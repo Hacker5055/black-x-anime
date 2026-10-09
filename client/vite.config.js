@@ -7,6 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   root: __dirname,
+  // GitHub Pages project sites live at /<repo>/ — set VITE_BASE=/black-x-anime/
+  base: process.env.VITE_BASE || '/',
   plugins: [react()],
   server: {
     host: '0.0.0.0',

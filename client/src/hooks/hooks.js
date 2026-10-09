@@ -52,16 +52,17 @@ export function useDominantColor(imageUrl, fallback = '#8b5cf6') {
       }
     };
 
+    const STATIC = import.meta.env.VITE_STATIC === '1';
     img.onerror = () => {
       // One retry through our same-origin proxy (CORS-proof color extraction).
-      if (!cancelled && !retried && imageUrl.includes('s4.anilist.co')) {
+      if (!cancelled && !retried && !STATIC && imageUrl.includes('s4.anilist.co')) {
         retried = true;
         img.src = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
       }
       // else: keep the fallback color
     };
     // Prefer the same-origin proxy for AniList CDN assets (avoids CORS flakiness).
-    img.src = imageUrl.includes('s4.anilist.co')
+    img.src = imageUrl.includes('s4.anilist.co') && !STATIC
       ? `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`
       : imageUrl;
     return () => { cancelled = true; };
