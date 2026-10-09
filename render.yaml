@@ -1,0 +1,16 @@
+# Render Blueprint — connect your GitHub repo and create; no credit card needed.
+# Free plan: 750 instance-hours/month, sleeps after 15 min idle (~60s cold start).
+services:
+  - type: web
+    name: black-x
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true

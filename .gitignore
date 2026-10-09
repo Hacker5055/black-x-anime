@@ -1,0 +1,11 @@
+# BLACK X — deployment configs & local junk
+node_modules/
+client/dist/
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+screenshots/
+*.log
+.env
+.DS_Store
+.vite/

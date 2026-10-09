@@ -1,0 +1,32 @@
+{
+  "name": "black-x",
+  "version": "1.0.0",
+  "description": "BLACK X — Interactive Anime Tracker & Prediction Engine (bilingual EN/AR)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c magenta,cyan \"npm:server\" \"npm:client\"",
+    "server": "node --watch server/src/index.js",
+    "client": "vite --config client/vite.config.js",
+    "seed": "node server/src/seed.js",
+    "build": "vite build client",
+    "start": "NODE_ENV=production node server/src/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^12.4.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.2.1",
+    "playwright": "^1.64.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "vite": "^7.1.9"
+  }
+}
