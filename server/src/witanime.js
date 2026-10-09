@@ -11,6 +11,11 @@
 import { apiGet, apiSet, streamGet, streamSet } from './db.js';
 
 export const WITA_BASE = 'https://witanime.site';
+// Cloudflare Worker relay (see worker/witanime-relay.js): datacenter hosts get
+// a "Just a moment…" challenge from witanime's WAF; the relay fetches from
+// Cloudflare's own network instead. Set WITA_RELAY=https://<name>.workers.dev
+const RELAY = (process.env.WITA_RELAY || '').replace(/\/$/, '');
+const viaRelay = (url) => (RELAY ? `${RELAY}/?url=${encodeURIComponent(url)}` : url);
 // WAF recon: stream routes 404 on long browser UAs and pass short ones.
 // A datacenter IP + long Chrome UA gets a hard 403, so EVERYTHING uses the
 // short profile now, with an honest fallback on retry.
@@ -86,7 +91,7 @@ function jarOf(cookies) {
 async function get(url, { ua = UA_API, cookies = {}, headers = {}, redirect = 'follow', _retry = true } = {}) {
   await throttle();
   const jar = jarOf(cookies);
-  const res = await fetch(url, {
+  const res = await fetch(viaRelay(url), {
     headers: {
       'User-Agent': ua,
       'Accept-Language': LANG,
@@ -107,7 +112,7 @@ async function get(url, { ua = UA_API, cookies = {}, headers = {}, redirect = 'f
 async function post(url, { ua = UA_API, cookies = {}, headers = {}, body, json = false, _retry = true } = {}) {
   await throttle();
   const jar = jarOf(cookies);
-  const res = await fetch(url, {
+  const res = await fetch(viaRelay(url), {
     method: 'POST',
     headers: {
       'User-Agent': ua,
@@ -463,11 +468,11 @@ export async function scrapeHealth() {
  * is treated by the witanime WAF (statuses, cf-ray, challenge pages, manifest).
  */
 export async function scrapeDiagnostics() {
-  const out = { source: 'witanime.site', at: new Date().toISOString(), probes: [] };
+  const out = { source: 'witanime.site', relay: RELAY || null, at: new Date().toISOString(), probes: [] };
   const uas = [['short', UA_API], ['honest', UA_HONEST], ['chrome-long', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36']];
   for (const [name, ua] of uas) {
     try {
-      const res = await fetch(`${WITA_BASE}/`, {
+      const res = await fetch(viaRelay(`${WITA_BASE}/`), {
         headers: { 'User-Agent': ua, Accept: 'text/html', 'Accept-Language': LANG },
         redirect: 'manual',
         signal: AbortSignal.timeout(15000)
