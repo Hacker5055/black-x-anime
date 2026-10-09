@@ -11,8 +11,13 @@
 import { apiGet, apiSet, streamGet, streamSet } from './db.js';
 
 export const WITA_BASE = 'https://witanime.site';
-const UA_PAGE = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
-const UA_API = 'Mozilla/5.0'; // short UA — required by their WAF on stream routes
+// WAF recon: stream routes 404 on long browser UAs and pass short ones.
+// A datacenter IP + long Chrome UA gets a hard 403, so EVERYTHING uses the
+// short profile now, with an honest fallback on retry.
+const UA_API = 'Mozilla/5.0';
+const UA_HONEST = 'black-x/1.0';
+const UA_PAGE = UA_API;
+const LANG = 'ar-EG,ar;q=0.9,en;q=0.8';
 const TIMEOUT = 20000;
 
 /* ------------------------------ http helpers ------------------------------ */
@@ -78,29 +83,35 @@ function jarOf(cookies) {
   return cookies instanceof WitaSession ? cookies : new WitaSession(cookies || {});
 }
 
-async function get(url, { ua = UA_API, cookies = {}, headers = {}, redirect = 'follow' } = {}) {
+async function get(url, { ua = UA_API, cookies = {}, headers = {}, redirect = 'follow', _retry = true } = {}) {
   await throttle();
   const jar = jarOf(cookies);
   const res = await fetch(url, {
     headers: {
       'User-Agent': ua,
+      'Accept-Language': LANG,
       ...(Object.keys(jar.cookies).length ? { Cookie: jar.cookieHeader() } : {}),
       ...headers
     },
     redirect,
     signal: AbortSignal.timeout(TIMEOUT)
   });
+  if (_retry && (res.status === 403 || res.status === 429) && ua !== UA_HONEST) {
+    // WAF mood swing — one retry with the honest UA
+    return get(url, { ua: UA_HONEST, cookies: jar, headers, redirect, _retry: false });
+  }
   jar.absorb(guard(res));
   return res;
 }
 
-async function post(url, { ua = UA_API, cookies = {}, headers = {}, body, json = false } = {}) {
+async function post(url, { ua = UA_API, cookies = {}, headers = {}, body, json = false, _retry = true } = {}) {
   await throttle();
   const jar = jarOf(cookies);
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'User-Agent': ua,
+      'Accept-Language': LANG,
       ...(Object.keys(jar.cookies).length ? { Cookie: jar.cookieHeader() } : {}),
       ...(json ? { 'Content-Type': 'application/json' } : {}),
       ...headers
@@ -108,6 +119,9 @@ async function post(url, { ua = UA_API, cookies = {}, headers = {}, body, json =
     body: body ? (json ? JSON.stringify(body) : body) : undefined,
     signal: AbortSignal.timeout(TIMEOUT)
   });
+  if (_retry && (res.status === 403 || res.status === 429) && ua !== UA_HONEST) {
+    return post(url, { ua: UA_HONEST, cookies: jar, headers, body, json, _retry: false });
+  }
   jar.absorb(guard(res));
   return res;
 }
@@ -171,6 +185,18 @@ export async function searchShows(q) {
   const cached = apiGet(key);
   if (cached) return cached;
 
+  let items = await searchOnce(q);
+  if (!items.length && q.trim().split(/\s+/).length > 3) {
+    // AniList titles are long ("STEEL BALL RUN JoJo's … 2nd - 3rd STAGE") —
+    // witanime search matches better on short keyword sets
+    const short = q.replace(/[''`]/g, '').split(/[\s\-(]+/).filter((w) => w.length > 2).slice(0, 3).join(' ');
+    if (short && short !== q) items = await searchOnce(short);
+  }
+  apiSet(key, items, 30 * 60 * 1000);
+  return items;
+}
+
+async function searchOnce(q) {
   const { html } = await session(`/search?q=${encodeURIComponent(q)}`);
   const items = [];
   const seen = new Set();
@@ -189,7 +215,6 @@ export async function searchShows(q) {
     });
     if (items.length >= 24) break;
   }
-  apiSet(key, items, 30 * 60 * 1000);
   return items;
 }
 
@@ -420,9 +445,62 @@ async function resolveDirectUrl(embedUrl) {
 /** Health/status helper for the UI. */
 export async function scrapeHealth() {
   try {
-    const res = await get(`${WITA_BASE}/`, { ua: UA_PAGE, headers: { Accept: 'text/html' } });
-    return { ok: res.ok, status: res.status, source: 'witanime.site' };
+    const res = await get(`${WITA_BASE}/`, { headers: { Accept: 'text/html' } });
+    const body = await res.text();
+    return {
+      ok: res.ok,
+      status: res.status,
+      source: 'witanime.site',
+      challenge: /Just a moment|challenge-platform|Attention Required/i.test(body)
+    };
   } catch (err) {
     return { ok: false, status: 0, source: 'witanime.site', error: err.message };
   }
+}
+
+/**
+ * Deep diagnostics — run from the deployed host to see exactly how its IP/UA
+ * is treated by the witanime WAF (statuses, cf-ray, challenge pages, manifest).
+ */
+export async function scrapeDiagnostics() {
+  const out = { source: 'witanime.site', at: new Date().toISOString(), probes: [] };
+  const uas = [['short', UA_API], ['honest', UA_HONEST], ['chrome-long', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36']];
+  for (const [name, ua] of uas) {
+    try {
+      const res = await fetch(`${WITA_BASE}/`, {
+        headers: { 'User-Agent': ua, Accept: 'text/html', 'Accept-Language': LANG },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(15000)
+      });
+      const body = (await res.text()).slice(0, 4000);
+      out.probes.push({
+        name,
+        status: res.status,
+        cfRay: res.headers.get('cf-ray'),
+        server: res.headers.get('server'),
+        challenge: /Just a moment|challenge-platform|Attention Required/i.test(body),
+        blocked: /Access denied|Sorry, you have been blocked/i.test(body),
+        title: body.match(/<title>([^<]*)/)?.[1]?.slice(0, 60) || null
+      });
+    } catch (err) {
+      out.probes.push({ name, error: err.message });
+    }
+  }
+  // full streaming chain probe (the money test)
+  try {
+    const sess = await session('/watch/black-clover-2nd-season/1');
+    out.pageStatus = sess.status;
+    out.csrf = Boolean(sess.csrf);
+    const man = await post(`${WITA_BASE}/watch/black-clover-2nd-season/1/sources`, {
+      headers: { 'X-CSRF-TOKEN': sess.csrf, Accept: '*/*' },
+      cookies: sess.cookies
+    });
+    const manBody = await man.text();
+    out.manifestStatus = man.status;
+    out.manifestOk = manBody.startsWith('{');
+    out.manifestSnippet = manBody.slice(0, 100);
+  } catch (err) {
+    out.manifestError = err.message;
+  }
+  return out;
 }

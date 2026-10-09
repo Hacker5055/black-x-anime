@@ -3,6 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { applyLiveColor, hexToRgbString } from '../hooks/hooks.js';
 
+/** Poster image with graceful fallback when the URL is missing or broken. */
+function Poster({ src, alt, cls = '' }) {
+  const [broken, setBroken] = React.useState(false);
+  if (!src || broken) {
+    return <div className={`anime-card__fallback ${cls}`}>{(alt || 'X').slice(0, 2)}</div>;
+  }
+  return (
+    <img
+      className={cls}
+      src={src}
+      alt={alt}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
 /** Poster card for a show (witanime). Hover feeds the ambient glow. */
 export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
   const { t, lang, formatNumber } = useI18n();
@@ -27,11 +45,7 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
       aria-label={title}
     >
       <div className="anime-card__poster">
-        {show.poster ? (
-          <img src={show.poster} alt={title} loading="lazy" referrerPolicy="no-referrer" />
-        ) : (
-          <div className="anime-card__fallback">{title.slice(0, 2)}</div>
-        )}
+        <Poster src={show.poster} alt={title} />
         <div className="anime-card__glowtag">▶</div>
       </div>
       <div className="anime-card__body">
@@ -65,11 +79,7 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
       onKeyDown={(e) => e.key === 'Enter' && navigate(`/watch/${item.slug}/${item.episode}`)}
     >
       <div className="ep-tile__thumb">
-        {item.poster ? (
-          <img src={item.poster} alt="" loading="lazy" referrerPolicy="no-referrer" />
-        ) : (
-          <div className="anime-card__fallback">{title.slice(0, 2)}</div>
-        )}
+        <Poster src={item.poster} alt={title} />
         <div className="ep-tile__play">▶</div>
         <div className="ep-tile__num">{t('common.ep')} {formatNumber(item.episode)}</div>
         {progress != null && (
@@ -100,11 +110,7 @@ export function ContinueCard({ entry, onClick, delay = 0 }) {
       tabIndex={0}
     >
       <div className="cont-card__poster">
-        {entry.poster ? (
-          <img src={entry.poster} alt="" loading="lazy" referrerPolicy="no-referrer" />
-        ) : (
-          <div className="anime-card__fallback">{title.slice(0, 2)}</div>
-        )}
+        <Poster src={entry.poster} alt={title} />
         <div className="cont-card__play">▶</div>
       </div>
       <div className="cont-card__body">

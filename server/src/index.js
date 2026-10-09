@@ -32,10 +32,17 @@ try {
     seedAll({ quick: true })
       .then(() => {
         console.log('🌱 Quick seed done — enriching metadata in background');
-        return enrichLibrary();
+        // self-heal: keep trying in case the source rate-limits or the host
+        // IP starts cold — stops after ~5 attempts (≈15 min)
+        const attempt = (n) => enrichLibrary()
+          .then(() => console.log('✨ Library enriched with live metadata'))
+          .catch((err) => {
+            console.error('enrich attempt failed:', err?.message || err);
+            if (n < 5) setTimeout(() => attempt(n + 1), 3 * 60 * 1000);
+          });
+        return attempt(1);
       })
-      .then(() => console.log('✨ Library enriched with live metadata'))
-      .catch((err) => console.error('seed/enrich failed:', err?.message || err));
+      .catch((err) => console.error('seed failed:', err?.message || err));
   }
 } catch (err) {
   console.error('auto-seed check failed:', err?.message || err);

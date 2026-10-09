@@ -1,12 +1,21 @@
 import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../auth.js';
-import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, scrapeHealth } from '../witanime.js';
+import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, scrapeHealth, scrapeDiagnostics } from '../witanime.js';
 
 const router = Router();
 
 /** GET /api/stream/health — is the source reachable */
 router.get('/health', async (req, res) => {
   res.json(await scrapeHealth());
+});
+
+/** GET /api/stream/diagnostics — how this host's IP/UA is treated by the WAF */
+router.get('/diagnostics', async (req, res) => {
+  try {
+    res.json(await scrapeDiagnostics());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /** GET /api/stream/latest — latest episodes grid */
