@@ -21,12 +21,77 @@ function Poster({ src, alt, cls = '' }) {
   );
 }
 
-/** Poster card for a show (witanime). Hover feeds the ambient glow. */
+/**
+ * Auto-flipping poster component that rotates between available images (poster, banner, etc.)
+ * with smooth transitions, 3D flip effects, and active indicator dots.
+ */
+function AutoFlipPoster({ images = [], alt = '', cls = '' }) {
+  const validImages = React.useMemo(() => {
+    const list = Array.isArray(images) ? images.filter(Boolean) : [images].filter(Boolean);
+    return list.length > 0 ? list : [];
+  }, [images]);
+
+  const [currentIndex, setCurrentIndex] = React.useState(0);
+  const [isFlipping, setIsFlipping] = React.useState(false);
+
+  React.useEffect(() => {
+    if (validImages.length <= 1) return undefined;
+    const interval = setInterval(() => {
+      setIsFlipping(true);
+      setTimeout(() => {
+        setCurrentIndex((prev) => (prev + 1) % validImages.length);
+        setIsFlipping(false);
+      }, 350);
+    }, 3800);
+
+    return () => clearInterval(interval);
+  }, [validImages.length]);
+
+  if (validImages.length === 0) {
+    return <div className={`anime-card__fallback ${cls}`}>{(alt || 'X').slice(0, 2)}</div>;
+  }
+
+  const currentSrc = validImages[currentIndex] || validImages[0];
+
+  return (
+    <div className={`auto-flip-poster-container ${cls}`}>
+      <img
+        className={`auto-flip-poster-img ${isFlipping ? 'flipping' : ''}`}
+        src={currentSrc}
+        alt={alt}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+      {validImages.length > 1 && (
+        <div className="auto-flip-dots">
+          {validImages.map((_, idx) => (
+            <span
+              key={idx}
+              className={`auto-flip-dot ${idx === currentIndex ? 'active' : ''}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Poster card for a show. Hover feeds the ambient glow. */
 export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
   const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
 
   const title = (lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn || show.slug;
+
+  const cardImages = React.useMemo(() => {
+    const arr = [];
+    if (show.poster) arr.push(show.poster);
+    if (show.banner && show.banner !== show.poster) arr.push(show.banner);
+    if (show.bannerUrl && show.bannerUrl !== show.poster) arr.push(show.bannerUrl);
+    if (show.coverUrl && show.coverUrl !== show.poster) arr.push(show.coverUrl);
+    return arr.length > 0 ? arr : [show.poster].filter(Boolean);
+  }, [show.poster, show.banner, show.bannerUrl, show.coverUrl]);
+
   const handleClick = () => {
     if (onClick) return onClick(show);
     navigate(`/show/${show.slug}`);
@@ -45,7 +110,7 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
       aria-label={title}
     >
       <div className="anime-card__poster">
-        <Poster src={show.poster} alt={title} />
+        <AutoFlipPoster images={cardImages} alt={title} />
         <div className="anime-card__glowtag">▶</div>
       </div>
       <div className="anime-card__body">

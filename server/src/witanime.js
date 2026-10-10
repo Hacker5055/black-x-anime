@@ -332,13 +332,32 @@ export async function fetchEpisode(slug, episode, { fresh = false } = {}) {
       });
     }
   }
-  if (!entries.length) {
+
+  const downloads = [];
+  let dIdx = 0;
+  for (const [quality, list] of Object.entries(manifest.downloads || {})) {
+    for (const item of list) {
+      dIdx += 1;
+      downloads.push({
+        id: `dl-${slug}-${episode}-${(item.label || 'srv')}-${quality || ''}-${dIdx}`,
+        token: item.token,
+        server: item.label || `download-${dIdx}`,
+        quality: quality || null,
+        version: item.version || 'sub',
+        lang: item.lang || 'jp'
+      });
+    }
+  }
+
+  if (!entries.length && !downloads.length) {
     throw Object.assign(new Error('empty manifest'), { code: 'upstream' });
   }
 
   const payload = {
     entries: orderEntries(entries),
+    downloads,
     resolved: {},
+    resolvedDownloads: {},
     _session: {
       cookies: { ...sess.cookies.cookies },
       csrf: sess.csrf,
@@ -347,6 +366,68 @@ export async function fetchEpisode(slug, episode, { fresh = false } = {}) {
   };
   streamSet(key, payload, RESOLVE_TTL_MS);
   return payload;
+}
+
+/**
+ * Resolve one download manifest entry by id.
+ */
+export async function resolveDownloadEntry(slug, episode, entryId) {
+  let payload = await fetchEpisode(slug, episode);
+  if (!payload) return null;
+
+  if (payload.resolvedDownloads?.[entryId]) return payload.resolvedDownloads[entryId];
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const entry = (payload.downloads || []).find((e) => e.id === entryId);
+    if (!entry) return null;
+
+    try {
+      const source = await resolveDownloadTokenWithSession(entry.token, payload._session);
+      payload.resolvedDownloads = { ...(payload.resolvedDownloads || {}), [entryId]: source };
+      streamSet(`wita:episode:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
+      return source;
+    } catch (err) {
+      if (err.code === 'rate_limited') throw err;
+      if (attempt === 0) {
+        payload = await fetchEpisode(slug, episode, { fresh: true });
+        if (!payload) return null;
+        continue;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
+async function resolveDownloadTokenWithSession(token, sess) {
+  const key = `wita:dl_token:${token}`;
+  const cached = streamGet(key);
+  if (cached) return cached;
+
+  const jar = new WitaSession(sess?.cookies || {});
+  const csrf = sess?.csrf || '';
+
+  await post(`${WITA_BASE}/watch/download-source/${token}`, {
+    headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+    cookies: jar
+  });
+  const gate = await get(`${WITA_BASE}/watch/download-gate/${token}`, {
+    cookies: jar,
+    redirect: 'manual'
+  });
+  const downloadUrl = gate.headers.get('location');
+  if (!downloadUrl) {
+    throw Object.assign(new Error('download gate did not redirect (stale session?)'), { code: 'stale_session' });
+  }
+
+  let directUrl = null;
+  try {
+    directUrl = await resolveDirectUrl(downloadUrl);
+  } catch { /* keep link */ }
+
+  const out = { downloadUrl, directUrl };
+  streamSet(key, out, RESOLVE_TTL_MS);
+  return out;
 }
 
 /**
@@ -413,36 +494,131 @@ async function resolveTokenWithSession(token, sess) {
   return out;
 }
 
-async function resolveDirectUrl(embedUrl) {
-  const host = (() => { try { return new URL(embedUrl).hostname; } catch { return ''; } })();
+async function resolveDirectUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
 
-  // mega.nz embeds are encrypted — cannot resolve a direct file URL
-  if (host.endsWith('mega.nz') || host.endsWith('mega.co.nz')) return null;
+  // Mega, Google Drive, Workupload, Gofile, 4shared are web lockers / cloud drives — not raw stream direct files
+  if (
+    host.endsWith('mega.nz') ||
+    host.endsWith('mega.co.nz') ||
+    host.endsWith('drive.google.com') ||
+    host.endsWith('workupload.com') ||
+    host.endsWith('gofile.io') ||
+    host.endsWith('4shared.com') ||
+    host.endsWith('wtsrv.xyz')
+  ) {
+    return null;
+  }
 
-  const cacheKey = `wita:direct:${embedUrl}`;
+  const cacheKey = `wita:direct:${url}`;
   const cached = streamGet(cacheKey);
   if (cached !== null && cached !== undefined) return cached;
 
-  const res = await get(embedUrl, {
-    headers: { Accept: 'text/html' }
-  });
-  const html = await res.text();
-
   let direct = null;
-  // mp4upload / generic: file:"…mp4" | src:"…mp4" | <source src="…mp4">
-  const patterns = [
-    /(?:file|src)\s*:\s*["']([^"']+\.mp4[^"']*)/i,
-    /<source[^>]+src="([^"]+\.mp4[^"]*)"/i,
-    /"(https?:\/\/[^"]+\.mp4[^"]*)"/i,
-    /"(https?:\/\/[^"]+\.m3u8[^"]*)"/i
-  ];
-  for (const re of patterns) {
-    const m = html.match(re);
-    if (m && !/video\.min\.js|\.css|player\//i.test(m[1])) {
-      direct = m[1].replace(/\\\//g, '/');
-      break;
+
+  try {
+    // 1. mp4upload (embed or direct page)
+    if (host.includes('mp4upload.com')) {
+      let embedTarget = url;
+      const idMatch = url.match(/mp4upload\.com\/(?:embed-)?([a-zA-Z0-9]+)(?:\.html)?/i);
+      if (idMatch && idMatch[1]) {
+        embedTarget = `https://www.mp4upload.com/embed-${idMatch[1]}.html`;
+      }
+
+      const res = await fetch(embedTarget, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+          Accept: 'text/html'
+        },
+        signal: AbortSignal.timeout(12000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const m = html.match(/src\s*:\s*["'](https?:\/\/[^"']+\/video\.mp4)[\"']/i) ||
+                  html.match(/["'](https?:\/\/[a-zA-Z0-9.:-]+\/d\/[a-zA-Z0-9_\/=-]+\/video\.mp4)["']/i);
+        if (m && m[1]) {
+          direct = m[1];
+        }
+      }
+    }
+    // 2. MediaFire (extract direct download CDN button link)
+    else if (host.includes('mediafire.com')) {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+          Accept: 'text/html'
+        },
+        signal: AbortSignal.timeout(12000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const m = html.match(/href=["'](https?:\/\/[a-zA-Z0-9.-]+\.mediafire\.com\/[^"']+)["'][^>]*id=["']downloadButton["']/i) ||
+                  html.match(/id=["']downloadButton["'][^>]*href=["']([^"']+)["']/i) ||
+                  html.match(/aria-label=["']Download file["'][^>]*href=["']([^"']+)["']/i);
+        if (m && m[1] && m[1].startsWith('http') && !m[1].includes('/file/')) {
+          direct = m[1];
+        }
+      }
+    }
+    // 3. Generic video hosts (e.g. yourupload, videa, etc.)
+    else {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Accept: 'text/html'
+        },
+        signal: AbortSignal.timeout(12000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        // Look specifically for actual video paths with .mp4 or .mkv in the file name
+        const patterns = [
+          /(?:file|src)\s*:\s*["'](https?:\/\/[^"'\s]+\/(?:[^"'\s\/]+\.)+(?:mp4|mkv)(?:\?[^"'\s]*)?)["']/i,
+          /<source[^>]+src=["'](https?:\/\/[^"'\s]+\/(?:[^"'\s\/]+\.)+(?:mp4|mkv)(?:\?[^"'\s]*)?)["']/i
+        ];
+        for (const re of patterns) {
+          const m = html.match(re);
+          if (m && m[1] && !/video\.min\.js|\.css|\.png|\.jpg|\.m3u8|favicon|player\//i.test(m[1])) {
+            direct = m[1].replace(/\\\//g, '/');
+            break;
+          }
+        }
+      }
+    }
+  } catch {
+    // Keep direct null if extraction times out or fails
+  }
+
+  // Safety filter: never allow non-video assets to be returned as direct video URLs
+  if (direct) {
+    try {
+      const u = new URL(direct);
+      const path = u.pathname.toLowerCase();
+      if (
+        path.endsWith('.png') ||
+        path.endsWith('.jpg') ||
+        path.endsWith('.jpeg') ||
+        path.endsWith('.gif') ||
+        path.endsWith('.ico') ||
+        path.endsWith('.m3u8') ||
+        path.endsWith('.js') ||
+        path.endsWith('.css') ||
+        path.includes('favicon')
+      ) {
+        direct = null;
+      }
+    } catch {
+      direct = null;
     }
   }
+
   streamSet(cacheKey, direct, 6 * 60 * 60 * 1000);
   return direct;
 }

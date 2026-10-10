@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile representation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 1000000 },
+        "photoUrl": { "type": "string", "maxLength": 1000000 },
+        "username": { "type": "string", "maxLength": 64 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "avatarColor": { "type": "string", "maxLength": 32 },
+        "role": { "type": "string", "maxLength": 32 },
+        "badges": { "type": "array" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "email"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "Anime bookmarked to user favorites",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "titleEn": { "type": "string", "maxLength": 200 },
+        "titleAr": { "type": "string", "maxLength": 200 },
+        "poster": { "type": "string", "maxLength": 500 },
+        "banner": { "type": "string", "maxLength": 500 },
+        "episodes": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["slug", "userId"]
+    },
+    "Progress": {
+      "title": "Progress",
+      "description": "Episode watch progress tracking",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "episode": { "type": "number" },
+        "position": { "type": "number" },
+        "duration": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "titleEn": { "type": "string", "maxLength": 200 },
+        "titleAr": { "type": "string", "maxLength": 200 },
+        "poster": { "type": "string", "maxLength": 500 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["slug", "userId", "episode"]
+    },
+    "TestConnection": {
+      "title": "TestConnection",
+      "description": "Diagnostics connection test document",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "maxLength": 32 }
+      }
+    },
+    "SiteSetting": {
+      "title": "SiteSetting",
+      "description": "Global site settings or developer profile state",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 1000000 },
+        "photoUrl": { "type": "string", "maxLength": 1000000 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document owned by the user"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User anime favorites subcollection"
+    },
+    "/users/{userId}/progress/{progressId}": {
+      "schema": "Progress",
+      "description": "User watch progress subcollection"
+    },
+    "/settings/{settingId}": {
+      "schema": "SiteSetting",
+      "description": "Site settings and persistent developer profile"
+    },
+    "/test/connection": {
+      "schema": "TestConnection",
+      "description": "Connection test document readable by anyone"
+    }
+  }
+}

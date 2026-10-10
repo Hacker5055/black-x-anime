@@ -25,6 +25,7 @@ export default function VideoPlayer({
   entries = [],
   resolved = {},
   onResolve,
+  onOpenDownload,
   title,
   episodeLabel,
   startTime = 0,
@@ -425,6 +426,20 @@ export default function VideoPlayer({
                 <option key={s} value={s}>{s}×</option>
               ))}
             </select>
+
+            {onOpenDownload && (
+              <button
+                type="button"
+                className="player-btn"
+                onClick={onOpenDownload}
+                title={t('watch.downloadEpisode')}
+                style={{ color: 'var(--cyan)' }}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
 
             <button type="button" className="player-btn" onClick={togglePip} title={t('watch.pip')}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">

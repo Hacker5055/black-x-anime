@@ -109,6 +109,20 @@ export async function fetchTrending() {
   );
 }
 
+export async function fetchTopRanked(perPage = 15) {
+  return cachedQuery(
+    `anilist:rankings:top:${perPage}`,
+    30 * 60 * 1000,
+    `query ($page: Int) {
+      Page(page: $page, perPage: ${perPage}) {
+        media(sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, isAdult: false) { ${MEDIA_FRAGMENT} }
+      }
+    }`,
+    { page: 1 },
+    (data) => data.Page.media.map((m) => mediaToJson(normalizeMedia(m)))
+  );
+}
+
 export async function fetchSeason(season, seasonYear) {
   return cachedQuery(
     `anilist:season:${season}:${seasonYear}`,

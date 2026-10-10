@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ShowSearch } from './Modals.jsx';
+import { UserBadges } from './UserBadges.jsx';
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -30,11 +31,14 @@ function LanguageToggle() {
 }
 
 export default function Navbar({ onOpenAuth }) {
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const menuRef = useRef(null);
+
+  const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
+  const hasVerified = isDev || (user?.badges || []).includes('blue_verified') || (user?.badges || []).includes('gold_vip') || (user?.badges || []).length > 0;
 
   useEffect(() => {
     const onClick = (e) => {
@@ -47,6 +51,8 @@ export default function Navbar({ onOpenAuth }) {
   const links = [
     { to: '/', label: t('nav.home'), icon: '◈' },
     { to: '/browse', label: t('nav.browse'), icon: '⌕' },
+    { to: '/community', label: t('nav.community'), icon: '💬' },
+    { to: '/rankings', label: t('nav.rankings'), icon: '🏆' },
     { to: '/mylist', label: t('nav.mylist'), icon: '♥' }
   ];
 
@@ -91,26 +97,70 @@ export default function Navbar({ onOpenAuth }) {
             <ShowSearch variant="nav" />
             <LanguageToggle />
             {!user ? (
-              <>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={() => onOpenAuth('login')}>
+              <div className="nav__auth-group">
+                <button type="button" className="btn btn--ghost btn--sm nav-auth-btn nav-auth-btn--login" onClick={() => onOpenAuth('login')}>
                   {t('nav.login')}
                 </button>
-                <button type="button" className="btn btn--primary btn--sm" onClick={() => onOpenAuth('register')}>
+                <button type="button" className="btn btn--primary btn--sm nav-auth-btn nav-auth-btn--reg" onClick={() => onOpenAuth('register')}>
                   <span className="btn__shine" />
                   {t('nav.register')}
                 </button>
-              </>
+              </div>
             ) : (
               <div ref={menuRef} style={{ position: 'relative' }}>
-                <button type="button" className="user-chip" onClick={() => setMenuOpen((v) => !v)}>
-                  <span className="avatar" style={{ background: user.avatarColor }}>
-                    {user.displayName?.[0]?.toUpperCase() || 'X'}
-                  </span>
-                  <span className="user-chip__name">{user.displayName}</span>
-                  <span style={{ color: 'var(--ink-faint)', fontSize: '0.7rem' }}>▼</span>
+                <button
+                  type="button"
+                  className="user-avatar-btn"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label={user.displayName || 'User profile'}
+                >
+                  <div className="user-avatar-wrapper">
+                    <span className="avatar user-avatar-circle" style={{ background: user.avatarColor, overflow: 'hidden' }}>
+                      {(user.photoURL || user.photoUrl) ? (
+                        <img src={user.photoURL || user.photoUrl} alt={user.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        user.displayName?.[0]?.toUpperCase() || 'X'
+                      )}
+                    </span>
+                    {/* Verification badges attached directly beside/on user picture like Facebook and Instagram */}
+                    {isDev ? (
+                      <span className="avatar-badge avatar-badge--dev" title="👑 مطور BLACK X">👑</span>
+                    ) : hasVerified ? (
+                      <span className="avatar-badge avatar-badge--verified" title="✔ حساب موثّق">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15-5-5 1.41-1.41L11 14.17l7.59-7.59L20 8l-9 9z" />
+                        </svg>
+                      </span>
+                    ) : null}
+                  </div>
                 </button>
                 {menuOpen && (
                   <div className="user-menu" style={{ insetInlineEnd: 0, top: 'calc(100% + 10px)' }}>
+                    <div className="user-menu__header">
+                      <div className="user-menu__name">{user.displayName}</div>
+                      <div className="user-menu__role">
+                        {isDev ? '👑 مطور BLACK X' : `@${user.username || 'user'}`}
+                      </div>
+                      <UserBadges badges={user.badges} size="sm" />
+                    </div>
+                    <div className="user-menu__divider" />
+                    <button
+                      type="button"
+                      className="user-menu__item"
+                      onClick={() => { setMenuOpen(false); navigate('/profile'); }}
+                    >
+                      <span>👤</span> {t('nav.profile')}
+                    </button>
+                    {(user.role === 'developer' || user.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user.isDeveloper) && (
+                      <button
+                        type="button"
+                        className="user-menu__item"
+                        style={{ color: '#f472b6', fontWeight: 700 }}
+                        onClick={() => { setMenuOpen(false); navigate('/profile?tab=developer'); }}
+                      >
+                        <span>👑</span> {t('nav.devConsole')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="user-menu__item"
@@ -140,13 +190,6 @@ export default function Navbar({ onOpenAuth }) {
             <span>{l.label}</span>
           </NavLink>
         ))}
-        <a
-          href="#lang"
-          onClick={(e) => { e.preventDefault(); setLang(lang === 'ar' ? 'en' : 'ar'); }}
-        >
-          <span>🌐</span>
-          <span>{lang === 'ar' ? 'EN' : 'ع'}</span>
-        </a>
       </nav>
     </>
   );

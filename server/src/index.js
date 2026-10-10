@@ -9,6 +9,8 @@ import authRoutes from './routes/auth.js';
 import animeRoutes from './routes/anime.js';
 import streamingRoutes from './routes/streaming.js';
 import libraryRoutes from './routes/library.js';
+import devRoutes from './routes/dev.js';
+import communityRoutes from './routes/community.js';
 import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
@@ -50,10 +52,11 @@ try {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = Number(process.env.PORT) || 4001;
+const isProd = process.env.NODE_ENV === 'production';
+const PORT = isProd ? (Number(process.env.PORT) || 3000) : (Number(process.env.SERVER_PORT) || 4001);
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(optionalAuth);
 
@@ -90,6 +93,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/anime', animeRoutes);
 app.use('/api/stream', streamingRoutes);
 app.use('/api/library', libraryRoutes);
+app.use('/api/dev', devRoutes);
+app.use('/api/settings', devRoutes);
+app.use('/api/community', communityRoutes);
 
 // Serve the built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist');

@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Catch-all: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common security primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Diagnostics / health connection test
+    match /test/{docId} {
+      allow read: if isValidId(docId);
+      allow write: if false;
+    }
+
+    // Site settings & developer state
+    match /settings/{settingId} {
+      allow read: if isValidId(settingId);
+      allow write: if isValidId(settingId);
+    }
+
+    // Community Posts and comments
+    match /community_posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update: if isSignedIn();
+        allow delete: if isSignedIn();
+      }
+    }
+
+    // User Profile validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email'])
+        && data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'photoUrl', 'username', 'bio', 'avatarColor', 'role', 'badges', 'createdAt', 'updatedAt'])
+        && data.id == request.auth.uid
+        && data.id is string && data.id.size() <= 128
+        && data.email is string && data.email.size() <= 128
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000000))
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 1000000))
+        && (!('username' in data) || (data.username is string && data.username.size() <= 64))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
+        && (!('avatarColor' in data) || (data.avatarColor is string && data.avatarColor.size() <= 32))
+        && (!('role' in data) || (data.role is string && data.role.size() <= 32))
+        && (!('badges' in data) || (data.badges is list && data.badges.size() <= 20))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && incoming().id == existing().id;
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Favorites subcollection
+      function isValidFavorite(data) {
+        return data.keys().hasAll(['slug', 'userId'])
+          && data.keys().hasOnly(['slug', 'userId', 'titleEn', 'titleAr', 'poster', 'banner', 'episodes', 'createdAt'])
+          && data.userId == request.auth.uid
+          && data.slug is string && data.slug.size() <= 128
+          && (!('titleEn' in data) || (data.titleEn is string && data.titleEn.size() <= 200))
+          && (!('titleAr' in data) || (data.titleAr is string && data.titleAr.size() <= 200))
+          && (!('poster' in data) || (data.poster is string && data.poster.size() <= 500))
+          && (!('banner' in data) || (data.banner is string && data.banner.size() <= 500))
+          && (!('episodes' in data) || (data.episodes is number))
+          && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64));
+      }
+
+      match /favorites/{favId} {
+        allow get: if isOwner(userId) && isValidId(favId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(favId) && isValidFavorite(incoming());
+        allow update: if isOwner(userId) && isValidId(favId) && isValidFavorite(incoming()) && incoming().slug == existing().slug;
+        allow delete: if isOwner(userId) && isValidId(favId);
+      }
+
+      // Progress subcollection
+      function isValidProgress(data) {
+        return data.keys().hasAll(['slug', 'userId', 'episode'])
+          && data.keys().hasOnly(['slug', 'userId', 'episode', 'position', 'duration', 'completed', 'titleEn', 'titleAr', 'poster', 'updatedAt'])
+          && data.userId == request.auth.uid
+          && data.slug is string && data.slug.size() <= 128
+          && data.episode is number && data.episode >= 0
+          && (!('position' in data) || (data.position is number && data.position >= 0))
+          && (!('duration' in data) || (data.duration is number && data.duration >= 0))
+          && (!('completed' in data) || (data.completed is bool))
+          && (!('titleEn' in data) || (data.titleEn is string && data.titleEn.size() <= 200))
+          && (!('titleAr' in data) || (data.titleAr is string && data.titleAr.size() <= 200))
+          && (!('poster' in data) || (data.poster is string && data.poster.size() <= 500))
+          && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+      }
+
+      match /progress/{progressId} {
+        allow get: if isOwner(userId) && isValidId(progressId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(progressId) && isValidProgress(incoming());
+        allow update: if isOwner(userId) && isValidId(progressId) && isValidProgress(incoming()) && incoming().slug == existing().slug;
+        allow delete: if isOwner(userId) && isValidId(progressId);
+      }
+    }
+  }
+}

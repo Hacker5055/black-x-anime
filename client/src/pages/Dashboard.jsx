@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -6,85 +6,9 @@ import { api } from '../api.js';
 import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/hooks.js';
 import ShowCard, { EpisodeTile, ContinueCard } from '../components/ShowCard.jsx';
 import { LiquidLoader, SkeletonGrid, EmptyState } from '../components/Loading.jsx';
+import LandingHero from '../components/LandingHero.jsx';
 
-/* -------------------------------- hero -------------------------------- */
-function Hero({ featured, loading, onOpenAuth }) {
-  const { t, lang, formatNumber } = useI18n();
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const color = useDominantColor(featured?.poster, '#8b5cf6');
 
-  useEffect(() => {
-    if (color) applyLiveColor(color);
-  }, [color]);
-
-  if (loading) return <LiquidLoader />;
-  if (!featured) return null;
-
-  const title = (lang === 'ar' ? featured.titleAr : featured.titleEn) || featured.titleEn || featured.slug;
-
-  return (
-    <section className="hero glass reveal">
-      <div className="hero__bg" style={{ backgroundImage: `url(${featured.poster || ''})` }} />
-      <div className="hero__veil" />
-      <div className="hero__content">
-        <div>
-          <div className="hero__badge">
-            <span className="hero__badge-dot" />
-            {t('dashboard.heroBadge')}
-          </div>
-          <h1 className="hero__title">{t('app.taglineLong')}</h1>
-          <p className="hero__desc">
-            <strong style={{ color: 'var(--ink)' }}>{title}</strong>
-            {featured.description ? ` — ${featured.description.slice(0, 170)}…` : ''}
-          </p>
-          <div className="hero__cta-row">
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => navigate(`/watch/${featured.slug}/${featured.episode || 1}`)}
-            >
-              <span className="btn__shine" />
-              ▶ {t('dashboard.heroCta')}
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={() => navigate(`/show/${featured.slug}`)}>
-              ▣ {t('dashboard.heroCta2')}
-            </button>
-          </div>
-          <div className="hero__stats">
-            <div className="stat-card">
-              <div className="stat-card__num">{formatNumber(featured.episode || 1)}</div>
-              <div className="stat-card__label">{t('common.episode')}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card__num">HD</div>
-              <div className="stat-card__label">{t('watch.quality')}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card__num">{t('watch.sub')}</div>
-              <div className="stat-card__label">{t('watch.lang')}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card__num">FREE</div>
-              <div className="stat-card__label">{t('browse.sourceNote')}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="hero__poster-wrap">
-          <div className="hero__poster-glow" />
-          <div className="hero__poster">
-            {featured.poster ? (
-              <img src={featured.poster} alt={title} referrerPolicy="no-referrer" />
-            ) : (
-              <div style={{ width: '100%', height: '100%', background: `linear-gradient(150deg, ${color}, #0a0d18)` }} />
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 /* --------------------------- continue watching --------------------------- */
 function ContinueSection({ onOpenAuth }) {
@@ -265,7 +189,11 @@ function TrendingSection() {
 /* ------------------------------ dashboard ------------------------------ */
 export default function Dashboard({ onOpenAuth }) {
   const [latest, setLatest] = useState(null);
+  const [trending, setTrending] = useState(null);
   const [error, setError] = useState(false);
+
+  const { t, lang } = useI18n();
+  const navigate = useNavigate();
 
   const loadLatest = useCallback(() => {
     setLatest(null);
@@ -277,11 +205,55 @@ export default function Dashboard({ onOpenAuth }) {
 
   useEffect(() => { loadLatest(); }, [loadLatest]);
 
-  const featured = latest && latest.length > 0 ? latest[0] : null;
+  useEffect(() => {
+    api.get('/api/anime/trending')
+      .then((d) => setTrending(d.anime || []))
+      .catch(() => setTrending([]));
+  }, []);
+
+  // Build rich featured carousel anime items
+  const carouselItems = useMemo(() => {
+    if (!latest || latest.length === 0) return [];
+    const seen = new Set();
+    const unique = [];
+    for (const item of latest) {
+      if (!seen.has(item.slug)) {
+        seen.add(item.slug);
+        unique.push(item);
+      }
+      if (unique.length >= 6) break;
+    }
+
+    return unique.map((item, idx) => {
+      const match = (trending || []).find((t) => {
+        const titleL = (item.titleEn || '').toLowerCase();
+        const tRomaji = (t.titleRomaji || '').toLowerCase();
+        const tEng = (t.titleEnglish || '').toLowerCase();
+        return tRomaji.includes(titleL) || titleL.includes(tRomaji) || tEng.includes(titleL) || titleL.includes(tEng);
+      }) || (trending && trending[idx]);
+
+      return {
+        slug: item.slug,
+        titleEn: item.titleEn || match?.titleEnglish || match?.titleRomaji || item.slug,
+        titleAr: item.titleAr || match?.titleArabic || null,
+        poster: item.poster || match?.coverUrl,
+        banner: match?.bannerUrl || item.poster,
+        episode: item.episode || 1,
+        score: match?.score || (86 + (idx % 10)),
+        genres: match?.genres || ['Action', 'Adventure', 'Fantasy'],
+        description: match?.description ? match.description.replace(/<[^>]+>/g, '') : null,
+        color: match?.color || '#22d3ee'
+      };
+    });
+  }, [latest, trending]);
 
   return (
     <>
-      <Hero featured={featured} loading={!latest} onOpenAuth={onOpenAuth} />
+      <LandingHero
+        items={carouselItems}
+        onOpenAuth={onOpenAuth}
+      />
+
       <ContinueSection onOpenAuth={onOpenAuth} />
       <LatestSection items={latest || []} loading={!latest} error={error} onRetry={loadLatest} />
       <FavoritesSection onOpenAuth={onOpenAuth} />

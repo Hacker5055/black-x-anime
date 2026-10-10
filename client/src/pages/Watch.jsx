@@ -5,7 +5,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/hooks.js';
 import VideoPlayer from '../components/VideoPlayer.jsx';
+import { DownloadModal } from '../components/DownloadModal.jsx';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
+import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
 
 export default function Watch({ onOpenAuth }) {
   const { slug, ep } = useParams();
@@ -15,9 +17,10 @@ export default function Watch({ onOpenAuth }) {
   const { user } = useAuth();
 
   const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}`), [slug]);
-  const [episodeData, setEpisodeData] = useState(null); // { entries, resolved }
+  const [episodeData, setEpisodeData] = useState(null); // { entries, downloads, resolved, resolvedDownloads }
   const [sourcesError, setSourcesError] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [resumeAt, setResumeAt] = useState(0);
   const [fav, setFav] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -39,10 +42,15 @@ export default function Watch({ onOpenAuth }) {
     setEpisodeData(null);
     api.get(`/api/stream/episode/${slug}/${episode}`)
       .then((d) => {
-        if (!d?.entries?.length) throw new Error('empty');
-        setEpisodeData({ entries: d.entries, resolved: d.resolved || {} });
+        if (!d?.entries?.length && !d?.downloads?.length) throw new Error('empty');
+        setEpisodeData({
+          entries: d.entries || [],
+          downloads: d.downloads || [],
+          resolved: d.resolved || {},
+          resolvedDownloads: d.resolvedDownloads || {}
+        });
         // auto-resolve the first server so playback starts immediately
-        const first = d.entries[0];
+        const first = d.entries?.[0];
         if (first && !d.resolved?.[first.id]) {
           resolveEntryRef.current?.(first);
         }
@@ -75,6 +83,27 @@ export default function Watch({ onOpenAuth }) {
   const resolveEntryRef = useRef(null);
   resolveEntryRef.current = resolveEntry;
 
+  /** Resolve one download server on demand (download gate → direct/link). */
+  const resolveDownload = useCallback(async (entry) => {
+    try {
+      const d = await api.post('/api/stream/resolve-download', {
+        slug,
+        episode,
+        entryId: entry.id
+      });
+      setEpisodeData((prev) => (prev
+        ? {
+            ...prev,
+            resolvedDownloads: { ...(prev.resolvedDownloads || {}), [entry.id]: d.source }
+          }
+        : prev));
+      return d.source;
+    } catch {
+      pushToast(t('watch.sourceError'), 'error');
+      return null;
+    }
+  }, [slug, episode, t]);
+
   /* --------------------------- library state --------------------------- */
   useEffect(() => {
     if (!user) { setFav(false); setResumeAt(0); return undefined; }
@@ -98,14 +127,18 @@ export default function Watch({ onOpenAuth }) {
       const pos = Math.max(0, Math.min(Number(position) || 0, 24 * 3600));
       const dur = Math.max(0, Math.min(Number(duration) || 0, 24 * 3600));
       if (!completed && dur > 0 && pos < 1) return; // don't spam t=0 rows
-      api.put(`/api/library/progress/${slug}/${episode}`, {
+      const payload = {
         position: Math.floor(pos),
         duration: Math.floor(dur),
         completed: completed === true,
         titleEn: show?.titleEn || slug,
         titleAr: show?.titleAr || null,
         poster: show?.poster || null
-      }).catch(() => {});
+      };
+      api.put(`/api/library/progress/${slug}/${episode}`, payload).catch(() => {});
+      if (auth.currentUser) {
+        syncProgressToFirestore(auth.currentUser.uid, { slug, episode, ...payload }).catch(() => {});
+      }
     },
     [user, slug, episode, show]
   );
@@ -125,15 +158,22 @@ export default function Watch({ onOpenAuth }) {
     try {
       if (prev) {
         await api.del(`/api/library/favorites/${slug}`);
+        if (auth.currentUser) {
+          removeFavoriteFromFirestore(auth.currentUser.uid, slug).catch(() => {});
+        }
         pushToast(t('toast.favoriteRemoved'), 'success');
       } else {
-        await api.put(`/api/library/favorites/${slug}`, {
+        const favPayload = {
           titleEn: show?.titleEn || slug,
           titleAr: show?.titleAr,
           poster: show?.poster,
           banner: show?.banner,
           episodes: show?.episodeCount
-        });
+        };
+        await api.put(`/api/library/favorites/${slug}`, favPayload);
+        if (auth.currentUser) {
+          syncFavoriteToFirestore(auth.currentUser.uid, { slug, ...favPayload }).catch(() => {});
+        }
         pushToast(t('toast.favoriteAdded'), 'success');
       }
     } catch {
@@ -194,6 +234,7 @@ export default function Watch({ onOpenAuth }) {
               entries={episodeData.entries}
               resolved={episodeData.resolved}
               onResolve={resolveEntry}
+              onOpenDownload={() => setDownloadModalOpen(true)}
               title={title}
               episodeLabel={t('watch.episodePicker', { n: formatNumber(episode) })}
               startTime={resumeAt}
@@ -222,6 +263,19 @@ export default function Watch({ onOpenAuth }) {
               <div className="watch-meta__shortcuts">{t('watch.shortcuts')}</div>
             </div>
             <div className="watch-meta__actions">
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={() => setDownloadModalOpen(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
+                  color: '#fff',
+                  fontWeight: 700
+                }}
+              >
+                <span className="btn__shine" />
+                📥 {t('watch.downloadEpisode')}
+              </button>
               <button type="button" className={`btn btn--sm ${fav ? 'btn--violet' : 'btn--ghost'}`} onClick={toggleFav}>
                 {fav ? '♥' : '♡'} {fav ? t('show.unfavorite') : t('show.favorite')}
               </button>
@@ -272,6 +326,21 @@ export default function Watch({ onOpenAuth }) {
           )}
         </aside>
       </div>
+
+      <DownloadModal
+        isOpen={downloadModalOpen}
+        onClose={() => setDownloadModalOpen(false)}
+        slug={slug}
+        episode={episode}
+        title={title}
+        showPoster={show?.poster}
+        entries={episodeData?.entries || []}
+        resolved={episodeData?.resolved || {}}
+        downloads={episodeData?.downloads || []}
+        resolvedDownloads={episodeData?.resolvedDownloads || {}}
+        onResolveDownload={resolveDownload}
+        onResolveStreaming={resolveEntry}
+      />
     </>
   );
 }

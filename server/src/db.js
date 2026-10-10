@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -62,6 +63,18 @@ CREATE TABLE IF NOT EXISTS progress (
 CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
 
+-- ===== community ratings & scores =====
+CREATE TABLE IF NOT EXISTS community_ratings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  anime_id INTEGER NOT NULL,
+  user_id INTEGER,
+  score REAL NOT NULL,
+  review TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(anime_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ratings_anime ON community_ratings(anime_id);
+
 -- ===== generic API cache (AniList + witanime responses) =====
 CREATE TABLE IF NOT EXISTS api_cache (
   key TEXT PRIMARY KEY,
@@ -100,7 +113,181 @@ CREATE TABLE IF NOT EXISTS anime_cache (
   raw TEXT,
   cached_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ===== site settings & diagnostics logs =====
+CREATE TABLE IF NOT EXISTS site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS system_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT NOT NULL DEFAULT 'info',
+  category TEXT NOT NULL DEFAULT 'system',
+  message TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ===== community posts, reactions & comments (Facebook-like) =====
+CREATE TABLE IF NOT EXISTS community_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT NOT NULL DEFAULT 'dev-mz',
+  author_name TEXT NOT NULL,
+  author_username TEXT DEFAULT '',
+  author_avatar TEXT DEFAULT '',
+  author_role TEXT DEFAULT 'user',
+  tag TEXT DEFAULT 'general',
+  tag_name TEXT DEFAULT 'عام',
+  content TEXT NOT NULL,
+  image_url TEXT DEFAULT '',
+  is_pinned INTEGER DEFAULT 0,
+  likes_count INTEGER DEFAULT 0,
+  comments_count INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_comm_posts_pinned ON community_posts(is_pinned, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS community_reactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  reaction_type TEXT NOT NULL DEFAULT 'like',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS community_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  author_name TEXT NOT NULL,
+  author_avatar TEXT DEFAULT '',
+  author_role TEXT DEFAULT 'user',
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_comm_comments_post ON community_comments(post_id, created_at ASC);
 `);
+
+// Safe column migrations
+try {
+  db.exec("ALTER TABLE users ADD COLUMN photo_url TEXT DEFAULT ''");
+} catch {
+  /* column already exists */
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN badges TEXT DEFAULT '[]'");
+} catch {
+  /* column already exists */
+}
+
+// Default footer settings
+try {
+  db.prepare(`
+    INSERT OR IGNORE INTO site_settings (key, value) 
+    VALUES ('footer_tagline', 'Stream every episode. Track your shows. Own the night.')
+  `).run();
+  db.prepare(`
+    INSERT OR IGNORE INTO site_settings (key, value) 
+    VALUES ('footer_notice', 'BLACK X — The ultimate interactive anime experience.')
+  `).run();
+} catch (err) {
+  console.warn('Settings init note:', err.message);
+}
+
+// Ensure mz0970mmz@gmail.com is configured as developer
+try {
+  const existingDev = db.prepare('SELECT id, role, password_hash FROM users WHERE email = ?').get('mz0970mmz@gmail.com');
+  if (existingDev) {
+    if (existingDev.role !== 'developer') {
+      db.prepare("UPDATE users SET role = 'developer' WHERE email = ?").run('mz0970mmz@gmail.com');
+    }
+  } else {
+    // Initial setup for developer account mz0970mmz@gmail.com
+    db.prepare(`
+      INSERT INTO users (username, email, password_hash, display_name, avatar_color, role)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      'developer',
+      'mz0970mmz@gmail.com',
+      bcrypt.hashSync('blackx2026', 10),
+      'Developer MZ',
+      '#ec4899',
+      'developer'
+    );
+  }
+} catch (err) {
+  console.warn('Developer user setup note:', err.message);
+}
+
+// Initial seed for community if empty
+try {
+  const postCount = db.prepare('SELECT COUNT(*) AS c FROM community_posts').get()?.c || 0;
+  if (postCount === 0) {
+    const welcome = db.prepare(`
+      INSERT INTO community_posts (uid, author_name, author_username, author_avatar, author_role, tag, tag_name, content, is_pinned, likes_count, comments_count, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      'mz0970mmz@gmail.com',
+      'Developer MZ',
+      'developer',
+      'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=150&auto=format&fit=crop&q=80',
+      'developer',
+      'announcement',
+      '👑 إعلان المطور',
+      'مرحباً بكم جميعاً في مجتمع BLACK X الرسمي! 🖤✨\n\nهنا مساحتكم الخاصة كعشاق ومتابعي الأنمي لمشاركة الآراء، النقاشات حول الحلقات الأسبوعية، النظريات، المراجعات، والتوصيات.\n\nيسعدنا تفاعلكم ومشاركاتكم، واستمتعوا بتجربة المشاهدة والتواصل!',
+      1,
+      7,
+      1
+    );
+
+    const postId = welcome.lastInsertRowid;
+    db.prepare(`
+      INSERT INTO community_comments (post_id, user_id, author_name, author_avatar, author_role, content, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      postId,
+      'dev-team',
+      'فريق الدعم',
+      '',
+      'developer',
+      'أهلاً بكم في مجتمعنا الجديد! يسعدنا انضمام الجميع 🚀'
+    );
+  }
+} catch (err) {
+  console.warn('Community seed note:', err.message);
+}
+
+/* ---------------- settings & logs helpers ---------------- */
+export function getSetting(key, defaultValue = '') {
+  try {
+    const row = db.prepare('SELECT value FROM site_settings WHERE key = ?').get(key);
+    return row ? row.value : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+export function setSetting(key, value) {
+  db.prepare(`
+    INSERT INTO site_settings (key, value, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `).run(key, String(value));
+}
+
+export function logSystemEvent(level, category, message, details = null) {
+  try {
+    db.prepare(`
+      INSERT INTO system_logs (level, category, message, details)
+      VALUES (?, ?, ?, ?)
+    `).run(level, category, message, details ? JSON.stringify(details) : null);
+  } catch (err) {
+    console.error('Failed to log system event:', err.message);
+  }
+}
 
 /* ---------------- cache helpers ---------------- */
 function cacheGet(table, key) {
@@ -208,5 +395,32 @@ export function parseAnimeRow(row) {
     popularity: row.popularity,
     nextEpisode: row.next_episode,
     nextAiringAt: row.next_airing_at
+  };
+}
+
+export function saveCommunityRating(animeId, userId, score, review = '') {
+  const stmt = db.prepare(`
+    INSERT INTO community_ratings (anime_id, user_id, score, review, created_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(anime_id, user_id) DO UPDATE SET
+      score = excluded.score,
+      review = excluded.review,
+      created_at = datetime('now')
+  `);
+  return stmt.run(animeId, userId || null, score, review);
+}
+
+export function getAnimeCommunityStats(animeId) {
+  const row = db.prepare(`
+    SELECT
+      COUNT(*) AS total_votes,
+      AVG(score) AS avg_score
+    FROM community_ratings
+    WHERE anime_id = ?
+  `).get(animeId);
+
+  return {
+    votes: row?.total_votes || 0,
+    avgScore: row?.avg_score ? Number(row.avg_score.toFixed(1)) : null
   };
 }

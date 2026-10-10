@@ -1,0 +1,8 @@
+{
+  "name": "BLACK X — Anime Tracker & Prediction Engine",
+  "description": "Interactive anime tracker, prediction engine, and streaming hub with bilingual English and Arabic support.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
+  "permissions": []
+}

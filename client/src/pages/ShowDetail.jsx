@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { useAsync, useDominantColor, applyLiveColor, pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
+import { auth, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
 
 export default function ShowDetail({ onOpenAuth }) {
   const { slug } = useParams();
@@ -50,15 +51,22 @@ export default function ShowDetail({ onOpenAuth }) {
     try {
       if (prev) {
         await api.del(`/api/library/favorites/${slug}`);
+        if (auth.currentUser) {
+          removeFavoriteFromFirestore(auth.currentUser.uid, slug).catch(() => {});
+        }
         pushToast(t('toast.favoriteRemoved'), 'success');
       } else {
-        await api.put(`/api/library/favorites/${slug}`, {
+        const favPayload = {
           titleEn: show.titleEn,
           titleAr: show.titleAr,
           poster: show.poster,
           banner: show.banner,
           episodes: show.episodeCount
-        });
+        };
+        await api.put(`/api/library/favorites/${slug}`, favPayload);
+        if (auth.currentUser) {
+          syncFavoriteToFirestore(auth.currentUser.uid, { slug, ...favPayload }).catch(() => {});
+        }
         pushToast(t('toast.favoriteAdded'), 'success');
       }
     } catch {
@@ -139,6 +147,16 @@ export default function ShowDetail({ onOpenAuth }) {
               >
                 {fav ? '♥ ' : '♡ '}{fav ? t('show.unfavorite') : t('show.favorite')}
               </button>
+              {eps.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => navigate(`/watch/${slug}/${continueEp?.episode || 1}`)}
+                  title={t('watch.downloadEpisode')}
+                >
+                  📥 {t('watch.downloadEpisode')}
+                </button>
+              )}
             </div>
           </div>
         </div>
