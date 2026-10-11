@@ -76,7 +76,7 @@ const PALETTE = ['#22d3ee', '#8b5cf6', '#f472b6', '#a3e635', '#fb923c', '#f87171
 
 export default function ProfileDashboard({ onOpenAuth }) {
   const { t, lang, formatNumber } = useI18n();
-  const { user, stats, updateProfile, applyRealtimeProfileUpdate, refresh, loading: authLoading } = useAuth();
+  const { user, stats, updateProfile, applyRealtimeProfileUpdate, refresh, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef(null);
@@ -84,11 +84,13 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const isDeveloper = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
 
   const urlTab = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(urlTab === 'developer' && isDeveloper ? 'developer' : (urlTab || 'profile'));
+  const [activeTab, setActiveTab] = useState(urlTab === 'developer' && isDeveloper ? 'developer' : (urlTab || 'overview'));
 
   useEffect(() => {
     if (urlTab === 'developer' && isDeveloper) {
       setActiveTab('developer');
+    } else if (urlTab) {
+      setActiveTab(urlTab);
     }
   }, [urlTab, isDeveloper]);
 
@@ -635,446 +637,411 @@ export default function ProfileDashboard({ onOpenAuth }) {
   };
 
   return (
-    <div className="container" style={{ paddingBlock: '1.5rem 3.5rem' }}>
-      {/* Header */}
-      {/* ================= FACEBOOK-STYLE GLOBAL PROFILE HEADER ================= */}
+    <div className="container" style={{ paddingBlock: '2rem 4rem', maxWidth: '820px', margin: '0 auto' }}>
+      {/* ================= EXACT WITANIME PROFILE CARD WITH BACKGROUND BANNER ================= */}
       <div
-        className="glass fb-profile-header-card"
+        className="wit-prof-card"
         style={{
-          marginBlockEnd: '1.75rem',
-          borderRadius: '24px',
+          position: 'relative',
+          borderRadius: '18px',
           overflow: 'hidden',
-          padding: 0,
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          boxShadow: '0 24px 65px rgba(0, 0, 0, 0.6)'
+          background: '#161616',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          padding: '2.1rem 1.85rem 1.65rem',
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.85)'
         }}
       >
-        {/* 1. Full-Width Cover Photo / 3D Live Banner (like Facebook Cover) */}
+        {/* Background Banner Layer (مع ظهور البانر في الخلف) */}
         <div
-          className={`profile-banner ${bannerStyle && bannerStyle !== 'off' ? 'profile-banner--3d' : ''}`}
           style={{
-            position: 'relative',
-            width: '100%',
-            height: 'clamp(210px, 27vw, 310px)',
+            position: 'absolute',
+            inset: 0,
+            zIndex: 0,
             overflow: 'hidden',
-            background: 'radial-gradient(circle at 50% 40%, #1e1b4b, #05060d)'
+            background: '#111111'
           }}
         >
-          {bannerStyle && bannerStyle !== 'off' ? (
+          {bannerUrl ? (
+            <img
+              onError={imgFallback}
+              src={bannerUrl}
+              alt="Profile Banner"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.65) contrast(1.08)' }}
+            />
+          ) : bannerStyle && bannerStyle !== 'off' ? (
             <Ornament3D
               mode="banner"
               ornament={bannerStyle}
               eager
               quality={ornamentQuality}
               overrides={{ imageOverride: bannerUrl || undefined }}
-              style={{ position: 'absolute', inset: 0 }}
+              style={{ position: 'absolute', inset: 0, opacity: 0.7 }}
             />
-          ) : bannerUrl ? (
-            <img onError={imgFallback} src={bannerUrl} alt="Profile Banner" className="profile-banner__img" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <div className="profile-banner__fallback" style={{ width: '100%', height: '100%' }} />
+            <img
+              onError={imgFallback}
+              src="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80"
+              alt="Profile Banner"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.55) contrast(1.08)' }}
+            />
           )}
           <div
-            className="profile-banner__overlay"
             style={{
               position: 'absolute',
               inset: 0,
-              background: 'linear-gradient(to top, rgba(8, 10, 20, 0.96) 2%, rgba(8, 10, 20, 0.25) 55%, transparent 100%)',
+              background:
+                'linear-gradient(180deg, rgba(16, 16, 16, 0.25) 0%, rgba(20, 20, 20, 0.78) 58%, rgba(22, 22, 22, 0.96) 100%)',
               pointerEvents: 'none'
             }}
           />
-
-          {/* Top Bar on Cover: UI Theme Pills */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '14px',
-              insetInlineStart: '16px',
-              zIndex: 6,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              background: 'rgba(8, 11, 22, 0.78)',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
-              borderRadius: '99px',
-              padding: '0.28rem 0.6rem',
-              backdropFilter: 'blur(12px)',
-              flexWrap: 'wrap'
-            }}
-          >
-            <span style={{ fontSize: '0.73rem', color: '#cbd5e1', fontWeight: 700, paddingInlineStart: '0.2rem' }}>
-              🎨 {lang === 'ar' ? 'الثيم:' : 'Theme:'}
-            </span>
-            {[
-              { id: 'dark-cyber', label: 'Dark Cyber ⚡', grad: 'linear-gradient(135deg, #06b6d4, #3b82f6)' },
-              { id: 'shadow', label: 'Shadow 👑', grad: 'linear-gradient(135deg, #7c3aed, #4f46e5)' },
-              { id: 'sakura', label: 'Sakura 🌸', grad: 'linear-gradient(135deg, #f43f5e, #ec4899)' },
-              { id: 'golden', label: 'Golden ⚜️', grad: 'linear-gradient(135deg, #f59e0b, #d97706)' }
-            ].map((th) => (
-              <button
-                key={th.id}
-                type="button"
-                onClick={() => handleThemeChange(th.id)}
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  padding: '0.18rem 0.55rem',
-                  borderRadius: '99px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: uiTheme === th.id ? th.grad : 'transparent',
-                  color: uiTheme === th.id ? '#fff' : '#94a3b8'
-                }}
-              >
-                {th.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Facebook-style "Edit Cover Photo" Button at bottom-end of cover */}
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => {
-              setActiveTab('profile');
-              setTimeout(() => {
-                const el = document.getElementById('prof-banner-input');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }, 80);
-            }}
-            style={{
-              position: 'absolute',
-              bottom: '16px',
-              insetInlineEnd: '20px',
-              zIndex: 6,
-              background: 'rgba(10, 12, 24, 0.82)',
-              border: '1px solid rgba(255, 255, 255, 0.22)',
-              backdropFilter: 'blur(12px)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              padding: '0.45rem 0.95rem',
-              borderRadius: '10px',
-              color: '#fff'
-            }}
-          >
-            🖼️ {lang === 'ar' ? 'تعديل غلاف البروفايل' : 'Edit Cover Photo'}
-          </button>
         </div>
 
-        {/* 2. Facebook-Style Identity Bar (Overlapping Avatar + Name & Verified Checkmark + Action Buttons) */}
-        <div
+        {/* Quick Edit Banner Button (Top-Left in RTL) */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('profile');
+            setTimeout(() => {
+              const el = document.getElementById('prof-banner-input');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }, 80);
+          }}
           style={{
-            padding: '0 2rem 1.25rem',
-            marginTop: '-68px',
-            position: 'relative',
-            zIndex: 5,
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '1.25rem'
+            position: 'absolute',
+            top: '14px',
+            insetInlineEnd: '16px',
+            zIndex: 4,
+            background: 'rgba(10, 10, 10, 0.72)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
+            borderRadius: '8px',
+            padding: '0.32rem 0.72rem',
+            color: '#e4e4e7',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            cursor: 'pointer'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.35rem', flexWrap: 'wrap' }}>
-            {/* Large Overlapping Circular Avatar with 3D Living Creature */}
-            <div style={{ position: 'relative', width: '148px', height: '148px', flexShrink: 0 }}>
-              {ornament3d && frameStyle !== 'default' && frameStyle !== 'none' ? (
-                <OrnamentAvatar
-                  src={photoUrl || ''}
-                  fallbackLabel={(displayName || username || 'X').slice(0, 2)}
-                  avatarColor={avatarColor}
-                  frameStyle={frameStyle}
-                  size={148}
-                  pointerMode="block"
-                  eager
-                  quality={ornamentQuality}
-                  style={{ margin: 0 }}
-                />
-              ) : (
-                <Avatar3DDecoration
-                  photoUrl={photoUrl}
-                  displayName={displayName}
-                  username={username}
-                  frameStyle={frameStyle}
-                  avatarColor={avatarColor}
-                  size={148}
-                  interactive
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingImage}
-                style={{
-                  position: 'absolute',
-                  insetInlineEnd: '4px',
-                  bottom: '4px',
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #22d3ee, #8b5cf6)',
-                  border: '3px solid #080a14',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.05rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.75)',
-                  padding: 0,
-                  zIndex: 25
-                }}
-                title={lang === 'ar' ? 'تغيير الصورة الشخصية' : 'Change profile picture'}
-              >
-                📷
-              </button>
-            </div>
+          🖼️ {lang === 'ar' ? 'تغيير البانر' : 'Edit Banner'}
+        </button>
 
-            {/* User Name + Verified Seal + @handle + Follower Stats + Badges */}
-            <div style={{ paddingBottom: '0.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                <h1 style={{ margin: 0, fontSize: 'clamp(1.55rem, 2.6vw, 2.1rem)', fontWeight: 900, letterSpacing: '-0.02em', display: 'inline-flex', alignItems: 'center' }}>
-                  {displayName || username}
-                  <VerifiedBadge isDev={isDeveloper} size={23} />
-                </h1>
-                {isDeveloper && (
-                  <span
-                    style={{
-                      padding: '0.22rem 0.7rem',
-                      borderRadius: '99px',
-                      background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.22), rgba(139, 92, 246, 0.22))',
-                      border: '1px solid rgba(236, 72, 153, 0.55)',
-                      color: '#f472b6',
-                      fontWeight: 800,
-                      fontSize: '0.76rem'
-                    }}
-                  >
-                    👑 {t('profile.roleDeveloper')}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem', color: 'var(--ink-dim)', fontSize: '0.9rem', fontWeight: 600 }}>
-                <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>@{username}</span>
-                <span>•</span>
-                <span><strong style={{ color: '#fff' }}>{formatNumber(socialNetwork?.followersCount ?? 0)}</strong> {lang === 'ar' ? 'متابع' : 'followers'}</span>
-                <span>•</span>
-                <span><strong style={{ color: '#fff' }}>{formatNumber(socialNetwork?.followingCount ?? 0)}</strong> {lang === 'ar' ? 'يتابع' : 'following'}</span>
-                <span>•</span>
-                <span style={{ color: '#c084fc', fontWeight: 800 }}>⚡ LVL {gamificationStats?.currentLevel || 1}</span>
-              </div>
-
-              {/* Status & Role Pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.55rem', flexWrap: 'wrap' }}>
-                <span style={{
-                  background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.35), rgba(79, 70, 229, 0.35))',
-                  border: '1px solid rgba(147, 51, 234, 0.7)',
-                  color: '#c084fc',
-                  fontWeight: 800,
-                  fontSize: '0.73rem',
-                  padding: '0.18rem 0.6rem',
-                  borderRadius: '99px'
-                }}>
-                  Shadow Monarch 👑
-                </span>
-                <span style={{
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35))',
-                  border: '1px solid rgba(245, 158, 11, 0.7)',
-                  color: '#fbbf24',
-                  fontWeight: 800,
-                  fontSize: '0.73rem',
-                  padding: '0.18rem 0.55rem',
-                  borderRadius: '99px'
-                }}>
-                  Creator ⚡
-                </span>
-                <span style={{
-                  background: 'rgba(29, 155, 240, 0.18)',
-                  border: '1px solid rgba(29, 155, 240, 0.55)',
-                  color: '#38bdf8',
-                  fontWeight: 800,
-                  fontSize: '0.73rem',
-                  padding: '0.18rem 0.55rem',
-                  borderRadius: '99px'
-                }}>
-                  ✓ Verified
-                </span>
-                <span
-                  onClick={() => setActiveTab('referrals')}
-                  style={{
-                    cursor: 'pointer',
-                    background:
-                      resolveUserVipTier(user, referralData) === 'vip_monarch'
-                        ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(236, 72, 153, 0.35))'
-                        : resolveUserVipTier(user, referralData) === 'vip_basic'
-                        ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.28), rgba(249, 115, 22, 0.28))'
-                        : 'rgba(255, 255, 255, 0.08)',
-                    border:
-                      resolveUserVipTier(user, referralData) === 'vip_monarch'
-                        ? '1px solid #a855f7'
-                        : resolveUserVipTier(user, referralData) === 'vip_basic'
-                        ? '1px solid #eab308'
-                        : '1px solid rgba(255, 255, 255, 0.2)',
-                    color:
-                      resolveUserVipTier(user, referralData) === 'vip_monarch'
-                        ? '#f3e8ff'
-                        : resolveUserVipTier(user, referralData) === 'vip_basic'
-                        ? '#facc15'
-                        : '#cbd5e1',
-                    fontWeight: 900,
-                    fontSize: '0.73rem',
-                    padding: '0.18rem 0.65rem',
-                    borderRadius: '99px'
-                  }}
-                >
-                  {resolveUserVipTier(user, referralData) === 'vip_monarch'
-                    ? '🔮 VIP Monarch 👑'
-                    : resolveUserVipTier(user, referralData) === 'vip_basic'
-                    ? '⚡ VIP Basic 👑'
-                    : (lang === 'ar' ? '🆓 مجاني (ترقية VIP)' : '🆓 Free (Upgrade VIP)')}
-                </span>
-                {customTitle && (
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                      padding: '0.18rem 0.65rem',
-                      borderRadius: '999px',
-                      background: 'rgba(168, 85, 247, 0.2)',
-                      border: '1px solid rgba(168, 85, 247, 0.5)',
-                      color: '#e9d5ff',
-                      fontSize: '0.73rem',
-                      fontWeight: 800
-                    }}
-                  >
-                    {customTitle}
-                  </span>
-                )}
-              </div>
-            </div>
+        {/* Top Identity Row (Avatar on Right + Name, Email, Join Date) */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1.25rem',
+            flexWrap: 'wrap'
+          }}
+        >
+          {/* Circular Avatar with White Edit Badge */}
+          <div style={{ position: 'relative', width: '96px', height: '96px', flexShrink: 0 }}>
+            {ornament3d && frameStyle !== 'default' && frameStyle !== 'none' ? (
+              <OrnamentAvatar
+                src={photoUrl || ''}
+                fallbackLabel={(displayName || username || 'X').slice(0, 2)}
+                avatarColor={avatarColor}
+                frameStyle={frameStyle}
+                size={96}
+                pointerMode="block"
+                eager
+                quality={ornamentQuality}
+                style={{ margin: 0 }}
+              />
+            ) : (
+              <Avatar3DDecoration
+                photoUrl={photoUrl}
+                displayName={displayName}
+                username={username}
+                frameStyle={frameStyle}
+                avatarColor={avatarColor}
+                size={96}
+                interactive
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('profile');
+                setTimeout(() => fileInputRef.current?.click(), 120);
+              }}
+              disabled={uploadingImage}
+              style={{
+                position: 'absolute',
+                insetInlineStart: '2px',
+                bottom: '2px',
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                background: '#ffffff',
+                border: '2px solid #161616',
+                color: '#000000',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: '0.78rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.8)',
+                padding: 0,
+                zIndex: 25
+              }}
+              title={lang === 'ar' ? 'تعديل الصورة الرمزية' : 'Edit Avatar'}
+            >
+              ✎
+            </button>
           </div>
 
-          {/* Right-side Facebook Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', paddingBottom: '0.35rem' }}>
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              onClick={() => {
-                if (!frameStyle || frameStyle === 'default' || frameStyle === 'none') {
-                  setFrameStyle('royal-flame');
-                }
-                window.dispatchEvent(new CustomEvent('blackx:trigger-creature-attack'));
-              }}
-              style={{
-                background: 'linear-gradient(135deg, #ff4500, #ff9900)',
-                border: '1px solid rgba(255, 190, 60, 0.6)',
-                color: '#fff',
-                fontWeight: 800,
-                padding: '0.5rem 1rem',
-                borderRadius: '10px',
-                boxShadow: '0 0 18px rgba(255, 69, 0, 0.4)'
-              }}
-            >
-              🔥 {lang === 'ar' ? 'نفث النار الآن' : 'Unleash Fire'}
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => setActiveTab('shop')}
-              style={{
-                background: 'rgba(168, 85, 247, 0.16)',
-                border: '1px solid rgba(168, 85, 247, 0.45)',
-                color: '#e9d5ff',
-                padding: '0.5rem 0.95rem',
-                borderRadius: '10px',
-                fontWeight: 800
-              }}
-            >
-              💎 {lang === 'ar' ? 'متجر الشظايا' : 'Shards Shop'}
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => setActiveTab('wrapped')}
-              style={{
-                background: 'rgba(34, 211, 238, 0.14)',
-                border: '1px solid rgba(34, 211, 238, 0.45)',
-                color: 'var(--cyan)',
-                padding: '0.5rem 0.95rem',
-                borderRadius: '10px',
-                fontWeight: 800
-              }}
-            >
-              📈 {lang === 'ar' ? 'ملخص 2026' : '2026 Wrapped'}
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.16)',
-                padding: '0.5rem 0.95rem',
-                borderRadius: '10px',
-                fontWeight: 700
-              }}
-            >
-              📷 {lang === 'ar' ? 'تغيير الصورة' : 'Update Photo'}
-            </button>
+          {/* Name + Email + Join Date */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.22rem', textAlign: 'start' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.01em', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                {displayName || username}
+                <VerifiedBadge isDev={isDeveloper} size={19} />
+              </h1>
+            </div>
+            <div style={{ fontSize: '0.86rem', color: '#a1a1aa', fontWeight: 500 }}>
+              {user.email || `@${username}`}
+            </div>
+            <div style={{ fontSize: '0.76rem', color: '#71717a', fontWeight: 600, marginTop: '0.1rem' }}>
+              {lang === 'ar' ? 'انضم في سبتمبر 2026' : 'Joined September 2026'}
+            </div>
           </div>
         </div>
 
-        {/* 3. Facebook-Style Integrated Navigation Tabs Bar */}
+        {/* 4 Stat Boxes Grid inside Profile Card */}
         <div
           style={{
-            display: 'flex',
-            gap: '0.35rem',
-            padding: '0 1.5rem',
-            borderTop: '1px solid rgba(255, 255, 255, 0.09)',
-            background: 'rgba(6, 8, 16, 0.45)',
-            overflowX: 'auto',
-            scrollbarWidth: 'none'
+            position: 'relative',
+            zIndex: 2,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: '0.75rem',
+            marginTop: '1.65rem'
           }}
         >
           {[
-            { id: 'profile', icon: '👤', labelAr: 'الملف والتخصيص', labelEn: 'Profile & Look' },
-            { id: 'shop', icon: '💎', labelAr: 'متجر الزخارف والألقاب', labelEn: 'Shards Shop' },
-            { id: 'wrapped', icon: '📈', labelAr: 'ملخص 2026 Wrapped', labelEn: '2026 Wrapped' },
-            { id: 'manga-novels', icon: '📖', labelAr: 'المانجا والروايات', labelEn: 'Manga & Novels' },
-            { id: 'posts', icon: '💬', labelAr: 'منشوراتي', labelEn: 'My Posts' },
-            { id: 'ratings', icon: '⭐', labelAr: 'تقييماتي', labelEn: 'My Ratings' },
-            { id: 'activity', icon: '🏆', labelAr: 'المستوى والـ XP', labelEn: 'Level & XP' },
-            { id: 'social', icon: '👥', labelAr: 'الأصدقاء والدعوات', labelEn: 'Friends & Invites' },
-            { id: 'referrals', icon: '👑', labelAr: 'باقات VIP والأكواد', labelEn: 'VIP Plans & Codes' },
-            { id: 'support', icon: '🎧', labelAr: 'الدعم الفني', labelEn: 'Support' },
-            ...(isDeveloper ? [{ id: 'developer', icon: '👑', labelAr: t('profile.tabDev'), labelEn: t('profile.tabDev') }] : [])
-          ].map((tb) => {
-            const isAct = activeTab === tb.id;
-            return (
-              <button
-                key={tb.id}
-                type="button"
-                onClick={() => setActiveTab(tb.id)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: isAct ? '3px solid var(--cyan)' : '3px solid transparent',
-                  color: isAct ? 'var(--cyan)' : '#cbd5e1',
-                  fontWeight: isAct ? 800 : 600,
-                  fontSize: '0.88rem',
-                  padding: '0.9rem 1rem',
-                  whiteSpace: 'nowrap',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {tb.icon} {lang === 'ar' ? tb.labelAr : tb.labelEn}
-              </button>
-            );
-          })}
+            { count: stats?.favorites ?? bookmarks?.length ?? 1, label: lang === 'ar' ? 'المفضلة' : 'Favorites' },
+            { count: stats?.watching ?? 2, label: lang === 'ar' ? 'أشاهده' : 'Watching' },
+            { count: stats?.completed ?? 1, label: lang === 'ar' ? 'أكملته' : 'Completed' },
+            { count: stats?.planToWatch ?? readingHistory?.length ?? 2, label: lang === 'ar' ? 'أنوي مشاهدته' : 'Plan to Watch' }
+          ].map((st, idx) => (
+            <div
+              key={idx}
+              style={{
+                background: 'rgba(34, 34, 34, 0.86)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '12px',
+                padding: '0.95rem 0.5rem',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#ffffff', marginBottom: '0.2rem' }}>
+                {formatNumber(st.count)}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: '#a1a1aa', fontWeight: 700 }}>
+                {st.label}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* ================= WITANIME PILL TABS BAR ================= */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          margin: '1.35rem 0 1.15rem',
+          overflowX: 'auto',
+          scrollbarWidth: 'none'
+        }}
+      >
+        {[
+          { id: 'overview', labelAr: 'نظرة عامة', labelEn: 'Overview' },
+          { id: 'profile', labelAr: 'إعدادات الحساب', labelEn: 'Account Settings' },
+          { id: 'referrals', labelAr: 'باقات VIP والأكواد', labelEn: 'VIP & Codes' },
+          { id: 'shop', labelAr: 'متجر الزخارف', labelEn: 'Ornaments Shop' },
+          { id: 'wrapped', labelAr: 'ملخص 2026', labelEn: '2026 Wrapped' },
+          ...(isDeveloper ? [{ id: 'developer', labelAr: 'لوحة المطور 👑', labelEn: 'Developer Console 👑' }] : [])
+        ].map((tb) => {
+          const isAct = activeTab === tb.id;
+          return (
+            <button
+              key={tb.id}
+              type="button"
+              onClick={() => setActiveTab(tb.id)}
+              style={{
+                background: isAct ? '#ffffff' : 'transparent',
+                color: isAct ? '#000000' : '#a1a1aa',
+                border: 'none',
+                borderRadius: '9px',
+                padding: '0.48rem 1.15rem',
+                fontFamily: 'inherit',
+                fontSize: '0.84rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.18s ease'
+              }}
+            >
+              {lang === 'ar' ? tb.labelAr : tb.labelEn}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ================= TAB: نظرة عامة (Exact 3 Stacked Action Cards from Screenshot) ================= */}
+      {activeTab === 'overview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* 1. قائمتي (My List) */}
+          <div
+            onClick={() => navigate('/mylist')}
+            role="button"
+            tabIndex={0}
+            style={{
+              background: '#161616',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: '14px',
+              padding: '1.05rem 1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              transition: 'background 0.18s ease'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: '#242424',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#e4e4e7',
+                  fontSize: '1rem',
+                  flexShrink: 0
+                }}
+              >
+                ☰
+              </div>
+              <div style={{ textAlign: 'start' }}>
+                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#ffffff' }}>
+                  {lang === 'ar' ? 'قائمتي' : 'My List'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '0.15rem' }}>
+                  {lang === 'ar' ? 'اعرض مجموعتك من الأنمي والأفلام وأدرها' : 'View and manage your anime & movie collection'}
+                </div>
+              </div>
+            </div>
+            <span style={{ color: '#71717a', fontSize: '1.15rem', fontWeight: 700 }}>
+              {lang === 'ar' ? '‹' : '›'}
+            </span>
+          </div>
+
+          {/* 2. تعديل الصورة الرمزية والبانر (Edit Avatar & Banner) */}
+          <div
+            onClick={() => {
+              setActiveTab('profile');
+              setTimeout(() => fileInputRef.current?.click(), 120);
+            }}
+            role="button"
+            tabIndex={0}
+            style={{
+              background: '#161616',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: '14px',
+              padding: '1.05rem 1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              transition: 'background 0.18s ease'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: '#242424',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#e4e4e7',
+                  fontSize: '1rem',
+                  flexShrink: 0
+                }}
+              >
+                🖼️
+              </div>
+              <div style={{ textAlign: 'start' }}>
+                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#ffffff' }}>
+                  {lang === 'ar' ? 'تعديل الصورة الرمزية' : 'Edit Avatar & Banner'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '0.15rem' }}>
+                  {lang === 'ar' ? 'غيّر صورة ملفك الشخصي والبانر الخلفي' : 'Change your profile picture and background banner'}
+                </div>
+              </div>
+            </div>
+            <span style={{ color: '#71717a', fontSize: '1.15rem', fontWeight: 700 }}>
+              {lang === 'ar' ? '‹' : '›'}
+            </span>
+          </div>
+
+          {/* 3. تسجيل الخروج (Logout) */}
+          <div
+            onClick={async () => {
+              if (logout) await logout();
+              navigate('/');
+            }}
+            role="button"
+            tabIndex={0}
+            style={{
+              background: 'rgba(127, 29, 29, 0.16)',
+              border: '1px solid rgba(239, 68, 68, 0.24)',
+              borderRadius: '14px',
+              padding: '1.05rem 1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              transition: 'background 0.18s ease'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.18)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#f87171',
+                  fontSize: '1rem',
+                  flexShrink: 0
+                }}
+              >
+                ↪
+              </div>
+              <div style={{ textAlign: 'start' }}>
+                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#f87171' }}>
+                  {lang === 'ar' ? 'تسجيل الخروج' : 'Log Out'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#a1a1aa', marginTop: '0.15rem' }}>
+                  {lang === 'ar' ? 'الخروج من حسابك' : 'Sign out of your account'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= TAB: Black Shards Ornament & Title Shop ================= */}
       {activeTab === 'shop' && (
