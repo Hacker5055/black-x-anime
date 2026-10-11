@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, resolveDownloadEntry, scrapeHealth, scrapeDiagnostics, fetchBrowseAnimeList } from '../witanime.js';
 import { anime3rbService, ANIME3RB_CATALOG } from '../services/anime3rb.service.js';
+import { okanimeService, OKANIME_CATALOG } from '../services/okanime.service.js';
+import { animeblkomService, ANIMEBLKOM_CATALOG } from '../services/animeblkom.service.js';
 
 const router = Router();
 
@@ -28,12 +30,26 @@ router.get('/sources', (req, res) => {
         nameEn: 'BLACK X Server 2 (Anime3rb)',
         site: 'https://anime3rb.com/',
         badge: 'Anime3rb'
+      },
+      {
+        id: 'okanime',
+        nameAr: '🔥 سيرفر BLACK X 3 (OkAnime)',
+        nameEn: 'BLACK X Server 3 (OkAnime)',
+        site: 'https://ww3.okanime.xyz/',
+        badge: 'OkAnime'
+      },
+      {
+        id: 'animeblkom',
+        nameAr: '💎 سيرفر BLACK X 4 (AnimeBlkom)',
+        nameEn: 'BLACK X Server 4 (AnimeBlkom)',
+        site: 'https://www.animeblkom.com/',
+        badge: 'AnimeBlkom'
       }
     ]
   });
 });
 
-/** GET /api/stream/catalog — complete catalog of anime from Anime3rb & WitAnime */
+/** GET /api/stream/catalog — complete catalog of anime across all BLACK X sources */
 router.get('/catalog', async (req, res) => {
   const source = (req.query.source || 'all').toLowerCase();
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -48,6 +64,26 @@ router.get('/catalog', async (req, res) => {
         sourceLabel: 'Anime3rb'
       }));
       items = items.concat(a3rbItems);
+    }
+
+    if (source === 'all' || source === 'okanime') {
+      const okItems = OKANIME_CATALOG.map((a) => ({
+        ...a,
+        source: 'okanime',
+        sourceName: 'سيرفر BLACK X 3 (OkAnime)',
+        sourceLabel: 'OkAnime'
+      }));
+      items = items.concat(okItems);
+    }
+
+    if (source === 'all' || source === 'animeblkom') {
+      const blkomItems = ANIMEBLKOM_CATALOG.map((a) => ({
+        ...a,
+        source: 'animeblkom',
+        sourceName: 'سيرفر BLACK X 4 (AnimeBlkom)',
+        sourceLabel: 'AnimeBlkom'
+      }));
+      items = items.concat(blkomItems);
     }
 
     if (source === 'all' || source === 'witanime') {
@@ -81,12 +117,14 @@ router.get('/diagnostics', async (req, res) => {
   }
 });
 
-/** GET /api/stream/latest — latest episodes grid across WitAnime and Anime3rb */
+/** GET /api/stream/latest — latest episodes grid across WitAnime, Anime3rb, OkAnime & AnimeBlkom */
 router.get('/latest', async (req, res) => {
   const source = (req.query.source || 'all').toLowerCase();
   try {
     let witaItems = [];
     let a3rbItems = [];
+    let okItems = [];
+    let blkomItems = [];
 
     if (source === 'all' || source === 'witanime') {
       try {
@@ -114,16 +152,53 @@ router.get('/latest', async (req, res) => {
       }
     }
 
+    if (source === 'all' || source === 'okanime') {
+      try {
+        const o = await okanimeService.getLatestEpisodes();
+        okItems = (o || []).map((it) => ({
+          ...it,
+          source: 'okanime',
+          sourceLabel: 'سيرفر BLACK X 3 (OkAnime)'
+        }));
+      } catch (e) {
+        console.warn('okanime fetch latest note:', e.message);
+      }
+    }
+
+    if (source === 'all' || source === 'animeblkom') {
+      try {
+        const b = await animeblkomService.getLatestEpisodes();
+        blkomItems = (b || []).map((it) => ({
+          ...it,
+          source: 'animeblkom',
+          sourceLabel: 'سيرفر BLACK X 4 (AnimeBlkom)'
+        }));
+      } catch (e) {
+        console.warn('animeblkom fetch latest note:', e.message);
+      }
+    }
+
     let combined = [];
     if (source === 'anime3rb') {
       combined = a3rbItems;
+    } else if (source === 'okanime') {
+      combined = okItems;
+    } else if (source === 'animeblkom') {
+      combined = blkomItems;
     } else if (source === 'witanime') {
       combined = witaItems;
     } else {
-      // Interleave both sources evenly
-      const maxLen = Math.max(witaItems.length, a3rbItems.length);
+      // Interleave all 4 sources evenly
+      const maxLen = Math.max(witaItems.length, a3rbItems.length, okItems.length, blkomItems.length);
       const seen = new Set();
       for (let i = 0; i < maxLen; i++) {
+        if (i < okItems.length) {
+          const k = `ok:${okItems[i].slug}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            combined.push(okItems[i]);
+          }
+        }
         if (i < a3rbItems.length) {
           const k = `a3rb:${a3rbItems[i].slug}`;
           if (!seen.has(k)) {
@@ -136,6 +211,13 @@ router.get('/latest', async (req, res) => {
           if (!seen.has(k)) {
             seen.add(k);
             combined.push(witaItems[i]);
+          }
+        }
+        if (i < blkomItems.length) {
+          const k = `blkom:${blkomItems[i].slug}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            combined.push(blkomItems[i]);
           }
         }
       }
@@ -156,6 +238,8 @@ router.get('/search', async (req, res) => {
   try {
     let witaResults = [];
     let a3rbResults = [];
+    let okResults = [];
+    let blkomResults = [];
 
     if (source === 'all' || source === 'witanime') {
       try {
@@ -179,9 +263,31 @@ router.get('/search', async (req, res) => {
       } catch (_) {}
     }
 
+    if (source === 'all' || source === 'okanime') {
+      try {
+        const o = await okanimeService.search(q);
+        okResults = (o || []).map((it) => ({
+          ...it,
+          source: 'okanime',
+          sourceLabel: 'سيرفر BLACK X 3 (OkAnime)'
+        }));
+      } catch (_) {}
+    }
+
+    if (source === 'all' || source === 'animeblkom') {
+      try {
+        const b = await animeblkomService.search(q);
+        blkomResults = (b || []).map((it) => ({
+          ...it,
+          source: 'animeblkom',
+          sourceLabel: 'سيرفر BLACK X 4 (AnimeBlkom)'
+        }));
+      } catch (_) {}
+    }
+
     const seen = new Set();
     const merged = [];
-    for (const item of [...a3rbResults, ...witaResults]) {
+    for (const item of [...okResults, ...a3rbResults, ...witaResults, ...blkomResults]) {
       const key = `${item.source || 'src'}:${item.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -203,21 +309,39 @@ router.get('/show/:slug', async (req, res) => {
 
   try {
     let show = null;
-    if (source === 'anime3rb' || slug.startsWith('a3rb-')) {
+
+    if (source === 'okanime' || slug.startsWith('ok-')) {
+      show = await okanimeService.getShow(slug.replace(/^ok-/, ''));
+    } else if (source === 'animeblkom' || slug.startsWith('blkom-')) {
+      show = await animeblkomService.getShow(slug.replace(/^blkom-/, ''));
+    } else if (source === 'anime3rb' || slug.startsWith('a3rb-')) {
       show = await anime3rbService.getShow(slug.replace(/^a3rb-/, ''));
     } else {
-      // Try WitAnime first
+      // Automatic fallback sequence: OkAnime -> WitAnime -> Anime3rb -> AnimeBlkom
       try {
-        show = await fetchShow(slug);
-        if (show) {
-          show.source = 'witanime';
-          show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
-        }
+        show = await okanimeService.getShow(slug);
       } catch (_) {}
 
-      // If not on WitAnime, automatically check Anime3rb
       if (!show) {
-        show = await anime3rbService.getShow(slug);
+        try {
+          show = await fetchShow(slug);
+          if (show) {
+            show.source = 'witanime';
+            show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
+          }
+        } catch (_) {}
+      }
+
+      if (!show) {
+        try {
+          show = await anime3rbService.getShow(slug);
+        } catch (_) {}
+      }
+
+      if (!show) {
+        try {
+          show = await animeblkomService.getShow(slug);
+        } catch (_) {}
       }
     }
 
@@ -232,7 +356,7 @@ router.get('/show/:slug', async (req, res) => {
 /** GET /api/stream/episode/:slug/:ep — manifest entries + eagerly-resolved first source */
 router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   const episode = Number(req.params.ep);
-  const cleanSlug = req.params.slug.replace(/^a3rb-/, '');
+  const cleanSlug = req.params.slug.replace(/^(ok-|blkom-|a3rb-)/, '');
   const sourceParam = (req.query.source || '').toLowerCase();
 
   if (!Number.isInteger(episode) || episode < 1) {
@@ -242,31 +366,51 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   try {
     let data = null;
 
-    if (sourceParam === 'anime3rb' || req.params.slug.startsWith('a3rb-')) {
+    if (sourceParam === 'okanime' || req.params.slug.startsWith('ok-')) {
+      data = await okanimeService.getEpisode(cleanSlug, episode);
+    } else if (sourceParam === 'animeblkom' || req.params.slug.startsWith('blkom-')) {
+      data = await animeblkomService.getEpisode(cleanSlug, episode);
+    } else if (sourceParam === 'anime3rb' || req.params.slug.startsWith('a3rb-')) {
       data = await anime3rbService.getEpisode(cleanSlug, episode);
     } else {
-      // Try WitAnime first
+      // First try OkAnime for immediate high-speed servers
       try {
-        data = await fetchEpisode(cleanSlug, episode);
-      } catch (err) {
-        console.warn('witanime fetchEpisode failed, trying anime3rb fallback:', err.message);
+        data = await okanimeService.getEpisode(cleanSlug, episode);
+      } catch (_) {}
+
+      // If OkAnime didn't have live sources, try WitAnime
+      if (!data || !data.entries?.length) {
+        try {
+          data = await fetchEpisode(cleanSlug, episode);
+        } catch (err) {
+          console.warn('witanime fetchEpisode failed, trying anime3rb fallback:', err.message);
+        }
       }
 
       // If WitAnime didn't have it or failed, try Anime3rb
       if (!data || !data.entries?.length) {
-        data = await anime3rbService.getEpisode(cleanSlug, episode);
-      } else {
-        // WitAnime succeeded, also enrich with Anime3rb servers as alternative sources
         try {
-          const a3rbData = await anime3rbService.getEpisode(cleanSlug, episode);
-          if (a3rbData?.entries?.length) {
-            data.entries = [...data.entries, ...a3rbData.entries];
-            data.downloads = [...(data.downloads || []), ...(a3rbData.downloads || [])];
-            data.resolved = { ...(data.resolved || {}), ...(a3rbData.resolved || {}) };
-            data.resolvedDownloads = { ...(data.resolvedDownloads || {}), ...(a3rbData.resolvedDownloads || {}) };
-          }
+          data = await anime3rbService.getEpisode(cleanSlug, episode);
         } catch (_) {}
       }
+
+      // If still missing, try AnimeBlkom
+      if (!data || !data.entries?.length) {
+        try {
+          data = await animeblkomService.getEpisode(cleanSlug, episode);
+        } catch (_) {}
+      }
+
+      // Enrich with backup servers from other sources
+      try {
+        const altA3rb = await anime3rbService.getEpisode(cleanSlug, episode);
+        if (altA3rb?.entries?.length && data?.entries) {
+          data.entries = [...data.entries, ...altA3rb.entries];
+          data.downloads = [...(data.downloads || []), ...(altA3rb.downloads || [])];
+          data.resolved = { ...(data.resolved || {}), ...(altA3rb.resolved || {}) };
+          data.resolvedDownloads = { ...(data.resolvedDownloads || {}), ...(altA3rb.resolvedDownloads || {}) };
+        }
+      } catch (_) {}
     }
 
     if (!data) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });
@@ -388,6 +532,38 @@ router.post('/resolve-download', async (req, res) => {
     } catch (_) {}
   }
 
+  // If this is an OkAnime download entry
+  if (String(entryId).startsWith('dl-ok-')) {
+    try {
+      const okData = await okanimeService.getEpisode(String(slug).replace(/^ok-/, ''), ep);
+      const match = okData?.downloads?.find((d) => d.id === entryId);
+      if (match) {
+        return res.json({
+          source: {
+            url: match.downloadUrl,
+            directUrl: match.downloadUrl
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  // If this is an AnimeBlkom download entry
+  if (String(entryId).startsWith('dl-blkom-')) {
+    try {
+      const blkomData = await animeblkomService.getEpisode(String(slug).replace(/^blkom-/, ''), ep);
+      const match = blkomData?.downloads?.find((d) => d.id === entryId);
+      if (match) {
+        return res.json({
+          source: {
+            url: match.downloadUrl,
+            directUrl: match.downloadUrl
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
   try {
     const source = await resolveDownloadEntry(String(slug), ep, String(entryId));
     if (!source) return res.status(404).json({ error: 'not_found', message: 'Download server not found' });
@@ -399,8 +575,7 @@ router.post('/resolve-download', async (req, res) => {
 });
 
 /**
- * GET /api/stream/download-sources/:slug/:ep — resolves WitAnime's official download servers.
- * Strictly returns only the anime's official download sources from WitAnime.
+ * GET /api/stream/download-sources/:slug/:ep — resolves multi-source official download servers.
  */
 router.get('/download-sources/:slug/:ep', async (req, res) => {
   const { slug } = req.params;
@@ -410,32 +585,80 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
   }
 
   try {
-    const payload = await fetchEpisode(slug, ep);
-    if (!payload) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });
-
-    const rawDownloads = payload.downloads || [];
     const cloudHosts = [];
 
-    for (const dl of rawDownloads) {
-      let resolved = payload.resolvedDownloads?.[dl.id] || null;
-
-      if (!resolved) {
-        try {
-          resolved = await resolveDownloadEntry(slug, ep, dl.id);
-        } catch (e) {
-          // Keep resolving others gracefully if one encounters rate limiting or upstream lag
+    // Check OkAnime download sources
+    try {
+      const okData = await okanimeService.getEpisode(slug, ep);
+      if (okData?.downloads?.length) {
+        for (const dl of okData.downloads) {
+          cloudHosts.push({
+            id: dl.id,
+            server: dl.server || 'OkAnime Server',
+            quality: dl.quality || 'FHD',
+            url: dl.downloadUrl,
+            directUrl: dl.downloadUrl,
+            type: 'okanime_download'
+          });
         }
       }
+    } catch (_) {}
 
-      cloudHosts.push({
-        id: dl.id,
-        server: dl.server || 'Server',
-        quality: dl.quality || 'FHD',
-        url: resolved?.downloadUrl || null,
-        directUrl: resolved?.directUrl || null,
-        type: 'witanime_download'
-      });
-    }
+    // Check WitAnime downloads
+    try {
+      const payload = await fetchEpisode(slug, ep);
+      const rawDownloads = payload?.downloads || [];
+      for (const dl of rawDownloads) {
+        let resolved = payload.resolvedDownloads?.[dl.id] || null;
+        if (!resolved) {
+          try {
+            resolved = await resolveDownloadEntry(slug, ep, dl.id);
+          } catch (_) {}
+        }
+        cloudHosts.push({
+          id: dl.id,
+          server: dl.server || 'Server',
+          quality: dl.quality || 'FHD',
+          url: resolved?.downloadUrl || null,
+          directUrl: resolved?.directUrl || null,
+          type: 'witanime_download'
+        });
+      }
+    } catch (_) {}
+
+    // Check Anime3rb downloads
+    try {
+      const a3rbData = await anime3rbService.getEpisode(slug, ep);
+      if (a3rbData?.downloads?.length) {
+        for (const dl of a3rbData.downloads) {
+          cloudHosts.push({
+            id: dl.id,
+            server: dl.server || 'Anime3rb Server',
+            quality: dl.quality || 'FHD',
+            url: dl.downloadUrl,
+            directUrl: dl.downloadUrl,
+            type: 'anime3rb_download'
+          });
+        }
+      }
+    } catch (_) {}
+
+    // Check AnimeBlkom downloads
+    try {
+      const blkomData = await animeblkomService.getEpisode(slug, ep);
+      if (blkomData?.downloads?.length) {
+        for (const dl of blkomData.downloads) {
+          cloudHosts.push({
+            id: dl.id,
+            server: dl.server || 'AnimeBlkom Server',
+            quality: dl.quality || 'FHD',
+            url: dl.downloadUrl,
+            directUrl: dl.downloadUrl,
+            type: 'animeblkom_download'
+          });
+        }
+      }
+    } catch (_) {}
 
     res.json({
       slug,
@@ -481,7 +704,16 @@ const ALLOWED_HOSTS = [
   'vidmoly.me',
   'vidmoly.to',
   'wahmi.org',
-  'uptobox.com'
+  'uptobox.com',
+  'okanime.xyz',
+  'animeblkom.com',
+  'share4max.com',
+  'uqload.is',
+  'uqload.com',
+  'streamruby.com',
+  'rubyvidhub.com',
+  'vkvideo.ru',
+  'vk.com'
 ];
 
 function hostAllowed(hostname) {

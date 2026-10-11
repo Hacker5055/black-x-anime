@@ -62,7 +62,7 @@ export default function TrendingAnime() {
       api.get(`/api/stream/catalog?source=${selectedSource}`).catch(() => ({ items: [] }))
     ];
 
-    if (selectedSource !== 'anime3rb') {
+    if (selectedSource === 'all' || selectedSource === 'witanime') {
       promises.push(api.get('/api/anime/trending').catch(() => ({ anime: [] })));
     } else {
       promises.push(Promise.resolve({ anime: [] }));
@@ -92,9 +92,9 @@ export default function TrendingAnime() {
       setSearching(true);
       try {
         const streamPromise = api.get(`/api/stream/search?q=${encodeURIComponent(clean)}&source=${selectedSource}`).catch(() => ({ items: [] }));
-        const aniPromise = selectedSource === 'anime3rb'
-          ? Promise.resolve({ anime: [] })
-          : api.get(`/api/anime/search?q=${encodeURIComponent(clean)}`).catch(() => ({ anime: [] }));
+        const aniPromise = (selectedSource === 'all' || selectedSource === 'witanime')
+          ? api.get(`/api/anime/search?q=${encodeURIComponent(clean)}`).catch(() => ({ anime: [] }))
+          : Promise.resolve({ anime: [] });
 
         const [streamRes, aniRes] = await Promise.all([streamPromise, aniPromise]);
 
@@ -186,38 +186,49 @@ export default function TrendingAnime() {
     const list = [];
     const seen = new Set();
 
-    // 1. Add catalog items for Anime3rb and WitAnime when selected
-    if (selectedSource === 'all' || selectedSource === 'anime3rb' || selectedSource === 'witanime') {
-      for (const cat of catalogList) {
-        const catSource = cat.source || (cat.anime3rbId ? 'anime3rb' : 'witanime');
-        if (selectedSource !== 'all' && selectedSource !== catSource) continue;
-        const key = `${catSource}:${cat.slug}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          list.push({
-            id: `cat-${catSource}-${cat.slug}`,
-            slug: cat.slug,
-            titleEn: cat.titleEn || cat.title || cat.slug,
-            titleAr: cat.titleAr || cat.title || cat.titleEn || cat.slug,
-            poster: cat.poster,
-            banner: cat.banner,
-            episodes: cat.episodeCount || cat.episodes || 24,
-            score: Math.round((cat.rating || cat.score || 9.8) > 10 ? (cat.rating || cat.score || 9.8) : (cat.rating || cat.score || 9.8) * 10),
-            genres: cat.genres || ['أكشن', 'فانتازيا'],
-            isDirectStream: true,
-            source: catSource,
-            sourceLabel: catSource === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' : 'سيرفر BLACK X 1 (WitAnime)'
-          });
-        }
+    // 1. Add catalog items for all sources (WitAnime, Anime3rb, OkAnime, AnimeBlkom)
+    for (const cat of catalogList) {
+      const catSource = cat.source || (cat.okanimeId ? 'okanime' : cat.blkomId ? 'animeblkom' : cat.anime3rbId ? 'anime3rb' : 'witanime');
+      if (selectedSource !== 'all' && selectedSource !== catSource) continue;
+      const key = `${catSource}:${cat.slug}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const sourceLabel = cat.sourceLabel || (
+          catSource === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
+          catSource === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
+          catSource === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
+          'سيرفر BLACK X 1 (WitAnime)'
+        );
+        list.push({
+          id: `cat-${catSource}-${cat.slug}`,
+          slug: cat.slug,
+          titleEn: cat.titleEn || cat.title || cat.slug,
+          titleAr: cat.titleAr || cat.title || cat.titleEn || cat.slug,
+          poster: cat.poster,
+          banner: cat.banner,
+          episodes: cat.episodeCount || cat.episodes || 24,
+          score: Math.round((cat.rating || cat.score || 9.8) > 10 ? (cat.rating || cat.score || 9.8) : (cat.rating || cat.score || 9.8) * 10),
+          genres: cat.genres || ['أكشن', 'فانتازيا'],
+          isDirectStream: true,
+          source: catSource,
+          sourceLabel
+        });
       }
     }
 
     // 2. Add latest streaming episodes
     for (const item of latestStreamList) {
       const itemSrc = item.source || 'witanime';
+      if (selectedSource !== 'all' && selectedSource !== itemSrc) continue;
       const key = `${itemSrc}:${item.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
+        const sourceLabel = item.sourceLabel || (
+          itemSrc === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
+          itemSrc === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
+          itemSrc === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
+          'سيرفر BLACK X 1 (WitAnime)'
+        );
         list.push({
           id: `lat-${itemSrc}-${item.slug}`,
           slug: item.slug,
@@ -229,7 +240,7 @@ export default function TrendingAnime() {
           genres: ['Action', 'Adventure'],
           isDirectStream: true,
           source: itemSrc,
-          sourceLabel: itemSrc === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' : 'سيرفر BLACK X 1 (WitAnime)'
+          sourceLabel
         });
       }
     }
@@ -282,7 +293,7 @@ export default function TrendingAnime() {
   }, [searchResults, activeFilter, selectedSource, catalogList, latestStreamList, trendingList, selectedGenre, subscribedSlugs]);
 
   const handleOpenAnime = async (item) => {
-    const srcQuery = item.source === 'anime3rb' ? '?source=anime3rb' : '';
+    const srcQuery = item.source && item.source !== 'all' ? `?source=${item.source}` : '';
     if (item.slug && !String(item.slug).startsWith('ani-')) {
       navigate(`/show/${item.slug}${srcQuery}`);
       return;
@@ -536,9 +547,11 @@ export default function TrendingAnime() {
 
         <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
           {[
-            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (WitAnime + Anime3rb)', labelEn: 'All Sources' },
+            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (WitAnime + Anime3rb + OkAnime + Blkom)', labelEn: 'All Sources' },
             { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1 (WitAnime)', labelEn: 'Server 1 (WitAnime)', sub: 'witanime.site' },
-            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2 (Anime3rb)', labelEn: 'Server 2 (Anime3rb)', sub: 'anime3rb.com' }
+            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2 (Anime3rb)', labelEn: 'Server 2 (Anime3rb)', sub: 'anime3rb.com' },
+            { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 3 (OkAnime)', labelEn: 'Server 3 (OkAnime)', sub: 'ww3.okanime.xyz' },
+            { id: 'animeblkom', icon: '💎', labelAr: 'سيرفر BLACK X 4 (AnimeBlkom)', labelEn: 'Server 4 (AnimeBlkom)', sub: 'animeblkom.com' }
           ].map((src) => {
             const active = selectedSource === src.id;
             return (
@@ -561,7 +574,11 @@ export default function TrendingAnime() {
                   cursor: 'pointer',
                   transition: 'all 0.22s ease',
                   background: active
-                    ? src.id === 'anime3rb'
+                    ? src.id === 'okanime'
+                      ? 'linear-gradient(135deg, #f97316, #e11d48)'
+                      : src.id === 'animeblkom'
+                      ? 'linear-gradient(135deg, #a855f7, #3b82f6)'
+                      : src.id === 'anime3rb'
                       ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
                       : src.id === 'witanime'
                       ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)'

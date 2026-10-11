@@ -470,9 +470,12 @@ export default function Watch({ onOpenAuth }) {
           {/* ---------- meta under player ---------- */}
           <div className="watch-meta glass reveal">
             <div style={{ flex: 1, minWidth: '220px' }}>
-              <div className="watch-meta__kicker">
+              <div className="watch-meta__kicker" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
                 <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
+                <span style={{ fontSize: '0.72rem', padding: '0.12rem 0.55rem', borderRadius: '8px', background: 'rgba(34, 211, 238, 0.14)', border: '1px solid rgba(34, 211, 238, 0.35)', color: '#22d3ee', fontWeight: 800 }}>
+                  {show?.sourceName || (sourceParam === 'okanime' ? '🔥 OkAnime' : sourceParam === 'animeblkom' ? '💎 AnimeBlkom' : sourceParam === 'anime3rb' ? '⚡ Anime3rb' : '👑 WitAnime')}
+                </span>
               </div>
               <h1 className="watch-meta__title">
                 {t('watch.episodePicker', { n: formatNumber(episode) })}
