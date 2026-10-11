@@ -536,6 +536,106 @@ export default function Watch({ onOpenAuth }) {
             </div>
           </div>
 
+          {/* ---------- WitAnime Direct Multi-Quality Download Table (جدول تحميل الحلقة) ---------- */}
+          {episodeData?.entries?.length > 0 && (
+            <div className="wit-section" style={{ marginTop: '0.85rem' }}>
+              <div className="wit-sec-header" style={{ marginBottom: '0.75rem', paddingBottom: '0.65rem' }}>
+                <div className="wit-sec-header__right">
+                  <span className="wit-sec-header__bar" style={{ background: '#10b981' }} />
+                  <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
+                    <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر' : 'Direct Episode Download Table'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="wit-sec-header__more"
+                  onClick={() => setDownloadModalOpen(true)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {lang === 'ar' ? 'كل روابط التحميل ←' : 'All Download Links →'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                {/* Row 1: FHD 1080p VIP */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.6rem',
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '8px',
+                    background: '#111622',
+                    border: '1px solid rgba(245, 158, 11, 0.35)'
+                  }}
+                >
+                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#fde047' }}>
+                    👑 {lang === 'ar' ? 'الجودة الخارقة FHD (1080p • VIP)' : 'Full HD (1080p • VIP)'}
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {episodeData.entries.slice(0, 5).map((entry) => (
+                      <button
+                        key={`dl-fhd-${entry.index}`}
+                        type="button"
+                        className="wit-server-tab wit-server-tab--vip"
+                        onClick={() => {
+                          if (!isVipMember) {
+                            pushToast(
+                              lang === 'ar'
+                                ? '👑 تحميل جودة FHD 1080p متاح لمشتركي VIP فقط! افتح نافذة التحميل أو اشترك في VIP.'
+                                : '👑 FHD 1080p download is exclusive to VIP members!',
+                              'info'
+                            );
+                            navigate('/profile?tab=referrals');
+                            return;
+                          }
+                          setDownloadModalOpen(true);
+                        }}
+                      >
+                        <span>📥 {entry.label}</span>
+                        <small>{isVipMember ? '1080p' : '🔒 VIP'}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Row 2: HD 720p Free */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.6rem',
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '8px',
+                    background: '#111622',
+                    border: '1px solid #242f46'
+                  }}
+                >
+                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#38bdf8' }}>
+                    🖥️ {lang === 'ar' ? 'الجودة العالية HD (720p • مجاناً)' : 'High Definition HD (720p • Free)'}
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {episodeData.entries.slice(0, 5).map((entry) => (
+                      <button
+                        key={`dl-hd-${entry.index}`}
+                        type="button"
+                        className="wit-server-tab"
+                        onClick={() => setDownloadModalOpen(true)}
+                      >
+                        <span>📥 {entry.label}</span>
+                        <small>720p</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ---------- Watch Party Rooms & Timestamped / Voice Comments ---------- */}
           <WatchPartyPanel
             slug={slug}
