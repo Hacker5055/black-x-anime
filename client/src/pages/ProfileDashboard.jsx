@@ -12,6 +12,7 @@ import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
 import OrnamentGallery from '../ornaments/OrnamentGallery.jsx';
 import Avatar3DDecoration from '../components/Avatar3DDecoration.jsx';
 import MangaNovelReader from '../components/MangaNovelReader.jsx';
+import { OrnamentShop, WrappedCardPanel } from '../components/OrnamentShopAndWrapped.jsx';
 import { auth, onProfileSnapshot, onDeveloperProfileSnapshot } from '../firebase.js';
 
 // Helper to build instant, zero-404 SVG anime character portraits
@@ -120,6 +121,9 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const [userNotifications, setUserNotifications] = useState([]);
   const [activeDashboardReader, setActiveDashboardReader] = useState(null);
   const [uiTheme, setUiTheme] = useState(() => localStorage.getItem('profile_ui_theme') || 'dark-cyber');
+  const [customTitle, setCustomTitle] = useState(() => {
+    try { return localStorage.getItem('blackx.customTitle') || 'Shadow Monarch 👑'; } catch { return 'Shadow Monarch 👑'; }
+  });
   const [userRatings, setUserRatings] = useState([]);
   const [userCommunityPosts, setUserCommunityPosts] = useState([]);
   const [supportMessage, setSupportMessage] = useState('');
@@ -905,6 +909,24 @@ export default function ProfileDashboard({ onOpenAuth }) {
                 }}>
                   ⭐ VIP Basic
                 </span>
+                {customTitle && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      padding: '0.18rem 0.65rem',
+                      borderRadius: '999px',
+                      background: 'rgba(168, 85, 247, 0.2)',
+                      border: '1px solid rgba(168, 85, 247, 0.5)',
+                      color: '#e9d5ff',
+                      fontSize: '0.73rem',
+                      fontWeight: 800
+                    }}
+                  >
+                    {customTitle}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -931,6 +953,36 @@ export default function ProfileDashboard({ onOpenAuth }) {
               }}
             >
               🔥 {lang === 'ar' ? 'نفث النار الآن' : 'Unleash Fire'}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => setActiveTab('shop')}
+              style={{
+                background: 'rgba(168, 85, 247, 0.16)',
+                border: '1px solid rgba(168, 85, 247, 0.45)',
+                color: '#e9d5ff',
+                padding: '0.5rem 0.95rem',
+                borderRadius: '10px',
+                fontWeight: 800
+              }}
+            >
+              💎 {lang === 'ar' ? 'متجر الشظايا' : 'Shards Shop'}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => setActiveTab('wrapped')}
+              style={{
+                background: 'rgba(34, 211, 238, 0.14)',
+                border: '1px solid rgba(34, 211, 238, 0.45)',
+                color: 'var(--cyan)',
+                padding: '0.5rem 0.95rem',
+                borderRadius: '10px',
+                fontWeight: 800
+              }}
+            >
+              📈 {lang === 'ar' ? 'ملخص 2026' : '2026 Wrapped'}
             </button>
             <button
               type="button"
@@ -963,6 +1015,8 @@ export default function ProfileDashboard({ onOpenAuth }) {
         >
           {[
             { id: 'profile', icon: '👤', labelAr: 'الملف والتخصيص', labelEn: 'Profile & Look' },
+            { id: 'shop', icon: '💎', labelAr: 'متجر الزخارف والألقاب', labelEn: 'Shards Shop' },
+            { id: 'wrapped', icon: '📈', labelAr: 'ملخص 2026 Wrapped', labelEn: '2026 Wrapped' },
             { id: 'manga-novels', icon: '📖', labelAr: 'المانجا والروايات', labelEn: 'Manga & Novels' },
             { id: 'posts', icon: '💬', labelAr: 'منشوراتي', labelEn: 'My Posts' },
             { id: 'ratings', icon: '⭐', labelAr: 'تقييماتي', labelEn: 'My Ratings' },
@@ -997,6 +1051,36 @@ export default function ProfileDashboard({ onOpenAuth }) {
           })}
         </div>
       </div>
+
+      {/* ================= TAB: Black Shards Ornament & Title Shop ================= */}
+      {activeTab === 'shop' && (
+        <OrnamentShop
+          user={user}
+          gamificationStats={gamificationStats}
+          frameStyle={frameStyle}
+          onSelectFrame={(id) => {
+            setFrameStyle(id);
+            localStorage.setItem('profile_frame_style', id);
+          }}
+          bannerStyle={bannerOrnament}
+          onSelectBanner={setBannerOrnament}
+          customTitle={customTitle}
+          onSelectTitle={setCustomTitle}
+        />
+      )}
+
+      {/* ================= TAB: 2026 BLACK X Wrapped Card ================= */}
+      {activeTab === 'wrapped' && (
+        <WrappedCardPanel
+          user={user}
+          stats={stats}
+          gamificationStats={gamificationStats}
+          bookmarks={bookmarks}
+          readingHistory={readingHistory}
+          userRatings={userRatings}
+          customTitle={customTitle}
+        />
+      )}
 
       {/* ================= TAB 1: Profile & Customization (Facebook Two-Column Layout) ================= */}
       {activeTab === 'profile' && (

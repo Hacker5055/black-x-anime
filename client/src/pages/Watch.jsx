@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/hooks.js';
 import VideoPlayer from '../components/VideoPlayer.jsx';
+import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
 import { DownloadModal } from '../components/DownloadModal.jsx';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
@@ -296,6 +297,14 @@ export default function Watch({ onOpenAuth }) {
               )}
             </div>
           </div>
+
+          {/* ---------- Watch Party Rooms & Timestamped / Voice Comments ---------- */}
+          <WatchPartyPanel
+            slug={slug}
+            episode={episode}
+            title={title}
+            currentPosRef={lastPos}
+          />
         </div>
 
         {/* ---------- episode sidebar ---------- */}

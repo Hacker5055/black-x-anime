@@ -649,6 +649,47 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
                   <div style={{ color: '#10b981', fontWeight: 800, fontSize: '1rem' }}>
                     🎉 نهاية الفصل {selectedChapter?.chapterNumber}
                   </div>
+
+                  {/* Interactive Chapter Reactions Bar */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                      justifyContent: 'center',
+                      padding: '0.65rem 1rem',
+                      borderRadius: '16px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}
+                  >
+                    {[
+                      { emoji: '🔥', label: 'فصل ناري' },
+                      { emoji: '🙌', label: 'سينما مطلقة' },
+                      { emoji: '😱', label: 'صدمة!' },
+                      { emoji: '👑', label: 'أسطوري' },
+                      { emoji: '😭', label: 'مؤثر' }
+                    ].map((rx) => (
+                      <button
+                        key={rx.emoji}
+                        type="button"
+                        onClick={() => pushToast(`${rx.emoji} تم تسجيل تفاعلك (${rx.label}) على الفصل ${selectedChapter?.chapterNumber} (+15 XP)!`, 'success')}
+                        style={{
+                          padding: '0.38rem 0.75rem',
+                          borderRadius: '99px',
+                          background: 'rgba(34, 211, 238, 0.1)',
+                          border: '1px solid rgba(34, 211, 238, 0.3)',
+                          color: '#fff',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {rx.emoji} {rx.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div style={{ display: 'flex', gap: '0.75rem', width: '100%', maxWidth: '380px' }}>
                     <button
                       type="button"

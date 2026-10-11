@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 import { UserBadges, VerifiedBadge } from '../components/UserBadges.jsx';
+import UserHoverCard, { ANIME_MEME_STICKERS, VoiceNoteWavePlayer } from '../components/UserHoverCard.jsx';
 import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
 import { useOrnamentPrefs } from '../ornaments/useOrnamentPrefs.js';
 import { onCommunitySnapshot, syncCommunityPostToFirestore } from '../firebase.js';
@@ -57,6 +58,8 @@ export default function Community({ onOpenAuth }) {
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [showImageInput, setShowImageInput] = useState(false);
+  const [showMemePicker, setShowMemePicker] = useState(false);
+  const [recordingVoice, setRecordingVoice] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -462,6 +465,44 @@ export default function Community({ onOpenAuth }) {
               </div>
             )}
 
+            {showMemePicker && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap',
+                  padding: '0.75rem',
+                  marginBottom: '0.65rem',
+                  borderRadius: '14px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}
+              >
+                {ANIME_MEME_STICKERS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setContent((prev) => `${prev ? prev + '\n' : ''}[MEME:${m.id}] `);
+                      setShowMemePicker(false);
+                    }}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '99px',
+                      background: m.bg,
+                      border: 'none',
+                      color: '#fff',
+                      fontWeight: 800,
+                      fontSize: '0.76rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {m.emoji} {lang === 'ar' ? m.labelAr : m.labelEn}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Composer Footer Actions */}
             <div className="fb-composer__bottom">
               <div className="fb-composer__tools">
@@ -488,6 +529,36 @@ export default function Community({ onOpenAuth }) {
                 >
                   <span>🖼️</span>
                   <span>{lang === 'ar' ? 'صورة' : 'Photo'}</span>
+                </button>
+
+                {/* Add Anime Meme Sticker Button */}
+                <button
+                  type="button"
+                  className={`fb-composer__tool-btn ${showMemePicker ? 'active' : ''}`}
+                  onClick={() => setShowMemePicker((v) => !v)}
+                  title={lang === 'ar' ? 'إرفاق ميمز أنمي' : 'Attach Anime Meme'}
+                >
+                  <span>🎭</span>
+                  <span>{lang === 'ar' ? 'ميمز' : 'Memes'}</span>
+                </button>
+
+                {/* Record Voice Note Button */}
+                <button
+                  type="button"
+                  className={`fb-composer__tool-btn ${recordingVoice ? 'active' : ''}`}
+                  onClick={() => {
+                    if (recordingVoice) {
+                      setRecordingVoice(false);
+                      setContent((prev) => `${prev ? prev + '\n' : ''}[VOICE_NOTE:5s] `);
+                      pushToast(lang === 'ar' ? '🎙️ تم إرفاق التعليق الصوتي بالمنشور!' : '🎙️ Voice note attached!', 'success');
+                    } else {
+                      setRecordingVoice(true);
+                    }
+                  }}
+                  style={recordingVoice ? { color: '#ef4444', borderColor: '#ef4444' } : {}}
+                >
+                  <span>{recordingVoice ? '⏹️' : '🎙️'}</span>
+                  <span>{recordingVoice ? (lang === 'ar' ? 'إيقاف وحفظ' : 'Stop & Attach') : (lang === 'ar' ? 'صوتي' : 'Voice')}</span>
                 </button>
 
                 {/* Developer pin toggle */}
@@ -616,10 +687,20 @@ export default function Community({ onOpenAuth }) {
 
                         <div className="fb-post-card__meta">
                           <div className="fb-post-card__author-row" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                            <span className="fb-post-card__author-name" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              {post.author_name}
-                              <VerifiedBadge isDev={isPostDev} size={17} />
-                            </span>
+                            <UserHoverCard
+                              authorName={post.author_name}
+                              authorAvatar={post.author_avatar || (isAuthor ? (user?.photoURL || user?.photoUrl || '') : '')}
+                              authorFrame={isAuthor ? myFrame : (post.author_frame || 'royal-flame')}
+                              isDev={isPostDev}
+                              isFollowing={followingSet.has(post.author_name)}
+                              onToggleFollow={handleToggleFollow}
+                              canFollow={Boolean(user && post.author_name && post.author_name !== user.username)}
+                            >
+                              <span className="fb-post-card__author-name" style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+                                {post.author_name}
+                                <VerifiedBadge isDev={isPostDev} size={17} />
+                              </span>
+                            </UserHoverCard>
                             {isPostDev && (
                               <span className="fb-dev-badge" title="Verified Developer">
                                 👑 {lang === 'ar' ? 'مطور BLACK X' : 'Developer'}
@@ -687,7 +768,43 @@ export default function Community({ onOpenAuth }) {
 
                     {/* Post Content */}
                     <div className="fb-post-card__body">
-                      <p className="fb-post-card__text">{post.content}</p>
+                      <p className="fb-post-card__text">
+                        {String(post.content || '')
+                          .replace(/\[VOICE_NOTE:\d+s\]/g, '')
+                          .replace(/\[MEME:[a-z0-9_-]+\]/gi, '')
+                          .trim()}
+                      </p>
+
+                      {/* Render attached Anime Meme Stickers */}
+                      {ANIME_MEME_STICKERS.filter((m) => String(post.content || '').includes(`[MEME:${m.id}]`)).map((m) => (
+                        <div
+                          key={m.id}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.5rem 1.05rem',
+                            borderRadius: '16px',
+                            background: m.bg,
+                            color: '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.88rem',
+                            marginTop: '0.45rem',
+                            marginInlineEnd: '0.5rem',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+                          }}
+                        >
+                          <span style={{ fontSize: '1.25rem' }}>{m.emoji}</span>
+                          <span>{lang === 'ar' ? m.labelAr : m.labelEn}</span>
+                        </div>
+                      ))}
+
+                      {/* Render attached Voice Note Waveform Player */}
+                      {String(post.content || '').includes('[VOICE_NOTE:') && (
+                        <div>
+                          <VoiceNoteWavePlayer duration={5} />
+                        </div>
+                      )}
 
                       {post.image_url && (
                         <div className="fb-post-card__media">

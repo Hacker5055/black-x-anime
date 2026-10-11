@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { ShowSearch } from './Modals.jsx';
 import { UserBadges } from './UserBadges.jsx';
 import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
+import NotificationBell from './NotificationBell.jsx';
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -97,6 +98,7 @@ export default function Navbar({ onOpenAuth }) {
 
           <div className="nav__actions">
             <ShowSearch variant="nav" />
+            <NotificationBell />
             <LanguageToggle />
             {!user ? (
               <div className="nav__auth-group">
