@@ -11,6 +11,11 @@ import streamingRoutes from './routes/streaming.js';
 import libraryRoutes from './routes/library.js';
 import devRoutes from './routes/dev.js';
 import communityRoutes from './routes/community.js';
+import contentRoutes from './routes/content.routes.js';
+import communitySpecRoutes from './routes/community.routes.js';
+import profileRoutes from './routes/profile.routes.js';
+import gamificationRoutes from './routes/gamification.routes.js';
+import supportRoutes from './routes/support.routes.js';
 import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
@@ -96,6 +101,14 @@ app.use('/api/library', libraryRoutes);
 app.use('/api/dev', devRoutes);
 app.use('/api/settings', devRoutes);
 app.use('/api/community', communityRoutes);
+
+// Prisma/PostgreSQL social & gamification API (see prisma/schema.prisma)
+app.use('/api/content', contentRoutes);
+app.use('/api/community', communitySpecRoutes); // POST /follow (+ spec GET /posts fallback)
+app.use('/api/profile', profileRoutes);
+app.use('/api/gamification', gamificationRoutes);
+app.use('/api/creator', gamificationRoutes); // POST /submit lives in gamification.routes.js
+app.use('/api/support', supportRoutes);
 
 // Serve the built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist');

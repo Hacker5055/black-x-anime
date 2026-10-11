@@ -1,0 +1,222 @@
+// BLACK X — Prisma schema (PostgreSQL)
+// Anime/Manga social network & streaming platform backend.
+// Generate client:  npx prisma generate
+// Push to database: npx prisma db push   (or `npm run db:migrate`)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================ enums ================================
+
+enum ContentType {
+  ANIME
+  MANGA
+  NOVEL
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TicketStatus {
+  OPEN
+  REVIEW
+  CLOSED
+}
+
+// ================================ models ===============================
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  email         String   @unique
+  password_hash String
+  display_name  String?
+  avatar_color  String?  @default("#8b5cf6")
+  bio           String?
+  role          String   @default("user")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // TASK 1.1 — user extensions
+  is_verified      Boolean @default(false)
+  banner_url       String?
+  theme_preference String  @default("dark-liquid")
+  referral_code    String  @unique @default(uuid())
+  referred_by_id   String?
+  referred_by      User?   @relation("Referrals", fields: [referred_by_id], references: [id])
+  referrals        User[]  @relation("Referrals")
+  vip_status       String  @default("free")
+
+  // relations
+  ratings           Rating[]
+  following         Follow[]       @relation("Follower")
+  followers         Follow[]       @relation("Following")
+  posts             Post[]
+  comments          Comment[]
+  stats             UserStats?
+  badges            UserBadge[]
+  submissions       CreatorSubmission[]
+  support_tickets   SupportTicket[]
+
+  @@map("users")
+}
+
+model Content {
+  id          String      @id @default(uuid())
+  title       String
+  type        ContentType
+  description String?
+  cover_url   String?
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  episodes EpisodeChapter[]
+  ratings  Rating[]
+
+  @@map("contents")
+}
+
+model EpisodeChapter {
+  id         String   @id @default(uuid())
+  content_id String
+  number     Int
+  title      String?
+  created_at DateTime @default(now())
+
+  content Content  @relation(fields: [content_id], references: [id], onDelete: Cascade)
+  ratings Rating[]
+
+  @@unique([content_id, number])
+  @@map("episode_chapters")
+}
+
+model Rating {
+  id         String   @id @default(uuid())
+  user_id    String
+  content_id String
+  episode_id String?
+  score      Int
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user    User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  content Content         @relation(fields: [content_id], references: [id], onDelete: Cascade)
+  episode EpisodeChapter? @relation(fields: [episode_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, content_id, episode_id])
+  @@map("ratings")
+}
+
+// ========================= community & social ==========================
+
+model Follow {
+  follower_id  String
+  following_id String
+  created_at   DateTime @default(now())
+
+  follower  User @relation("Follower", fields: [follower_id], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [following_id], references: [id], onDelete: Cascade)
+
+  @@id([follower_id, following_id])
+  @@map("follows")
+}
+
+model Post {
+  id         String   @id @default(uuid())
+  user_id    String
+  title      String
+  body       String
+  created_at DateTime @default(now())
+
+  user     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  comments Comment[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id         String   @id @default(uuid())
+  post_id    String
+  user_id    String
+  body       String
+  created_at DateTime @default(now())
+
+  post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+// ======================= gamification & rewards ========================
+
+model UserStats {
+  user_id              String @id
+  total_watch_time_min Int    @default(0)
+  total_read_time_min  Int    @default(0)
+  current_level        Int    @default(1)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_stats")
+}
+
+model Badge {
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  icon_url            String?
+  requirement_threshold Int
+
+  awarded UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  user_id    String
+  badge_id   String
+  awarded_at DateTime @default(now())
+
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badge_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, badge_id])
+  @@map("user_badges")
+}
+
+model CreatorSubmission {
+  id         String           @id @default(uuid())
+  user_id    String
+  video_url  String
+  status     SubmissionStatus @default(PENDING)
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("creator_submissions")
+}
+
+// ============================== support ================================
+
+model SupportTicket {
+  id         String       @id @default(uuid())
+  user_id    String
+  subject    String
+  message    String
+  status     TicketStatus @default(OPEN)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("support_tickets")
+}
