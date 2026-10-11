@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { imgFallback } from '../hooks/hooks.js';
+import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
 
 /**
  * Avatar3DDecoration
@@ -197,6 +198,9 @@ export default function Avatar3DDecoration({
               <span className="particle-3d-orb particle-3d-orb--2" />
               <span className="particle-3d-orb particle-3d-orb--3" />
             </div>
+
+            {/* Real-time Living Creature Overlay (Dragon Fire Breath / Shadow Slash / Cyber Laser) */}
+            <LiveCreatureOverlay ornament={frameStyle} mode="frame" size={size} />
           </div>
         )}
       </div>

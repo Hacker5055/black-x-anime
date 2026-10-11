@@ -438,7 +438,7 @@ export default function Community({ onOpenAuth }) {
             {/* Attached Image Preview if entered */}
             {imageUrl && (
               <div className="fb-composer__img-preview">
-                <img onError={imgFallback} src={imageUrl} alt="Upload preview" onError={() => setImageUrl('')} />
+                <img src={imageUrl} alt="Upload preview" onError={() => setImageUrl('')} />
                 <button
                   type="button"
                   className="fb-composer__img-remove"

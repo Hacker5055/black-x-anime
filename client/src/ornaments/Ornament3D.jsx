@@ -12,6 +12,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ORNAMENT_PRESETS, resolveOrnamentId, detectQuality, WEBGL_PROBE } from './core/ornaments.js';
+import { LiveCreatureOverlay } from '../components/LiveAvatarOrnament.jsx';
 
 /* Lazily import the engine once per document — three.js is ~600 KB raw, so it
    must never land in the initial chunk. */
@@ -225,6 +226,9 @@ export default function Ornament3D({
         />
       )}
       {children}
+      {enabled && ornament && ornament !== 'default' && ornament !== 'none' && ornament !== 'off' && (
+        <LiveCreatureOverlay ornament={ornament} mode={isBanner ? 'banner' : 'frame'} size={size} />
+      )}
       {active && withAvatar && phase !== 'live' && preset?.css && (
         <span className={`ornament3d__boot avatar-frame avatar-frame--${ornament}`} aria-hidden="true" />
       )}
@@ -238,6 +242,9 @@ export function CssFrame({ ornament, children, size = 112, className = '' }) {
   return (
     <div className={`ornament3d ornament3d--css ${className}`} style={{ position: 'relative', width: size, height: size }}>
       {children}
+      {ornament && ornament !== 'default' && ornament !== 'none' && (
+        <LiveCreatureOverlay ornament={ornament} mode="frame" size={size} />
+      )}
       {preset && preset.id !== 'default' && <span className={`avatar-frame avatar-frame--${ornament}`} aria-hidden="true" />}
     </div>
   );

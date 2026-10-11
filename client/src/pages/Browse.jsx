@@ -598,8 +598,8 @@ export default function Browse() {
                   ★ {item.rating}
                 </div>
 
-                {/* Status Badge */}
-                <div style={{ position: 'bottom', bottom: '10px', insetInlineStart: '10px', position: 'absolute' }}>
+                  {/* Status Badge */}
+                  <div style={{ bottom: '10px', insetInlineStart: '10px', position: 'absolute' }}>
                   <span
                     style={{
                       background: 'rgba(0, 0, 0, 0.75)',

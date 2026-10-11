@@ -77,8 +77,8 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const [avatarColor, setAvatarColor] = useState('#22d3ee');
   const [bio, setBio] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
-  const [frameStyle, setFrameStyle] = useState('default');
-  const [bannerStyle, setBannerStyle] = useState('off');
+  const [frameStyle, setFrameStyle] = useState(() => localStorage.getItem('profile_frame_style') || 'royal-flame');
+  const [bannerStyle, setBannerStyle] = useState(() => localStorage.getItem('profile_banner_style') || 'royal-flame');
   const [ornamentQuality, setOrnamentQuality] = useState('auto');
   const [ornament3d, setOrnament3d] = useState(true);   // WebGL ornaments vs CSS 3D
   const [show3DPromptStudio, setShow3DPromptStudio] = useState(true);
@@ -213,8 +213,12 @@ export default function ProfileDashboard({ onOpenAuth }) {
         .then((res) => {
           if (res?.data) {
             if (res.data.bannerUrl) setBannerUrl(res.data.bannerUrl);
-            if (res.data.frameStyle) setFrameStyle(res.data.frameStyle);
-            if (res.data.bannerStyle) setBannerStyle(res.data.bannerStyle);
+            if (res.data.frameStyle && res.data.frameStyle !== 'default') {
+              setFrameStyle(res.data.frameStyle);
+            }
+            if (res.data.bannerStyle && res.data.bannerStyle !== 'off') {
+              setBannerStyle(res.data.bannerStyle);
+            }
           }
         })
         .catch(() => {});
@@ -1418,7 +1422,10 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   threeDEnabled={ornament3d}
                   quality={ornamentQuality}
                   onQualityChange={setOrnamentQuality}
-                  onChange={({ frameStyle: next }) => setFrameStyle(next)}
+                  onChange={({ frameStyle: next }) => {
+                    setFrameStyle(next);
+                    try { localStorage.setItem('profile_frame_style', next); } catch {}
+                  }}
                   avatar={{ photoUrl, label: displayName || username || 'X', color: avatarColor }}
                 />
 
@@ -1434,45 +1441,49 @@ export default function ProfileDashboard({ onOpenAuth }) {
                     showAdvanced={false}
                     threeDEnabled={ornament3d}
                     quality={ornamentQuality}
-                    onChange={({ bannerStyle: next }) => setBannerStyle(next)}
+                    onChange={({ bannerStyle: next }) => {
+                      setBannerStyle(next);
+                      try { localStorage.setItem('profile_banner_style', next); } catch {}
+                    }}
                     avatar={{ photoUrl, label: displayName || username || 'X', color: avatarColor }}
                   />
                 </div>
 
-                {/* 3D Prompt Studio Section */}
-                <div style={{ marginTop: '1.25rem', borderTop: '1px dashed rgba(34, 211, 238, 0.3)', paddingTop: '1rem' }}>
+                {/* Live Creature Action Bar (No Prompts — Pure Living Animated Creatures) */}
+                <div style={{ marginTop: '1.25rem', borderTop: '1px dashed rgba(255, 85, 0, 0.35)', paddingTop: '1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
                     <div>
-                      <strong style={{ fontSize: '0.9rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>🔮</span> {lang === 'ar' ? 'معمل برومبتات الزخارف الحية ثلاثية الأبعاد 3D' : '3D Live Ornaments AI Prompts Studio'}
+                      <strong style={{ fontSize: '0.92rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <span>🐉</span> {lang === 'ar' ? 'الأشكال الحية التفاعلية (تنين ينفث النار وكائنات متحركة)' : 'Interactive Living Creatures (Fire-Breathing Dragon & Live Entities)'}
                       </strong>
-                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.76rem', color: 'var(--ink-dim)' }}>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.77rem', color: 'var(--ink-dim)' }}>
                         {lang === 'ar'
-                          ? 'برومبتات احترافية لـ Midjourney وRunway لتوليد أشكال وإطارات وبانرات 3D متحركة'
-                          : 'Production-ready prompts for Midjourney & Runway to generate living 3D frames & banners'}
+                          ? 'الكائن الحي المختار يطوف حول صورة حسابك وينفث النار أو يطلق قدرته القتالية تلقائياً وعند الضغط!'
+                          : 'Your chosen living creature orbits your avatar and breathes fire / unleashes its signature attack automatically and on click!'}
                       </p>
                     </div>
                     <button
                       type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => setShow3DPromptStudio((prev) => !prev)}
+                      className="btn btn--primary btn--sm"
+                      onClick={() => {
+                        if (!frameStyle || frameStyle === 'default' || frameStyle === 'none') {
+                          setFrameStyle('royal-flame');
+                        }
+                        window.dispatchEvent(new CustomEvent('blackx:trigger-creature-attack'));
+                      }}
                       style={{
-                        fontSize: '0.78rem',
-                        padding: '0.35rem 0.85rem',
-                        borderColor: 'rgba(34, 211, 238, 0.4)',
-                        color: 'var(--cyan)'
+                        fontSize: '0.82rem',
+                        padding: '0.48rem 1rem',
+                        background: 'linear-gradient(135deg, #ff4500, #ff9900)',
+                        border: '1px solid rgba(255, 190, 60, 0.6)',
+                        color: '#fff',
+                        fontWeight: 800,
+                        boxShadow: '0 0 20px rgba(255, 69, 0, 0.45)'
                       }}
                     >
-                      {show3DPromptStudio
-                        ? (lang === 'ar' ? '▲ إخفاء معمل البرومبتات' : '▲ Hide 3D Prompts')
-                        : (lang === 'ar' ? '▼ فتح معمل برومبتات 3D' : '▼ Open 3D Prompts Studio')}
+                      🔥 {lang === 'ar' ? 'نفث النار / إطلاق القدرة الآن!' : 'Unleash Fire / Creature Attack Now!'}
                     </button>
                   </div>
-                  {show3DPromptStudio && (
-                    <div style={{ marginTop: '0.85rem' }}>
-                      <PromptStudio3D lang={lang} />
-                    </div>
-                  )}
                 </div>
               </div>
 
