@@ -479,11 +479,9 @@ export default function Dashboard({ onOpenAuth }) {
   const [latest, setLatest] = useState(null);
   const [trending, setTrending] = useState(null);
   const [error, setError] = useState(false);
-  const [quickQuery, setQuickQuery] = useState('');
 
   const { lang } = useI18n();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const vipTier = resolveUserVipTier(user);
   const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
 
@@ -517,29 +515,10 @@ export default function Dashboard({ onOpenAuth }) {
     return unique;
   }, [latest]);
 
-  const handleQuickSearch = (e) => {
-    e.preventDefault();
-    if (!quickQuery.trim()) return;
-    navigate(`/trending?q=${encodeURIComponent(quickQuery.trim())}`);
-  };
-
   return (
     <div className="wit-home-wrap">
-      {/* WitAnime Top Search & Quick Navigation Strip */}
+      {/* Quick Navigation Strip (Search form removed per user request) */}
       <div className="wit-top-strip">
-        <form className="wit-search-form" onSubmit={handleQuickSearch}>
-          <input
-            type="search"
-            className="wit-search-input"
-            value={quickQuery}
-            onChange={(e) => setQuickQuery(e.target.value)}
-            placeholder={lang === 'ar' ? 'ابحث عن أنمي هنا (مثال: One Piece, Solo Leveling, Bleach)...' : 'Search anime here...'}
-          />
-          <button type="submit" className="wit-search-btn">
-            🔍 {lang === 'ar' ? 'بحث' : 'Search'}
-          </button>
-        </form>
-
         <div className="wit-quick-cats">
           <a href="#pinned-anime" className="wit-cat-pill active">📌 {lang === 'ar' ? 'الأنميات المثبتة' : 'Pinned'}</a>
           <a href="#latest-episodes" className="wit-cat-pill">🔥 {lang === 'ar' ? 'أحدث الحلقات' : 'Latest Episodes'}</a>
