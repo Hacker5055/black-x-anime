@@ -7,7 +7,7 @@ import { mangaNovelController } from '../controllers/mangaNovel.controller.js';
 
 const router = Router();
 
-// Search: Aggregates AniList, MangaDex, Scraper
+// Search: Aggregates MangaLik (مانجا ليك - https://mangalik.net/), AniList, Scraper
 router.get('/search', mangaNovelController.search);
 
 // Manga & Manhwa Routes

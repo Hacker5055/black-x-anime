@@ -53,18 +53,20 @@ export default function Browse() {
           const liveRes = await api.get(`/api/search?query=${encodeURIComponent(q)}&type=${searchType}`);
           if (liveRes?.results && liveRes.results.length > 0) {
             const mapped = liveRes.results.map((r, i) => ({
-              id: r.id || r.mangaDexId || `res_${i}`,
-              mangaDexId: r.mangaDexId,
-              title_ar: r.title || r.romajiTitle,
-              title_en: r.romajiTitle || r.title || 'Manga',
-              poster: r.coverImage?.large || r.coverImage?.extraLarge || r.coverUrl || r.coverImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600',
+              id: r.mangalikSlug || r.slug || r.id || `res_${i}`,
+              mangalikSlug: r.mangalikSlug || r.slug || r.id,
+              mangaSlayerId: r.mangalikSlug || r.slug || r.id,
+              mangaDexId: r.mangalikSlug || r.slug || r.id,
+              title_ar: r.arabicTitle || r.title || r.romajiTitle,
+              title_en: r.englishTitle || r.romajiTitle || r.title || 'Manga',
+              poster: r.coverUrl || r.poster || r.coverImage?.large || r.coverImage?.extraLarge || r.coverImage || 'https://io.mangalik.net/wp-content/app/lekmanganet/512.png',
               type: activeCategory.toUpperCase(),
-              author: r.author || (r.source === 'mangadex' ? 'MangaDex (مترجم عربي)' : r.source === 'anilist' ? 'AniList' : 'المصدر العربي'),
-              rating: r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.3',
-              description_ar: r.description || r.synopsisArabic || r.arabicSynopsis || 'متاح بترجمة عربية وفصول مباشرة.',
-              description_en: r.description || 'Full Arabic translated chapters available.',
-              chapters_count: r.chapters || r.chaptersCount || 40,
-              source: r.source
+              author: r.author || (r.source === 'mangalik' ? 'مانجا ليك (MangaLik)' : r.source === 'anilist' ? 'AniList' : 'شبكة مانجا ليك'),
+              rating: r.rating || (r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.7'),
+              description_ar: r.description || r.synopsisArabic || r.arabicSynopsis || 'متاح بترجمة عربية وفصول مباشرة وحصرية عبر مانجا ليك (https://mangalik.net/).',
+              description_en: r.description || 'Full Arabic translated chapters available via MangaLik.',
+              chapters_count: r.chaptersCount || r.totalChapters || r.chapters || 25,
+              source: r.source || 'mangalik'
             }));
             setLibraryItems(mapped);
             return;

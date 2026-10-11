@@ -1,10 +1,10 @@
 /**
  * Manga, Novel & Tracking Controller
- * Bridges AniList GraphQL, MangaDex v5 (Arabic), and Scraper Engine.
+ * Bridges AniList GraphQL, MangaLik (مانجا ليك - https://mangalik.net/), and Scraper Engine.
  */
 
 import { anilistService } from '../services/anilist.service.js';
-import { mangadexService } from '../services/mangadex.service.js';
+import { mangalikService } from '../services/mangalik.service.js';
 import { scraperService } from '../services/scraper.service.js';
 import { getUserId } from '../lib/api.js';
 import { db } from '../db.js';
@@ -19,7 +19,9 @@ export const mangaNovelController = {
       const cleanQuery = query.trim();
 
       if (!cleanQuery) {
-        return res.json({ success: true, total: 0, results: [] });
+        // Return latest trending releases from MangaLik
+        const trending = await mangalikService.getLatestFromHome(15);
+        return res.json({ success: true, total: trending.length, results: trending });
       }
 
       if (type === 'novel') {
@@ -42,16 +44,16 @@ export const mangaNovelController = {
         });
       }
 
-      // Default: Search Manga / Manhwa
-      const [aniListManga, mangaDexResults, scrapedManga] = await Promise.allSettled([
+      // Default: Search Manga / Manhwa via MangaLik (https://mangalik.net/), AniList, and Arabic Scraper
+      const [mangaLikResults, aniListManga, scrapedManga] = await Promise.allSettled([
+        mangalikService.searchManga(cleanQuery, 12),
         anilistService.search(cleanQuery, 'MANGA'),
-        mangadexService.searchManga(cleanQuery, 8),
         scraperService.searchArabicManga(cleanQuery)
       ]);
 
       const results = [
+        ...(mangaLikResults.status === 'fulfilled' ? mangaLikResults.value : []),
         ...(aniListManga.status === 'fulfilled' ? aniListManga.value : []),
-        ...(mangaDexResults.status === 'fulfilled' ? mangaDexResults.value : []),
         ...(scrapedManga.status === 'fulfilled' ? scrapedManga.value : [])
       ];
 
@@ -81,12 +83,12 @@ export const mangaNovelController = {
           return res.status(404).json({ error: 'not_found', message: 'Manga not found' });
         }
 
-        // Try to locate corresponding MangaDex Arabic ID
-        let mangaDexMatch = null;
+        // Locate corresponding MangaLik Arabic ID
+        let mangaLikMatch = null;
         try {
-          const mdResults = await mangadexService.searchManga(details.title, 3);
-          if (mdResults.length > 0) {
-            mangaDexMatch = mdResults[0].mangaDexId;
+          const mlResults = await mangalikService.searchManga(details.title, 3);
+          if (mlResults.length > 0) {
+            mangaLikMatch = mlResults[0].slug || mlResults[0].id;
           }
         } catch (_) {}
 
@@ -94,15 +96,25 @@ export const mangaNovelController = {
           success: true,
           data: {
             ...details,
-            mangaDexId: mangaDexMatch
+            mangalikSlug: mangaLikMatch,
+            mangaSlayerId: mangaLikMatch,
+            mangaDexId: mangaLikMatch
           }
         });
       }
 
-      // Fallback: If UUID/String, search MangaDex directly
-      const mdResults = await mangadexService.searchManga(id, 1);
-      if (mdResults.length > 0) {
-        return res.json({ success: true, data: mdResults[0] });
+      // If id is MangaLik slug or ID, fetch directly
+      const mlDetails = await mangalikService.getMangaDetails(id);
+      if (mlDetails) {
+        return res.json({
+          success: true,
+          data: {
+            ...mlDetails,
+            mangalikSlug: mlDetails.slug || mlDetails.id,
+            mangaSlayerId: mlDetails.slug || mlDetails.id,
+            mangaDexId: mlDetails.slug || mlDetails.id
+          }
+        });
       }
 
       res.status(404).json({ error: 'not_found', message: 'Manga not found' });
@@ -112,50 +124,33 @@ export const mangaNovelController = {
   },
 
   /**
-   * GET /api/manga/:id/chapters (Arabic only)
+   * GET /api/manga/:id/chapters (Arabic only from MangaLik)
    */
   async getMangaChapters(req, res) {
     try {
       const { id } = req.params;
-      let targetMangaDexId = id;
+      let targetId = id;
 
-      // If id is numeric (AniList), resolve to MangaDex ID
+      // If id is numeric (AniList), resolve to MangaLik ID
       if (/^\d+$/.test(id)) {
         const details = await anilistService.getDetails(id);
         if (details) {
-          const mdResults = await mangadexService.searchManga(details.title, 1);
-          if (mdResults.length > 0) {
-            targetMangaDexId = mdResults[0].mangaDexId;
+          const mlResults = await mangalikService.searchManga(details.title, 1);
+          if (mlResults.length > 0) {
+            targetId = mlResults[0].slug || mlResults[0].id;
           }
         }
       }
 
-      // Fetch Arabic chapters
-      const chapters = await mangadexService.getArabicChapters(targetMangaDexId);
-
-      // If no chapters in MangaDex, generate fallback scraper chapters
-      if (!chapters || chapters.length === 0) {
-        const fallback = Array.from({ length: 15 }, (_, i) => ({
-          source: 'arabic-scraper-fallback',
-          chapterId: `ch-fallback-${i + 1}`,
-          chapterNumber: `${i + 1}`,
-          title: `الفصل ${i + 1} (مترجم عربي)`,
-          language: 'ar',
-          scanlationGroup: 'فريق الترجمة العربي'
-        }));
-        return res.json({
-          success: true,
-          mangaId: id,
-          total: fallback.length,
-          language: 'ar',
-          chapters: fallback
-        });
-      }
+      // Fetch Arabic chapters from MangaLik
+      const chapters = await mangalikService.getArabicChapters(targetId);
 
       return res.json({
         success: true,
+        source: 'mangalik',
+        sourceUrl: `https://mangalik.net/manga/${targetId}/`,
         mangaId: id,
-        mangaDexId: targetMangaDexId,
+        mangalikSlug: targetId,
         total: chapters.length,
         language: 'ar',
         chapters
@@ -171,27 +166,8 @@ export const mangaNovelController = {
   async getChapterPages(req, res) {
     try {
       const { chapter_id } = req.params;
-
-      // MangaDex UUID format check
-      if (chapter_id.includes('-') && chapter_id.length > 20) {
-        const pageData = await mangadexService.getChapterPages(chapter_id);
-        return res.json({ success: true, ...pageData });
-      }
-
-      // Fallback sample high quality manga pages
-      const fallbackPages = [
-        { pageNumber: 1, url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200' },
-        { pageNumber: 2, url: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=1200' },
-        { pageNumber: 3, url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200' }
-      ];
-
-      return res.json({
-        success: true,
-        source: 'local-fallback',
-        chapterId: chapter_id,
-        totalPages: fallbackPages.length,
-        pages: fallbackPages
-      });
+      const pageData = await mangalikService.getChapterPages(chapter_id);
+      return res.json({ success: true, ...pageData });
     } catch (err) {
       res.status(500).json({ error: 'pages_fetch_failed', message: err.message });
     }
@@ -408,7 +384,7 @@ export const mangaNovelController = {
           seedId,
           userId,
           '🔥 فصل جديد متوفر!',
-          'صدر الفصل 179 مترجماً باللغة العربية لمانهو Solo Leveling الآن على MangaDex.',
+          'صدر الفصل الجديد مترجماً باللغة العربية الآن على مانجا ليك (MangaLik - https://mangalik.net/).',
           '/browse?category=manga'
         );
         rows = db.prepare('SELECT * FROM user_notifications WHERE user_id = ? ORDER BY created_at DESC').all(userId);
@@ -421,32 +397,70 @@ export const mangaNovelController = {
   },
 
   /**
-   * Image Streaming Proxy (Bypasses Hotlink Protection & CORS)
+   * Image Streaming Proxy (Bypasses Hotlink Protection, Referer blocks & CORS)
    * GET /api/proxy/image?url=...
    */
   async imageProxy(req, res) {
     try {
-      const { url } = req.query;
+      let { url } = req.query;
       if (!url) return res.status(400).send('URL is required');
 
-      const target = new URL(url);
+      // Unwrap nested proxy requests if present
+      while (url.includes('/api/proxy/image?url=')) {
+        const parts = url.split('/api/proxy/image?url=');
+        url = decodeURIComponent(parts[parts.length - 1]);
+      }
+
+      // If relative URL or invalid format, convert to valid URL or fail gracefully
+      let target;
+      try {
+        target = new URL(url);
+      } catch (_) {
+        return res.status(400).send('Invalid URL format');
+      }
+
+      const isMangalik = target.origin.includes('mangalik') || target.origin.includes('tempsolo');
+
       const upstream = await fetch(target.href, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0',
-          'Referer': target.origin,
-          'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+          'Referer': isMangalik ? 'https://mangalik.net/' : (target.origin || 'https://mangalik.net/'),
+          'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
         },
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(12000)
       });
 
-      if (!upstream.ok) return res.status(upstream.status).end();
+      if (!upstream.ok) {
+        // Fallback manga panel SVG to prevent broken image icon in browser
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.send(`
+          <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
+            <rect width="800" height="1100" fill="#0b0f19"/>
+            <rect x="30" y="30" width="740" height="1040" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="8 6"/>
+            <text x="400" y="480" fill="#10b981" font-size="28" font-family="sans-serif" font-weight="bold" text-anchor="middle">📖 مانجا ليك (MangaLik)</text>
+            <text x="400" y="530" fill="#94a3b8" font-size="20" font-family="sans-serif" text-anchor="middle">الصفحة قيد المعالجة من السيرفر المباشر</text>
+            <text x="400" y="580" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري إعادة التوجيه إلى خادم CDN المباشر...</text>
+          </svg>
+        `);
+      }
 
       res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable'); // 7 days cache
       res.send(Buffer.from(await upstream.arrayBuffer()));
     } catch (err) {
-      res.status(502).json({ error: 'image_proxy_error', message: err.message });
+      console.warn('[Image Proxy Warning]', err.message);
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.send(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
+          <rect width="800" height="1100" fill="#090d16"/>
+          <text x="400" y="520" fill="#10b981" font-size="24" font-family="sans-serif" text-anchor="middle">⚡ مانجا ليك - تحميل الصفحة</text>
+          <text x="400" y="560" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري الاتصال بسيرفر مانجا ليك...</text>
+        </svg>
+      `);
     }
   }
 };

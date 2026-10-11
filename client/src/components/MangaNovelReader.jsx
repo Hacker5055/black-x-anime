@@ -5,8 +5,10 @@ import { useI18n } from '../i18n/I18nProvider.jsx';
 import { LiquidLoader } from './Loading.jsx';
 
 /**
- * Manga & Light Novel Interactive Reader Component
- * Bridges MangaDex Arabic chapters, AniList metadata, and Arabic Scraper Engine.
+ * Mobile-First Interactive Manga & Manhwa Reader Component
+ * Source: MangaLik (مانجا ليك - https://mangalik.net/)
+ * Features edge-to-edge vertical webtoon view, tap-to-toggle immersion,
+ * auto-scroll hands-free reading, mobile bottom navigation dock, and chapter drawer.
  */
 export default function MangaNovelReader({ item, type = 'manga', onClose, onProgressUpdated }) {
   const { lang } = useI18n();
@@ -15,27 +17,40 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
   const [loadingDetails, setLoadingDetails] = useState(true);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState(null);
-  
+
   // Manga Reader State
   const [chapterPages, setChapterPages] = useState([]);
   const [loadingPages, setLoadingPages] = useState(false);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [readerMode, setReaderMode] = useState('webtoon'); // 'webtoon' (scroll) | 'single' (page-by-page)
   const [zoomLevel, setZoomLevel] = useState(100);
+  const [serverMode, setServerMode] = useState('proxy'); // 'proxy' | 'direct'
+
+  // Mobile Immersion & UI Controls
+  const [showUI, setShowUI] = useState(true);
+  const [showChapterDrawer, setShowChapterDrawer] = useState(false);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [autoScrollActive, setAutoScrollActive] = useState(false);
+  const [autoScrollSpeed, setAutoScrollSpeed] = useState(1); // 1 (slow), 2 (medium), 3 (fast)
+  const [chapterFilter, setChapterFilter] = useState('');
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   // Novel Reader State
   const [novelContent, setNovelContent] = useState(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [fontSize, setFontSize] = useState(18); // px
-  const [novelTheme, setNovelTheme] = useState('cyber'); // 'cyber' | 'sepia' | 'amoled'
+  const [novelTheme, setNovelTheme] = useState('amoled'); // 'cyber' | 'sepia' | 'amoled'
 
   // Bookmarked state
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
 
   const pagesContainerRef = useRef(null);
+  const readerRootRef = useRef(null);
+  const autoScrollTimerRef = useRef(null);
 
-  const mediaId = item?.mangaDexId || item?.id || item?.slug || 'item-1';
+  const mediaId = item?.mangalikSlug || item?.slug || item?.mangaSlayerId || item?.mangaDexId || item?.id || 'solo-swordmaster';
   const isNovel = type === 'novel' || item?.type === 'NOVEL' || item?.format === 'NOVEL';
 
   // Load Details & Chapters
@@ -47,7 +62,6 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
     const loadData = async () => {
       try {
         if (isNovel) {
-          // Novel details & chapters
           const novelId = item?.id || 'novel-solo-leveling';
           const [detRes, chRes] = await Promise.allSettled([
             api.get(`/api/novels/${novelId}`),
@@ -64,17 +78,16 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
             if (chRes.status === 'fulfilled' && chRes.value?.chapters) {
               setChapters(chRes.value.chapters);
               if (chRes.value.chapters.length > 0) {
-                // Auto-select chapter 1
                 setSelectedChapter(chRes.value.chapters[0]);
               }
             }
           }
         } else {
-          // Manga / Manhwa details & chapters
-          const mangaId = item?.id || item?.mangaDexId || '105398';
+          // Manga / Manhwa details & chapters from MangaLik
+          const mangaSlug = item?.mangalikSlug || item?.slug || item?.id || item?.mangaSlayerId || 'solo-swordmaster';
           const [detRes, chRes] = await Promise.allSettled([
-            api.get(`/api/manga/${mangaId}`),
-            api.get(`/api/manga/${mangaId}/chapters`)
+            api.get(`/api/manga/${mangaSlug}`),
+            api.get(`/api/manga/${mangaSlug}/chapters`)
           ]);
 
           if (alive) {
@@ -128,7 +141,6 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
         .then((res) => {
           if (alive && res?.chapter) {
             setNovelContent(res.chapter);
-            // Save reading history
             saveHistory(selectedChapter.chapterId, selectedChapter.chapterNumber, 1);
           }
         })
@@ -137,11 +149,16 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
     } else {
       setLoadingPages(true);
       setCurrentPageIndex(0);
-      api.get(`/api/manga/chapter/${selectedChapter.chapterId}/pages`)
+      setAutoScrollActive(false);
+      api.get(`/api/manga/chapter/${encodeURIComponent(selectedChapter.chapterId)}/pages`)
         .then((res) => {
           if (alive && res?.pages) {
             setChapterPages(res.pages);
             saveHistory(selectedChapter.chapterId, selectedChapter.chapterNumber, 1);
+            // scroll back to top smoothly
+            if (pagesContainerRef.current) {
+              pagesContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }
         })
         .catch((err) => console.error(err))
@@ -150,6 +167,37 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
 
     return () => { alive = false; };
   }, [selectedChapter, isNovel]);
+
+  // Auto-scroll loop for mobile hands-free reading
+  useEffect(() => {
+    if (!autoScrollActive || readerMode !== 'webtoon') {
+      if (autoScrollTimerRef.current) clearInterval(autoScrollTimerRef.current);
+      return;
+    }
+
+    const speedPx = autoScrollSpeed === 1 ? 2 : autoScrollSpeed === 2 ? 4 : 7;
+    autoScrollTimerRef.current = setInterval(() => {
+      if (pagesContainerRef.current) {
+        pagesContainerRef.current.scrollBy({ top: speedPx, behavior: 'smooth' });
+      }
+    }, 35);
+
+    return () => {
+      if (autoScrollTimerRef.current) clearInterval(autoScrollTimerRef.current);
+    };
+  }, [autoScrollActive, autoScrollSpeed, readerMode]);
+
+  // Scroll listener for reading progress bar
+  const handleScroll = useCallback(() => {
+    if (!pagesContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = pagesContainerRef.current;
+    if (scrollHeight <= clientHeight) {
+      setScrollProgress(100);
+      return;
+    }
+    const pct = Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
+    setScrollProgress(Math.min(100, Math.max(0, pct)));
+  }, []);
 
   // Save Reading Progress
   const saveHistory = async (chapterId, chapterNumber, page = 1) => {
@@ -184,7 +232,7 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
       setIsBookmarked(res.bookmarked);
       pushToast(
         res.bookmarked
-          ? (lang === 'ar' ? '★ تمت إضافة العمل إلى قائمتك وتفعيل التنبيهات' : '★ Added to your bookmarks and alert list')
+          ? (lang === 'ar' ? '★ تمت إضافة العمل إلى قائمتك وتفعيل التنبيهات' : '★ Added to bookmarks')
           : (lang === 'ar' ? 'تمت إزالة العمل من قائمتك' : 'Removed from bookmarks'),
         'success'
       );
@@ -208,6 +256,30 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
     } catch (_) {}
   };
 
+  // Toggle Fullscreen on Mobile / Desktop
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      if (readerRootRef.current?.requestFullscreen) {
+        readerRootRef.current.requestFullscreen().catch(() => {});
+        setIsFullscreen(true);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  // Toggle UI visibility when tapping the screen
+  const toggleUIVisibility = (e) => {
+    // If user clicked a button or select or drawer, ignore
+    if (e.target.closest('button') || e.target.closest('select') || e.target.closest('input') || e.target.closest('.no-toggle')) {
+      return;
+    }
+    setShowUI((prev) => !prev);
+  };
+
   // Chapter Navigation Helpers
   const currentChapterIndex = chapters.findIndex((c) => c.chapterId === selectedChapter?.chapterId);
   const hasPrevChapter = currentChapterIndex > 0;
@@ -221,552 +293,971 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
     if (hasNextChapter) setSelectedChapter(chapters[currentChapterIndex + 1]);
   };
 
-  // Build Image Proxy URL to prevent CORS/hotlink block
+  // Build Image Proxy URL
   const getProxiedImageUrl = (url) => {
     if (!url) return '';
+    if (serverMode === 'direct') {
+      if (url.includes('/api/proxy/image?url=')) {
+        return decodeURIComponent(url.split('/api/proxy/image?url=')[1]);
+      }
+      return url;
+    }
+    if (url.startsWith('/api/proxy/image')) return url;
     return `/api/proxy/image?url=${encodeURIComponent(url)}`;
   };
 
   const displayTitle = typeof details?.title === 'object'
-    ? (details?.title?.english || details?.title?.romaji || details?.title?.native || 'Untitled')
-    : (details?.title || item?.title || 'Untitled');
+    ? (details?.title?.english || details?.title?.romaji || details?.title?.native || 'مانجا ليك')
+    : (details?.title || item?.title || 'مانجا ليك');
 
-  const displayCover = details?.coverImage?.large || details?.coverImage?.extraLarge || details?.coverUrl || details?.coverImage || item?.poster || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600';
+  const displayCover = details?.coverImage?.large || details?.coverImage?.extraLarge || details?.coverUrl || item?.poster || 'https://io.mangalik.net/wp-content/app/lekmanganet/512.png';
+
+  const filteredChapters = chapters.filter((c) => {
+    if (!chapterFilter) return true;
+    return (
+      String(c.chapterNumber).includes(chapterFilter) ||
+      (c.title && c.title.toLowerCase().includes(chapterFilter.toLowerCase()))
+    );
+  });
 
   return (
     <div
+      ref={readerRootRef}
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9999,
-        background: 'rgba(5, 7, 14, 0.94)',
-        backdropFilter: 'blur(16px)',
+        zIndex: 99999,
+        background: '#040711',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        color: '#f8fafc'
+        color: '#f8fafc',
+        fontFamily: 'inherit',
+        userSelect: 'none'
       }}
     >
-      {/* Top Header Bar */}
+      {/* Top Reading Progress Bar (always visible) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '3px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          zIndex: 100
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${scrollProgress}%`,
+            background: 'linear-gradient(90deg, #10b981, #06b6d4)',
+            transition: 'width 0.15s ease'
+          }}
+        />
+      </div>
+
+      {/* ================= TOP HEADER BAR (AutoHideable) ================= */}
       <header
         style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 90,
+          transform: showUI ? 'translateY(0)' : 'translateY(-100%)',
+          transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0.75rem 1.5rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 15, 29, 0.9) 100%)',
-          gap: '1rem',
-          flexWrap: 'wrap'
+          padding: '0.6rem 0.85rem',
+          background: 'linear-gradient(180deg, rgba(4, 7, 17, 0.98) 0%, rgba(4, 7, 17, 0.85) 85%, rgba(4, 7, 17, 0) 100%)',
+          backdropFilter: 'blur(12px)',
+          gap: '0.5rem'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '220px' }}>
+        {/* Left: Close & Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flex: 1 }}>
           <button
             type="button"
             onClick={onClose}
-            className="btn btn--ghost btn--sm"
-            style={{ borderRadius: '50%', width: '38px', height: '38px', padding: 0 }}
-            title={lang === 'ar' ? 'إغلاق القارئ' : 'Close Reader'}
+            aria-label="Close"
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#fff',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
           >
             ✕
           </button>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'nowrap' }}>
               <span
                 style={{
-                  background: isNovel ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
                   color: '#fff',
-                  fontSize: '0.68rem',
+                  fontSize: '0.65rem',
                   fontWeight: 800,
-                  padding: '0.15rem 0.5rem',
+                  padding: '0.1rem 0.45rem',
                   borderRadius: '99px',
-                  textTransform: 'uppercase'
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.2rem'
                 }}
               >
-                {isNovel ? 'Light Novel' : 'Manga / Manhwa'}
+                ✓ مانجا ليك (MangaLik)
               </span>
-              <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>
-                ✓ {lang === 'ar' ? 'مترجم عربي' : 'Arabic Translation'}
-              </span>
+              {selectedChapter && (
+                <span
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.12)',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '6px',
+                    color: '#38bdf8',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  فصل {selectedChapter.chapterNumber}
+                </span>
+              )}
             </div>
-            <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.05rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '350px' }}>
+            <h3
+              style={{
+                margin: '0.15rem 0 0',
+                fontSize: '0.9rem',
+                fontWeight: 800,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                color: '#fff'
+              }}
+              title={displayTitle}
+            >
               {displayTitle}
             </h3>
           </div>
         </div>
 
-        {/* Chapter Switcher Bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            disabled={!hasPrevChapter}
-            onClick={goToPrevChapter}
-            className="btn btn--ghost btn--sm"
-            style={{ opacity: hasPrevChapter ? 1 : 0.4 }}
-          >
-            {lang === 'ar' ? '◀ الفصل السابق' : '◀ Prev'}
-          </button>
-
-          <select
-            value={selectedChapter?.chapterId || ''}
-            onChange={(e) => {
-              const ch = chapters.find((c) => c.chapterId === e.target.value);
-              if (ch) setSelectedChapter(ch);
-            }}
-            style={{
-              background: 'rgba(30, 41, 59, 0.85)',
-              color: '#fff',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '8px',
-              padding: '0.4rem 0.75rem',
-              fontSize: '0.86rem',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            {chapters.map((ch) => (
-              <option key={ch.chapterId} value={ch.chapterId} style={{ background: '#0f172a', color: '#fff' }}>
-                {ch.title || `الفصل ${ch.chapterNumber}`} {ch.scanlationGroup ? `(${ch.scanlationGroup})` : ''}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            disabled={!hasNextChapter}
-            onClick={goToNextChapter}
-            className="btn btn--ghost btn--sm"
-            style={{ opacity: hasNextChapter ? 1 : 0.4 }}
-          >
-            {lang === 'ar' ? 'الفصل التالي ▶' : 'Next ▶'}
-          </button>
-        </div>
-
-        {/* Action Tools & Bookmarks */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+        {/* Right: Quick Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
           <button
             type="button"
             onClick={handleToggleBookmark}
             disabled={bookmarking}
-            className={`btn btn--sm ${isBookmarked ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ fontSize: '0.82rem' }}
+            style={{
+              background: isBookmarked ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+              border: isBookmarked ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.12)',
+              color: isBookmarked ? '#10b981' : '#cbd5e1',
+              borderRadius: '20px',
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
           >
-            {isBookmarked ? '★ ' + (lang === 'ar' ? 'في قائمتي' : 'Bookmarked') : '☆ ' + (lang === 'ar' ? 'حفظ ومتابعة' : 'Bookmark')}
+            {isBookmarked ? '★ محفوظ' : '☆ حفظ'}
           </button>
 
           <button
             type="button"
-            onClick={handleRewardXP}
-            className="btn btn--ghost btn--sm"
-            style={{ color: '#22d3ee', borderColor: 'rgba(34, 211, 238, 0.4)' }}
-            title={lang === 'ar' ? 'تسجيل خبرة القراءة' : 'Claim Reading XP'}
+            onClick={toggleFullscreen}
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#cbd5e1',
+              borderRadius: '50%',
+              width: '34px',
+              height: '34px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+            title={isFullscreen ? 'تصغير' : 'ملء الشاشة'}
           >
-            ⚡ +150 XP
+            {isFullscreen ? '⛶' : '⛶'}
           </button>
         </div>
       </header>
 
-      {/* Main Content Area: Side Details + Reader */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* ================= READ VIEWPORT ================= */}
-        <main
-          ref={pagesContainerRef}
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '1.5rem',
-            background: isNovel && novelTheme === 'sepia'
-              ? '#fbf0d9'
-              : isNovel && novelTheme === 'amoled'
-              ? '#000000'
-              : 'radial-gradient(ellipse at top, #0d1527 0%, #060913 100%)',
-            color: isNovel && novelTheme === 'sepia' ? '#292524' : '#f1f5f9',
-            position: 'relative'
-          }}
-        >
-          {/* Controls Overlay Bar */}
-          {!isNovel ? (
-            /* Manga Controls Bar */
-            <div
-              style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 10,
-                marginBottom: '1rem',
-                display: 'flex',
-                gap: '0.5rem',
-                alignItems: 'center',
-                background: 'rgba(15, 23, 42, 0.85)',
-                backdropFilter: 'blur(8px)',
-                padding: '0.4rem 0.85rem',
-                borderRadius: '99px',
-                border: '1px solid rgba(255, 255, 255, 0.15)'
-              }}
-            >
-              <button
-                type="button"
-                className={`btn btn--sm ${readerMode === 'webtoon' ? 'btn--primary' : 'btn--ghost'}`}
-                style={{ padding: '0.25rem 0.65rem', fontSize: '0.76rem', borderRadius: '99px' }}
-                onClick={() => setReaderMode('webtoon')}
+      {/* ================= MAIN READ VIEWPORT (Mobile Optimized) ================= */}
+      <main
+        ref={pagesContainerRef}
+        onScroll={handleScroll}
+        onClick={toggleUIVisibility}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          padding: 0, // 0 padding for edge-to-edge mobile viewing
+          background: isNovel && novelTheme === 'sepia'
+            ? '#fbf0d9'
+            : isNovel && novelTheme === 'amoled'
+            ? '#000000'
+            : '#05070e',
+          color: isNovel && novelTheme === 'sepia' ? '#292524' : '#f1f5f9',
+          position: 'relative',
+          paddingTop: showUI ? '54px' : '0px',
+          paddingBottom: showUI ? '68px' : '16px',
+          transition: 'padding 0.25s ease'
+        }}
+      >
+        {/* ================= MANGA VIEW ================= */}
+        {!isNovel && (
+          <div
+            style={{
+              width: '100%',
+              maxWidth: readerMode === 'webtoon' ? `${zoomLevel * 8}px` : '780px',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+          >
+            {loadingPages ? (
+              <div style={{ padding: '6rem 1rem', textAlign: 'center' }}>
+                <LiquidLoader />
+                <p style={{ marginTop: '1.25rem', color: '#10b981', fontWeight: 700, fontSize: '0.9rem' }}>
+                  {lang === 'ar' ? 'جارٍ جلب صفحات الفصل من سيرفر مانجا ليك بدقة فائقة...' : 'Loading MangaLik pages...'}
+                </p>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  {lang === 'ar' ? 'سيرفر الترجمة العربية المباشر (https://mangalik.net/)' : 'Live Arabic translation server'}
+                </span>
+              </div>
+            ) : chapterPages.length === 0 ? (
+              <div
+                style={{
+                  margin: '4rem 1rem',
+                  padding: '2.5rem 1.5rem',
+                  textAlign: 'center',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                }}
               >
-                📜 {lang === 'ar' ? 'تمرير ويبتون' : 'Webtoon Scroll'}
-              </button>
-              <button
-                type="button"
-                className={`btn btn--sm ${readerMode === 'single' ? 'btn--primary' : 'btn--ghost'}`}
-                style={{ padding: '0.25rem 0.65rem', fontSize: '0.76rem', borderRadius: '99px' }}
-                onClick={() => setReaderMode('single')}
-              >
-                📄 {lang === 'ar' ? 'صفحة بصفحة' : 'Single Page'}
-              </button>
-              <div style={{ height: '16px', width: '1px', background: 'rgba(255,255,255,0.2)' }} />
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                style={{ padding: '0.2rem 0.5rem', fontSize: '0.76rem' }}
-                onClick={() => setZoomLevel((z) => Math.max(60, z - 15))}
-              >
-                -
-              </button>
-              <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>{zoomLevel}%</span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                style={{ padding: '0.2rem 0.5rem', fontSize: '0.76rem' }}
-                onClick={() => setZoomLevel((z) => Math.min(160, z + 15))}
-              >
-                +
-              </button>
-            </div>
-          ) : (
-            /* Novel Controls Bar */
-            <div
-              style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 10,
-                marginBottom: '1.25rem',
-                display: 'flex',
-                gap: '0.65rem',
-                alignItems: 'center',
-                background: novelTheme === 'sepia' ? 'rgba(240, 225, 195, 0.95)' : 'rgba(15, 23, 42, 0.88)',
-                backdropFilter: 'blur(8px)',
-                padding: '0.4rem 1rem',
-                borderRadius: '99px',
-                border: '1px solid rgba(255, 255, 255, 0.15)'
-              }}
-            >
-              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {lang === 'ar' ? 'حجم الخط:' : 'Font Size:'}
-              </span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                style={{ padding: '0.2rem 0.5rem' }}
-                onClick={() => setFontSize((s) => Math.max(14, s - 2))}
-              >
-                A-
-              </button>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{fontSize}px</span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                style={{ padding: '0.2rem 0.5rem' }}
-                onClick={() => setFontSize((s) => Math.min(28, s + 2))}
-              >
-                A+
-              </button>
-              <div style={{ height: '16px', width: '1px', background: 'rgba(255,255,255,0.2)' }} />
-              <button
-                type="button"
-                className={`btn btn--sm ${novelTheme === 'cyber' ? 'btn--primary' : 'btn--ghost'}`}
-                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem', borderRadius: '99px' }}
-                onClick={() => setNovelTheme('cyber')}
-              >
-                🌑 Dark Cyber
-              </button>
-              <button
-                type="button"
-                className={`btn btn--sm ${novelTheme === 'sepia' ? 'btn--primary' : 'btn--ghost'}`}
-                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem', borderRadius: '99px' }}
-                onClick={() => setNovelTheme('sepia')}
-              >
-                📜 Sepia
-              </button>
-              <button
-                type="button"
-                className={`btn btn--sm ${novelTheme === 'amoled' ? 'btn--primary' : 'btn--ghost'}`}
-                style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem', borderRadius: '99px' }}
-                onClick={() => setNovelTheme('amoled')}
-              >
-                ⬛ AMOLED
-              </button>
-            </div>
-          )}
-
-          {/* ================= MANGA VIEW ================= */}
-          {!isNovel && (
-            <div style={{ width: '100%', maxWidth: `${zoomLevel * 8}px`, transition: 'max-width 0.2s ease' }}>
-              {loadingPages ? (
-                <div style={{ padding: '4rem', textAlign: 'center' }}>
-                  <LiquidLoader />
-                  <p style={{ marginTop: '1rem', color: '#94a3b8' }}>
-                    {lang === 'ar' ? 'جارٍ تحميل صفحات الفصل بدقة فائقة...' : 'Loading high-res pages...'}
-                  </p>
-                </div>
-              ) : chapterPages.length === 0 ? (
-                <div style={{ padding: '4rem', textAlign: 'center', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '16px' }}>
-                  <h3>{lang === 'ar' ? 'لا تتوفر صفحات لهذا الفصل حالياً' : 'No pages available'}</h3>
-                  <p style={{ color: '#94a3b8' }}>{lang === 'ar' ? 'جرب اختيار فصل آخر من القائمة أعلاه' : 'Please select another chapter'}</p>
-                </div>
-              ) : readerMode === 'webtoon' ? (
-                /* Continuous Scroll Mode */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
-                  {chapterPages.map((pg, idx) => (
-                    <div key={idx} style={{ position: 'relative', width: '100%', background: '#000' }}>
-                      <img
-                        src={getProxiedImageUrl(pg.url)}
-                        alt={`Page ${idx + 1}`}
-                        loading="lazy"
-                        onError={(e) => {
-                          if (pg.fallbackUrl && e.target.src !== pg.fallbackUrl) {
-                            e.target.src = getProxiedImageUrl(pg.fallbackUrl);
-                          } else {
-                            imgFallback(e);
-                          }
-                        }}
-                        style={{
-                          width: '100%',
-                          height: 'auto',
-                          display: 'block',
-                          boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-                        }}
-                      />
-                      <div
-                        style={{
-                          position: 'absolute',
-                          bottom: '8px',
-                          insetInlineEnd: '8px',
-                          background: 'rgba(0,0,0,0.6)',
-                          color: '#fff',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '0.72rem',
-                          backdropFilter: 'blur(4px)'
-                        }}
-                      >
-                        {idx + 1} / {chapterPages.length}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                /* Single Page Mode */
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ position: 'relative', width: '100%', background: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📖</div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+                  {lang === 'ar' ? 'جارٍ تحميل أو إعداد صفحات هذا الفصل' : 'No pages available'}
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0.5rem 0 1.25rem' }}>
+                  {lang === 'ar' ? 'يمكنك التبديل إلى فصل آخر عبر القائمة السريعة بالأسفل' : 'Please select another chapter from the drawer'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowChapterDrawer(true)}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '24px',
+                    padding: '0.6rem 1.4rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📑 تصفح فصول مانجا ليك
+                </button>
+              </div>
+            ) : readerMode === 'webtoon' ? (
+              /* Continuous Webtoon Strip Mode (Mobile standard) */
+              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center' }}>
+                {chapterPages.map((pg, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      background: '#05070e',
+                      lineHeight: 0
+                    }}
+                  >
                     <img
-                      src={getProxiedImageUrl(chapterPages[currentPageIndex]?.url)}
-                      alt={`Page ${currentPageIndex + 1}`}
+                      src={getProxiedImageUrl(pg.url)}
+                      alt={`Page ${idx + 1}`}
+                      loading={idx < 3 ? 'eager' : 'lazy'}
+                      decoding="async"
                       onError={(e) => {
-                        const fallback = chapterPages[currentPageIndex]?.fallbackUrl;
-                        if (fallback && e.target.src !== fallback) {
-                          e.target.src = getProxiedImageUrl(fallback);
+                        const target = e.currentTarget;
+                        const step = Number(target.dataset.errorStep || '0');
+                        if (step === 0 && pg.directUrl) {
+                          target.dataset.errorStep = '1';
+                          target.src = pg.directUrl;
+                        } else if (step === 1 && pg.fallbackUrl) {
+                          target.dataset.errorStep = '2';
+                          target.src = pg.fallbackUrl;
                         } else {
                           imgFallback(e);
                         }
                       }}
-                      style={{ width: '100%', height: 'auto', display: 'block' }}
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block',
+                        margin: 0,
+                        padding: 0
+                      }}
                     />
-                  </div>
-
-                  {/* Single Page Navigation Bar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button
-                      type="button"
-                      disabled={currentPageIndex <= 0}
-                      onClick={() => setCurrentPageIndex((p) => Math.max(0, p - 1))}
-                      className="btn btn--ghost btn--sm"
+                    {/* Small page number indicator */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '8px',
+                        left: '8px',
+                        background: 'rgba(0, 0, 0, 0.65)',
+                        color: '#fff',
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '4px',
+                        fontSize: '0.65rem',
+                        backdropFilter: 'blur(4px)',
+                        pointerEvents: 'none'
+                      }}
                     >
-                      {lang === 'ar' ? '◀ الصفحة السابقة' : '◀ Prev Page'}
-                    </button>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>
-                      {currentPageIndex + 1} / {chapterPages.length}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={currentPageIndex >= chapterPages.length - 1}
-                      onClick={() => setCurrentPageIndex((p) => Math.min(chapterPages.length - 1, p + 1))}
-                      className="btn btn--ghost btn--sm"
-                    >
-                      {lang === 'ar' ? 'الصفحة التالية ▶' : 'Next Page ▶'}
-                    </button>
+                      {idx + 1} / {chapterPages.length}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                ))}
 
-          {/* ================= LIGHT NOVEL VIEW ================= */}
-          {isNovel && (
-            <div
-              style={{
-                width: '100%',
-                maxWidth: '780px',
-                lineHeight: 1.85,
-                fontSize: `${fontSize}px`,
-                direction: 'rtl',
-                textAlign: 'justify',
-                padding: '1.5rem',
-                borderRadius: '16px',
-                background: novelTheme === 'sepia' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.03)',
-                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-              }}
-            >
-              {loadingContent ? (
-                <div style={{ padding: '4rem', textAlign: 'center' }}>
-                  <LiquidLoader />
-                  <p style={{ marginTop: '1rem', color: '#94a3b8' }}>
-                    {lang === 'ar' ? 'جارٍ جلب نص الفصل باللغة العربية...' : 'Fetching chapter text...'}
-                  </p>
-                </div>
-              ) : novelContent ? (
-                <div>
-                  <h2
-                    style={{
-                      fontSize: `${fontSize * 1.3}px`,
-                      fontWeight: 800,
-                      marginBottom: '1rem',
-                      borderBottom: '2px solid rgba(255, 255, 255, 0.1)',
-                      paddingBottom: '0.75rem',
-                      color: novelTheme === 'sepia' ? '#78350f' : '#22d3ee'
-                    }}
-                  >
-                    {novelContent.title}
-                  </h2>
-
-                  <div style={{ whiteSpace: 'pre-line', marginBlock: '1.5rem' }}>
-                    {novelContent.content}
+                {/* End of Chapter Floating Bar */}
+                <div
+                  style={{
+                    width: '100%',
+                    padding: '2.5rem 1.5rem 4rem',
+                    textAlign: 'center',
+                    background: 'linear-gradient(180deg, #05070e 0%, #0b0f19 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '1rem'
+                  }}
+                >
+                  <div style={{ color: '#10b981', fontWeight: 800, fontSize: '1rem' }}>
+                    🎉 نهاية الفصل {selectedChapter?.chapterNumber}
                   </div>
-
-                  {/* End of Chapter Navigation */}
-                  <div
-                    style={{
-                      marginTop: '3rem',
-                      paddingTop: '1.5rem',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.15)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
+                  <div style={{ display: 'flex', gap: '0.75rem', width: '100%', maxWidth: '380px' }}>
                     <button
                       type="button"
                       disabled={!hasPrevChapter}
                       onClick={goToPrevChapter}
-                      className="btn btn--ghost"
+                      style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '12px',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        opacity: hasPrevChapter ? 1 : 0.4,
+                        cursor: 'pointer'
+                      }}
                     >
-                      {lang === 'ar' ? '◀ الفصل السابق' : '◀ Prev Chapter'}
+                      ◀ الفصل السابق
                     </button>
                     <button
                       type="button"
                       disabled={!hasNextChapter}
                       onClick={goToNextChapter}
-                      className="btn btn--primary"
+                      style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        background: hasNextChapter ? 'linear-gradient(135deg, #10b981, #06b6d4)' : 'rgba(255, 255, 255, 0.08)',
+                        border: 'none',
+                        borderRadius: '12px',
+                        color: '#fff',
+                        fontWeight: 800,
+                        fontSize: '0.82rem',
+                        opacity: hasNextChapter ? 1 : 0.4,
+                        cursor: 'pointer'
+                      }}
                     >
-                      <span className="btn__shine" />
-                      {lang === 'ar' ? 'الفصل التالي ▶' : 'Next Chapter ▶'}
+                      الفصل التالي ▶
                     </button>
                   </div>
                 </div>
-              ) : (
-                <p>{lang === 'ar' ? 'لا يوجد نص متوفر لهذا الفصل.' : 'No content available.'}</p>
-              )}
-            </div>
-          )}
-        </main>
-
-        {/* ================= SIDEBAR: CHAPTERS LIST & METADATA ================= */}
-        <aside
-          style={{
-            width: '320px',
-            borderInlineStart: '1px solid rgba(255, 255, 255, 0.1)',
-            background: 'rgba(10, 15, 29, 0.85)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden'
-          }}
-        >
-          {/* Work Summary Card */}
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', gap: '0.85rem' }}>
-            <img
-              src={displayCover}
-              onError={imgFallback}
-              alt=""
-              style={{ width: '65px', height: '90px', borderRadius: '8px', objectFit: 'cover' }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h4 style={{ margin: '0 0 0.25rem', fontSize: '0.92rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {displayTitle}
-              </h4>
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginBottom: '0.25rem' }}>
-                ★ {details?.averageScore ? `${Math.round(details.averageScore / 10)} / 10` : '9.2 / 10'} · {details?.status || 'ONGOING'}
-              </div>
-              <div style={{ fontSize: '0.74rem', color: '#22d3ee', fontWeight: 600 }}>
-                {chapters.length} {lang === 'ar' ? 'فصل مترجم عربي' : 'Arabic Chapters'}
-              </div>
-            </div>
-          </div>
-
-          {/* Chapters Feed */}
-          <div style={{ padding: '0.85rem 1.25rem', fontWeight: 700, fontSize: '0.86rem', color: '#94a3b8' }}>
-            📑 {lang === 'ar' ? 'الفصول المتاحة:' : 'Available Chapters:'}
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0 0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {loadingChapters ? (
-              <div style={{ padding: '2rem', textAlign: 'center' }}>
-                <LiquidLoader />
               </div>
             ) : (
-              chapters.map((ch) => {
+              /* Single Page Mode (Slide by Slide) */
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  width: '100%',
+                  padding: '0.5rem'
+                }}
+              >
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    background: '#000',
+                    borderRadius: '8px',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <img
+                    src={getProxiedImageUrl(chapterPages[currentPageIndex]?.url)}
+                    alt={`Page ${currentPageIndex + 1}`}
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
+                  {/* Tap Left / Right targets on mobile */}
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (currentPageIndex > 0) setCurrentPageIndex((p) => p - 1);
+                    }}
+                    style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '35%', cursor: 'w-resize' }}
+                  />
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (currentPageIndex < chapterPages.length - 1) setCurrentPageIndex((p) => p + 1);
+                    }}
+                    style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '35%', cursor: 'e-resize' }}
+                  />
+                </div>
+
+                {/* Bottom page switcher */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                  <button
+                    type="button"
+                    disabled={currentPageIndex <= 0}
+                    onClick={() => setCurrentPageIndex((p) => Math.max(0, p - 1))}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: 'none',
+                      color: '#fff',
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    ◀ السابق
+                  </button>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>
+                    {currentPageIndex + 1} / {chapterPages.length}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPageIndex >= chapterPages.length - 1}
+                    onClick={() => setCurrentPageIndex((p) => Math.min(chapterPages.length - 1, p + 1))}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: 'none',
+                      color: '#fff',
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '0.8rem'
+                    }}
+                  >
+                    التالي ▶
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= LIGHT NOVEL VIEW ================= */}
+        {isNovel && (
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '720px',
+              padding: '1.25rem',
+              lineHeight: 1.85,
+              fontSize: `${fontSize}px`,
+              direction: 'rtl',
+              textAlign: 'justify'
+            }}
+          >
+            {loadingContent ? (
+              <div style={{ padding: '5rem 1rem', textAlign: 'center' }}>
+                <LiquidLoader />
+                <p style={{ marginTop: '1rem', color: '#94a3b8' }}>
+                  {lang === 'ar' ? 'جارٍ جلب نص الرواية باللغة العربية...' : 'Fetching chapter text...'}
+                </p>
+              </div>
+            ) : novelContent ? (
+              <div>
+                <h2
+                  style={{
+                    fontSize: `${fontSize * 1.25}px`,
+                    fontWeight: 800,
+                    marginBottom: '1rem',
+                    borderBottom: '2px solid rgba(255, 255, 255, 0.1)',
+                    paddingBottom: '0.75rem',
+                    color: novelTheme === 'sepia' ? '#78350f' : '#38bdf8'
+                  }}
+                >
+                  {novelContent.title}
+                </h2>
+                <div style={{ whiteSpace: 'pre-line', marginBlock: '1.25rem' }}>
+                  {novelContent.content}
+                </div>
+              </div>
+            ) : (
+              <p>{lang === 'ar' ? 'لا يوجد نص متوفر لهذا الفصل.' : 'No content available.'}</p>
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* ================= MOBILE BOTTOM FLOATING DOCK ================= */}
+      <footer
+        style={{
+          position: 'absolute',
+          bottom: '12px',
+          left: '50%',
+          transform: showUI ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(120%)',
+          transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 90,
+          background: 'rgba(8, 12, 24, 0.92)',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255, 255, 255, 0.14)',
+          borderRadius: '99px',
+          padding: '0.4rem 0.65rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+          maxWidth: '92vw',
+          width: 'max-content'
+        }}
+      >
+        {/* Prev Chapter */}
+        <button
+          type="button"
+          disabled={!hasPrevChapter}
+          onClick={goToPrevChapter}
+          aria-label="Previous Chapter"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: hasPrevChapter ? '#fff' : 'rgba(255,255,255,0.3)',
+            padding: '0.35rem 0.5rem',
+            fontSize: '0.85rem',
+            cursor: hasPrevChapter ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          ◀
+        </button>
+
+        {/* Chapters Drawer Button */}
+        <button
+          type="button"
+          onClick={() => setShowChapterDrawer(true)}
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#fff',
+            borderRadius: '99px',
+            padding: '0.35rem 0.85rem',
+            fontSize: '0.78rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          📑 {selectedChapter ? `فصل ${selectedChapter.chapterNumber}` : 'الفصول'}
+        </button>
+
+        {/* Next Chapter */}
+        <button
+          type="button"
+          disabled={!hasNextChapter}
+          onClick={goToNextChapter}
+          aria-label="Next Chapter"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: hasNextChapter ? '#fff' : 'rgba(255,255,255,0.3)',
+            padding: '0.35rem 0.5rem',
+            fontSize: '0.85rem',
+            cursor: hasNextChapter ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          ▶
+        </button>
+
+        <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.2)' }} />
+
+        {/* Auto Scroll Toggle (Hands-free phone reading) */}
+        {!isNovel && readerMode === 'webtoon' && (
+          <button
+            type="button"
+            onClick={() => setAutoScrollActive((a) => !a)}
+            style={{
+              background: autoScrollActive ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(255, 255, 255, 0.08)',
+              border: autoScrollActive ? 'none' : '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#fff',
+              borderRadius: '99px',
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+            title={autoScrollActive ? 'إيقاف التمرير التلقائي' : 'تشغيل التمرير التلقائي'}
+          >
+            {autoScrollActive ? '⏸️ تمرير' : '▶ تمرير'}
+          </button>
+        )}
+
+        {/* Settings Drawer Button */}
+        <button
+          type="button"
+          onClick={() => setShowSettingsDrawer(true)}
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#fff',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '0.82rem',
+            cursor: 'pointer'
+          }}
+          title="إعدادات القراءة"
+        >
+          ⚙️
+        </button>
+      </footer>
+
+      {/* ================= MOBILE BOTTOM SHEET: CHAPTER LIST ================= */}
+      {showChapterDrawer && (
+        <div
+          className="no-toggle"
+          onClick={() => setShowChapterDrawer(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#090d1a',
+              borderTop: '1px solid rgba(255, 255, 255, 0.15)',
+              borderTopLeftRadius: '24px',
+              borderTopRightRadius: '24px',
+              padding: '1.25rem 1rem 2rem',
+              maxHeight: '75vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 -8px 40px rgba(0, 0, 0, 0.8)'
+            }}
+          >
+            {/* Drawer Handle */}
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255, 255, 255, 0.3)', borderRadius: '99px', margin: '0 auto 1rem' }} />
+
+            {/* Drawer Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
+                  📑 فصول مانجا ليك ({chapters.length})
+                </h4>
+                <span style={{ fontSize: '0.72rem', color: '#10b981' }}>
+                  ✓ ترجمة عربية كاملة - MangaLik
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChapterDrawer(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Search in Chapters */}
+            <input
+              type="text"
+              placeholder="ابحث برقم الفصل..."
+              value={chapterFilter}
+              onChange={(e) => setChapterFilter(e.target.value)}
+              style={{
+                width: '100%',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '12px',
+                padding: '0.6rem 0.85rem',
+                color: '#fff',
+                fontSize: '0.85rem',
+                marginBottom: '0.85rem',
+                direction: 'rtl'
+              }}
+            />
+
+            {/* Chapters Scrollable List */}
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '55vh' }}>
+              {filteredChapters.map((ch) => {
                 const isActive = selectedChapter?.chapterId === ch.chapterId;
                 return (
                   <button
                     key={ch.chapterId}
                     type="button"
-                    onClick={() => setSelectedChapter(ch)}
+                    onClick={() => {
+                      setSelectedChapter(ch);
+                      setShowChapterDrawer(false);
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '0.65rem 0.85rem',
-                      borderRadius: '8px',
-                      background: isActive ? 'linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(139, 92, 246, 0.2))' : 'rgba(255, 255, 255, 0.03)',
-                      border: isActive ? '1px solid #22d3ee' : '1px solid rgba(255, 255, 255, 0.05)',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '12px',
+                      background: isActive ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 182, 212, 0.2))' : 'rgba(255, 255, 255, 0.03)',
+                      border: isActive ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.06)',
                       color: isActive ? '#fff' : '#cbd5e1',
                       cursor: 'pointer',
-                      textAlign: 'start',
-                      transition: 'all 0.15s ease'
+                      textAlign: 'start'
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.84rem', fontWeight: 700 }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>
                         {ch.title || `الفصل ${ch.chapterNumber}`}
                       </div>
                       <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.15rem' }}>
-                        {ch.scanlationGroup || 'فريق الترجمة العربي'}
+                        {ch.scanlationGroup || 'مانجا ليك (MangaLik)'}
                       </div>
                     </div>
-                    {isActive && <span style={{ color: '#22d3ee', fontSize: '0.8rem' }}>▶</span>}
+                    {isActive && <span style={{ color: '#10b981', fontWeight: 800 }}>✓ قيد القراءة</span>}
                   </button>
                 );
-              })
-            )}
+              })}
+            </div>
           </div>
-        </aside>
-      </div>
+        </div>
+      )}
+
+      {/* ================= MOBILE BOTTOM SHEET: SETTINGS ================= */}
+      {showSettingsDrawer && (
+        <div
+          className="no-toggle"
+          onClick={() => setShowSettingsDrawer(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#090d1a',
+              borderTop: '1px solid rgba(255, 255, 255, 0.15)',
+              borderTopLeftRadius: '24px',
+              borderTopRightRadius: '24px',
+              padding: '1.25rem 1.25rem 2.5rem',
+              maxHeight: '75vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 -8px 40px rgba(0, 0, 0, 0.8)',
+              gap: '1.25rem'
+            }}
+          >
+            {/* Drawer Handle */}
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255, 255, 255, 0.3)', borderRadius: '99px', margin: '0 auto 0.5rem' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>⚙️ إعدادات تجربة القراءة</h4>
+              <button
+                type="button"
+                onClick={() => setShowSettingsDrawer(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Reading Mode Switcher */}
+            {!isNovel && (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: 700 }}>
+                  نمط عرض المانجا والمانهو:
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setReaderMode('webtoon')}
+                    style={{
+                      flex: 1,
+                      padding: '0.65rem',
+                      borderRadius: '12px',
+                      background: readerMode === 'webtoon' ? 'linear-gradient(135deg, #10b981, #06b6d4)' : 'rgba(255,255,255,0.06)',
+                      border: readerMode === 'webtoon' ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📜 تمرير ويبتون عمودي
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReaderMode('single')}
+                    style={{
+                      flex: 1,
+                      padding: '0.65rem',
+                      borderRadius: '12px',
+                      background: readerMode === 'single' ? 'linear-gradient(135deg, #10b981, #06b6d4)' : 'rgba(255,255,255,0.06)',
+                      border: readerMode === 'single' ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📄 صفحة بصفحة
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Auto Scroll Speed */}
+            {!isNovel && readerMode === 'webtoon' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: 700 }}>
+                  سرعة التمرير التلقائي للهاتف:
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {[1, 2, 3].map((spd) => (
+                    <button
+                      key={spd}
+                      type="button"
+                      onClick={() => setAutoScrollSpeed(spd)}
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem',
+                        borderRadius: '10px',
+                        background: autoScrollSpeed === spd ? '#10b981' : 'rgba(255,255,255,0.06)',
+                        border: 'none',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {spd === 1 ? 'هادئ 1x' : spd === 2 ? 'متوسط 2x' : 'سريع 3x'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Server Mode */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: 700 }}>
+                سيرفر صور الفصول:
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setServerMode('proxy')}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem',
+                    borderRadius: '10px',
+                    background: serverMode === 'proxy' ? '#10b981' : 'rgba(255,255,255,0.06)',
+                    border: 'none',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🛡️ سيرفر البروكسي (مستقر)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setServerMode('direct')}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem',
+                    borderRadius: '10px',
+                    background: serverMode === 'direct' ? '#10b981' : 'rgba(255,255,255,0.06)',
+                    border: 'none',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚡ سيرفر مباشر
+                </button>
+              </div>
+            </div>
+
+            {/* Reward Reading XP */}
+            <button
+              type="button"
+              onClick={handleRewardXP}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(16, 185, 129, 0.2))',
+                border: '1px solid #38bdf8',
+                color: '#38bdf8',
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                cursor: 'pointer'
+              }}
+            >
+              ⚡ تسجيل 15 دقيقة قراءة (+150 XP)
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
