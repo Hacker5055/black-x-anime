@@ -12,7 +12,8 @@ export function resolveCreatureTheme(styleId = 'dragon') {
       kind: 'shadow',
       primary: '#a855f7',
       secondary: '#38bdf8',
-      core: '#0f0720'
+      core: '#1e0936',
+      glow: 'rgba(168, 85, 247, 0.7)'
     };
   }
   if (id.includes('cyber') || id.includes('neo-tokyo')) {
@@ -20,15 +21,17 @@ export function resolveCreatureTheme(styleId = 'dragon') {
       kind: 'cyber',
       primary: '#00f2fe',
       secondary: '#ff007f',
-      core: '#082f49'
+      core: '#082f49',
+      glow: 'rgba(0, 242, 254, 0.7)'
     };
   }
   if (id.includes('ascension')) {
     return {
       kind: 'dragon',
       primary: '#10b981',
-      secondary: '#6ee7b7',
+      secondary: '#a7f3d0',
       core: '#064e3b',
+      glow: 'rgba(16, 185, 129, 0.7)',
       scheme: 'emerald'
     };
   }
@@ -38,6 +41,7 @@ export function resolveCreatureTheme(styleId = 'dragon') {
       primary: '#eab308',
       secondary: '#fef08a',
       core: '#713f12',
+      glow: 'rgba(234, 179, 8, 0.7)',
       scheme: 'gold'
     };
   }
@@ -47,15 +51,17 @@ export function resolveCreatureTheme(styleId = 'dragon') {
       primary: '#f472b6',
       secondary: '#fbcfe8',
       core: '#831843',
+      glow: 'rgba(244, 114, 182, 0.7)',
       scheme: 'sakura'
     };
   }
-  if (id.includes('diamond') || id.includes('celestial') || id.includes('thunder')) {
+  if (id.includes('diamond') || id.includes('celestial') || id.includes('thunder') || id.includes('aurora')) {
     return {
       kind: 'dragon',
       primary: '#38bdf8',
-      secondary: '#c084fc',
+      secondary: '#e0f2fe',
       core: '#0c4a6e',
+      glow: 'rgba(56, 189, 248, 0.7)',
       scheme: 'thunder',
       isThunder: true
     };
@@ -63,18 +69,17 @@ export function resolveCreatureTheme(styleId = 'dragon') {
   // Default for 'royal-flame', 'dragon-flame', 'dragon', etc.
   return {
     kind: 'dragon',
-    primary: '#ef4444',
+    primary: '#ff4500',
     secondary: '#fde047',
-    core: '#450a0a',
+    core: '#7f1d1d',
+    glow: 'rgba(255, 69, 0, 0.75)',
     scheme: 'fire'
   };
 }
 
 /**
- * LiveCreatureOverlay — renders an actual articulated living creature
- * (Dragon that slithers & breathes fire, Shadow Monarch that slashes,
- * Cyberpunk Mecha-Drone that scans with laser, Thunder Serpent that strikes lightning)
- * around any circular avatar or across any profile banner.
+ * LiveCreatureOverlay — renders a smooth, sculpted living creature
+ * hugging the circular avatar ring (or soaring across the profile banner).
  */
 export function LiveCreatureOverlay({
   ornament = 'royal-flame',
@@ -96,18 +101,17 @@ export function LiveCreatureOverlay({
     let rafId = null;
     const startTime = performance.now();
     const fireParticles = [];
-    let headAngle = -Math.PI * 0.35;
+    let headAngle = -Math.PI * 0.4;
 
-    // Listen for global "trigger creature attack" custom event from Profile page button
     const onTriggerAttack = () => {
-      forcedAttackRef.current = performance.now() + 3600;
+      forcedAttackRef.current = performance.now() + 3800;
     };
     window.addEventListener('blackx:trigger-creature-attack', onTriggerAttack);
 
     function spawnFireBreath(hx, hy, aimAngle, W, scheme) {
-      for (let i = 0; i < 6; i++) {
-        const spread = (Math.random() - 0.5) * 0.48;
-        const speed = (W * 0.0085) * (0.7 + Math.random() * 0.65);
+      for (let i = 0; i < 5; i++) {
+        const spread = (Math.random() - 0.5) * 0.42;
+        const speed = (W * 0.011) * (0.75 + Math.random() * 0.55);
         const a = aimAngle + spread;
         fireParticles.push({
           x: hx,
@@ -115,8 +119,8 @@ export function LiveCreatureOverlay({
           vx: Math.cos(a) * speed,
           vy: Math.sin(a) * speed,
           life: 1.0,
-          decay: 0.017 + Math.random() * 0.014,
-          size: (W * 0.024) * (0.7 + Math.random() * 0.7),
+          decay: 0.02 + Math.random() * 0.015,
+          size: (W * 0.028) * (0.7 + Math.random() * 0.65),
           scheme
         });
       }
@@ -127,22 +131,26 @@ export function LiveCreatureOverlay({
       const H = canvas.height;
       const CX = W / 2;
       const CY = H / 2;
-      const R = W * 0.27;
+      // Ring radius calibrated so it hugs the exact edge of the circular avatar
+      const R = W * 0.355;
 
       ctx.clearRect(0, 0, W, H);
 
-      const cycle = t % 5.8;
-      const isAttacking = now < forcedAttackRef.current || cycle > 3.0;
+      const cycle = t % 5.6;
+      const isAttacking = now < forcedAttackRef.current || cycle > 2.8;
 
-      // Update & draw volumetric fire/plasma/shadow particles wrapping around the avatar
+      // 1. Update & Draw Volumetric Fire / Shadow / Plasma Stream hugging the ring
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       for (let i = fireParticles.length - 1; i >= 0; i--) {
         const p = fireParticles[i];
         const toCenterA = Math.atan2(p.y - CY, p.x - CX);
         const tangentA = toCenterA + Math.PI / 2;
-        p.vx = p.vx * 0.92 + Math.cos(tangentA) * (W * 0.0055);
-        p.vy = p.vy * 0.92 + Math.sin(tangentA) * (W * 0.0055);
+        // Pull particles gently onto the circular perimeter so the flame wraps the avatar
+        const currDist = Math.hypot(p.x - CX, p.y - CY);
+        const radialFix = (R - currDist) * 0.08;
+        p.vx = p.vx * 0.88 + Math.cos(tangentA) * (W * 0.0075) + Math.cos(toCenterA) * radialFix;
+        p.vy = p.vy * 0.88 + Math.sin(tangentA) * (W * 0.0075) + Math.sin(toCenterA) * radialFix;
         p.x += p.vx;
         p.y += p.vy;
         p.life -= p.decay;
@@ -150,29 +158,31 @@ export function LiveCreatureOverlay({
           fireParticles.splice(i, 1);
           continue;
         }
-        const rad = p.size * (1.8 - p.life * 0.7);
+        const rad = p.size * (1.7 - p.life * 0.6);
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
         if (p.scheme === 'shadow') {
           g.addColorStop(0, `rgba(255,255,255,${p.life})`);
-          g.addColorStop(0.4, `rgba(168,85,247,${p.life * 0.88})`);
+          g.addColorStop(0.38, `rgba(56,189,248,${p.life * 0.9})`);
+          g.addColorStop(0.75, `rgba(168,85,247,${p.life * 0.7})`);
           g.addColorStop(1, 'rgba(0,0,0,0)');
         } else if (p.scheme === 'cyber' || p.scheme === 'thunder') {
           g.addColorStop(0, `rgba(255,255,255,${p.life})`);
-          g.addColorStop(0.4, `rgba(0,242,254,${p.life * 0.88})`);
+          g.addColorStop(0.4, `rgba(0,242,254,${p.life * 0.9})`);
+          g.addColorStop(0.75, `rgba(168,85,247,${p.life * 0.6})`);
           g.addColorStop(1, 'rgba(0,0,0,0)');
         } else if (p.scheme === 'emerald') {
           g.addColorStop(0, `rgba(255,255,255,${p.life})`);
-          g.addColorStop(0.35, `rgba(110,231,183,${p.life * 0.9})`);
+          g.addColorStop(0.35, `rgba(167,243,208,${p.life * 0.92})`);
           g.addColorStop(0.7, `rgba(16,185,129,${p.life * 0.75})`);
           g.addColorStop(1, 'rgba(0,0,0,0)');
         } else if (p.scheme === 'sakura') {
           g.addColorStop(0, `rgba(255,255,255,${p.life})`);
-          g.addColorStop(0.4, `rgba(244,114,182,${p.life * 0.9})`);
+          g.addColorStop(0.4, `rgba(244,114,182,${p.life * 0.92})`);
           g.addColorStop(1, 'rgba(0,0,0,0)');
         } else {
-          g.addColorStop(0, `rgba(255,255,240,${p.life})`);
-          g.addColorStop(0.3, `rgba(253,224,71,${p.life * 0.94})`);
-          g.addColorStop(0.65, `rgba(255,69,0,${p.life * 0.78})`);
+          g.addColorStop(0, `rgba(255,255,245,${p.life})`);
+          g.addColorStop(0.28, `rgba(253,224,71,${p.life * 0.95})`);
+          g.addColorStop(0.62, `rgba(255,69,0,${p.life * 0.82})`);
           g.addColorStop(1, 'rgba(127,29,29,0)');
         }
         ctx.fillStyle = g;
@@ -182,143 +192,141 @@ export function LiveCreatureOverlay({
       }
       ctx.restore();
 
+      // 2. Draw Smooth Continuous Sculpted Dragon / Creature
       if (theme.kind === 'dragon') {
-        const speed = isAttacking ? 0.22 : 1.35;
+        const speed = isAttacking ? 0.25 : 1.38;
         headAngle += speed * 0.016;
-        const SEGMENTS = 32;
+        const SEGMENTS = 44;
         const spine = [];
         for (let i = 0; i < SEGMENTS; i++) {
-          const lag = i * 0.115;
-          const a = headAngle - lag;
-          const wave = Math.sin(t * 7 - i * 0.55) * (W * 0.018) * (1 - i / (SEGMENTS * 1.3));
+          const frac = i / (SEGMENTS - 1);
+          const a = headAngle - frac * Math.PI * 1.15;
+          const wave = Math.sin(t * 7.5 - i * 0.38) * (W * 0.012) * Math.sin(frac * Math.PI);
           const rad = R + wave;
           spine.push({
             x: CX + Math.cos(a) * rad,
             y: CY + Math.sin(a) * rad,
-            a: a + Math.PI / 2
+            a: a + Math.PI / 2,
+            frac
           });
         }
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
 
-        // Dragon Claws / Legs
-        [8, 20].forEach((sIdx) => {
-          const seg = spine[sIdx];
-          if (!seg) return;
-          const legAngle = seg.a + 0.7 + Math.sin(t * 5 + sIdx) * 0.25;
-          const kneeX = seg.x + Math.cos(legAngle) * (W * 0.042);
-          const kneeY = seg.y + Math.sin(legAngle) * (W * 0.042);
-          ctx.strokeStyle = theme.primary;
-          ctx.lineWidth = Math.max(1.5, W * 0.01);
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(seg.x, seg.y);
-          ctx.lineTo(kneeX, kneeY);
-          ctx.stroke();
-        });
-
-        // Dragon Body Scales & Dorsal Spines
+        // Outer Aura Ribbon along the Dragon Spine
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         for (let i = SEGMENTS - 1; i >= 1; i--) {
-          const p = spine[i];
-          const pPrev = spine[i - 1];
-          const dir = Math.atan2(pPrev.y - p.y, pPrev.x - p.x);
-          const taper = Math.sin((1 - i / SEGMENTS) * Math.PI * 0.85);
-          const radius = (W * 0.032) * Math.max(0.18, taper);
+          const p0 = spine[i];
+          const p1 = spine[i - 1];
+          const taper = Math.sin((1 - p0.frac * 0.88) * Math.PI * 0.9);
+          const w = Math.max(2, (W * 0.044) * taper);
 
-          const finLen = radius * 1.6;
-          const nx = Math.cos(dir - Math.PI / 2);
-          const ny = Math.sin(dir - Math.PI / 2);
-          ctx.fillStyle = i % 2 === 0 ? theme.secondary : theme.primary;
+          // Glowing outer body stroke
+          ctx.strokeStyle = theme.glow;
+          ctx.lineWidth = w * 1.45;
           ctx.beginPath();
-          ctx.moveTo(p.x + nx * radius * 0.5, p.y + ny * radius * 0.5);
-          ctx.lineTo(
-            p.x + nx * (radius + finLen) - Math.cos(dir) * radius * 0.65,
-            p.y + ny * (radius + finLen) - Math.sin(dir) * radius * 0.65
-          );
-          ctx.lineTo(p.x - Math.cos(dir) * radius * 0.5, p.y - Math.sin(dir) * radius * 0.5);
-          ctx.closePath();
-          ctx.fill();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
 
-          const grad = ctx.createRadialGradient(p.x, p.y, radius * 0.1, p.x, p.y, radius);
-          grad.addColorStop(0, theme.secondary);
-          grad.addColorStop(0.55, theme.primary);
-          grad.addColorStop(1, theme.core);
-          ctx.fillStyle = grad;
+          // Solid armored core stroke
+          ctx.strokeStyle = i % 3 === 0 ? theme.secondary : theme.primary;
+          ctx.lineWidth = w * 0.72;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
+
+          // Sharp Dorsal Dragon Fins along the outer curve
+          if (i % 2 === 0 && i < SEGMENTS - 4) {
+            const dir = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+            const nx = Math.cos(dir - Math.PI / 2);
+            const ny = Math.sin(dir - Math.PI / 2);
+            const finLen = w * 0.95;
+            ctx.fillStyle = theme.secondary;
+            ctx.beginPath();
+            ctx.moveTo(p0.x + nx * (w * 0.3), p0.y + ny * (w * 0.3));
+            ctx.lineTo(
+              p0.x + nx * (w * 0.3 + finLen) - Math.cos(dir) * (w * 0.55),
+              p0.y + ny * (w * 0.3 + finLen) - Math.sin(dir) * (w * 0.55)
+            );
+            ctx.lineTo(p0.x - Math.cos(dir) * (w * 0.35), p0.y - Math.sin(dir) * (w * 0.35));
+            ctx.closePath();
+            ctx.fill();
+          }
         }
 
-        // Articulated Dragon Head with Opening Jaw
+        // Sculpted Dragon Head with Horns, Whiskers, Glowing Eyes & Opening Jaw
         const head = spine[0];
         const neck = spine[1];
         const headDir = Math.atan2(head.y - neck.y, head.x - neck.x);
-        const hs = W * 0.046;
-        const jawOpen = isAttacking ? 0.52 + Math.sin(t * 26) * 0.08 : 0.08;
+        const hs = W * 0.052;
+        const jawOpen = isAttacking ? 0.52 + Math.sin(t * 28) * 0.08 : 0.08;
 
         ctx.save();
         ctx.translate(head.x, head.y);
         ctx.rotate(headDir);
 
-        // Horns
+        // Swept-back Royal Dragon Horns
         ctx.strokeStyle = theme.secondary;
-        ctx.lineWidth = Math.max(1.5, W * 0.0085);
+        ctx.lineWidth = Math.max(2, W * 0.01);
         [-1, 1].forEach((side) => {
           ctx.beginPath();
-          ctx.moveTo(-hs * 0.2, side * hs * 0.45);
-          ctx.quadraticCurveTo(-hs * 1.1, side * hs * 1.15, -hs * 1.6, side * hs * 0.85);
+          ctx.moveTo(-hs * 0.15, side * hs * 0.38);
+          ctx.quadraticCurveTo(-hs * 1.15, side * hs * 1.15, -hs * 1.75, side * hs * 0.78);
           ctx.stroke();
         });
 
         // Lower Jaw
         ctx.save();
         ctx.rotate(jawOpen);
-        ctx.fillStyle = theme.core;
-        ctx.beginPath();
-        ctx.moveTo(0, hs * 0.15);
-        ctx.lineTo(hs * 1.2, hs * 0.36);
-        ctx.lineTo(hs * 0.9, hs * 0.62);
-        ctx.lineTo(-hs * 0.2, hs * 0.42);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-
-        // Upper Snout
-        ctx.save();
-        ctx.rotate(-jawOpen * 0.5);
         ctx.fillStyle = theme.primary;
         ctx.beginPath();
+        ctx.moveTo(0, hs * 0.12);
+        ctx.lineTo(hs * 1.18, hs * 0.34);
+        ctx.lineTo(hs * 0.88, hs * 0.58);
+        ctx.lineTo(-hs * 0.2, hs * 0.38);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Upper Snout & Fierce Brow
+        ctx.save();
+        ctx.rotate(-jawOpen * 0.5);
+        ctx.fillStyle = theme.secondary;
+        ctx.beginPath();
         ctx.moveTo(-hs * 0.5, 0);
-        ctx.lineTo(-hs * 0.15, -hs * 0.7);
-        ctx.lineTo(hs * 1.35, -hs * 0.25);
-        ctx.lineTo(hs * 1.4, hs * 0.12);
-        ctx.lineTo(0, hs * 0.2);
+        ctx.lineTo(-hs * 0.1, -hs * 0.68);
+        ctx.lineTo(hs * 1.32, -hs * 0.22);
+        ctx.lineTo(hs * 1.38, hs * 0.12);
+        ctx.lineTo(0, hs * 0.18);
         ctx.closePath();
         ctx.fill();
 
-        // Glowing Eye
+        // Glowing Slit Eye
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(hs * 0.28, -hs * 0.25, hs * 0.17, 0, Math.PI * 2);
+        ctx.arc(hs * 0.28, -hs * 0.24, hs * 0.16, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         ctx.restore();
 
-        // Breathe Volumetric Fire or Lightning!
+        // Breathe Fire Stream / Lightning Bolts!
         const mouthX = head.x + Math.cos(headDir) * (hs * 1.25);
         const mouthY = head.y + Math.sin(headDir) * (hs * 1.25);
         if (isAttacking) {
-          spawnFireBreath(mouthX, mouthY, headDir + 0.18, W, theme.scheme);
+          spawnFireBreath(mouthX, mouthY, headDir + 0.22, W, theme.scheme);
           if (theme.isThunder) {
-            ctx.strokeStyle = '#e0f2fe';
-            ctx.lineWidth = 2.2;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.4;
             ctx.beginPath();
-            let currA = headAngle + 0.2;
+            let currA = headAngle + 0.18;
             ctx.moveTo(mouthX, mouthY);
-            for (let s = 1; s <= 9; s++) {
-              currA += 0.24;
-              const jitter = (Math.random() - 0.5) * (W * 0.042);
+            for (let s = 1; s <= 10; s++) {
+              currA += 0.22;
+              const jitter = (Math.random() - 0.5) * (W * 0.038);
               ctx.lineTo(CX + Math.cos(currA) * (R + jitter), CY + Math.sin(currA) * (R + jitter));
             }
             ctx.stroke();
@@ -328,23 +336,37 @@ export function LiveCreatureOverlay({
       } else if (theme.kind === 'shadow') {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
+
+        // Continuous Abyssal Shadow Aura Ring + Swirling Shadow Tendrils
+        for (let i = 0; i < 3; i++) {
+          const startA = t * (1.2 + i * 0.4) + (i * Math.PI * 2) / 3;
+          ctx.strokeStyle = i % 2 === 0 ? 'rgba(168, 85, 247, 0.78)' : 'rgba(56, 189, 248, 0.78)';
+          ctx.lineWidth = W * 0.018;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(CX, CY, R + Math.sin(t * 4 + i) * (W * 0.008), startA, startA + Math.PI * 0.45);
+          ctx.stroke();
+        }
+
+        // Shadow Monarch Armored Helm Crest at Crown of Avatar
         const mx = CX;
-        const my = CY - R * 0.96 + Math.sin(t * 3) * (W * 0.01);
-        const s = W * 0.095;
-        ctx.fillStyle = 'rgba(15, 7, 32, 0.92)';
+        const my = CY - R * 1.02 + Math.sin(t * 3) * (W * 0.008);
+        const s = W * 0.088;
+        ctx.fillStyle = 'rgba(15, 7, 32, 0.94)';
         ctx.strokeStyle = isAttacking ? '#38bdf8' : '#a855f7';
         ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.moveTo(mx, my - s * 1.1);
+        ctx.moveTo(mx, my - s * 1.15);
         ctx.lineTo(mx - s * 0.72, my - s * 0.35);
-        ctx.lineTo(mx - s * 0.45, my + s * 0.55);
-        ctx.lineTo(mx, my + s * 0.8);
-        ctx.lineTo(mx + s * 0.45, my + s * 0.55);
+        ctx.lineTo(mx - s * 0.45, my + s * 0.52);
+        ctx.lineTo(mx, my + s * 0.78);
+        ctx.lineTo(mx + s * 0.45, my + s * 0.52);
         ctx.lineTo(mx + s * 0.72, my - s * 0.35);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
+        // Glowing Sovereign Eyes
         [-1, 1].forEach((side) => {
           ctx.fillStyle = isAttacking ? '#38bdf8' : '#c084fc';
           ctx.beginPath();
@@ -357,12 +379,12 @@ export function LiveCreatureOverlay({
 
         if (isAttacking) {
           for (let k = 0; k < 2; k++) {
-            const slashStart = t * 9 + k * Math.PI;
+            const slashStart = t * 9.5 + k * Math.PI;
             ctx.strokeStyle = k === 0 ? '#a855f7' : '#38bdf8';
-            ctx.lineWidth = W * 0.022;
+            ctx.lineWidth = W * 0.024;
             ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.arc(CX, CY, R * (1.02 + k * 0.07), slashStart, slashStart + Math.PI * 0.75);
+            ctx.arc(CX, CY, R * 1.02, slashStart, slashStart + Math.PI * 0.72);
             ctx.stroke();
           }
           const randA = t * 8;
@@ -372,10 +394,11 @@ export function LiveCreatureOverlay({
       } else if (theme.kind === 'cyber') {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const droneA = isAttacking ? -Math.PI / 2 + Math.sin(t * 3) * 0.35 : t * 1.15;
+
+        const droneA = isAttacking ? -Math.PI / 2 + Math.sin(t * 3) * 0.35 : t * 1.18;
         const dx = CX + Math.cos(droneA) * (R * 1.02);
         const dy = CY + Math.sin(droneA) * (R * 1.02);
-        const wingSpread = isAttacking ? 0.55 + Math.sin(t * 20) * 0.08 : 0.22;
+        const wingSpread = isAttacking ? 0.55 + Math.sin(t * 20) * 0.08 : 0.24;
         const ds = W * 0.068;
 
         ctx.save();
@@ -385,7 +408,7 @@ export function LiveCreatureOverlay({
           for (let w = 0; w < 3; w++) {
             ctx.save();
             ctx.rotate(side * (wingSpread + w * 0.24));
-            ctx.fillStyle = w % 2 === 0 ? 'rgba(0, 242, 254, 0.8)' : 'rgba(255, 0, 128, 0.8)';
+            ctx.fillStyle = w % 2 === 0 ? 'rgba(0, 242, 254, 0.85)' : 'rgba(255, 0, 128, 0.85)';
             ctx.beginPath();
             ctx.moveTo(side * ds * 0.3, 0);
             ctx.lineTo(side * ds * (1.5 - w * 0.2), -ds * (0.35 + w * 0.15));
@@ -402,9 +425,9 @@ export function LiveCreatureOverlay({
         ctx.restore();
 
         if (isAttacking) {
-          const scanY = CY + Math.sin(t * 7) * (R * 0.76);
+          const scanY = CY + Math.sin(t * 7) * (R * 0.78);
           const halfChord = Math.sqrt(Math.max(0, R * R - Math.pow(scanY - CY, 2)));
-          ctx.strokeStyle = 'rgba(255, 0, 128, 0.9)';
+          ctx.strokeStyle = 'rgba(255, 0, 128, 0.92)';
           ctx.lineWidth = W * 0.012;
           ctx.beginPath();
           ctx.moveTo(CX - halfChord, scanY);
@@ -421,30 +444,62 @@ export function LiveCreatureOverlay({
       const H = canvas.height;
       ctx.clearRect(0, 0, W, H);
 
-      const bx = ((t * 95) % (W * 1.35)) - W * 0.18;
-      const by = H * 0.46 + Math.sin(t * 2.5) * (H * 0.14);
-
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < 24; i++) {
-        const sx = bx - i * 14;
-        const sy = by + Math.sin(t * 6 - i * 0.45) * 11;
-        const sr = Math.max(3, 15 - i * 0.55);
-        ctx.fillStyle = theme.primary;
+
+      // Smooth Soaring Winged Dragon / Energy Ribbon across the Banner Sky (no dotted worm!)
+      const headX = ((t * 115) % (W * 1.4)) - W * 0.2;
+      const headY = H * 0.44 + Math.sin(t * 2.4) * (H * 0.12);
+
+      // Continuous Tapered Serpentine Ribbon
+      const pts = [];
+      for (let i = 0; i < 28; i++) {
+        const sx = headX - i * 9.5;
+        const sy = headY + Math.sin(t * 6.5 - i * 0.32) * 11;
+        pts.push({ x: sx, y: sy });
+      }
+
+      for (let i = pts.length - 1; i >= 1; i--) {
+        const taper = Math.sin((1 - i / pts.length) * Math.PI * 0.9);
+        ctx.strokeStyle = theme.glow;
+        ctx.lineWidth = Math.max(1.5, 16 * taper);
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.moveTo(pts[i].x, pts[i].y);
+        ctx.lineTo(pts[i - 1].x, pts[i - 1].y);
+        ctx.stroke();
+
+        ctx.strokeStyle = i % 2 === 0 ? theme.secondary : theme.primary;
+        ctx.lineWidth = Math.max(1, 7 * taper);
+        ctx.beginPath();
+        ctx.moveTo(pts[i].x, pts[i].y);
+        ctx.lineTo(pts[i - 1].x, pts[i - 1].y);
+        ctx.stroke();
+      }
+
+      // Sweeping Dragon Wings at segment 4
+      const wingBase = pts[4];
+      if (wingBase) {
+        const flap = Math.sin(t * 9) * 24;
+        ctx.fillStyle = theme.glow;
+        ctx.beginPath();
+        ctx.moveTo(wingBase.x, wingBase.y);
+        ctx.lineTo(wingBase.x - 34, wingBase.y - 32 - flap);
+        ctx.lineTo(wingBase.x - 14, wingBase.y - 6);
+        ctx.closePath();
         ctx.fill();
       }
 
-      if (Math.sin(t * 2.2) > -0.25) {
-        const plume = ctx.createRadialGradient(bx + 15, by, 2, bx + 85, by, 75);
+      // Dragon Breath Flame Plume in the Banner Sky
+      if (Math.sin(t * 2.2) > -0.2) {
+        const plume = ctx.createRadialGradient(headX + 10, headY, 2, headX + 85, headY, 78);
         plume.addColorStop(0, '#ffffff');
-        plume.addColorStop(0.35, theme.secondary);
+        plume.addColorStop(0.32, theme.secondary);
         plume.addColorStop(0.7, theme.primary);
         plume.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = plume;
         ctx.beginPath();
-        ctx.arc(bx + 70, by, 75, 0, Math.PI * 2);
+        ctx.arc(headX + 68, headY, 78, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -473,7 +528,7 @@ export function LiveCreatureOverlay({
     return (
       <canvas
         ref={canvasRef}
-        width={680}
+        width={760}
         height={240}
         style={{
           position: 'absolute',
@@ -488,7 +543,8 @@ export function LiveCreatureOverlay({
     );
   }
 
-  const overlaySize = Math.round(size * 1.88);
+  // Calibrated to 1.38x so R = 0.355 * 1.38 = 0.49x of container size (hugs the avatar border!)
+  const overlaySize = Math.round(size * 1.38);
 
   return (
     <canvas
@@ -496,7 +552,7 @@ export function LiveCreatureOverlay({
       width={360}
       height={360}
       onClick={() => {
-        forcedAttackRef.current = performance.now() + 3600;
+        forcedAttackRef.current = performance.now() + 3800;
       }}
       style={{
         position: 'absolute',

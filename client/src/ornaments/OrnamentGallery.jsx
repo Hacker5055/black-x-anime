@@ -144,13 +144,25 @@ export default function OrnamentGallery({
               onBlur={() => setHovered(null)}
               disabled={disabled}
             >
-              <span className="orn-tile__poster" style={{ background: p.background || 'transparent', position: 'relative' }}>
-                {!isOff && p.css && <span className={`avatar-frame avatar-frame--${p.id}`} />}
-                {!isOff && !p.css && p.skyline && <span className="orn-tile__city" style={{ background: p.colors?.primary }} />}
+              <span
+                className="orn-tile__poster"
+                style={{
+                  background: p.background || 'radial-gradient(circle at 50% 40%, rgba(34,211,238,0.18), #070912)',
+                  position: 'relative',
+                  aspectRatio: isBanner ? '16 / 9' : undefined,
+                  height: isBanner ? '64px' : undefined,
+                  borderRadius: isBanner ? '10px' : undefined,
+                  overflow: 'hidden'
+                }}
+              >
+                {!isOff && !isBanner && p.css && <span className={`avatar-frame avatar-frame--${p.id}`} />}
+                {!isOff && isBanner && <LiveCreatureOverlay ornament={p.id} mode="banner" />}
                 {!isOff && !isBanner && <LiveCreatureOverlay ornament={p.id} mode="frame" size={44} />}
-                <span className="orn-tile__ava">
-                  {avatar.photoUrl ? <img src={avatar.photoUrl} alt="" loading="lazy" /> : (avatar.label || 'X').slice(0, 2).toUpperCase()}
-                </span>
+                {!isBanner && (
+                  <span className="orn-tile__ava">
+                    {avatar.photoUrl ? <img src={avatar.photoUrl} alt="" loading="lazy" /> : (avatar.label || 'X').slice(0, 2).toUpperCase()}
+                  </span>
+                )}
               </span>
               <span className="orn-tile__label">
                 <i aria-hidden="true">{p.icon}</i>

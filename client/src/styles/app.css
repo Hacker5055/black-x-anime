@@ -4961,3 +4961,28 @@ html, body, #root, .app-shell {
   35%      { box-shadow: 0 0 26px #34d399, inset 0 0 14px #a7f3d0; border-color: #6ee7b7; }
   70%      { box-shadow: 0 0 20px #fbbf24, inset 0 0 10px #10b981; border-color: #a7f3d0; }
 }
+
+/* Global Facebook-Style Profile Header & World-Class Polish */
+.fb-profile-header-card ::-webkit-scrollbar {
+  display: none;
+}
+
+.fb-post-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.48);
+  transition: border-color 0.22s ease, transform 0.22s ease;
+}
+
+.fb-post-card:hover {
+  border-color: rgba(34, 211, 238, 0.28);
+}
+
+.verified-seal-badge svg {
+  transition: transform 0.2s ease;
+}
+
+.verified-seal-badge:hover svg {
+  transform: scale(1.15) rotate(8deg);
+}
+

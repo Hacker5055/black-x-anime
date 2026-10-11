@@ -227,7 +227,7 @@ export default function Ornament3D({
       )}
       {children}
       {enabled && ornament && ornament !== 'default' && ornament !== 'none' && ornament !== 'off' && (
-        <LiveCreatureOverlay ornament={ornament} mode={isBanner ? 'banner' : 'frame'} size={size} />
+        <LiveCreatureOverlay ornament={ornament} mode={isBanner ? 'banner' : 'frame'} size={Math.round(size * 0.78)} />
       )}
       {active && withAvatar && phase !== 'live' && preset?.css && (
         <span className={`ornament3d__boot avatar-frame avatar-frame--${ornament}`} aria-hidden="true" />

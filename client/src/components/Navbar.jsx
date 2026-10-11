@@ -55,8 +55,7 @@ export default function Navbar({ onOpenAuth }) {
     { to: '/browse', label: lang === 'ar' ? 'المكتبة 📖' : 'Library 📖', icon: '📖' },
     { to: '/community', label: t('nav.community'), icon: '💬' },
     { to: '/rankings', label: t('nav.rankings'), icon: '🏆' },
-    { to: '/mylist', label: t('nav.mylist'), icon: '♥' },
-    { to: '/account', label: t('nav.account'), icon: '⚙' }
+    { to: '/mylist', label: t('nav.mylist'), icon: '♥' }
   ];
 
   return (

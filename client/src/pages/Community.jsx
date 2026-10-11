@@ -4,7 +4,7 @@ import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
-import { UserBadges } from '../components/UserBadges.jsx';
+import { UserBadges, VerifiedBadge } from '../components/UserBadges.jsx';
 import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
 import { useOrnamentPrefs } from '../ornaments/useOrnamentPrefs.js';
 import { onCommunitySnapshot, syncCommunityPostToFirestore } from '../firebase.js';
@@ -598,23 +598,34 @@ export default function Community({ onOpenAuth }) {
                     {/* Post Header */}
                     <div className="fb-post-card__head">
                       <div className="fb-post-card__author">
-                        <div className="avatar fb-post-card__avatar" style={{ background: isPostDev ? '#ec4899' : '#22d3ee' }}>
-                          {post.author_avatar ? (
-                            <img onError={imgFallback} src={post.author_avatar} alt={post.author_name} />
-                          ) : (
-                            post.author_name?.[0]?.toUpperCase() || '👤'
-                          )}
-                        </div>
+                        <OrnamentAvatar
+                          src={post.author_avatar || (isAuthor ? (user?.photoURL || user?.photoUrl || '') : '')}
+                          fallbackLabel={post.author_name?.[0] || '👤'}
+                          avatarColor={isPostDev ? '#ec4899' : (isAuthor ? (user?.avatarColor || '#22d3ee') : '#22d3ee')}
+                          frameStyle={isAuthor ? myFrame : (post.author_frame || 'royal-flame')}
+                          size={44}
+                        >
+                          <div className="avatar fb-post-card__avatar" style={{ background: isPostDev ? '#ec4899' : '#22d3ee', width: '100%', height: '100%' }}>
+                            {(post.author_avatar || (isAuthor && (user?.photoURL || user?.photoUrl))) ? (
+                              <img onError={imgFallback} src={post.author_avatar || user?.photoURL || user?.photoUrl} alt={post.author_name} />
+                            ) : (
+                              post.author_name?.[0]?.toUpperCase() || '👤'
+                            )}
+                          </div>
+                        </OrnamentAvatar>
 
                         <div className="fb-post-card__meta">
-                          <div className="fb-post-card__author-row">
-                            <span className="fb-post-card__author-name">{post.author_name}</span>
+                          <div className="fb-post-card__author-row" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            <span className="fb-post-card__author-name" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                              {post.author_name}
+                              <VerifiedBadge isDev={isPostDev} size={17} />
+                            </span>
                             {isPostDev && (
                               <span className="fb-dev-badge" title="Verified Developer">
                                 👑 {lang === 'ar' ? 'مطور BLACK X' : 'Developer'}
                               </span>
                             )}
-                            <UserBadges badges={post.author_role === 'developer' ? ['dev'] : []} size="sm" />
+                            <UserBadges badges={isAuthor ? (user?.badges || ['blue_verified']) : (post.author_role === 'developer' ? ['gold_vip', 'blue_verified'] : ['blue_verified'])} size="sm" />
                             {user && post.author_name && post.author_name !== user.username && (
                               <button
                                 type="button"
@@ -848,8 +859,11 @@ export default function Community({ onOpenAuth }) {
 
                                   <div className="fb-comment-item__content">
                                     <div className="fb-comment-bubble">
-                                      <div className="fb-comment-bubble__head">
-                                        <span className="fb-comment-bubble__author">{c.author_name}</span>
+                                      <div className="fb-comment-bubble__head" style={{ display: 'flex', alignItems: 'center', gap: '0.28rem' }}>
+                                        <span className="fb-comment-bubble__author" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                          {c.author_name}
+                                          <VerifiedBadge isDev={isCommDev} size={14} />
+                                        </span>
                                         {isCommDev && (
                                           <span className="fb-dev-badge fb-dev-badge--xs">👑 dev</span>
                                         )}
