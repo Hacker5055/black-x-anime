@@ -95,11 +95,12 @@ export default function App() {
               <Route path="/profile" element={<ProfileDashboard onOpenAuth={openAuth} />} />
               <Route path="/account" element={<Navigate to="/profile" replace />} />
               <Route path="/settings" element={<Navigate to="/profile" replace />} />
-              {/* legacy prediction-engine routes → home */}
+              <Route path="/anime" element={<Navigate to="/trending" replace />} />
+              <Route path="/animes" element={<Navigate to="/trending" replace />} />
+              <Route path="/anime/:slug" element={<ShowDetail onOpenAuth={openAuth} />} />
               <Route path="/arena" element={<Navigate to="/" replace />} />
               <Route path="/leaderboard" element={<Navigate to="/" replace />} />
               <Route path="/watchlist" element={<Navigate to="/mylist" replace />} />
-              <Route path="/anime/:id" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

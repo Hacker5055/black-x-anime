@@ -156,6 +156,159 @@ export const OKANIME_CATALOG = [
     genres: ['أكشن', 'قتال خارق', 'سايان', 'بطولة الأكوان', 'خيال علمي'],
     descriptionAr: 'غوكو وفيجيتا يواجهان آلهة الدمار ومحاربي الأكوان المتعددة في بطولة القوة الكبرى لحماية كونهم من المحو.',
     servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive', 'Uqload']
+  },
+  {
+    slug: 'shingeki-no-kyojin',
+    okanimeId: 'shingeki-no-kyojin',
+    titleAr: 'هجوم العمالقة (Attack on Titan)',
+    titleEn: 'Attack on Titan',
+    titleRomaji: 'Shingeki no Kyojin',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-C6FPmWm59CyP.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFCOcDmneX.jpg',
+    status: 'مكتمل (89 حلقة)',
+    season: 'Spring 2013',
+    type: 'TV Series',
+    rating: 9.9,
+    episodeCount: 89,
+    genres: ['أكشن', 'عمالقة', 'حروب', 'دراما سوداوية'],
+    descriptionAr: 'إيرين ييغر وفيلق الاستكشاف في معركة البقاء الملحمية ضد عمالقة الجدران ومؤامرات العالم الخارجي.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload 1080p', 'Mega 1080p']
+  },
+  {
+    slug: 'vinland-saga',
+    okanimeId: 'vinland-saga',
+    titleAr: 'فينلاند ساغا (Vinland Saga)',
+    titleEn: 'Vinland Saga',
+    titleRomaji: 'Vinland Saga',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101348-7fM1k81g1b1Z.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/101348-k0b81h1g1b1Z.jpg',
+    status: 'مكتمل (48 حلقة)',
+    season: 'Summer 2019',
+    type: 'TV Series',
+    rating: 9.9,
+    episodeCount: 48,
+    genres: ['فايكنج', 'تاريخي', 'حروب', 'فلسفة وسينين'],
+    descriptionAr: 'ثورفين في ملحمة الفايكنج الخالدة من نار الانتقام إلى البحث عن أرض السلام فينلاند.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
+  },
+  {
+    slug: 'death-note',
+    okanimeId: 'death-note',
+    titleAr: 'مذكرة الموت (Death Note)',
+    titleEn: 'Death Note',
+    titleRomaji: 'Death Note',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1535-lawX6J9j2w7R.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/1535-N1l7m1k2v8aZ.jpg',
+    status: 'مكتمل (37 حلقة)',
+    season: 'Fall 2006',
+    type: 'TV Series',
+    rating: 9.8,
+    episodeCount: 37,
+    genres: ['غموض', 'صراع عقول', 'شينيغامي', 'نفسي'],
+    descriptionAr: 'ياغامي لايت وخصمه العبقري إل في أعظم صراع ذكاء في تاريخ الأنمي.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
+  },
+  {
+    slug: 'chainsaw-man',
+    okanimeId: 'chainsaw-man',
+    titleAr: 'رجل المنشار (Chainsaw Man)',
+    titleEn: 'Chainsaw Man',
+    titleRomaji: 'Chainsaw Man',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx127230-FloXFJyQZPdq.png',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/127230-Nu0tVw0zH07H.jpg',
+    status: 'مكتمل (12 حلقة)',
+    season: 'Fall 2022',
+    type: 'TV Series',
+    rating: 9.7,
+    episodeCount: 12,
+    genres: ['أكشن', 'شياطين', 'دموي', 'خوارق'],
+    descriptionAr: 'دينجي يندمج مع شيطان المنشار بوتشيتا ليصبح رجل المنشار وينضم لفرقة الأمن العام بقيادة ماكيما.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload 1080p', 'Mega 1080p']
+  },
+  {
+    slug: 'black-clover',
+    okanimeId: 'black-clover',
+    titleAr: 'بلاك كلوفر (Black Clover)',
+    titleEn: 'Black Clover',
+    titleRomaji: 'Black Clover',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97940-7fM1k81g1b1Z.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/97940-k0b81h1g1b1Z.jpg',
+    status: 'مكتمل (170 حلقة)',
+    season: 'Fall 2017',
+    type: 'TV Series',
+    rating: 9.7,
+    episodeCount: 170,
+    genres: ['سحر', 'فرسان السحر', 'شونين', 'عزيمة خارقة'],
+    descriptionAr: 'أستا الفتى الذي ولد بدون سحر يحصل على كتاب الورقة الخماسية بسيف مضاد للسحر ساعياً لأن يصبح إمبراطور السحر.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
+  },
+  {
+    slug: 'boku-no-hero-academia',
+    okanimeId: 'boku-no-hero-academia',
+    titleAr: 'أكاديمية بطلي (My Hero Academia)',
+    titleEn: 'My Hero Academia',
+    titleRomaji: 'Boku no Hero Academia',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21459-oZNQ7NmNOIXA.png',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21459-7jX1jX1b1Z.jpg',
+    status: 'مستمر (الموسم 7)',
+    season: 'Spring 2016',
+    type: 'TV Series',
+    rating: 9.6,
+    episodeCount: 159,
+    genres: ['أبطال خارقين', 'شونين', 'مدرسة', 'قوى خارقة'],
+    descriptionAr: 'ميدوريا إيزوكو الفتى الذي ولد بلا ميزة يحصل على قوة أول مايت الأعظم ليدخل ثانوية الأبطال.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
+  },
+  {
+    slug: 'spy-x-family',
+    okanimeId: 'spy-x-family',
+    titleAr: 'عائلة الجاسوس (Spy x Family)',
+    titleEn: 'Spy x Family',
+    titleRomaji: 'Spy x Family',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx140960-vNPTtHx7WNzE.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/140960-63737b1Z.jpg',
+    status: 'مستمر (المواسم 1 و 2)',
+    season: 'Spring 2022',
+    type: 'TV Series',
+    rating: 9.7,
+    episodeCount: 37,
+    genres: ['كوميديا', 'جاسوسية', 'عائلة', 'حركة'],
+    descriptionAr: 'جاسوس، قاتلة مأجورة، وطفلة تقرأ العقول يشكلون عائلة مزيفة لأداء مهمة سلام عالمية.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
+  },
+  {
+    slug: 'blue-lock',
+    okanimeId: 'blue-lock',
+    titleAr: 'القفل الأزرق (Blue Lock)',
+    titleEn: 'Blue Lock',
+    titleRomaji: 'Blue Lock',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx137822-4P2PzKzVz8hH.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/137822-83838b1Z.jpg',
+    status: 'مستمر (الموسم 2)',
+    season: 'Fall 2022',
+    type: 'TV Series',
+    rating: 9.7,
+    episodeCount: 38,
+    genres: ['رياضة', 'كرة قدم', 'إثارة وتنافس', 'أناني'],
+    descriptionAr: 'مشروع بلو لوك يجمع 300 مهاجم ياباني في سجن كروي لصناعة المهاجم الأكثر أنانية وتفوقاً في العالم.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
+  },
+  {
+    slug: 'one-punch-man',
+    okanimeId: 'one-punch-man',
+    titleAr: 'رجل اللكمة الواحدة (One Punch Man)',
+    titleEn: 'One Punch Man',
+    titleRomaji: 'One Punch Man',
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21087-0b1Z8b1Z.jpg',
+    banner: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21087-0b1Z.jpg',
+    status: 'مكتمل (24 حلقة)',
+    season: 'Fall 2015',
+    type: 'TV Series',
+    rating: 9.8,
+    episodeCount: 24,
+    genres: ['أكشن', 'كوميديا خارقة', 'أبطال', 'سايتاما'],
+    descriptionAr: 'سايتاما البطل الذي يهزم أي عدو أو وحش بلكمة واحدة فقط يعاني من الملل الشديد لغياب أي منافس يجاريه.',
+    servers: ['سيرفر BLACK X (OkAnime VIP)', 'Mp4Upload FHD', 'Mega Drive']
   }
 ];
 
@@ -184,6 +337,68 @@ class OkanimeService {
   }
 
   /**
+   * Get complete live anime catalog from OkAnime (/anime-list?page=N)
+   */
+  async getBrowseCatalog(page = 1) {
+    const pageNum = Math.max(1, Number(page) || 1);
+    const cacheKey = `okanime:browse:${pageNum}`;
+    const cached = apiGet(cacheKey);
+    if (cached) return cached;
+
+    let items = [];
+    try {
+      const html = await this.fetchPage(`/anime-list?page=${pageNum}`);
+      if (html && !html.includes('Just a moment')) {
+        const $ = cheerio.load(html);
+        const seen = new Set();
+
+        $('.anime-card, .col-6, .col-sm-4, .col-lg-3, .col-xl-2dot4').each((_, el) => {
+          const $el = $(el);
+          const link = $el.find('a[href*="/anime/"]').first();
+          const href = link.attr('href') || '';
+          const slugMatch = href.match(/\/anime\/([a-z0-9-]+)/i);
+          if (!slugMatch) return;
+          const slug = slugMatch[1];
+          if (seen.has(slug)) return;
+
+          const title = $el.find('.anime-title h4 span, .anime-details h3').first().text().trim() ||
+                        link.text().trim() || slug.replace(/-/g, ' ');
+          const poster = $el.find('img').attr('src') || $el.find('img').attr('data-src') || '';
+          const epText = $el.find('.anime-title h5').text().trim();
+          const epCountMatch = epText.match(/\d+/);
+          const episodeCount = epCountMatch ? Number(epCountMatch[0]) : 12;
+          const desc = $el.find('.anime-details p').text().trim();
+          const genres = $el.find('.anime-details ul li').map((__, li) => $(li).text().trim()).get();
+
+          seen.add(slug);
+          items.push({
+            slug,
+            okanimeId: slug,
+            titleEn: title,
+            titleAr: title,
+            poster: poster.startsWith('http') ? poster : (poster ? `${OKANIME_BASE}${poster}` : ''),
+            banner: poster.startsWith('http') ? poster : (poster ? `${OKANIME_BASE}${poster}` : ''),
+            episodeCount,
+            episodes: episodeCount,
+            score: 95,
+            genres: genres.length > 0 ? genres : ['أكشن', 'مغامرات'],
+            description: desc,
+            url: `/show/${slug}?source=okanime`,
+            source: 'okanime',
+            sourceName: 'سيرفر BLACK X 3 (OkAnime)',
+            sourceLabel: 'سيرفر BLACK X 3 (OkAnime)'
+          });
+        });
+      }
+    } catch (_) {}
+
+    if (items.length > 0) {
+      apiSet(cacheKey, items, 30 * 60 * 1000);
+    }
+    return items;
+  }
+
+  /**
    * Get latest anime episodes from OkAnime
    */
   async getLatestEpisodes() {
@@ -198,49 +413,87 @@ class OkanimeService {
         const $ = cheerio.load(html);
         const seen = new Set();
 
-        $('a[href*="/episode/"]').each((_, el) => {
+        // 1. Primary: High-fidelity .anime-card.episode-card with authentic posters
+        $('.anime-card.episode-card').each((_, el) => {
           const $el = $(el);
-          const href = $el.attr('href') || '';
-          if (!href || seen.has(href)) return;
-
-          const rawText = $el.text().trim().replace(/\s+/g, ' ');
-          // Format usually: "00:30 Oni no Hanayome الحلقة 2" or "One Piece الحلقة 1120"
-          const epMatch = rawText.match(/الحلقة\s*(\d+)/i) || href.match(/episode-(\d+)/i) || rawText.match(/\d+/);
-          const episode = epMatch ? Number(epMatch[1] || epMatch[0]) : 1;
-
-          // Extract slug from href: /episode/{slug}-episode-{ep}
-          const epSlugMatch = href.match(/\/episode\/([a-z0-9-]+?)(?:-episode-\d+)?$/i);
-          let slug = '';
-          if (epSlugMatch) {
-            slug = epSlugMatch[1].replace(/-episode-\d+$/i, '');
-          }
-
-          // Clean title
-          let title = rawText
-            .replace(/^\d{1,2}:\d{2}\s*/, '')
-            .replace(/الحلقة\s*\d+.*/i, '')
-            .trim();
-          if (!title && slug) {
-            title = slug.replace(/-/g, ' ');
-          }
+          const link = $el.find('a[href*="/episode/"]').first();
+          const href = link.attr('href') || $el.find('a').attr('href') || '';
+          if (!href) return;
 
           const poster = $el.find('img').attr('src') || $el.find('img').attr('data-src') || '';
+          const title = $el.find('.anime-title h4 span, .anime-title h4, h4').first().text().trim() ||
+                        $el.find('.anime-title').text().replace(/الحلقة\s*\d+.*/i, '').trim();
 
-          if (slug && title) {
-            seen.add(href);
+          const epText = $el.find('.episode-number, .anime-title h5, span').text();
+          const epMatch = href.match(/episode-(\d+)/i) || epText.match(/الحلقة\s*(\d+)/i) || epText.match(/\d+/);
+          const episode = epMatch ? Number(epMatch[1] || epMatch[0]) : 1;
+
+          const slugMatch = href.match(/\/episode\/([a-z0-9-]+?)(?:-episode-\d+)?$/i);
+          const slug = slugMatch ? slugMatch[1].replace(/-episode-\d+$/i, '') : '';
+
+          if (slug && title && !seen.has(slug)) {
+            seen.add(slug);
             items.push({
               slug,
               okanimeId: slug,
               episode,
               titleEn: title,
               titleAr: title,
-              poster: poster.startsWith('http') ? poster : (poster ? `${OKANIME_BASE}${poster}` : 'https://images.witanime.site/posters/one-piece.jpg'),
+              poster: poster.startsWith('http') ? poster : (poster ? `${OKANIME_BASE}${poster}` : ''),
               url: `/watch/${slug}/${episode}?source=okanime`,
               source: 'okanime',
-              sourceLabel: 'سيرفر BLACK X 3 (OkAnime)'
+              sourceLabel: 'سيرفر BLACK X 3 (OkAnime)',
+              status: 'مستمر (Ongoing)',
+              score: 95
             });
           }
         });
+
+        // 2. Secondary: If cards were sparse, supplement from schedule links
+        if (items.length < 10) {
+          $('a[href*="/episode/"]').each((_, el) => {
+            const $el = $(el);
+            const href = $el.attr('href') || '';
+            if (!href) return;
+
+            const rawText = $el.text().trim().replace(/\s+/g, ' ');
+            const epMatch = rawText.match(/الحلقة\s*(\d+)/i) || href.match(/episode-(\d+)/i) || rawText.match(/\d+/);
+            const episode = epMatch ? Number(epMatch[1] || epMatch[0]) : 1;
+
+            const epSlugMatch = href.match(/\/episode\/([a-z0-9-]+?)(?:-episode-\d+)?$/i);
+            let slug = '';
+            if (epSlugMatch) {
+              slug = epSlugMatch[1].replace(/-episode-\d+$/i, '');
+            }
+
+            let title = rawText
+              .replace(/^\d{1,2}:\d{2}\s*/, '')
+              .replace(/الحلقة\s*\d+.*/i, '')
+              .trim();
+            if (!title && slug) {
+              title = slug.replace(/-/g, ' ');
+            }
+
+            const poster = $el.find('img').attr('src') || $el.find('img').attr('data-src') || '';
+
+            if (slug && title && !seen.has(slug)) {
+              seen.add(slug);
+              items.push({
+                slug,
+                okanimeId: slug,
+                episode,
+                titleEn: title,
+                titleAr: title,
+                poster: poster.startsWith('http') ? poster : (poster ? `${OKANIME_BASE}${poster}` : 'https://images.witanime.site/posters/one-piece.jpg'),
+                url: `/watch/${slug}/${episode}?source=okanime`,
+                source: 'okanime',
+                sourceLabel: 'سيرفر BLACK X 3 (OkAnime)',
+                status: 'مستمر',
+                score: 94
+              });
+            }
+          });
+        }
       }
     } catch (_) {}
 

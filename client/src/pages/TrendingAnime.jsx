@@ -22,6 +22,14 @@ const ANIME_GENRES = [
   { id: 'Drama', ar: '🎭 دراما وغموض', en: '🎭 Drama' }
 ];
 
+const GENRE_KEYWORDS = {
+  Action: ['action', 'أكشن', 'قتال', 'حركة', 'قتالية', 'مغامرات', 'مغامرة', 'قتالي'],
+  Fantasy: ['fantasy', 'خيال', 'فانتازيا', 'سحر', 'خيالي', 'خوارق', 'فانتازي'],
+  Adventure: ['adventure', 'مغامرات', 'مغامرة', 'رحلة', 'استكشاف'],
+  Supernatural: ['supernatural', 'خارق للطبيعة', 'خوارق', 'شياطين', 'قوى خارقة', 'شيطان', 'ما وراء الطبيعة'],
+  Drama: ['drama', 'دراما', 'غموض', 'رومانسي', 'مأساة', 'حياة يومية', 'تشويق']
+};
+
 export default function TrendingAnime() {
   const { lang, formatNumber } = useI18n();
   const { user } = useAuth();
@@ -32,9 +40,11 @@ export default function TrendingAnime() {
   const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
 
   const initialQ = searchParams.get('q') || '';
+  const initialSource = searchParams.get('source') || 'all';
+  const initialFilter = searchParams.get('filter') || 'trending';
   const [query, setQuery] = useState(initialQ);
-  const [selectedSource, setSelectedSource] = useState('all'); // 'all' | 'witanime' | 'anime3rb'
-  const [activeFilter, setActiveFilter] = useState('trending'); // 'trending' | 'latest' | 'top' | 'alerts'
+  const [selectedSource, setSelectedSource] = useState(initialSource);
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
   const [selectedGenre, setSelectedGenre] = useState('all');
 
   const [trendingList, setTrendingList] = useState([]);
@@ -133,8 +143,8 @@ export default function TrendingAnime() {
             score: s.score || 94,
             genres: s.genres || ['Action', 'Fantasy'],
             isDirectStream: true,
-            source: s.source || (String(s.slug).startsWith('a3rb-') ? 'anime3rb' : 'witanime'),
-            sourceLabel: s.sourceLabel || (s.source === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' : 'سيرفر BLACK X 1 (WitAnime)')
+            source: s.source || (String(s.slug).startsWith('ok-') ? 'okanime' : 'witanime'),
+            sourceLabel: s.sourceLabel || (s.source === 'okanime' ? 'سيرفر BLACK X 2 (OkAnime)' : 'سيرفر BLACK X 1 (WitAnime)')
           });
         }
 
@@ -204,18 +214,15 @@ export default function TrendingAnime() {
     const list = [];
     const seen = new Set();
 
-    // 1. Add catalog items for all sources (WitAnime, Anime3rb, OkAnime, AnimeBlkom)
+    // 1. Add catalog items for WitAnime & OkAnime
     for (const cat of catalogList) {
-      const catSource = cat.source || (cat.okanimeId ? 'okanime' : cat.blkomId ? 'animeblkom' : cat.anime3rbId ? 'anime3rb' : 'witanime');
+      const catSource = cat.source || (cat.okanimeId ? 'okanime' : 'witanime');
       if (selectedSource !== 'all' && selectedSource !== catSource) continue;
       const key = `${catSource}:${cat.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
         const sourceLabel = cat.sourceLabel || (
-          catSource === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
-          catSource === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
-          catSource === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
-          'سيرفر BLACK X 1 (WitAnime)'
+          catSource === 'okanime' ? 'سيرفر BLACK X 2 (OkAnime)' : 'سيرفر BLACK X 1 (WitAnime)'
         );
         list.push({
           id: `cat-${catSource}-${cat.slug}`,
@@ -242,10 +249,7 @@ export default function TrendingAnime() {
       if (!seen.has(key)) {
         seen.add(key);
         const sourceLabel = item.sourceLabel || (
-          itemSrc === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
-          itemSrc === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
-          itemSrc === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
-          'سيرفر BLACK X 1 (WitAnime)'
+          itemSrc === 'okanime' ? 'سيرفر BLACK X 2 (OkAnime)' : 'سيرفر BLACK X 1 (WitAnime)'
         );
         list.push({
           id: `lat-${itemSrc}-${item.slug}`,
@@ -320,12 +324,22 @@ export default function TrendingAnime() {
 
     let filtered = list;
     if (selectedGenre !== 'all') {
+      const targetKeywords = GENRE_KEYWORDS[selectedGenre] || [selectedGenre.toLowerCase()];
       filtered = list.filter((it) =>
-        (it.genres || []).some((g) => String(g).toLowerCase() === selectedGenre.toLowerCase())
+        (it.genres || []).some((g) => {
+          const gLower = String(g).toLowerCase();
+          return targetKeywords.some((k) => gLower.includes(k.toLowerCase()) || k.toLowerCase().includes(gLower));
+        })
       );
     }
 
-    if (activeFilter === 'top') {
+    if (activeFilter === 'latest') {
+      filtered = [...filtered].sort((a, b) => {
+        const aIsLat = a.id?.startsWith('lat-') ? 1 : 0;
+        const bIsLat = b.id?.startsWith('lat-') ? 1 : 0;
+        return bIsLat - aIsLat;
+      });
+    } else if (activeFilter === 'top') {
       filtered = [...filtered].sort((a, b) => (b.score || 0) - (a.score || 0));
     } else if (activeFilter === 'random') {
       const randomOnly = filtered.filter((it) => it.isRandomPick);
@@ -590,11 +604,9 @@ export default function TrendingAnime() {
 
         <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
           {[
-            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (WitAnime + Anime3rb + OkAnime + Blkom)', labelEn: 'All Sources' },
+            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (WitAnime + OkAnime)', labelEn: 'All Sources' },
             { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1 (WitAnime)', labelEn: 'Server 1 (WitAnime)', sub: 'witanime.site' },
-            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2 (Anime3rb)', labelEn: 'Server 2 (Anime3rb)', sub: 'anime3rb.com' },
-            { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 3 (OkAnime)', labelEn: 'Server 3 (OkAnime)', sub: 'ww3.okanime.xyz' },
-            { id: 'animeblkom', icon: '💎', labelAr: 'سيرفر BLACK X 4 (AnimeBlkom)', labelEn: 'Server 4 (AnimeBlkom)', sub: 'animeblkom.com' }
+            { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 2 (OkAnime)', labelEn: 'Server 2 (OkAnime)', sub: 'ww3.okanime.xyz' }
           ].map((src) => {
             const active = selectedSource === src.id;
             return (
@@ -605,6 +617,10 @@ export default function TrendingAnime() {
                   setSelectedSource(src.id);
                   setQuery('');
                   setSearchResults(null);
+                  const p = new URLSearchParams(searchParams);
+                  if (src.id === 'all') p.delete('source');
+                  else p.set('source', src.id);
+                  setSearchParams(p, { replace: true });
                 }}
                 style={{
                   display: 'flex',
@@ -619,10 +635,6 @@ export default function TrendingAnime() {
                   background: active
                     ? src.id === 'okanime'
                       ? 'linear-gradient(135deg, #f97316, #e11d48)'
-                      : src.id === 'animeblkom'
-                      ? 'linear-gradient(135deg, #a855f7, #3b82f6)'
-                      : src.id === 'anime3rb'
-                      ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
                       : src.id === 'witanime'
                       ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)'
                       : 'linear-gradient(135deg, #22d3ee, #10b981)'
@@ -845,12 +857,23 @@ export default function TrendingAnime() {
                           fontWeight: 900,
                           padding: '0.15rem 0.5rem',
                           borderRadius: '6px',
-                          background: item.source === 'anime3rb' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(34, 211, 238, 0.22)',
-                          color: item.source === 'anime3rb' ? '#fde047' : '#38bdf8',
-                          border: item.source === 'anime3rb' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(34, 211, 238, 0.5)'
+                          background:
+                            item.source === 'okanime'
+                              ? 'rgba(249, 115, 22, 0.22)'
+                              : 'rgba(34, 211, 238, 0.22)',
+                          color:
+                            item.source === 'okanime'
+                              ? '#fb923c'
+                              : '#38bdf8',
+                          border:
+                            item.source === 'okanime'
+                              ? '1px solid rgba(249, 115, 22, 0.5)'
+                              : '1px solid rgba(34, 211, 238, 0.5)'
                         }}
                       >
-                        {item.source === 'anime3rb' ? '⚡ سيرفر Anime3rb' : '👑 سيرفر WitAnime'}
+                        {item.source === 'okanime'
+                          ? '🔥 سيرفر OkAnime'
+                          : '👑 سيرفر WitAnime'}
                       </span>
                       {item.episodes && (
                         <span style={{ fontSize: '0.72rem', color: 'var(--ink-dim)', fontWeight: 800 }}>
