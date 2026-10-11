@@ -56,6 +56,11 @@ model User {
   referrals        User[]  @relation("Referrals")
   vip_status       String  @default("free")
 
+  // profile ornaments (3D frames / banners) — see client/src/ornaments/
+  frame_style  String @default("default")
+  ornament     String @default("none")
+  banner_style String @default("off")
+
   // relations
   ratings           Rating[]
   following         Follow[]       @relation("Follower")

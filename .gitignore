@@ -9,3 +9,6 @@ screenshots/
 .env
 .DS_Store
 .vite/
+
+# the repo intentionally ships without a lockfile (Dockerfile installs fresh)
+package-lock.json

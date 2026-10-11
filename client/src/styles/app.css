@@ -3299,10 +3299,17 @@ html, body, #root, .app-shell {
   overflow: hidden;
 }
 
-.fb-composer__avatar img {
+.fb-composer__avatar img,
+.fb-composer__avatar-wrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* wrapper that lets the live 3D band overflow past the disc */
+.fb-composer__avatar-wrap {
+  flex-shrink: 0;
+  position: relative;
 }
 
 .fb-composer__input-wrap {
@@ -4430,3 +4437,275 @@ html, body, #root, .app-shell {
 .ticket-status--progress { background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }
 .ticket-status--resolved { background: rgba(52, 211, 153, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); }
 
+
+/* ==========================================================================
+   3D ORNAMENTS — live Three.js frames, banners, gallery
+   (engine: client/src/ornaments/core/engine.js · React wrappers: /ornaments)
+   Everything here is decoration-only: the canvas never eats pointer events
+   that belong to real controls, and each block degrades to the CSS frame.
+   ========================================================================== */
+
+.ornament3d {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  isolation: isolate;
+}
+
+.ornament3d__canvas {
+  z-index: 1;
+  border-radius: inherit;
+  /* the ring needs the pointer for gyro/drag, but children above still win */
+  touch-action: none;
+}
+
+.ornament3d__boot {
+  position: absolute;
+  inset: -4%;
+  z-index: 4;
+  opacity: 0.9;
+  animation: ornamentBootFade 0.6s var(--ease-out) both;
+}
+@keyframes ornamentBootFade {
+  from { opacity: 0.35; transform: scale(0.94); }
+  to   { opacity: 1;    transform: scale(1); }
+}
+
+/* frame layering: DOM avatar > canvas band > glow */
+.ornament-avatar__overlay { z-index: 3; }
+.ornament-avatar.is-live .avatar3d__disc { visibility: hidden; }
+.ornament-avatar .avatar3d__disc { transition: opacity 0.25s ease; }
+
+.avatar-frame--fallback { inset: -3%; }
+.ornament-avatar.is-live .avatar-frame--fallback { display: none; }
+
+/* the 2D fallback keeps the brand presets and adds the missing keyframes */
+.avatar-frame--aurora-veil {
+  border: 3px solid #34d399;
+  box-shadow: 0 0 18px #34d399, inset 0 0 12px #67e8f9;
+  animation: auroraWave 4s infinite alternate;
+}
+.avatar-frame--aurora-veil::after,
+.orn-tile--off .avatar-frame { display: none; }
+
+@keyframes goldShine {
+  0%   { box-shadow: 0 0 12px #eab308, inset 0 0 8px #ca8a04; }
+  50%  { box-shadow: 0 0 26px #fde047, inset 0 0 14px #facc15; }
+  100% { box-shadow: 0 0 12px #eab308, inset 0 0 8px #ca8a04; }
+}
+.avatar-frame--imperial-gold { animation: goldShine 3.4s infinite ease-in-out; }
+
+@keyframes sakuraFloat {
+  0%   { transform: scale(1) rotate(0deg); box-shadow: 0 0 16px #f472b6; }
+  50%  { transform: scale(1.02) rotate(2deg); box-shadow: 0 0 26px #f9a8d4; }
+  100% { transform: scale(1) rotate(0deg); box-shadow: 0 0 16px #f472b6; }
+}
+.avatar-frame--sakura-blossom { animation: sakuraFloat 6s infinite ease-in-out; }
+
+@keyframes prismShift {
+  0%   { border-color: #38bdf8; box-shadow: 0 0 20px #38bdf8, 0 0 30px #c084fc; }
+  33%  { border-color: #a78bfa; box-shadow: 0 0 20px #a78bfa, 0 0 30px #67e8f9; }
+  66%  { border-color: #f0abfc; box-shadow: 0 0 22px #f0abfc, 0 0 34px #38bdf8; }
+  100% { border-color: #38bdf8; box-shadow: 0 0 20px #38bdf8, 0 0 30px #c084fc; }
+}
+.avatar-frame--prismatic-diamond { animation: prismShift 7s infinite linear; }
+
+@keyframes auroraWave {
+  0%   { box-shadow: 0 0 16px #34d399, inset 0 0 10px #67e8f9; border-color: #34d399; }
+  50%  { box-shadow: 0 0 26px #67e8f9, inset 0 0 14px #a7f3d0; border-color: #5eead4; }
+  100% { box-shadow: 0 0 16px #818cf8, inset 0 0 10px #34d399; border-color: #818cf8; }
+}
+
+/* ---------------- banner ---------------- */
+.profile-banner--3d { background: #05060d; }
+.profile-banner--3d .ornament3d { width: 100%; height: 100%; }
+.profile-banner__fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #090d16 0%, #1e1b4b 60%, #06070d 100%);
+}
+.profile-banner__badge {
+  position: absolute;
+  top: 10px;
+  inset-inline-start: 12px;
+  z-index: 4;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  padding: 0.18rem 0.5rem;
+  border-radius: 8px;
+  color: #d9fbff;
+  background: rgba(4, 8, 16, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+}
+
+/* ---------------- gallery / picker ---------------- */
+.orn-gallery { display: flex; flex-direction: column; gap: 0.9rem; }
+
+.orn-gallery__stage {
+  position: relative;
+  min-height: 240px;
+  border-radius: 20px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  transition: background 0.6s ease;
+}
+.orn-gallery__stage > .ornament3d { width: 100%; height: 100%; }
+.orn-gallery__stage-meta {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 0.6rem 0.85rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: linear-gradient(transparent, rgba(3, 5, 12, 0.9));
+  pointer-events: none;
+}
+.orn-gallery__stage-name { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; }
+.orn-gallery__stats {
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.orn-gallery__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 0.6rem;
+}
+.orn-tile {
+  position: relative;
+  padding: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: start;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  transition: transform 0.22s var(--ease-out), border-color 0.2s, box-shadow 0.25s;
+}
+.orn-tile:hover { transform: translateY(-3px); border-color: var(--glass-border-hi); }
+.orn-tile:focus-visible { outline: 2px solid var(--orn-color, var(--cyan)); outline-offset: 2px; }
+.orn-tile.is-active {
+  border-color: var(--orn-color, var(--cyan));
+  box-shadow: 0 0 0 1px var(--orn-color, var(--cyan)), 0 14px 34px -18px var(--orn-color, var(--cyan));
+}
+.orn-tile:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.orn-tile__poster {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  background-size: cover;
+}
+.orn-tile__ava {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 46%;
+  height: 46%;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #fff;
+  background: linear-gradient(140deg, var(--orn-color, #22d3ee), #14192c);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+}
+.orn-tile__ava img { width: 100%; height: 100%; object-fit: cover; }
+.orn-tile__city {
+  position: absolute;
+  inset: 12% 8% 22%;
+  border-radius: 8px;
+  opacity: 0.7;
+  background:
+    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--orn-color, #22d3ee) 60%, transparent) 100%),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--orn-color, #22d3ee) 55%, transparent) 0 6px, transparent 6px 16px);
+  mask-image: linear-gradient(180deg, transparent, #000 45%);
+}
+.orn-tile__label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--ink-dim);
+  background: rgba(4, 6, 14, 0.72);
+}
+.orn-tile__label span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orn-tile.is-active .orn-tile__label { color: #fff; }
+.orn-tile__check {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: #04060d;
+  background: var(--orn-color, var(--cyan));
+  box-shadow: 0 0 12px var(--orn-color, var(--cyan));
+}
+
+.orn-gallery__advanced {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.orn-gallery__quality { display: flex; gap: 0.2rem; padding: 0.18rem; border-radius: 99px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); }
+.orn-gallery__quality button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-dim);
+  border-radius: 99px;
+  padding: 0.24rem 0.62rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.orn-gallery__quality button.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.3), rgba(139, 92, 246, 0.32));
+}
+
+.orn-gallery__sliders {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.5rem 1rem;
+  padding: 0.85rem;
+  border-radius: 16px;
+  background: rgba(2, 4, 10, 0.5);
+  border: 1px solid var(--glass-border);
+}
+.orn-slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.35rem 0.6rem; font-size: 0.76rem; color: var(--ink-dim); }
+.orn-slider span { grid-column: 1 / -1; }
+.orn-slider input[type='range'] { grid-column: 1; width: 100%; }
+.orn-slider output { grid-column: 2; font-weight: 800; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.orn-gallery__sliders .btn { grid-column: 1 / -1; justify-self: start; }
+.orn-gallery__sliders .hint { grid-column: 1 / -1; margin: 0; }
+
+.orn-gallery--compact .orn-gallery__stage { min-height: 168px; }
+.orn-gallery--compact .orn-gallery__tiles { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ornament3d__boot,
+  .avatar-frame--aurora-veil,
+  .avatar-frame--imperial-gold,
+  .avatar-frame--sakura-blossom,
+  .avatar-frame--prismatic-diamond { animation: none !important; }
+  .orn-tile:hover { transform: none; }
+}

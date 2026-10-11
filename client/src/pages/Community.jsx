@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 import { UserBadges } from '../components/UserBadges.jsx';
+import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
+import { useOrnamentPrefs } from '../ornaments/useOrnamentPrefs.js';
 import { onCommunitySnapshot, syncCommunityPostToFirestore } from '../firebase.js';
 
 const TOPICS = [
@@ -66,6 +68,10 @@ export default function Community({ onOpenAuth }) {
   const [commentInputs, setCommentInputs] = useState({}); // postId -> string
   const [submittingComment, setSubmittingComment] = useState({});
   const [followingSet, setFollowingSet] = useState(new Set());
+
+  /* the logged-in member's live 3D ornament (cached, so the feed paints it
+     instantly and works offline; the CSS frame covers the no-WebGL case) */
+  const { frameStyle: myFrame } = useOrnamentPrefs(user?.id, { fetch: !!user });
 
   const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
 
@@ -397,14 +403,22 @@ export default function Community({ onOpenAuth }) {
           {/* ================= Facebook-style Post Composer Card ================= */}
           <div className="fb-composer glass glass--strong">
             <div className="fb-composer__top">
-              <div className="avatar fb-composer__avatar" style={{ background: user?.avatarColor || '#22d3ee' }}>
-                {(user?.photoURL || user?.photoUrl) ? (
-                  <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt="Avatar" />
-                ) : (
-                  user?.displayName?.[0]?.toUpperCase() || '👤'
-                )}
-              </div>
-
+              <OrnamentAvatar
+                src={user?.photoURL || user?.photoUrl || ''}
+                fallbackLabel={user?.displayName?.[0] || '👤'}
+                avatarColor={user?.avatarColor || '#22d3ee'}
+                frameStyle={myFrame}
+                size={44}
+                className="fb-composer__avatar-wrap"
+              >
+                <div className="avatar fb-composer__avatar" style={{ background: user?.avatarColor || '#22d3ee', width: '100%', height: '100%' }}>
+                  {(user?.photoURL || user?.photoUrl) ? (
+                    <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt="Avatar" />
+                  ) : (
+                    user?.displayName?.[0]?.toUpperCase() || '👤'
+                  )}
+                </div>
+              </OrnamentAvatar>
               <div className="fb-composer__input-wrap">
                 <textarea
                   className="fb-composer__textarea"

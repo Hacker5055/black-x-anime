@@ -7,6 +7,8 @@ import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { UserBadges, BADGE_DEFINITIONS } from '../components/UserBadges.jsx';
+import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
+import OrnamentGallery from '../ornaments/OrnamentGallery.jsx';
 import { auth, onProfileSnapshot, onDeveloperProfileSnapshot } from '../firebase.js';
 
 // Preset high quality anime character avatars for quick selection
@@ -68,6 +70,9 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const [bio, setBio] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
   const [frameStyle, setFrameStyle] = useState('default');
+  const [bannerStyle, setBannerStyle] = useState('off');
+  const [ornamentQuality, setOrnamentQuality] = useState('auto');
+  const [ornament3d, setOrnament3d] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -158,6 +163,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
           if (res?.data) {
             if (res.data.bannerUrl) setBannerUrl(res.data.bannerUrl);
             if (res.data.frameStyle) setFrameStyle(res.data.frameStyle);
+            if (res.data.bannerStyle) setBannerStyle(res.data.bannerStyle);
           }
         })
         .catch(() => {});
@@ -347,11 +353,18 @@ export default function ProfileDashboard({ onOpenAuth }) {
       try {
         await api.put('/api/profile/customize', {
           bannerUrl: bannerUrl.trim(),
-          frameStyle
+          frameStyle,
+          bannerStyle
         });
       } catch (custErr) {
         console.warn('Customization save notice:', custErr);
       }
+
+      try {
+        window.dispatchEvent(new CustomEvent('blackx:ornaments-updated', {
+          detail: { frameStyle, bannerStyle }
+        }));
+      } catch { /* no DOM */ }
 
       pushToast(t('profile.savedSuccess'), 'success');
       await refresh();
@@ -635,11 +648,24 @@ export default function ProfileDashboard({ onOpenAuth }) {
           {/* Left Preview Card */}
           <div className="glass" style={{ padding: '0 0 2rem 0', textAlign: 'center', borderRadius: '20px', overflow: 'hidden' }}>
             {/* Profile Banner */}
-            <div className="profile-banner">
-              {bannerUrl ? (
-                <img onError={imgFallback} src={bannerUrl} alt="Profile Banner" className="profile-banner__img" />
+            <div className={`profile-banner ${bannerStyle && bannerStyle !== 'off' ? 'profile-banner--3d' : ''}`}>
+              {bannerStyle && bannerStyle !== 'off' ? (
+                /* live 3D header — the AI image (if any) becomes the plane
+                   texture so it still gets curvature, rails and bloom */
+                <Ornament3D
+                  mode="banner"
+                  ornament={bannerStyle}
+                  eager
+                  quality={ornamentQuality}
+                  overrides={{ imageOverride: bannerUrl || undefined }}
+                  style={{ position: 'absolute', inset: 0 }}
+                />
               ) : (
-                <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #090d16 0%, #1e1b4b 60%, #06070d 100%)' }} />
+                bannerUrl ? (
+                  <img onError={imgFallback} src={bannerUrl} alt="Profile Banner" className="profile-banner__img" />
+                ) : (
+                  <div className="profile-banner__fallback" />
+                )
               )}
               <div className="profile-banner__overlay" />
               <button
@@ -667,37 +693,18 @@ export default function ProfileDashboard({ onOpenAuth }) {
               {/* Avatar with Frame Ornament */}
               <div className="avatar-frame-wrapper" style={{ margin: '0 auto 1.15rem' }}>
                 <div style={{ position: 'relative', width: '110px', height: '110px' }}>
-                  {frameStyle && frameStyle !== 'default' && (
-                    <div className={`avatar-frame avatar-frame--${frameStyle}`} />
-                  )}
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      borderRadius: '50%',
-                      background: avatarColor,
-                      border: '3px solid rgba(255, 255, 255, 0.25)',
-                      boxShadow: `0 0 35px ${avatarColor}40`,
-                      overflow: 'hidden',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '2.8rem',
-                      fontWeight: 800,
-                      color: '#fff'
-                    }}
-                  >
-                    {photoUrl ? (
-                      <img onError={imgFallback}
-                        src={photoUrl}
-                        alt={displayName}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                    ) : (
-                      displayName?.[0]?.toUpperCase() || username?.[0]?.toUpperCase() || 'X'
-                    )}
-                  </div>
+                  <OrnamentAvatar
+                    src={photoUrl || ''}
+                    fallbackLabel={(displayName || username || 'X').slice(0, 2)}
+                    avatarColor={avatarColor}
+                    frameStyle={frameStyle}
+                    size={110}
+                    pointerMode="block"
+                    eager
+                    quality={ornamentQuality}
+                    style={{ margin: 0 }}
+                  />
+                  <div style={{ position: 'absolute', inset: 0 }}>
                   {/* Quick camera button over avatar */}
                   <button
                     type="button"
@@ -727,6 +734,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   >
                     📷
                   </button>
+                  </div>
                 </div>
               </div>
 
@@ -1075,7 +1083,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                 />
               </div>
 
-              {/* Avatar Frames & Ornaments Section */}
+              {/* ═════════ 3D ORNAMENTS — live frames + 3D banners ═════════ */}
               <div
                 style={{
                   background: 'rgba(255, 255, 255, 0.03)',
@@ -1085,44 +1093,51 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   marginBottom: '1.35rem'
                 }}
               >
-                <strong style={{ fontSize: '0.92rem', display: 'block', marginBottom: '0.35rem' }}>
-                  ✨ {lang === 'ar' ? 'أشكال وزخارف وإطارات الصورة الشخصية' : 'Avatar Frames & Ornaments'}
-                </strong>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                  <strong style={{ fontSize: '0.92rem' }}>
+                    ✨ {t('profile.ornTitle')}
+                  </strong>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className={`chip ${ornament3d ? 'active' : ''}`}
+                      onClick={() => setOrnament3d((v) => !v)}
+                      style={{ fontSize: '0.74rem', padding: '0.28rem 0.7rem' }}
+                      title={t('profile.ornToggle3d')}
+                    >
+                      {ornament3d ? `🧊 ${t('profile.ornMode3d')}` : `🖼️ ${t('profile.ornMode2d')}`}
+                    </button>
+                  </div>
+                </div>
                 <p style={{ fontSize: '0.78rem', color: 'var(--ink-dim)', margin: '0 0 0.85rem' }}>
-                  {lang === 'ar' ? 'إطارات متحركة ولامعة مميزة تلتف حول صورتك الشخصية وتظهر في حسابك والمنشورات:' : 'Animated glowing frames surrounding your avatar across profile and community:'}
+                  {t('profile.ornSubtitle')}
                 </p>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.65rem' }}>
-                  {PRESET_FRAMES.map((f) => {
-                    const isSelected = frameStyle === f.id;
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        onClick={() => setFrameStyle(f.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          padding: '0.65rem',
-                          borderRadius: '12px',
-                          border: isSelected ? `2px solid ${f.color}` : '1px solid rgba(255, 255, 255, 0.1)',
-                          background: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
-                          cursor: 'pointer',
-                          textAlign: 'start',
-                          boxShadow: isSelected ? `0 0 14px ${f.color}40` : 'none',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <span style={{ fontSize: '1.2rem' }}>{f.icon}</span>
-                        <div style={{ minWidth: 0 }}>
-                          <strong style={{ display: 'block', fontSize: '0.78rem', color: isSelected ? '#fff' : 'var(--ink-dim)' }}>
-                            {lang === 'ar' ? f.labelAr : f.labelEn}
-                          </strong>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <OrnamentGallery
+                  mode="frame"
+                  value={frameStyle}
+                  threeDEnabled={ornament3d}
+                  quality={ornamentQuality}
+                  onQualityChange={setOrnamentQuality}
+                  onChange={({ frameStyle: next }) => setFrameStyle(next)}
+                  avatar={{ photoUrl, label: displayName || username || 'X', color: avatarColor }}
+                />
+
+                <div style={{ marginTop: '1.1rem' }}>
+                  <strong style={{ fontSize: '0.88rem', display: 'block', marginBottom: '0.5rem' }}>
+                    🏙️ {t('profile.ornBannerTitle')}
+                  </strong>
+                  <OrnamentGallery
+                    mode="banner"
+                    value={bannerStyle}
+                    compact
+                    showStage={false}
+                    showAdvanced={false}
+                    threeDEnabled={ornament3d}
+                    quality={ornamentQuality}
+                    onChange={({ bannerStyle: next }) => setBannerStyle(next)}
+                    avatar={{ photoUrl, label: displayName || username || 'X', color: avatarColor }}
+                  />
                 </div>
               </div>
 
