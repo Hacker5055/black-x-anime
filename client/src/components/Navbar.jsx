@@ -56,7 +56,6 @@ export default function Navbar({ onOpenAuth }) {
     { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home' },
     { to: '/trending', label: lang === 'ar' ? 'قائمة الأنمي' : 'Anime List' },
     { to: '/trending?type=movie', label: lang === 'ar' ? 'أفلام' : 'Movies' },
-    { to: '/#season-trending', label: lang === 'ar' ? 'أنميات الموسم' : 'Season Anime', isHash: true },
     { to: '/#schedule-section', label: lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule', isHash: true },
     { to: '/browse', label: lang === 'ar' ? 'المانجا' : 'Manga' },
     { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community' }

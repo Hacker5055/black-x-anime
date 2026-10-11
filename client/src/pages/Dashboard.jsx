@@ -40,6 +40,25 @@ function WitSectionHeader({ icon, title, sub, linkTo, linkLabel }) {
   );
 }
 
+const DEFAULT_HERO_SLIDES = [
+  {
+    slug: 'bleach-sennen-kessen-hen',
+    titleEn: 'BLEACH: Sennen Kessen-hen - Soukoku-tan',
+    titleAr: 'القسم الثالث من حرب الألفية الدموية متاح الآن بجودة عالية.',
+    episodes: 14,
+    score: 89,
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/169755-82wS1kG2a1kZ.jpg'
+  },
+  {
+    slug: 'solo-leveling',
+    titleEn: 'Solo Leveling: Arise from the Shadow',
+    titleAr: 'الموسم الجديد متاح الآن بجودة FHD 1080p.',
+    episodes: 12,
+    score: 88,
+    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/151807-37yfQA3ym8PA.jpg'
+  }
+];
+
 /* --------------------------- 0. Exact WitAnime Cinema Hero Banner --------------------------- */
 function Hero3DStage({ items = [], trending = [] }) {
   const { lang, formatNumber } = useI18n();
@@ -50,13 +69,13 @@ function Hero3DStage({ items = [], trending = [] }) {
     const merged = [];
     const seen = new Set();
     for (const item of [...(items || []), ...(trending || [])]) {
-      const key = item.slug || item.id || item.titleEn;
+      const key = item.slug || item.id || item.titleEn || item.titleEnglish || item.titleRomaji;
       if (!key || seen.has(key)) continue;
       seen.add(key);
       merged.push(item);
       if (merged.length >= 6) break;
     }
-    return merged;
+    return merged.length > 0 ? merged : DEFAULT_HERO_SLIDES;
   }, [items, trending]);
 
   useEffect(() => {
@@ -67,18 +86,29 @@ function Hero3DStage({ items = [], trending = [] }) {
     return () => clearInterval(id);
   }, [heroPool.length]);
 
-  if (!heroPool.length) return null;
   const current = heroPool[activeIdx] || heroPool[0];
-  const displayTitle = current.titleEn || current.titleAr || current.slug;
+  const displayTitle =
+    current.titleEn ||
+    current.titleEnglish ||
+    current.titleRomaji ||
+    current.titleAr ||
+    current.titleArabic ||
+    current.slug;
+  const arabicSub = current.titleAr || current.titleArabic;
   const subLine =
-    current.titleAr && current.titleAr !== displayTitle
-      ? current.titleAr
+    arabicSub && arabicSub !== displayTitle
+      ? arabicSub
       : lang === 'ar'
       ? 'القسم الجديد من الموسم متاح الآن بجودة عالية.'
       : 'New season episodes streaming now in Full HD.';
   const epCount = current.episodes || current.episode || 12;
   const score = current.score ? (Number(current.score) / 10).toFixed(1) : '8.8';
-  const artwork = current.banner || current.poster || current.coverUrl || '';
+  const artwork =
+    current.banner ||
+    current.bannerUrl ||
+    current.poster ||
+    current.coverUrl ||
+    '';
 
   return (
     <section className="wit-cinema-hero">
@@ -583,29 +613,19 @@ export default function Dashboard({ onOpenAuth }) {
       {/* 0. Exact WitAnime Cinema Hero Banner */}
       <Hero3DStage items={pinnedItems} trending={trending || []} />
 
-      {/* 1. Split Row: الأكثر مشاهدة (1..6) + أشهر أنميات الموسم */}
-      <MostWatchedAndSeasonSplit
-        latestItems={latest || []}
-        seasonItems={trending || []}
-        loading={!latest}
-      />
-
-      {/* 2. Continue Watching (if logged in) */}
+      {/* 1. Continue Watching (if logged in) */}
       <ContinueSection onOpenAuth={onOpenAuth} />
 
-      {/* 3. Latest Added Episodes (أحدث الحلقات المضافة) */}
+      {/* 2. Latest Added Episodes (أحدث الحلقات المضافة) */}
       <LatestSection items={latest || []} loading={!latest} error={error} onRetry={loadLatest} />
 
-      {/* 4. Weekly Airing Schedule (مواعيد الحلقات) */}
+      {/* 3. Weekly Airing Schedule (مواعيد الحلقات) */}
       <WeeklyScheduleSection items={pinnedItems} />
 
-      {/* 5. Seasonal Trending Anime (أنميات الموسم) */}
-      <TrendingSection />
-
-      {/* 6. Manga & Manhwa Library */}
+      {/* 4. Manga & Manhwa Library */}
       <LibraryShowcaseSection />
 
-      {/* 7. User Favorites */}
+      {/* 5. User Favorites */}
       <FavoritesSection onOpenAuth={onOpenAuth} />
     </div>
   );
