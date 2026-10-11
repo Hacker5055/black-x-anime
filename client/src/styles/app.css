@@ -5027,61 +5027,94 @@ html, body, #root, .app-shell {
 }
 
 /* ============================================================================
-   PITCH-BLACK GLASSMORPHISM (OBSIDIAN #000000) + LUXURY 3D ANIME ARCHITECTURE
+   100% PURE MONOCHROME PITCH-BLACK (#000000) GLASSY + 3D ANIME ARCHITECTURE
+   (ZERO OTHER COLORS — ONLY PITCH BLACK & CRYSTAL GLASS SPECULAR REFLECTIONS)
    ============================================================================ */
 
 :root {
-  --bg: #000000;
-  --bg-2: #040407;
-  --wit-surface: rgba(12, 12, 18, 0.68);
-  --wit-surface-2: rgba(20, 20, 28, 0.75);
-  --wit-border: rgba(255, 255, 255, 0.1);
-  --wit-blue: #2563eb;
-  --wit-red: #f43f5e;
-  --wit-gold: #f59e0b;
-  --wit-green: #10b981;
+  --bg: #000000 !important;
+  --bg-2: #050505 !important;
+  --bg-3: #0a0a0a !important;
+  --glass: rgba(8, 8, 8, 0.78) !important;
+  --glass-strong: rgba(12, 12, 12, 0.88) !important;
+  --glass-border: rgba(255, 255, 255, 0.14) !important;
+  --ink: #ffffff !important;
+  --ink-dim: #a1a1aa !important;
+  --ink-mute: #71717a !important;
+  --violet: #ffffff !important;
+  --violet-2: #d4d4d8 !important;
+  --cyan: #ffffff !important;
+  --magenta: #d4d4d8 !important;
+  --amber: #ffffff !important;
+  --emerald: #ffffff !important;
+  --grad-brand: linear-gradient(145deg, #18181b 0%, #050505 100%) !important;
+  --grad-text: linear-gradient(180deg, #ffffff 0%, #a1a1aa 100%) !important;
+  --wit-surface: rgba(8, 8, 8, 0.78);
+  --wit-surface-2: rgba(14, 14, 14, 0.86);
+  --wit-border: rgba(255, 255, 255, 0.14);
 }
 
 html,
 body {
+  background: #000000 !important;
   background-color: #000000 !important;
-  background-image:
-    radial-gradient(circle at 18% 12%, rgba(245, 158, 11, 0.06) 0%, transparent 42%),
-    radial-gradient(circle at 82% 24%, rgba(34, 211, 238, 0.06) 0%, transparent 45%),
-    radial-gradient(circle at 50% 85%, rgba(139, 92, 246, 0.05) 0%, transparent 50%) !important;
-  color: #f8fafc !important;
+  background-image: none !important;
+  color: #f4f4f5 !important;
 }
 
-.backdrop__blob {
-  opacity: 0.12 !important;
-  filter: blur(110px) !important;
-}
-
+/* Completely eliminate any colored background blobs or grids */
+.backdrop,
+.backdrop__blob,
 .backdrop__grid {
-  opacity: 0.04 !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: #000000 !important;
 }
 
 /* Smoked Pitch-Black Glass Navbar */
 .nav {
-  background: rgba(4, 4, 7, 0.78) !important;
-  backdrop-filter: blur(28px) saturate(200%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
+  background: rgba(0, 0, 0, 0.82) !important;
+  backdrop-filter: blur(30px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(140%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.98), inset 0 -1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
-/* Universal Smoked Obsidian Glass Panels */
+.brand__logo,
+.brand__logo-ring {
+  background: linear-gradient(145deg, #171717, #030303) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* Universal Pure Pitch-Black Glass Panels */
 .glass,
 .wit-section,
 .wit-top-strip,
 .wit-servers-box {
-  background: linear-gradient(145deg, rgba(16, 16, 23, 0.72) 0%, rgba(5, 5, 9, 0.88) 100%) !important;
-  backdrop-filter: blur(28px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: linear-gradient(145deg, rgba(12, 12, 12, 0.78) 0%, rgba(3, 3, 3, 0.94) 100%) !important;
+  backdrop-filter: blur(30px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(130%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.92),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+    0 24px 64px rgba(0, 0, 0, 0.96),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Universal Monochrome Black Glass Buttons */
+.btn--primary,
+.btn--violet {
+  background: linear-gradient(180deg, #1c1c1c 0%, #060606 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+
+.btn--primary:hover,
+.btn--violet:hover {
+  background: linear-gradient(180deg, #262626 0%, #0c0c0c 100%) !important;
+  border-color: rgba(255, 255, 255, 0.48) !important;
 }
 
 /* ============================================================================
@@ -5091,11 +5124,11 @@ body {
   position: relative;
   border-radius: 22px;
   overflow: hidden;
-  background: #030306;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #020202;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.96),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    0 30px 80px rgba(0, 0, 0, 0.98),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
   padding: 2rem 2.2rem;
   perspective: 1400px;
 }
@@ -5105,7 +5138,7 @@ body {
   inset: -20px;
   background-size: cover;
   background-position: center;
-  filter: blur(36px) brightness(0.22) saturate(1.4);
+  filter: blur(38px) brightness(0.18) grayscale(45%);
   transform: scale(1.12);
   z-index: 0;
 }
@@ -5114,8 +5147,8 @@ body {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 75% 50%, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.92) 75%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.95) 100%);
+    radial-gradient(circle at 75% 50%, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.96) 75%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.98) 100%);
   z-index: 1;
 }
 
@@ -5140,29 +5173,19 @@ body {
   gap: 0.5rem;
 }
 
-.bx-glass-pill {
+.bx-glass-pill,
+.bx-glass-pill--gold,
+.bx-glass-pill--cyan {
   padding: 0.32rem 0.85rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #f8fafc;
+  background: rgba(10, 10, 10, 0.82);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
   font-size: 0.74rem;
   font-weight: 900;
   letter-spacing: 0.03em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-.bx-glass-pill--gold {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.55);
-  color: #fde047;
-}
-
-.bx-glass-pill--cyan {
-  background: rgba(34, 211, 238, 0.14);
-  border-color: rgba(34, 211, 238, 0.5);
-  color: #67e8f9;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .bx-hero-3d__title {
@@ -5170,15 +5193,15 @@ body {
   font-size: clamp(1.6rem, 3.2vw, 2.65rem);
   font-weight: 900;
   line-height: 1.18;
-  background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #a1a1aa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 12px 35px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 12px 35px rgba(0, 0, 0, 0.95);
 }
 
 .bx-hero-3d__desc {
   margin: 0;
-  color: #94a3b8;
+  color: #a1a1aa;
   font-size: 0.92rem;
   line-height: 1.7;
   max-width: 580px;
@@ -5201,35 +5224,38 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .bx-btn-3d--primary {
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-  color: #050507;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(180deg, #222222 0%, #050505 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.38);
   box-shadow:
-    0 12px 30px rgba(245, 158, 11, 0.4),
+    0 14px 34px rgba(0, 0, 0, 0.95),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .bx-btn-3d--primary:hover {
   transform: translateY(-4px) scale(1.03);
-  box-shadow: 0 18px 38px rgba(245, 158, 11, 0.58);
+  background: linear-gradient(180deg, #2e2e2e 0%, #0a0a0a 100%);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.98), 0 0 22px rgba(255, 255, 255, 0.16);
 }
 
 .bx-btn-3d--glass {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(10, 10, 10, 0.75);
   backdrop-filter: blur(20px);
-  color: #f8fafc;
+  color: #e4e4e7;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .bx-btn-3d--glass:hover {
   transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(24, 24, 24, 0.88);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
 }
 
 .bx-hero-3d__thumbs {
@@ -5245,9 +5271,9 @@ body {
   overflow: hidden;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: #050508;
+  background: #030303;
   cursor: pointer;
-  opacity: 0.5;
+  opacity: 0.45;
   transform: perspective(500px) rotateY(-10deg) scale(0.92);
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -5261,9 +5287,9 @@ body {
 .bx-hero-3d__thumb.active,
 .bx-hero-3d__thumb:hover {
   opacity: 1;
-  border-color: #f59e0b;
+  border-color: #ffffff;
   transform: perspective(500px) rotateY(0deg) translateY(-5px) scale(1.06);
-  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.96), 0 0 16px rgba(255, 255, 255, 0.22);
 }
 
 /* 3D Floating Poster Centerpiece */
@@ -5301,7 +5327,7 @@ body {
   position: absolute;
   inset: -18px;
   border-radius: 26px;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.32) 0%, rgba(34, 211, 238, 0.18) 50%, transparent 75%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0%, transparent 72%);
   filter: blur(22px);
   transform: translateZ(-30px);
 }
@@ -5312,12 +5338,12 @@ body {
   height: 100%;
   border-radius: 18px;
   overflow: hidden;
-  background: #050508;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: #020202;
+  border: 1px solid rgba(255, 255, 255, 0.32);
   box-shadow:
-    -20px 28px 60px rgba(0, 0, 0, 0.95),
-    0 0 30px rgba(245, 158, 11, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    -20px 28px 64px rgba(0, 0, 0, 0.98),
+    0 0 28px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
   transform-style: preserve-3d;
 }
 
@@ -5330,7 +5356,7 @@ body {
 .bx-hero-3d__card-shine {
   position: absolute;
   inset: 0;
-  background: linear-gradient(125deg, rgba(255, 255, 255, 0.32) 0%, transparent 42%, rgba(0, 0, 0, 0.65) 100%);
+  background: linear-gradient(125deg, rgba(255, 255, 255, 0.28) 0%, transparent 42%, rgba(0, 0, 0, 0.75) 100%);
   pointer-events: none;
 }
 
@@ -5341,10 +5367,10 @@ body {
   text-align: center;
   padding: 0.38rem 0.65rem;
   border-radius: 10px;
-  background: rgba(5, 5, 9, 0.82);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  color: #fde047;
+  background: rgba(0, 0, 0, 0.86);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff;
   font-size: 0.74rem;
   font-weight: 900;
   transform: translateZ(35px);
@@ -5375,8 +5401,8 @@ body {
 
 .wit-search-input {
   flex: 1;
-  background: rgba(4, 4, 8, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   padding: 0.7rem 1.05rem;
   color: #ffffff;
@@ -5384,19 +5410,19 @@ body {
   font-size: 0.92rem;
   font-weight: 700;
   outline: none;
-  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.95);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .wit-search-input:focus {
-  border-color: rgba(245, 158, 11, 0.65);
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2), inset 0 2px 10px rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.48);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.12), inset 0 2px 12px rgba(0, 0, 0, 0.95);
 }
 
 .wit-search-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #050507;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, #222222 0%, #060606 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.32);
   border-radius: 12px;
   padding: 0.7rem 1.4rem;
   font-family: inherit;
@@ -5404,7 +5430,7 @@ body {
   font-size: 0.88rem;
   cursor: pointer;
   white-space: nowrap;
-  box-shadow: 0 8px 22px rgba(245, 158, 11, 0.32);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .wit-quick-cats {
@@ -5419,32 +5445,29 @@ body {
   display: none;
 }
 
-.wit-cat-pill {
+.wit-cat-pill,
+.wit-cat-pill--vip {
   padding: 0.42rem 0.9rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgba(10, 10, 10, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #d4d4d8;
   font-size: 0.8rem;
   font-weight: 800;
   text-decoration: none;
   white-space: nowrap;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
   transition: all 0.2s ease;
 }
 
 .wit-cat-pill:hover,
-.wit-cat-pill.active {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.32);
+.wit-cat-pill.active,
+.wit-cat-pill--vip:hover {
+  background: rgba(28, 28, 28, 0.92);
+  border-color: rgba(255, 255, 255, 0.42);
   color: #ffffff;
   transform: translateY(-2px);
-}
-
-.wit-cat-pill--vip {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.55);
-  color: #fde047;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 /* Section Box & Header */
@@ -5460,7 +5483,7 @@ body {
   gap: 0.75rem;
   padding-bottom: 0.85rem;
   margin-bottom: 1.1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .wit-sec-header__right {
@@ -5473,8 +5496,8 @@ body {
   width: 5px;
   height: 26px;
   border-radius: 4px;
-  background: linear-gradient(180deg, #f59e0b 0%, #22d3ee 100%);
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.5);
+  background: linear-gradient(180deg, #ffffff 0%, #52525b 100%) !important;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
   flex-shrink: 0;
 }
 
@@ -5491,30 +5514,30 @@ body {
 .wit-sec-header__sub {
   margin: 0.15rem 0 0;
   font-size: 0.76rem;
-  color: #94a3b8;
+  color: #a1a1aa;
 }
 
 .wit-sec-header__more {
   padding: 0.36rem 0.85rem;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #f8fafc;
+  background: rgba(12, 12, 12, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f4f4f5;
   font-size: 0.76rem;
   font-weight: 800;
   text-decoration: none;
   white-space: nowrap;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
   transition: all 0.2s ease;
 }
 
 .wit-sec-header__more:hover {
-  background: rgba(245, 158, 11, 0.2);
-  border-color: rgba(245, 158, 11, 0.55);
-  color: #fde047;
+  background: rgba(28, 28, 28, 0.95);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
 }
 
-/* 3D Perspective Stage & 3D Glass Card */
+/* 3D Perspective Stage & 3D Pitch-Black Glass Card */
 .bx-3d-stage {
   perspective: 1050px;
   transform-style: preserve-3d;
@@ -5527,10 +5550,10 @@ body {
   --gy: 50%;
   --glare: 0;
   position: relative;
-  background: linear-gradient(160deg, rgba(18, 18, 26, 0.82) 0%, rgba(4, 4, 7, 0.96) 100%) !important;
-  backdrop-filter: blur(22px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  background: linear-gradient(160deg, rgba(16, 16, 16, 0.88) 0%, rgba(2, 2, 2, 0.98) 100%) !important;
+  backdrop-filter: blur(24px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
   border-radius: 14px !important;
   overflow: visible !important;
   transform-style: preserve-3d !important;
@@ -5540,21 +5563,21 @@ body {
     border-color 0.25s ease,
     box-shadow 0.25s ease !important;
   box-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.92),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+    0 18px 40px rgba(0, 0, 0, 0.96),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
   will-change: transform;
 }
 
 .bx-3d-card:hover {
-  border-color: rgba(245, 158, 11, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.48) !important;
   box-shadow:
-    0 28px 55px rgba(0, 0, 0, 0.96),
-    0 0 28px rgba(245, 158, 11, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+    0 28px 58px rgba(0, 0, 0, 0.98),
+    0 0 26px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
   z-index: 10;
 }
 
-/* Specular Holographic Glass Glare Layer */
+/* Specular Pure Crystal White/Silver Glass Glare Layer */
 .bx-3d-card__glare {
   position: absolute;
   inset: 0;
@@ -5564,8 +5587,8 @@ body {
   opacity: var(--glare, 0);
   background: radial-gradient(
     circle at var(--gx, 50%) var(--gy, 50%),
-    rgba(255, 255, 255, 0.26) 0%,
-    rgba(245, 158, 11, 0.1) 28%,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.08) 32%,
     transparent 65%
   );
   mix-blend-mode: screen;
@@ -5585,7 +5608,7 @@ body {
   position: relative;
   aspect-ratio: 2 / 2.85 !important;
   width: 100%;
-  background: #030306;
+  background: #020202;
   border-radius: 13px 13px 0 0;
   overflow: hidden;
   transform-style: preserve-3d;
@@ -5600,7 +5623,7 @@ body {
 
 .bx-3d-card:hover .bx-3d-card__img {
   transform: scale(1.1);
-  filter: contrast(1.06) saturate(1.12);
+  filter: contrast(1.08);
 }
 
 .bx-3d-card__vignette {
@@ -5608,10 +5631,10 @@ body {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.38) 0%,
+    rgba(0, 0, 0, 0.42) 0%,
     transparent 35%,
-    transparent 62%,
-    rgba(0, 0, 0, 0.92) 100%
+    transparent 60%,
+    rgba(0, 0, 0, 0.95) 100%
   );
   pointer-events: none;
 }
@@ -5630,43 +5653,35 @@ body {
   transform: translateZ(56px);
 }
 
-/* Glassy 3D Badges */
-.wit-badge {
+/* Monochrome Pitch-Black Glassy 3D Badges */
+.wit-badge,
+.wit-badge--status,
+.wit-badge--type,
+.wit-ep-card__vip {
   position: absolute;
   z-index: 4;
-  font-size: 0.65rem;
+  font-size: 0.64rem;
   font-weight: 900;
   padding: 0.18rem 0.5rem;
   border-radius: 7px;
   line-height: 1.2;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.75);
+  background: rgba(4, 4, 4, 0.88) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .wit-badge--status {
   top: 7px;
   inset-inline-end: 7px;
-  background: rgba(16, 185, 129, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #ffffff;
 }
 
 .wit-badge--type,
 .wit-ep-card__vip {
-  position: absolute;
   top: 7px;
   inset-inline-start: 7px;
-  background: rgba(5, 5, 9, 0.84);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(245, 158, 11, 0.65);
-  color: #fde047;
-  font-size: 0.62rem;
-  font-weight: 900;
-  padding: 0.16rem 0.45rem;
-  border-radius: 7px;
-  z-index: 4;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.8);
 }
 
 .wit-badge--ep,
@@ -5675,16 +5690,16 @@ body {
   bottom: 7px;
   inset-inline-end: 7px;
   top: auto !important;
-  background: rgba(8, 8, 14, 0.86) !important;
+  background: rgba(4, 4, 4, 0.9) !important;
   backdrop-filter: blur(14px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
   color: #ffffff !important;
   font-size: 0.68rem !important;
   font-weight: 900 !important;
   padding: 0.2rem 0.55rem !important;
   border-radius: 7px !important;
   z-index: 4;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.92), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .wit-bell-btn {
@@ -5695,26 +5710,26 @@ body {
   width: 27px;
   height: 27px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(5, 5, 9, 0.82);
-  backdrop-filter: blur(12px);
-  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(4, 4, 4, 0.88);
+  backdrop-filter: blur(14px);
+  color: #ffffff;
   font-size: 0.72rem;
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.9);
 }
 
 .wit-bell-btn.active {
-  background: rgba(16, 185, 129, 0.9);
-  border-color: #6ee7b7;
+  background: rgba(28, 28, 28, 0.96);
+  border-color: #ffffff;
 }
 
 .wit-anime-card__hover {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.68) 100%);
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.75) 100%);
   display: grid;
   place-items: center;
   opacity: 0;
@@ -5730,15 +5745,17 @@ body {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: rgba(245, 158, 11, 0.92);
+  background: rgba(12, 12, 12, 0.92);
+  backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.55);
-  color: #050507;
+  color: #ffffff;
   display: grid;
   place-items: center;
   font-size: 1.05rem;
   box-shadow:
-    0 0 28px rgba(245, 158, 11, 0.8),
-    inset 0 2px 4px rgba(255, 255, 255, 0.6);
+    0 12px 30px rgba(0, 0, 0, 0.96),
+    0 0 22px rgba(255, 255, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
   transform: scale(0.82);
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -5750,8 +5767,8 @@ body {
 .bx-3d-card__body {
   padding: 0.6rem 0.5rem !important;
   text-align: center;
-  background: rgba(6, 6, 10, 0.92) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(4, 4, 4, 0.96) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 0 0 13px 13px;
   transform: translateZ(20px);
 }
@@ -5760,14 +5777,14 @@ body {
 .wit-ep-card__title {
   font-size: 0.8rem !important;
   font-weight: 800 !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   margin: 0 !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Weekly Schedule Day Tabs (Smoked Glass) */
+/* Weekly Schedule Day Tabs (Monochrome Smoked Black Glass) */
 .wit-days-bar {
   display: flex;
   gap: 0.45rem;
@@ -5786,9 +5803,9 @@ body {
   min-width: 92px;
   padding: 0.58rem 0.78rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgba(8, 8, 8, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #a1a1aa;
   font-family: inherit;
   font-weight: 800;
   font-size: 0.82rem;
@@ -5803,18 +5820,19 @@ body {
 }
 
 .wit-day-tab.active {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(234, 88, 12, 0.25));
-  border-color: rgba(245, 158, 11, 0.65);
-  color: #fde047;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, #242424 0%, #080808 100%);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.92), inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 .wit-day-tab__today {
   font-size: 0.64rem;
   padding: 0.08rem 0.35rem;
   border-radius: 4px;
-  background: #f43f5e;
-  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
 }
 
 /* Anime Details Metadata Grid (Pitch-Black Glass) */
@@ -5826,9 +5844,9 @@ body {
 }
 
 .wit-meta-item {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(8, 8, 8, 0.85);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   padding: 0.55rem 0.8rem;
   display: flex;
@@ -5838,7 +5856,7 @@ body {
 }
 
 .wit-meta-label {
-  color: #94a3b8;
+  color: #a1a1aa;
   font-weight: 700;
 }
 
@@ -5847,7 +5865,7 @@ body {
   font-weight: 900;
 }
 
-/* Always-Visible Streaming Servers Box (Smoked Glass) */
+/* Always-Visible Streaming Servers Box (Monochrome Pitch-Black Glass) */
 .wit-servers-box {
   border-radius: 14px;
   padding: 0.9rem 1.05rem;
@@ -5860,12 +5878,12 @@ body {
   justify-content: space-between;
   font-size: 0.84rem;
   font-weight: 800;
-  color: #cbd5e1;
+  color: #d4d4d8;
   margin-bottom: 0.65rem;
 }
 
 .wit-servers-box__active {
-  color: #fde047;
+  color: #ffffff;
   font-weight: 900;
 }
 
@@ -5875,13 +5893,14 @@ body {
   gap: 0.45rem;
 }
 
-.wit-server-tab {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.wit-server-tab,
+.wit-server-tab--vip {
+  background: rgba(10, 10, 10, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 9px;
   padding: 0.48rem 0.88rem;
-  color: #f8fafc;
+  color: #f4f4f5;
   font-family: inherit;
   font-size: 0.8rem;
   font-weight: 800;
@@ -5892,32 +5911,24 @@ body {
   transition: all 0.2s ease;
 }
 
-.wit-server-tab small {
+.wit-server-tab small,
+.wit-server-tab--vip small {
   font-size: 0.68rem;
   padding: 0.1rem 0.38rem;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
-}
-
-.wit-server-tab--vip {
-  border-color: rgba(245, 158, 11, 0.48);
-}
-
-.wit-server-tab--vip small {
-  background: rgba(245, 158, 11, 0.22);
-  color: #fde047;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .wit-server-tab.active {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border-color: rgba(255, 255, 255, 0.45);
-  color: #050507;
-  box-shadow: 0 8px 22px rgba(245, 158, 11, 0.38);
+  background: linear-gradient(180deg, #262626 0%, #080808 100%);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .wit-server-tab.active small {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
 }
 
@@ -5988,11 +5999,11 @@ body {
     bottom: 0 !important;
     inset-inline: 0 !important;
     height: 64px !important;
-    background: rgba(4, 4, 7, 0.86) !important;
-    backdrop-filter: blur(28px) saturate(200%) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.92) !important;
+    background: rgba(0, 0, 0, 0.9) !important;
+    backdrop-filter: blur(30px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(140%) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.14) !important;
+    box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.98) !important;
     z-index: 999 !important;
     display: grid !important;
     grid-template-columns: repeat(5, 1fr) !important;

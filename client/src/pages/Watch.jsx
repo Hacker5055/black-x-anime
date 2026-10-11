@@ -541,7 +541,7 @@ export default function Watch({ onOpenAuth }) {
             <div className="wit-section" style={{ marginTop: '0.85rem' }}>
               <div className="wit-sec-header" style={{ marginBottom: '0.75rem', paddingBottom: '0.65rem' }}>
                 <div className="wit-sec-header__right">
-                  <span className="wit-sec-header__bar" style={{ background: '#10b981' }} />
+                  <span className="wit-sec-header__bar" />
                   <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
                     <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر' : 'Direct Episode Download Table'}
                   </h3>
@@ -566,12 +566,12 @@ export default function Watch({ onOpenAuth }) {
                     flexWrap: 'wrap',
                     gap: '0.6rem',
                     padding: '0.65rem 0.85rem',
-                    borderRadius: '8px',
-                    background: '#111622',
-                    border: '1px solid rgba(245, 158, 11, 0.35)'
+                    borderRadius: '10px',
+                    background: 'rgba(6, 6, 6, 0.9)',
+                    border: '1px solid rgba(255, 255, 255, 0.22)'
                   }}
                 >
-                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#fde047' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#ffffff' }}>
                     👑 {lang === 'ar' ? 'الجودة الخارقة FHD (1080p • VIP)' : 'Full HD (1080p • VIP)'}
                   </span>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -610,12 +610,12 @@ export default function Watch({ onOpenAuth }) {
                     flexWrap: 'wrap',
                     gap: '0.6rem',
                     padding: '0.65rem 0.85rem',
-                    borderRadius: '8px',
-                    background: '#111622',
-                    border: '1px solid #242f46'
+                    borderRadius: '10px',
+                    background: 'rgba(6, 6, 6, 0.9)',
+                    border: '1px solid rgba(255, 255, 255, 0.14)'
                   }}
                 >
-                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#38bdf8' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#d4d4d8' }}>
                     🖥️ {lang === 'ar' ? 'الجودة العالية HD (720p • مجاناً)' : 'High Definition HD (720p • Free)'}
                   </span>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
