@@ -336,12 +336,14 @@ export function CustomizePanel() {
 
   const FRAMES = [
     { id: 'default', labelAr: 'بدون إطار', labelEn: 'Default' },
-    { id: 'royal-flame', labelAr: 'لهب التنين الملكي 🔥', labelEn: 'Royal Flame 🔥' },
-    { id: 'cyber-neon', labelAr: 'نيون سايبربانك ⚡', labelEn: 'Cyber Neon ⚡' },
-    { id: 'shadow-monarch', labelAr: 'هالة ملك الظلال 👑', labelEn: 'Shadow Monarch 👑' },
-    { id: 'imperial-gold', labelAr: 'التاج الذهبي ⚜️', labelEn: 'Imperial Gold ⚜️' },
-    { id: 'sakura-blossom', labelAr: 'أزهار الساكورا 🌸', labelEn: 'Sakura Blossom 🌸' },
-    { id: 'prismatic-diamond', labelAr: 'الماسة الكريستالية 💎', labelEn: 'Prismatic Diamond 💎' }
+    { id: 'royal-flame', labelAr: 'لهب التنين الملكي 🔥 (3D)', labelEn: 'Royal Flame 3D 🔥' },
+    { id: 'cyber-neon', labelAr: 'نيون سايبربانك ⚡ (3D)', labelEn: 'Cyber Neon 3D ⚡' },
+    { id: 'shadow-monarch', labelAr: 'هالة ملك الظلال 👑 (3D)', labelEn: 'Shadow Monarch 3D 👑' },
+    { id: 'imperial-gold', labelAr: 'التاج الإمبراطوري ⚜️ (3D)', labelEn: 'Imperial Gold 3D ⚜️' },
+    { id: 'sakura-blossom', labelAr: 'أزهار الساكورا 🌸 (3D)', labelEn: 'Sakura Blossom 3D 🌸' },
+    { id: 'prismatic-diamond', labelAr: 'الماسة الكريستالية 💎 (3D)', labelEn: 'Prismatic Diamond 3D 💎' },
+    { id: 'celestial-void', labelAr: 'الفضاء الكوني 🌌 (3D)', labelEn: 'Celestial Void 3D 🌌' },
+    { id: 'dragon-ascension', labelAr: 'التنين السماوي 🐉 (3D)', labelEn: 'Dragon Ascension 3D 🐉' }
   ];
 
   useEffect(() => {
