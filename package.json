@@ -5,12 +5,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "node server/src/index.js",
+    "dev": "vite build client && node server/src/index.js",
     "server": "node --watch server/src/index.js",
     "client": "vite --config client/vite.config.js",
     "seed": "node server/src/seed.js",
     "build": "vite build client",
-    "start": "node server/src/index.js",
+    "start": "vite build client && node server/src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@prisma/client": "6.19.2",
+    "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "cheerio": "^1.2.0",
@@ -28,8 +29,12 @@
     "express": "^5.1.0",
     "firebase": "^13.0.0",
     "jsonwebtoken": "^9.0.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
     "recharts": "^3.10.1",
-    "three": "^0.180.0"
+    "three": "^0.180.0",
+    "vite": "^7.1.9"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.4",

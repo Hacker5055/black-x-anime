@@ -118,16 +118,28 @@ app.use('/api', mangaNovelRoutes); // Manga, Manhwa, Light Novels, AniList, Mang
 // Platform injectors (AI Studio _websocket-interceptor.js) register a
 // service worker via a relative URL — serve a valid one for ANY nested path
 // so registration stops failing with an HTML MIME SecurityError.
-const SW_JS = "self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});\n";
+const SW_JS = "self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).then(() => self.clients.claim())); });\nself.addEventListener('fetch', () => {});\n";
 app.get(/_service-worker\.js$/, (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.type('application/javascript').send(SW_JS);
 });
 
 // Serve the built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
-  app.get(/^(?!\/api).*/, (req, res) => res.sendFile(join(clientDist, 'index.html')));
+  app.use(
+    express.static(clientDist, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        }
+      }
+    })
+  );
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.sendFile(join(clientDist, 'index.html'));
+  });
 }
 
 app.use((err, req, res, next) => {
