@@ -74,7 +74,18 @@ router.get('/posts', (req, res) => {
       };
     });
 
-    res.json({ ok: true, posts: enriched });
+    // Dual contract: the Community UI consumes { ok, posts }; the platform
+    // spec requires { success, data: [{ postId, title, author }] } — serve both.
+    const specData = enriched.map((p) => ({
+      postId: String(p.id),
+      title: String(p.content || '').split('\n')[0].slice(0, 140),
+      author: {
+        username: p.author_username || p.author_name || '',
+        isVerified: ['developer', 'admin', 'moderator', 'creator'].includes(String(p.author_role || '').toLowerCase()),
+        vipStatus: 'free'
+      }
+    }));
+    res.json({ ok: true, posts: enriched, success: true, data: specData });
   } catch (err) {
     console.error('Error fetching community posts:', err);
     res.status(500).json({ error: 'fetch_failed', message: err.message });

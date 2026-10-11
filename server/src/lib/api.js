@@ -20,7 +20,7 @@ export function attachUser(req, res, next) {
 export function getUserId(req) {
   const u = req?.user;
   if (!u) return null;
-  if (typeof u === 'object') return u.id ?? u.userId ?? u.sub ?? null;
+  if (typeof u === 'object') return u.id ?? u.userId ?? u.sub ?? u.uid ?? null;
   return u;
 }
 
