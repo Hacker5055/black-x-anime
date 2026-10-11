@@ -6,7 +6,7 @@ import { LiquidLoader } from './Loading.jsx';
 
 /**
  * Mobile-First Interactive Manga & Manhwa Reader Component
- * Source: MangaLik (مانجا ليك - https://mangalik.net/)
+ * Source: BLACK X Manga Engine
  * Features edge-to-edge vertical webtoon view, tap-to-toggle immersion,
  * auto-scroll hands-free reading, mobile bottom navigation dock, and chapter drawer.
  */
@@ -307,8 +307,8 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
   };
 
   const displayTitle = typeof details?.title === 'object'
-    ? (details?.title?.english || details?.title?.romaji || details?.title?.native || 'مانجا ليك')
-    : (details?.title || item?.title || 'مانجا ليك');
+    ? (details?.title?.english || details?.title?.romaji || details?.title?.native || 'BLACK X Manga')
+    : (details?.title || item?.title || 'BLACK X Manga');
 
   const displayCover = details?.coverImage?.large || details?.coverImage?.extraLarge || details?.coverUrl || item?.poster || 'https://io.mangalik.net/wp-content/app/lekmanganet/512.png';
 
@@ -414,7 +414,7 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
                   gap: '0.2rem'
                 }}
               >
-                ✓ مانجا ليك (MangaLik)
+                ✓ منصة BLACK X
               </span>
               {selectedChapter && (
                 <span
@@ -534,10 +534,10 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
               <div style={{ padding: '6rem 1rem', textAlign: 'center' }}>
                 <LiquidLoader />
                 <p style={{ marginTop: '1.25rem', color: '#10b981', fontWeight: 700, fontSize: '0.9rem' }}>
-                  {lang === 'ar' ? 'جارٍ جلب صفحات الفصل من سيرفر مانجا ليك بدقة فائقة...' : 'Loading MangaLik pages...'}
+                  {lang === 'ar' ? 'جارٍ جلب صفحات الفصل من سيرفرات BLACK X بدقة فائقة...' : 'Loading BLACK X pages...'}
                 </p>
                 <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  {lang === 'ar' ? 'سيرفر الترجمة العربية المباشر (https://mangalik.net/)' : 'Live Arabic translation server'}
+                  {lang === 'ar' ? 'سيرفر الترجمة العربية المباشر (BLACK X CDN)' : 'Live Arabic translation server'}
                 </span>
               </div>
             ) : chapterPages.length === 0 ? (
@@ -571,7 +571,7 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
                     cursor: 'pointer'
                   }}
                 >
-                  📑 تصفح فصول مانجا ليك
+                  📑 تصفح فصول العمل
                 </button>
               </div>
             ) : readerMode === 'webtoon' ? (
@@ -1030,10 +1030,10 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
-                  📑 فصول مانجا ليك ({chapters.length})
+                  📑 فصول العمل ({chapters.length})
                 </h4>
                 <span style={{ fontSize: '0.72rem', color: '#10b981' }}>
-                  ✓ ترجمة عربية كاملة - MangaLik
+                  ✓ ترجمة عربية كاملة - سيرفرات BLACK X
                 </span>
               </div>
               <button
@@ -1102,7 +1102,7 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
                         {ch.title || `الفصل ${ch.chapterNumber}`}
                       </div>
                       <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.15rem' }}>
-                        {ch.scanlationGroup || 'مانجا ليك (MangaLik)'}
+                        {ch.scanlationGroup || 'سيرفرات BLACK X الرسمية'}
                       </div>
                     </div>
                     {isActive && <span style={{ color: '#10b981', fontWeight: 800 }}>✓ قيد القراءة</span>}

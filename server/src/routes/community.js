@@ -98,7 +98,7 @@ router.get('/posts', (req, res) => {
  */
 router.post('/posts', (req, res) => {
   try {
-    const { content, tag, tagName, imageUrl, authorName, authorUsername, authorAvatar, authorRole, uid } = req.body;
+    const { content, tag, tagName, imageUrl, authorName, authorUsername, authorAvatar, authorRole, uid, voiceUrl, voiceDuration } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'empty_content', message: 'Content cannot be empty' });
@@ -114,9 +114,9 @@ router.post('/posts', (req, res) => {
     const result = db.prepare(`
       INSERT INTO community_posts (
         uid, author_name, author_username, author_avatar, author_role,
-        tag, tag_name, content, image_url, is_pinned, likes_count, comments_count, created_at
+        tag, tag_name, content, image_url, voice_url, voice_duration, is_pinned, likes_count, comments_count, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now'))
     `).run(
       String(effectiveUid),
       effectiveAuthor,
@@ -127,6 +127,8 @@ router.post('/posts', (req, res) => {
       tagName || 'عام',
       content.trim(),
       imageUrl || '',
+      voiceUrl || '',
+      Number(voiceDuration) || 0,
       isDev && req.body.isPinned ? 1 : 0
     );
 

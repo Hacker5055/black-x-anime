@@ -21,6 +21,10 @@ import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
 
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://postgres@localhost:5432/blackx';
+}
+
 // never let a stray async error kill the API (client aborts during video
 // streaming are the usual suspects)
 process.on('unhandledRejection', (err) => {

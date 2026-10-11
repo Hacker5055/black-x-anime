@@ -32,9 +32,18 @@ export function resolveUserVipTier(user, referralData) {
     return 'vip_monarch';
   }
   const savedLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('blackx.vipTier') : null;
-  if (user.vipTier === 'vip_monarch' || savedLocal === 'vip_monarch') return 'vip_monarch';
+  if (
+    user.vipTier === 'vip_monarch' ||
+    user.vipStatus === 'VIP Monarch' ||
+    user.vip_status === 'VIP Monarch' ||
+    savedLocal === 'vip_monarch'
+  ) {
+    return 'vip_monarch';
+  }
   if (
     user.vipTier === 'vip_basic' ||
+    user.vipStatus === 'VIP Basic' ||
+    user.vip_status === 'VIP Basic' ||
     savedLocal === 'vip_basic' ||
     referralData?.isVipUnlocked ||
     (user.badges || []).includes('gold_vip')

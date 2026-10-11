@@ -384,7 +384,7 @@ export const mangaNovelController = {
           seedId,
           userId,
           '🔥 فصل جديد متوفر!',
-          'صدر الفصل الجديد مترجماً باللغة العربية الآن على مانجا ليك (MangaLik - https://mangalik.net/).',
+          'صدر الفصل الجديد مترجماً باللغة العربية الآن على منصة BLACK X.',
           '/browse?category=manga'
         );
         rows = db.prepare('SELECT * FROM user_notifications WHERE user_id = ? ORDER BY created_at DESC').all(userId);
@@ -439,9 +439,9 @@ export const mangaNovelController = {
           <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
             <rect width="800" height="1100" fill="#0b0f19"/>
             <rect x="30" y="30" width="740" height="1040" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="8 6"/>
-            <text x="400" y="480" fill="#10b981" font-size="28" font-family="sans-serif" font-weight="bold" text-anchor="middle">📖 مانجا ليك (MangaLik)</text>
-            <text x="400" y="530" fill="#94a3b8" font-size="20" font-family="sans-serif" text-anchor="middle">الصفحة قيد المعالجة من السيرفر المباشر</text>
-            <text x="400" y="580" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري إعادة التوجيه إلى خادم CDN المباشر...</text>
+            <text x="400" y="480" fill="#10b981" font-size="28" font-family="sans-serif" font-weight="bold" text-anchor="middle">📖 BLACK X Manga Reader</text>
+            <text x="400" y="530" fill="#94a3b8" font-size="20" font-family="sans-serif" text-anchor="middle">الصفحة قيد المعالجة من خادم BLACK X المباشر</text>
+            <text x="400" y="580" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري التوجيه إلى خادم CDN المباشر...</text>
           </svg>
         `);
       }
@@ -457,8 +457,8 @@ export const mangaNovelController = {
       res.send(`
         <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
           <rect width="800" height="1100" fill="#090d16"/>
-          <text x="400" y="520" fill="#10b981" font-size="24" font-family="sans-serif" text-anchor="middle">⚡ مانجا ليك - تحميل الصفحة</text>
-          <text x="400" y="560" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري الاتصال بسيرفر مانجا ليك...</text>
+          <text x="400" y="520" fill="#10b981" font-size="24" font-family="sans-serif" text-anchor="middle">⚡ BLACK X - تحميل صفحة المانجا</text>
+          <text x="400" y="560" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري الاتصال بسيرفر BLACK X...</text>
         </svg>
       `);
     }

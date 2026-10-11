@@ -14,8 +14,16 @@ let instance = null;
 
 export function getPrisma() {
   if (!instance) {
-    const { PrismaClient } = require('@prisma/client');
-    instance = new PrismaClient();
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL = 'postgresql://postgres@localhost:5432/blackx';
+    }
+    try {
+      const { PrismaClient } = require('@prisma/client');
+      instance = new PrismaClient();
+    } catch (err) {
+      console.warn('PrismaClient initialization warning:', err.message);
+      throw err;
+    }
   }
   return instance;
 }

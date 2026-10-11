@@ -255,10 +255,11 @@ router.post('/test-log', requireDeveloper, (req, res) => {
    VIP SUBSCRIPTION PLANS & REAL DEVELOPER CODE GENERATOR
    ============================================================================ */
 
-function generateRandomVipCode(tier = 'vip_basic', customPrefix = '') {
+function generateRandomVipCode(tierKey = 'vip_basic', customPrefix = '') {
+  const isMonarch = String(tierKey).toLowerCase().includes('monarch');
   const prefix = customPrefix
     ? customPrefix.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12)
-    : tier === 'vip_monarch'
+    : isMonarch
     ? 'BX-MONARCH'
     : 'BX-BASIC';
   const seg1 = crypto.randomBytes(2).toString('hex').toUpperCase();
@@ -271,25 +272,60 @@ function generateRandomVipCode(tier = 'vip_basic', customPrefix = '') {
  */
 router.get('/vip-codes', requireDeveloper, (req, res) => {
   try {
-    const rows = db.prepare(`
+    const rowsV2 = db.prepare(`
       SELECT id, code, tier, duration_days AS durationDays, max_uses AS maxUses, used_count AS usedCount,
              price_egp AS priceEgp, note, created_by AS createdBy, redeemed_by AS redeemedBy,
              is_active AS isActive, created_at AS createdAt
       FROM vip_codes
       ORDER BY id DESC
-      LIMIT 300
+      LIMIT 200
     `).all();
 
-    const codes = rows.map((r) => {
+    let rowsV1 = [];
+    try {
+      rowsV1 = db.prepare(`
+        SELECT id, code, tier, duration_days AS durationDays, price_egp AS priceEgp,
+               created_by AS createdBy, is_used AS isUsed,
+               used_by_user_id AS usedByUserId, used_by_username AS usedByUsername,
+               used_at AS usedAt, created_at AS createdAt
+        FROM vip_subscription_codes
+        ORDER BY id DESC
+        LIMIT 100
+      `).all();
+    } catch {}
+
+    const seen = new Set();
+    const codes = [];
+
+    for (const r of rowsV2) {
+      seen.add(r.code);
       let redeemedBy = [];
       try {
         redeemedBy = JSON.parse(r.redeemedBy || '[]');
       } catch {}
-      return { ...r, redeemedBy };
-    });
+      const isUsed = (r.usedCount || 0) >= (r.maxUses || 1) ? 1 : 0;
+      codes.push({
+        ...r,
+        redeemedBy,
+        isUsed,
+        usedByUsername: redeemedBy[0]?.username || null,
+        usedAt: redeemedBy[0]?.at || null
+      });
+    }
+
+    for (const r of rowsV1) {
+      if (seen.has(r.code)) continue;
+      codes.push({
+        ...r,
+        maxUses: 1,
+        usedCount: r.isUsed ? 1 : 0,
+        isActive: 1,
+        redeemedBy: r.usedByUsername ? [{ username: r.usedByUsername, userId: r.usedByUserId, at: r.usedAt }] : []
+      });
+    }
 
     const totalCodes = codes.length;
-    const activeCodes = codes.filter((c) => c.isActive && c.usedCount < c.maxUses).length;
+    const activeCodes = codes.filter((c) => c.isActive && (c.usedCount || 0) < (c.maxUses || 1)).length;
     const totalRedemptions = codes.reduce((acc, c) => acc + (c.usedCount || 0), 0);
     const totalValueEgp = codes.reduce((acc, c) => acc + (c.priceEgp || 0) * (c.usedCount || 0), 0);
 
@@ -317,36 +353,41 @@ router.post('/vip-codes/generate', requireDeveloper, (req, res) => {
     customPrefix = ''
   } = req.body || {};
 
-  const validTier = tier === 'vip_monarch' ? 'vip_monarch' : 'vip_basic';
+  const isMonarch = String(tier).toLowerCase().includes('monarch');
+  const validTier = isMonarch ? 'vip_monarch' : 'vip_basic';
+  const displayTier = isMonarch ? 'VIP Monarch' : 'VIP Basic';
   const days = Math.max(1, Math.min(36500, Number(durationDays) || 30));
   const uses = Math.max(1, Math.min(1000, Number(maxUses) || 1));
   const batchCount = Math.max(1, Math.min(50, Number(count) || 1));
 
   // Default suggested Egyptian Pound (EGP) pricing based on tier & duration
-  let defaultPriceEgp = validTier === 'vip_monarch' ? 199 : 99;
-  if (days >= 36500) defaultPriceEgp = validTier === 'vip_monarch' ? 2999 : 1499;
-  else if (days >= 365) defaultPriceEgp = validTier === 'vip_monarch' ? 1499 : 799;
-  else if (days >= 90) defaultPriceEgp = validTier === 'vip_monarch' ? 499 : 249;
-  else if (days <= 7) defaultPriceEgp = validTier === 'vip_monarch' ? 65 : 35;
+  let defaultPriceEgp = isMonarch ? 199 : 99;
+  if (days >= 36500) defaultPriceEgp = isMonarch ? 2999 : 1499;
+  else if (days >= 365) defaultPriceEgp = isMonarch ? 1499 : 799;
+  else if (days >= 90) defaultPriceEgp = isMonarch ? 499 : 249;
+  else if (days <= 7) defaultPriceEgp = isMonarch ? 65 : 35;
 
-  const finalPriceEgp = priceEgp !== undefined && priceEgp !== '' ? Number(priceEgp) : defaultPriceEgp;
+  const finalPriceEgp = priceEgp !== undefined && priceEgp !== '' && Number(priceEgp) >= 0 ? Number(priceEgp) : defaultPriceEgp;
 
   try {
-    const ins = db.prepare(`
-      INSERT INTO vip_codes (code, tier, duration_days, max_uses, price_egp, note, created_by)
+    const insV2 = db.prepare(`
+      INSERT OR IGNORE INTO vip_codes (code, tier, duration_days, max_uses, price_egp, note, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insV1 = db.prepare(`
+      INSERT OR IGNORE INTO vip_subscription_codes (code, tier, duration_days, price_egp, created_by, is_used)
+      VALUES (?, ?, ?, ?, ?, 0)
     `);
 
     const generated = [];
     for (let i = 0; i < batchCount; i++) {
       let code = generateRandomVipCode(validTier, customPrefix);
-      // Ensure uniqueness
       for (let retry = 0; retry < 5; retry++) {
         const exists = db.prepare('SELECT id FROM vip_codes WHERE code = ?').get(code);
         if (!exists) break;
         code = generateRandomVipCode(validTier, customPrefix);
       }
-      const info = ins.run(
+      const info = insV2.run(
         code,
         validTier,
         days,
@@ -355,13 +396,19 @@ router.post('/vip-codes/generate', requireDeveloper, (req, res) => {
         String(note || '').slice(0, 200),
         req.user?.email || 'developer'
       );
+      try {
+        insV1.run(code, displayTier, days, finalPriceEgp, req.user?.email || 'developer');
+      } catch {}
+
       generated.push({
         id: info.lastInsertRowid,
         code,
         tier: validTier,
+        displayTier,
         durationDays: days,
         maxUses: uses,
         usedCount: 0,
+        isUsed: 0,
         priceEgp: finalPriceEgp,
         note: String(note || '').slice(0, 200),
         isActive: 1,
@@ -374,7 +421,7 @@ router.post('/vip-codes/generate', requireDeveloper, (req, res) => {
       codes: generated.map((g) => g.code)
     });
 
-    res.json({ ok: true, generated });
+    res.json({ ok: true, code: generated[0], generated });
   } catch (err) {
     res.status(500).json({ error: 'db_error', message: err.message });
   }
@@ -386,7 +433,11 @@ router.post('/vip-codes/generate', requireDeveloper, (req, res) => {
 router.delete('/vip-codes/:id', requireDeveloper, (req, res) => {
   const codeId = Number(req.params.id);
   try {
+    const row = db.prepare('SELECT code FROM vip_codes WHERE id = ?').get(codeId);
     db.prepare('DELETE FROM vip_codes WHERE id = ?').run(codeId);
+    try {
+      db.prepare('DELETE FROM vip_subscription_codes WHERE id = ? OR code = ?').run(codeId, row?.code || '');
+    } catch {}
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'db_error', message: err.message });
@@ -399,7 +450,10 @@ router.delete('/vip-codes/:id', requireDeveloper, (req, res) => {
 router.post('/users/:id/vip', requireDeveloper, (req, res) => {
   const userId = Number(req.params.id);
   const { vipTier = 'free', durationDays = 30 } = req.body || {};
-  const validTier = ['free', 'vip_basic', 'vip_monarch'].includes(vipTier) ? vipTier : 'free';
+  const isMonarch = String(vipTier).toLowerCase().includes('monarch');
+  const isBasic = String(vipTier).toLowerCase().includes('basic');
+  const validTier = isMonarch ? 'vip_monarch' : isBasic ? 'vip_basic' : 'free';
+  const vipStatusLabel = isMonarch ? 'VIP Monarch' : isBasic ? 'VIP Basic' : null;
 
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
@@ -421,8 +475,9 @@ router.post('/users/:id/vip', requireDeveloper, (req, res) => {
       }
     }
 
-    db.prepare('UPDATE users SET vip_tier = ?, vip_expires_at = ?, badges = ? WHERE id = ?').run(
+    db.prepare('UPDATE users SET vip_tier = ?, vip_status = ?, vip_expires_at = ?, badges = ? WHERE id = ?').run(
       validTier,
+      vipStatusLabel,
       expiresAt,
       JSON.stringify(badges),
       userId
@@ -445,7 +500,27 @@ router.post('/vip/redeem', requireAuth, (req, res) => {
   }
 
   try {
-    const codeRow = db.prepare('SELECT * FROM vip_codes WHERE UPPER(code) = ?').get(rawCode);
+    let codeRow = db.prepare('SELECT * FROM vip_codes WHERE UPPER(code) = ?').get(rawCode);
+    let fromV1 = false;
+    if (!codeRow) {
+      try {
+        const v1 = db.prepare('SELECT * FROM vip_subscription_codes WHERE UPPER(code) = ?').get(rawCode);
+        if (v1) {
+          fromV1 = true;
+          codeRow = {
+            id: v1.id,
+            code: v1.code,
+            tier: String(v1.tier).toLowerCase().includes('monarch') ? 'vip_monarch' : 'vip_basic',
+            duration_days: v1.duration_days || 30,
+            max_uses: 1,
+            used_count: v1.is_used ? 1 : 0,
+            is_active: 1,
+            redeemed_by: '[]'
+          };
+        }
+      } catch {}
+    }
+
     if (!codeRow || !codeRow.is_active) {
       return res.status(404).json({ error: 'not_found', message: 'كود الاشتراك غير صحيح أو منتهي الصلاحية' });
     }
@@ -463,7 +538,9 @@ router.post('/vip/redeem', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'already_redeemed', message: 'لقد قمت بتفعيل هذا الكود مسبقاً على حسابك' });
     }
 
-    const tier = codeRow.tier === 'vip_monarch' ? 'vip_monarch' : 'vip_basic';
+    const isMonarch = String(codeRow.tier).toLowerCase().includes('monarch');
+    const tier = isMonarch ? 'vip_monarch' : 'vip_basic';
+    const vipStatusLabel = isMonarch ? 'VIP Monarch' : 'VIP Basic';
     const days = Number(codeRow.duration_days) || 30;
     const nowMs = Date.now();
     const currentExpMs = req.user.vip_expires_at ? new Date(req.user.vip_expires_at).getTime() : 0;
@@ -480,8 +557,9 @@ router.post('/vip/redeem', requireAuth, (req, res) => {
       badges.push('celebrity');
     }
 
-    db.prepare('UPDATE users SET vip_tier = ?, vip_expires_at = ?, badges = ? WHERE id = ?').run(
+    db.prepare('UPDATE users SET vip_tier = ?, vip_status = ?, vip_expires_at = ?, badges = ? WHERE id = ?').run(
       tier,
+      vipStatusLabel,
       nextExpiresAt,
       JSON.stringify(badges),
       req.user.id
@@ -493,10 +571,19 @@ router.post('/vip/redeem', requireAuth, (req, res) => {
       at: new Date().toISOString()
     });
 
-    db.prepare('UPDATE vip_codes SET used_count = used_count + 1, redeemed_by = ? WHERE id = ?').run(
-      JSON.stringify(redeemedBy),
-      codeRow.id
-    );
+    if (!fromV1) {
+      db.prepare('UPDATE vip_codes SET used_count = used_count + 1, redeemed_by = ? WHERE id = ?').run(
+        JSON.stringify(redeemedBy),
+        codeRow.id
+      );
+    }
+    try {
+      db.prepare(`
+        UPDATE vip_subscription_codes
+        SET is_used = 1, used_by_user_id = ?, used_by_username = ?, used_at = datetime('now')
+        WHERE UPPER(code) = ?
+      `).run(req.user.id, req.user.username, rawCode);
+    } catch {}
 
     logSystemEvent('info', 'vip_redeem', `User @${req.user.username} redeemed code ${codeRow.code} (${tier}, ${days}d)`);
 
@@ -504,6 +591,7 @@ router.post('/vip/redeem', requireAuth, (req, res) => {
     res.json({
       ok: true,
       tier,
+      vipStatus: vipStatusLabel,
       durationDays: days,
       expiresAt: nextExpiresAt,
       user: publicUser(updatedUser)

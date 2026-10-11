@@ -9,6 +9,7 @@ import UserHoverCard, { ANIME_MEME_STICKERS, VoiceNoteWavePlayer } from '../comp
 import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
 import { useOrnamentPrefs } from '../ornaments/useOrnamentPrefs.js';
 import { onCommunitySnapshot, syncCommunityPostToFirestore } from '../firebase.js';
+import { useVoiceRecorder } from '../components/VoiceRecorder.jsx';
 
 const TOPICS = [
   { id: 'general', nameEn: 'General', nameAr: 'عام', icon: '💬' },
@@ -59,9 +60,22 @@ export default function Community({ onOpenAuth }) {
   const [imageUrl, setImageUrl] = useState('');
   const [showImageInput, setShowImageInput] = useState(false);
   const [showMemePicker, setShowMemePicker] = useState(false);
-  const [recordingVoice, setRecordingVoice] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Real voice recording via microphone
+  const voiceRecorder = useVoiceRecorder();
+  const [attachedVoiceUrl, setAttachedVoiceUrl] = useState(null);
+  const [attachedVoiceDuration, setAttachedVoiceDuration] = useState(0);
+
+  useEffect(() => {
+    if (voiceRecorder.audioUrl) {
+      setAttachedVoiceUrl(voiceRecorder.audioUrl);
+      const dur = Math.max(1, voiceRecorder.recordSec || 2);
+      setAttachedVoiceDuration(dur);
+      pushToast(lang === 'ar' ? `🎙️ تم تسجيل الصوت بنجاح (${dur}ث)!` : `🎙️ Voice note recorded (${dur}s)!`, 'success');
+    }
+  }, [voiceRecorder.audioUrl]);
 
   // Active reactions picker & open comment boxes
   const [reactionPickerPostId, setReactionPickerPostId] = useState(null);
@@ -186,6 +200,8 @@ export default function Community({ onOpenAuth }) {
         tag: selectedTopic,
         tagName: `${chosenTopicObj.icon} ${tagName}`,
         imageUrl: imageUrl.trim(),
+        voiceUrl: attachedVoiceUrl || '',
+        voiceDuration: attachedVoiceDuration || 0,
         authorName: user.displayName || user.username || (isDev ? 'Developer MZ' : 'عاشق الأنمي'),
         authorUsername: user.username || '',
         authorAvatar: user.photoURL || user.photoUrl || '',
@@ -203,6 +219,9 @@ export default function Community({ onOpenAuth }) {
 
         setContent('');
         setImageUrl('');
+        setAttachedVoiceUrl(null);
+        setAttachedVoiceDuration(0);
+        voiceRecorder.cancelRecording();
         setShowImageInput(false);
         setIsPinned(false);
         pushToast(t('community.postSuccess'), 'success');
@@ -453,6 +472,25 @@ export default function Community({ onOpenAuth }) {
               </div>
             )}
 
+            {/* Attached Real Voice Note Preview */}
+            {attachedVoiceUrl && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.65rem', padding: '0.45rem 0.75rem', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px' }}>
+                <VoiceNoteWavePlayer audioUrl={attachedVoiceUrl} duration={attachedVoiceDuration} />
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => {
+                    setAttachedVoiceUrl(null);
+                    setAttachedVoiceDuration(0);
+                    voiceRecorder.cancelRecording();
+                  }}
+                  style={{ color: 'var(--red)', padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}
+                >
+                  ✕ {lang === 'ar' ? 'إزالة' : 'Remove'}
+                </button>
+              </div>
+            )}
+
             {showImageInput && (
               <div className="fb-composer__extra-row">
                 <input
@@ -542,23 +580,32 @@ export default function Community({ onOpenAuth }) {
                   <span>{lang === 'ar' ? 'ميمز' : 'Memes'}</span>
                 </button>
 
-                {/* Record Voice Note Button */}
+                {/* Real Microphone Voice Note Button */}
                 <button
                   type="button"
-                  className={`fb-composer__tool-btn ${recordingVoice ? 'active' : ''}`}
-                  onClick={() => {
-                    if (recordingVoice) {
-                      setRecordingVoice(false);
-                      setContent((prev) => `${prev ? prev + '\n' : ''}[VOICE_NOTE:5s] `);
-                      pushToast(lang === 'ar' ? '🎙️ تم إرفاق التعليق الصوتي بالمنشور!' : '🎙️ Voice note attached!', 'success');
+                  className={`fb-composer__tool-btn ${voiceRecorder.isRecording ? 'active' : ''}`}
+                  onClick={async () => {
+                    if (voiceRecorder.isRecording) {
+                      voiceRecorder.stopRecording();
                     } else {
-                      setRecordingVoice(true);
+                      try {
+                        await voiceRecorder.startRecording();
+                        pushToast(lang === 'ar' ? '🎙️ بدأ تسجيل صوتك من المايكروفون...' : '🎙️ Recording voice note from mic...', 'info');
+                      } catch (err) {
+                        pushToast(lang === 'ar' ? 'يرجى السماح بالوصول إلى المايكروفون لتسجيل الصوت' : 'Please allow microphone access to record voice', 'error');
+                      }
                     }
                   }}
-                  style={recordingVoice ? { color: '#ef4444', borderColor: '#ef4444' } : {}}
+                  style={voiceRecorder.isRecording ? { color: '#ef4444', borderColor: '#ef4444', background: 'rgba(239,68,68,0.2)' } : {}}
                 >
-                  <span>{recordingVoice ? '⏹️' : '🎙️'}</span>
-                  <span>{recordingVoice ? (lang === 'ar' ? 'إيقاف وحفظ' : 'Stop & Attach') : (lang === 'ar' ? 'صوتي' : 'Voice')}</span>
+                  <span style={{ animation: voiceRecorder.isRecording ? 'pulse 1s infinite' : 'none' }}>
+                    {voiceRecorder.isRecording ? '⏹️' : '🎙️'}
+                  </span>
+                  <span>
+                    {voiceRecorder.isRecording
+                      ? (lang === 'ar' ? `إيقاف (${voiceRecorder.recordSec}ث)` : `Stop (${voiceRecorder.recordSec}s)`)
+                      : (lang === 'ar' ? 'صوتي' : 'Voice')}
+                  </span>
                 </button>
 
                 {/* Developer pin toggle */}
@@ -800,9 +847,12 @@ export default function Community({ onOpenAuth }) {
                       ))}
 
                       {/* Render attached Voice Note Waveform Player */}
-                      {String(post.content || '').includes('[VOICE_NOTE:') && (
-                        <div>
-                          <VoiceNoteWavePlayer duration={5} />
+                      {(post.voice_url || post.voiceUrl || String(post.content || '').includes('[VOICE_NOTE:')) && (
+                        <div style={{ marginTop: '0.45rem', marginBottom: '0.45rem' }}>
+                          <VoiceNoteWavePlayer
+                            audioUrl={post.voice_url || post.voiceUrl}
+                            duration={post.voice_duration || post.voiceDuration || 5}
+                          />
                         </div>
                       )}
 

@@ -179,7 +179,7 @@ export async function getLibraryItemDetail(req, res) {
           url: c.url,
           slug: c.slug,
           releaseDate: c.releaseDate || '2026',
-          scanlationGroup: c.scanlationGroup || 'مانجا ليك (MangaLik)'
+          scanlationGroup: c.scanlationGroup || 'سيرفرات BLACK X الرسمية'
         }));
       }
     } catch (_) {}
@@ -193,10 +193,10 @@ export async function getLibraryItemDetail(req, res) {
           number: String(num),
           chapterId: `${id}:${num}`,
           title: `الفصل ${num}`,
-          url: `https://mangalik.net/manga/${id}/${num}/`,
+          url: `/manga/${id}/${num}`,
           slug: String(num),
           releaseDate: '2026',
-          scanlationGroup: 'مانجا ليك (MangaLik)'
+          scanlationGroup: 'سيرفرات BLACK X الرسمية'
         };
       });
     }

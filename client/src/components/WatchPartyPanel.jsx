@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { VerifiedBadge } from './UserBadges.jsx';
 import { resolveUserVipTier } from './VipPlansAndDevCodes.jsx';
 import { pushToast } from '../hooks/hooks.js';
+import { useVoiceRecorder, VoiceAudioPlayer } from './VoiceRecorder.jsx';
 
 const SCREEN_REACTIONS = [
   { emoji: '🔥', labelAr: 'حماس ناري', labelEn: 'Fire' },
@@ -34,14 +35,16 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
   const [roomCode, setRoomCode] = useState(() => urlParty || `BX-${String(slug || 'ANIME').slice(0, 3).toUpperCase()}${episode}9`);
   const [inParty, setInParty] = useState(Boolean(urlParty));
   const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [editingRoomCode, setEditingRoomCode] = useState(false);
+  const [customCodeInput, setCustomCodeInput] = useState('');
   const [floatingItems, setFloatingItems] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [pinTimestamp, setPinTimestamp] = useState(true);
-  const [recordingVoice, setRecordingVoice] = useState(false);
-  const [recordSec, setRecordSec] = useState(0);
   const [isPrivateRoom, setIsPrivateRoom] = useState(false);
   const [customSlugInput, setCustomSlugInput] = useState('');
-  const recordTimerRef = useRef(null);
+
+  // Real voice recording via microphone
+  const voiceRecorder = useVoiceRecorder();
 
   const vipTier = resolveUserVipTier(user);
   const maxRoomViewers = vipTier === 'vip_monarch' ? 100 : vipTier === 'vip_basic' ? 25 : 5;
@@ -76,6 +79,33 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
       localStorage.setItem(storageKey, JSON.stringify(messages.slice(-40)));
     } catch {}
   }, [messages, storageKey]);
+
+  // When audio finishes recording, append real voice note message
+  useEffect(() => {
+    if (voiceRecorder.audioUrl) {
+      const dur = Math.max(1, voiceRecorder.recordSec || 2);
+      const sec = currentPosRef?.current?.pos || 0;
+      const authorName = user?.displayName || user?.username || (lang === 'ar' ? 'مشاهد BLACK X' : 'BLACK X Viewer');
+      const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
+
+      const newVoiceMsg = {
+        id: `voice-${Date.now()}`,
+        author: authorName,
+        isDev,
+        isVoice: true,
+        audioUrl: voiceRecorder.audioUrl,
+        voiceDuration: dur,
+        text: lang === 'ar' ? `🎙️ تسجيل صوتي (${dur} ث)` : `🎙️ Voice Note (${dur}s)`,
+        timestampSec: pinTimestamp ? Math.floor(sec) : null,
+        timeAgo: lang === 'ar' ? 'الآن' : 'Just now'
+      };
+
+      setMessages((prev) => [...prev, newVoiceMsg]);
+      spawnFloatingOverlay(`🎙️ ${authorName} ${lang === 'ar' ? 'أرسل تسجيلاً صوتياً!' : 'sent a voice note!'}`, '#f472b6');
+      pushToast(lang === 'ar' ? '🎙️ تم تسجيل ونشر رسالتك الصوتية الحقيقية بنجاح!' : '🎙️ Real voice note posted successfully!', 'success');
+      voiceRecorder.cancelRecording();
+    }
+  }, [voiceRecorder.audioUrl]);
 
   const spawnFloatingOverlay = (text, color = '#22d3ee') => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -113,6 +143,20 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
     );
   };
 
+  const handleSaveCustomCode = (e) => {
+    e?.preventDefault?.();
+    const clean = customCodeInput.trim().replace(/[^a-zA-Z0-9_\u0600-\u06FF-]/g, '');
+    if (!clean) return;
+    setRoomCode(clean);
+    setInParty(true);
+    setEditingRoomCode(false);
+    setCustomCodeInput('');
+    const next = new URLSearchParams(searchParams);
+    next.set('party', clean);
+    setSearchParams(next, { replace: true });
+    pushToast(lang === 'ar' ? `✓ تم تخصيص كود الغرفة: ${clean}` : `✓ Custom room code set: ${clean}`, 'success');
+  };
+
   const handleSyncTimestamp = () => {
     const sec = currentPosRef?.current?.pos || 0;
     const fmt = formatSec(sec);
@@ -146,31 +190,9 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
     setChatInput('');
   };
 
-  const handleToggleVoiceNote = () => {
-    if (recordingVoice) {
-      clearInterval(recordTimerRef.current);
-      setRecordingVoice(false);
-      const dur = Math.max(2, recordSec);
-      setRecordSec(0);
-      const sec = currentPosRef?.current?.pos || 0;
-      const authorName = user?.displayName || user?.username || (lang === 'ar' ? 'مشاهد BLACK X' : 'BLACK X Viewer');
-      const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `voice-${Date.now()}`,
-          author: authorName,
-          isDev,
-          isVoice: true,
-          voiceDuration: dur,
-          text: lang === 'ar' ? `🎙️ تعليق صوتي (${dur} ثانية)` : `🎙️ Voice Note (${dur}s)`,
-          timestampSec: Math.floor(sec),
-          timeAgo: lang === 'ar' ? 'الآن' : 'Just now'
-        }
-      ]);
-      spawnFloatingOverlay(`🎙️ ${authorName} ${lang === 'ar' ? 'أرسل تعليقاً صوتياً!' : 'sent a voice note!'}`, '#f472b6');
-      pushToast(lang === 'ar' ? '🎙️ تم نشر تعليقك الصوتي على الدقيقة الحالية!' : '🎙️ Voice note posted at current timestamp!', 'success');
+  const handleToggleVoiceNote = async () => {
+    if (voiceRecorder.isRecording) {
+      voiceRecorder.stopRecording();
     } else {
       const voiceCount = messages.filter((m) => m.isVoice).length;
       if (vipTier === 'free' && voiceCount >= 2) {
@@ -182,11 +204,12 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
         );
         return;
       }
-      setRecordingVoice(true);
-      setRecordSec(1);
-      recordTimerRef.current = setInterval(() => {
-        setRecordSec((s) => s + 1);
-      }, 1000);
+      try {
+        await voiceRecorder.startRecording();
+        pushToast(lang === 'ar' ? '🎙️ بدأ تسجيل صوتك من المايكروفون...' : '🎙️ Recording voice note from microphone...', 'info');
+      } catch (err) {
+        pushToast(lang === 'ar' ? 'يرجى السماح بالوصول إلى المايكروفون لتسجيل رسالة صوتية' : 'Please allow microphone access to record voice note', 'error');
+      }
     }
   };
 
@@ -317,9 +340,9 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
           <div>
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <span>🎭</span>
-              {lang === 'ar' ? 'غرفة المشاهدة الجماعية والتعليقات الزمنية' : 'Live Watch Party & Timestamped Comments'}
+              {lang === 'ar' ? 'غرفة المشاهدة الجماعية والتعليقات الصوتية' : 'Live Watch Party & Real Voice Chat'}
               <span style={{ fontSize: '0.73rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(16, 185, 129, 0.18)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#34d399' }}>
-                ● {lang === 'ar' ? `4 / ${maxRoomViewers} مشاهد` : `4 / ${maxRoomViewers} Viewers`}
+                ● {lang === 'ar' ? `4 / ${maxRoomViewers} مشاهد (${roomCode})` : `4 / ${maxRoomViewers} Viewers (${roomCode})`}
               </span>
               {vipTier === 'vip_monarch' && (
                 <span style={{ fontSize: '0.7rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(168,85,247,0.22)', border: '1px solid #a855f7', color: '#e9d5ff' }}>
@@ -334,12 +357,12 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
             </h3>
             <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--ink-dim)' }}>
               {lang === 'ar'
-                ? `كود الغرفة: ${roomCode} ${isPrivateRoom ? '🔒 (غرفة خاصة برابط مخصص)' : ''} • شاهد الحلقة مع أصدقائك في نفس الثانية`
-                : `Room Code: ${roomCode} • Watch together in real-time`}
+                ? `كود الغرفة: ${roomCode} ${isPrivateRoom ? '🔒 (غرفة خاصة برابط مخصص)' : ''} • شاهد مع أصدقائك في نفس الثانية وسجل رسائل صوتية بالمايكروفون`
+                : `Room Code: ${roomCode} • Watch together in real-time, record real voice notes, and sync`}
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn btn--ghost btn--sm"
@@ -378,7 +401,7 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
               onClick={handleSyncTimestamp}
               style={{ borderColor: 'rgba(34, 211, 238, 0.4)', color: 'var(--cyan)', fontWeight: 700 }}
             >
-              ⚡ {lang === 'ar' ? 'مزامنة الثانية الحالية' : 'Sync Timestamp'}
+              ⚡ {lang === 'ar' ? 'مزامنة الثانية' : 'Sync'}
             </button>
             <button
               type="button"
@@ -386,39 +409,101 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
               onClick={handleCopyInvite}
               style={{ borderColor: 'rgba(168, 85, 247, 0.45)', color: '#c084fc', fontWeight: 700 }}
             >
-              🔗 {lang === 'ar' ? 'نسخ رابط الدعوة' : 'Copy Invite Link'}
+              🔗 {lang === 'ar' ? 'نسخ الرابط' : 'Copy Link'}
             </button>
-            <div style={{ display: 'flex', gap: '0.35rem' }}>
-              <input
-                type="text"
-                className="input"
-                placeholder={lang === 'ar' ? 'أدخل كود غرفة...' : 'Join room code...'}
-                value={joinCodeInput}
-                onChange={(e) => setJoinCodeInput(e.target.value)}
-                style={{ width: '130px', padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-              />
-              {joinCodeInput.trim() && (
-                <button
-                  type="button"
-                  className="btn btn--primary btn--sm"
-                  onClick={() => {
-                    setRoomCode(joinCodeInput.trim().toUpperCase());
-                    setInParty(true);
-                    setJoinCodeInput('');
-                    pushToast(lang === 'ar' ? 'تم الانضمام للغرفة بنجاح!' : 'Joined Watch Party room!', 'success');
-                  }}
-                >
-                  {lang === 'ar' ? 'انضمام' : 'Join'}
-                </button>
-              )}
-            </div>
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                `تعال نشاهد الحلقة معاً في غرفة المشاهدة الجماعية على BLACK X! الرابط: ${window.location.origin}${window.location.pathname}?party=${encodeURIComponent(roomCode)}`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn--sm"
+              style={{ background: '#25D366', color: '#fff', textDecoration: 'none', fontWeight: 700, padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+            >
+              💬 WhatsApp
+            </a>
+            <a
+              href={`https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?party=${encodeURIComponent(roomCode)}`)}&text=${encodeURIComponent('انضم لغرفة المشاهدة الجماعية على BLACK X!')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn--sm"
+              style={{ background: '#0088cc', color: '#fff', textDecoration: 'none', fontWeight: 700, padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+            >
+              ✈️ Telegram
+            </a>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => {
+                const isDev = user?.role === 'developer' || user?.isDeveloper;
+                const isVip = user?.vip_status || user?.vipStatus || isDev;
+                if (!isVip) {
+                  pushToast(
+                    lang === 'ar'
+                      ? '👑 ميزة تخصيص كود ورابط الغرفة حصرية لمشتركي VIP Basic و VIP Monarch! يمكنك تفعيلها بدعوة 3 أصدقاء أو بكود اشتراك.'
+                      : '👑 Custom Room codes are exclusive to VIP members! Unlock via 3 referrals or VIP code.',
+                    'info'
+                  );
+                  return;
+                }
+                setEditingRoomCode(!editingRoomCode);
+                setCustomCodeInput(roomCode);
+              }}
+              style={{
+                borderColor: user?.vip_status || user?.isDeveloper ? 'rgba(234, 179, 8, 0.45)' : 'rgba(255, 255, 255, 0.2)',
+                color: user?.vip_status || user?.isDeveloper ? '#fbbf24' : 'inherit',
+                fontSize: '0.78rem'
+              }}
+            >
+              👑 {lang === 'ar' ? 'تخصيص الكود (VIP)' : 'Custom Code (VIP)'}
+            </button>
           </div>
         </div>
+
+        {/* Custom Room Code Input Drawer */}
+        {editingRoomCode && (
+          <form
+            onSubmit={handleSaveCustomCode}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(139, 92, 246, 0.35)',
+              borderRadius: '12px',
+              padding: '0.65rem 0.85rem',
+              marginBottom: '1rem'
+            }}
+          >
+            <span style={{ fontSize: '0.82rem', color: '#c084fc', fontWeight: 700 }}>
+              🏷️ {lang === 'ar' ? 'اسم / كود الغرفة المخصص:' : 'Custom Room Name/Code:'}
+            </span>
+            <input
+              type="text"
+              className="input"
+              value={customCodeInput}
+              onChange={(e) => setCustomCodeInput(e.target.value)}
+              placeholder="مثال: Solo-Night-01"
+              style={{ flex: 1, padding: '0.35rem 0.65rem', fontSize: '0.82rem' }}
+              autoFocus
+            />
+            <button type="submit" className="btn btn--primary btn--sm" style={{ fontWeight: 800 }}>
+              {lang === 'ar' ? 'حفظ وتحديث الرابط' : 'Save'}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => setEditingRoomCode(false)}
+            >
+              ✕
+            </button>
+          </form>
+        )}
 
         {/* Timestamped & Voice Messages Stream */}
         <div
           style={{
-            maxHeight: '240px',
+            maxHeight: '260px',
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
@@ -462,28 +547,8 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
                   {m.author}
                   <VerifiedBadge isDev={m.isDev} size={15} />
                 </strong>
-                {m.isVoice ? (
-                  <button
-                    type="button"
-                    onClick={playSimulatedVoice}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.45rem',
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '999px',
-                      background: 'linear-gradient(135deg, rgba(236,72,153,0.22), rgba(139,92,246,0.22))',
-                      border: '1px solid rgba(236,72,153,0.5)',
-                      color: '#f472b6',
-                      fontWeight: 700,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <span>▶</span>
-                    <span>{m.text}</span>
-                    <span style={{ letterSpacing: '2px', color: '#38bdf8' }}>ılılılılı</span>
-                  </button>
+                {m.isVoice && m.audioUrl ? (
+                  <VoiceAudioPlayer audioUrl={m.audioUrl} durationSec={m.voiceDuration} mini />
                 ) : (
                   <span style={{ fontSize: '0.86rem', color: '#e2e8f0' }}>{m.text}</span>
                 )}
@@ -523,24 +588,40 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
             placeholder={lang === 'ar' ? 'اكتب تعليقاً يظهر على شاشة الحلقة وفي الغرفة...' : 'Write a timestamped comment or Watch Party message...'}
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
-            style={{ flex: 1, minWidth: '200px' }}
+            style={{ flex: 1, minWidth: '180px' }}
           />
 
+          {/* Real Microphone Voice Recording Button */}
           <button
             type="button"
             onClick={handleToggleVoiceNote}
             className="btn btn--ghost btn--sm"
             style={{
-              borderColor: recordingVoice ? '#ef4444' : 'rgba(244, 114, 182, 0.45)',
-              background: recordingVoice ? 'rgba(239, 68, 68, 0.22)' : 'rgba(244, 114, 182, 0.1)',
-              color: recordingVoice ? '#fca5a5' : '#f472b6',
-              fontWeight: 800
+              borderColor: voiceRecorder.isRecording ? '#ef4444' : 'rgba(244, 114, 182, 0.45)',
+              background: voiceRecorder.isRecording ? 'rgba(239, 68, 68, 0.25)' : 'rgba(244, 114, 182, 0.1)',
+              color: voiceRecorder.isRecording ? '#fca5a5' : '#f472b6',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem'
             }}
           >
-            🎙️ {recordingVoice
-              ? (lang === 'ar' ? `إيقاف وإرسال (${recordSec}ث)` : `Stop & Send (${recordSec}s)`)
-              : (lang === 'ar' ? 'تعليق صوتي' : 'Voice Note')}
+            <span style={{ animation: voiceRecorder.isRecording ? 'pulse 1s infinite' : 'none' }}>🎙️</span>
+            {voiceRecorder.isRecording
+              ? (lang === 'ar' ? `إيقاف وحفظ (${voiceRecorder.recordSec}ث)` : `Stop & Send (${voiceRecorder.recordSec}s)`)
+              : (lang === 'ar' ? 'تسجيل صوت حقيقي' : 'Record Voice')}
           </button>
+
+          {voiceRecorder.isRecording && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => voiceRecorder.cancelRecording()}
+              style={{ color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+            >
+              ✕ {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+            </button>
+          )}
 
           <button type="submit" className="btn btn--primary btn--sm" disabled={!chatInput.trim()}>
             <span className="btn__shine" />

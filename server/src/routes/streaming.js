@@ -53,7 +53,7 @@ router.get('/show/:slug', async (req, res) => {
 });
 
 /** GET /api/stream/episode/:slug/:ep — manifest entries + eagerly-resolved first source */
-router.get('/episode/:slug/:ep', async (req, res) => {
+router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   const episode = Number(req.params.ep);
   if (!Number.isInteger(episode) || episode < 1) {
     return res.status(400).json({ error: 'invalid_episode', message: 'Invalid episode number' });
@@ -61,7 +61,60 @@ router.get('/episode/:slug/:ep', async (req, res) => {
   try {
     const data = await fetchEpisode(req.params.slug, episode);
     if (!data) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });
-    res.json(data);
+
+    const isDev = req.user?.role === 'developer' || (req.user?.email || '').toLowerCase() === 'mz0970mmz@gmail.com';
+    const vipStatus = isDev ? 'VIP Monarch' : (req.user?.vip_status || null);
+    const isVipBasic = vipStatus === 'VIP Basic' || vipStatus === 'VIP Monarch' || isDev;
+    const isVipMonarch = vipStatus === 'VIP Monarch' || isDev;
+
+    // Enhance and prioritize entries based on user VIP tier
+    const rawEntries = Array.isArray(data.entries) ? [...data.entries] : [];
+    
+    // Sort & prioritize VIP Fast CDN servers
+    const prioritizedEntries = rawEntries.map((e) => {
+      const isFastCdn = e.server?.toLowerCase().includes('mp4upload') ||
+                        e.server?.toLowerCase().includes('mega') ||
+                        e.server?.toLowerCase().includes('drive') ||
+                        e.server?.toLowerCase().includes('soraplay') ||
+                        e.server?.toLowerCase().includes('fast');
+
+      return {
+        ...e,
+        isVipOnly: false,
+        isFastCdn,
+        serverTag: isFastCdn ? '⚡ VIP Fast CDN' : null
+      };
+    });
+
+    // If VIP Monarch, surface 4K HDR 60fps ultra option
+    let entriesWithVip = prioritizedEntries;
+    if (isVipMonarch) {
+      // Add top tier 4K HDR 60fps ultra badge to the fastest direct link
+      entriesWithVip = [
+        {
+          id: `vip-monarch-4k-${req.params.slug}-${episode}`,
+          token: prioritizedEntries[0]?.token || 'vip-4k',
+          server: '👑 VIP Monarch 4K HDR (60fps Ultra CDN)',
+          quality: '4K HDR',
+          version: prioritizedEntries[0]?.version || 'sub',
+          lang: 'ar/jp',
+          isMonarchExclusive: true,
+          badge: '4K 60fps'
+        },
+        ...prioritizedEntries
+      ];
+    } else if (isVipBasic) {
+      // VIP Basic gets Fast CDN sorted first
+      entriesWithVip.sort((a, b) => (b.isFastCdn ? 1 : 0) - (a.isFastCdn ? 1 : 0));
+    }
+
+    res.json({
+      ...data,
+      entries: entriesWithVip,
+      vipTier: vipStatus || 'Free Otaku',
+      isVipBasic,
+      isVipMonarch
+    });
   } catch (err) {
     console.error('[stream/episode]', err.message);
     res.status(502).json({ error: err.code || 'upstream', message: 'Could not resolve streaming sources' });

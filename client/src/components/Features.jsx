@@ -535,15 +535,63 @@ export function ReferralPanel() {
             </button>
           </div>
 
-          <button
-            type="button"
-            className="btn btn--ghost btn--block btn--sm"
-            onClick={handleMockInvite}
-            disabled={inviting}
-            style={{ border: '1px dashed rgba(255, 255, 255, 0.25)', fontSize: '0.82rem' }}
-          >
-            {inviting ? '...' : t('account.mockInvite')}
-          </button>
+          {/* Real Share Buttons */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                `انضم معي إلى منصة BLACK X لمشاهدة وقراءة أحدث الأنمي والمانجا بجودة فائقة! ${refData.referralLink}`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn--sm"
+              style={{ background: '#25D366', color: '#fff', textDecoration: 'none', fontWeight: 700 }}
+            >
+              💬 WhatsApp
+            </a>
+            <a
+              href={`https://t.me/share/url?url=${encodeURIComponent(refData.referralLink)}&text=${encodeURIComponent(
+                'انضم معي إلى منصة BLACK X واستمتع بمشاهدة أحدث الأنمي مجاناً!'
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn--sm"
+              style={{ background: '#0088cc', color: '#fff', textDecoration: 'none', fontWeight: 700 }}
+            >
+              ✈️ Telegram
+            </a>
+          </div>
+
+          {/* List of referred friends who joined */}
+          {refData.referrals && refData.referrals.length > 0 ? (
+            <div style={{ marginTop: '0.75rem' }}>
+              <strong style={{ fontSize: '0.85rem', color: 'var(--ink-dim)', display: 'block', marginBottom: '0.4rem' }}>
+                👥 {lang === 'ar' ? 'الأصدقاء الذين انضموا عبرك:' : 'Friends joined through your link:'}
+              </strong>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                {refData.referrals.map((r, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: '8px',
+                      fontSize: '0.82rem'
+                    }}
+                  >
+                    <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>@{r.referred_username}</span>
+                    <span style={{ color: '#10b981', fontSize: '0.75rem' }}>✓ {lang === 'ar' ? 'مكتمل' : 'Joined'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.8rem', color: 'var(--ink-dim)', textAlign: 'center', padding: '0.5rem' }}>
+              {lang === 'ar' ? 'لم ينضم أي صديق بعد. شارك الرابط وابدأ بجمع الدعوات!' : 'No friends joined yet. Share your link to start earning!'}
+            </div>
+          )}
         </div>
       )}
     </Panel>

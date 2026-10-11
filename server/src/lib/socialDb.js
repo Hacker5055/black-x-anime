@@ -515,19 +515,47 @@ export const social = {
   },
   unfollow(followerKey, followingKey) {
     ensureSocialTables();
-    db.prepare('DELETE FROM social_follows WHERE follower_key = ? AND following_key = ?')
-      .run(followerKey, followingKey);
+    let tKeys = [String(followingKey)];
+    try {
+      const u = db.prepare('SELECT id, username FROM users WHERE id = ? OR LOWER(username) = ?').get(followingKey, String(followingKey).replace('name:', '').toLowerCase());
+      if (u) tKeys.push(String(u.id), 'name:' + u.username);
+    } catch {}
+    const inClause = tKeys.map(() => '?').join(',');
+    db.prepare(`DELETE FROM social_follows WHERE follower_key = ? AND following_key IN (${inClause})`)
+      .run(followerKey, ...tKeys);
   },
   isFollowing(followerKey, followingKey) {
     ensureSocialTables();
-    const row = db.prepare('SELECT 1 FROM social_follows WHERE follower_key = ? AND following_key = ?')
-      .get(followerKey, followingKey);
+    let fKeys = [String(followerKey)];
+    let tKeys = [String(followingKey)];
+    try {
+      const u1 = db.prepare('SELECT id, username FROM users WHERE id = ? OR LOWER(username) = ?').get(followerKey, String(followerKey).replace('name:', '').toLowerCase());
+      if (u1) { fKeys.push(String(u1.id), 'name:' + u1.username); }
+      const u2 = db.prepare('SELECT id, username FROM users WHERE id = ? OR LOWER(username) = ?').get(followingKey, String(followingKey).replace('name:', '').toLowerCase());
+      if (u2) { tKeys.push(String(u2.id), 'name:' + u2.username); }
+    } catch {}
+    const fIn = fKeys.map(() => '?').join(',');
+    const tIn = tKeys.map(() => '?').join(',');
+    const row = db.prepare(`SELECT 1 FROM social_follows WHERE follower_key IN (${fIn}) AND following_key IN (${tIn})`).get(...fKeys, ...tKeys);
     return Boolean(row);
   },
   getNetwork(userKey) {
     ensureSocialTables();
-    const followers = db.prepare('SELECT follower_key FROM social_follows WHERE following_key = ?').all(userKey).map(r => r.follower_key);
-    const following = db.prepare('SELECT following_key FROM social_follows WHERE follower_key = ?').all(userKey).map(r => r.following_key);
+    let keys = [String(userKey)];
+    try {
+      const strKey = String(userKey);
+      if (strKey.startsWith('name:')) {
+        const uname = strKey.replace('name:', '');
+        const u = db.prepare('SELECT id FROM users WHERE LOWER(username) = ?').get(uname.toLowerCase());
+        if (u) keys.push(String(u.id));
+      } else {
+        const u = db.prepare('SELECT username FROM users WHERE id = ?').get(Number(strKey));
+        if (u) keys.push('name:' + u.username);
+      }
+    } catch {}
+    const inClause = keys.map(() => '?').join(',');
+    const followers = db.prepare(`SELECT DISTINCT follower_key FROM social_follows WHERE following_key IN (${inClause})`).all(...keys).map(r => r.follower_key);
+    const following = db.prepare(`SELECT DISTINCT following_key FROM social_follows WHERE follower_key IN (${inClause})`).all(...keys).map(r => r.following_key);
     return { followers, following };
   },
   getLibraryItems(type, query = '') {

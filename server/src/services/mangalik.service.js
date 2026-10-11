@@ -490,19 +490,19 @@ export const mangalikService = {
         id: slug,
         slug,
         mangalikSlug: slug,
-        title: `${title} (MangaLik)`,
+        title: title,
         romajiTitle: title,
         englishTitle: title,
         arabicTitle: title,
         coverUrl,
         poster: coverUrl,
-        description: `مانجا/مانهو مترجمة للعربية مباشرة من موقع مانجا ليك (MangaLik). أحدث الفصول: ${latestChapter}.`,
+        description: `مانجا/مانهو مترجمة للعربية مباشرة على منصة BLACK X. أحدث الفصول: ${latestChapter}.`,
         status: 'مستمرة (ONGOING)',
         type: slug.includes('manhwa') || slug.includes('solo') || slug.includes('leveling') ? 'MANHWA' : 'MANGA',
-        genres: genreMatches.length > 0 ? genreMatches : ['أكشن', 'مترجم عربي', 'مانجا ليك'],
+        genres: genreMatches.length > 0 ? genreMatches : ['أكشن', 'مترجم عربي', 'BLACK X'],
         rating,
         chaptersCount: 25,
-        source: 'mangalik',
+        source: 'blackx',
         sourceUrl: url
       });
     }
@@ -554,19 +554,19 @@ export const mangalikService = {
           slug,
           mangalikSlug: slug,
           postId,
-          title: `${title} (MangaLik)`,
+          title: title,
           romajiTitle: title,
           englishTitle: title,
           arabicTitle: title,
           coverUrl,
           poster: coverUrl,
-          description: `متوفرة بكامل الفصول بالترجمة العربية على مانجا ليك (MangaLik).`,
+          description: `متوفرة بكامل الفصول بالترجمة العربية على منصة BLACK X الرسمية.`,
           status: 'مستمرة (ONGOING)',
           type: 'MANHWA',
           genres: ['أكشن', 'مغامرة', 'مترجم عربي'],
           rating: '9.6',
           chaptersCount: 20,
-          source: 'mangalik',
+          source: 'blackx',
           sourceUrl: `${MANGALIK_BASE}/manga/${slug}/`
         });
       }
@@ -753,7 +753,7 @@ export const mangalikService = {
             slug: chSlug,
             mangaSlug: cleanSlug,
             releaseDate: 'حديثاً',
-            scanlationGroup: 'مانجا ليك (MangaLik)'
+            scanlationGroup: 'سيرفرات BLACK X الرسمية'
           });
         }
 
@@ -784,7 +784,7 @@ export const mangalikService = {
         slug: String(num),
         mangaSlug: cleanSlug,
         releaseDate: '2026',
-        scanlationGroup: 'مانجا ليك (MangaLik)'
+        scanlationGroup: 'سيرفرات BLACK X الرسمية'
       };
     });
 

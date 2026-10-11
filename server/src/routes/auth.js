@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth } from '../auth.js';
+import { social } from '../lib/socialDb.js';
 
 const router = Router();
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 
 router.post('/register', (req, res) => {
-  const { username, email, password, displayName } = req.body || {};
+  const { username, email, password, displayName, referralCode } = req.body || {};
   if (!username || !USERNAME_RE.test(username)) {
     return res.status(400).json({ error: 'invalid_username', message: 'Username must be 3-24 chars (letters, numbers, _ . -)' });
   }
@@ -39,6 +40,35 @@ router.post('/register', (req, res) => {
   ).run(username.toLowerCase(), email.toLowerCase(), hashPassword(password), displayName || username, color, isDev ? 'developer' : 'user');
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+
+  // Real referral tracking
+  if (referralCode) {
+    try {
+      let cleanRef = String(referralCode).trim();
+      if (cleanRef.toUpperCase().startsWith('BLACKX-')) {
+        cleanRef = cleanRef.slice(7);
+      }
+      const referrer = db.prepare('SELECT id, username FROM users WHERE LOWER(username) = ?').get(cleanRef.toLowerCase());
+      if (referrer && referrer.username.toLowerCase() !== username.toLowerCase()) {
+        social.addReferral(String(referrer.id), user.username);
+        try {
+          db.prepare(`
+            INSERT INTO user_notifications (id, user_id, title, message, link, read)
+            VALUES (?, ?, ?, ?, ?, 0)
+          `).run(
+            `ref_${Date.now()}_${referrer.id}`,
+            referrer.id,
+            '🎉 انضم صديق جديد عبر دعوتك!',
+            `سجل @${user.username} بنجاح عبر رابط دعوتك الخاص!`,
+            '/profile?tab=referrals'
+          );
+        } catch {}
+      }
+    } catch (refErr) {
+      console.warn('Referral tracking warning:', refErr.message);
+    }
+  }
+
   const token = signToken(user);
   setAuthCookie(res, token);
   res.status(201).json({ user: publicUser(user), token });
@@ -207,6 +237,83 @@ router.put('/profile', requireAuth, (req, res) => {
 router.post('/logout', (req, res) => {
   clearAuthCookie(res);
   res.json({ ok: true });
+});
+
+/**
+ * Redeem VIP Subscription Code (Activated by user)
+ */
+router.post('/redeem-vip-code', requireAuth, (req, res) => {
+  try {
+    const { code } = req.body || {};
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'invalid_code', message: 'يرجى إدخال كود اشتراك صالح' });
+    }
+    const cleanCode = code.trim().toUpperCase();
+    let row = db.prepare('SELECT * FROM vip_subscription_codes WHERE UPPER(code) = ?').get(cleanCode);
+    const rowV2 = db.prepare('SELECT * FROM vip_codes WHERE UPPER(code) = ?').get(cleanCode);
+
+    if (!row && !rowV2) {
+      return res.status(404).json({ error: 'not_found', message: 'كود الاشتراك غير صحيح أو غير موجود' });
+    }
+    if ((row && row.is_used && (!rowV2 || rowV2.used_count >= rowV2.max_uses)) || (rowV2 && rowV2.used_count >= rowV2.max_uses)) {
+      return res.status(400).json({ error: 'already_used', message: 'تم استخدام هذا الكود من قبل مسبقاً' });
+    }
+
+    const rawTier = (rowV2?.tier || row?.tier || 'VIP Basic');
+    const isMonarch = String(rawTier).toLowerCase().includes('monarch');
+    const vipStatusLabel = isMonarch ? 'VIP Monarch' : 'VIP Basic';
+    const vipTierKey = isMonarch ? 'vip_monarch' : 'vip_basic';
+    const durationDays = rowV2?.duration_days || row?.duration_days || 30;
+    const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+
+    if (row) {
+      db.prepare(`
+        UPDATE vip_subscription_codes
+        SET is_used = 1, used_by_user_id = ?, used_by_username = ?, used_at = datetime('now')
+        WHERE id = ?
+      `).run(req.user.id, req.user.username, row.id);
+    }
+    if (rowV2) {
+      let redeemedBy = [];
+      try { redeemedBy = JSON.parse(rowV2.redeemed_by || '[]'); } catch {}
+      redeemedBy.push({ userId: req.user.id, username: req.user.username, at: new Date().toISOString() });
+      db.prepare('UPDATE vip_codes SET used_count = used_count + 1, redeemed_by = ? WHERE id = ?').run(JSON.stringify(redeemedBy), rowV2.id);
+    }
+
+    // Update user vip_status, vip_tier and badges
+    let badges = [];
+    try {
+      badges = typeof req.user.badges === 'string' ? JSON.parse(req.user.badges || '[]') : (req.user.badges || []);
+      if (!Array.isArray(badges)) badges = [];
+    } catch {
+      badges = [];
+    }
+    if (!badges.includes('gold_vip')) {
+      badges.unshift('gold_vip');
+    }
+    if (isMonarch && !badges.includes('celebrity')) {
+      badges.push('celebrity');
+    }
+
+    db.prepare(`
+      UPDATE users
+      SET vip_status = ?, vip_tier = ?, vip_expires_at = ?, badges = ?
+      WHERE id = ?
+    `).run(vipStatusLabel, vipTierKey, expiresAt, JSON.stringify(badges), req.user.id);
+
+    const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+
+    res.json({
+      ok: true,
+      message: `تم تفعيل اشتراك ${vipStatusLabel} بنجاح لمدة ${durationDays} يوماً! 🎉`,
+      tier: vipStatusLabel,
+      vipTier: vipTierKey,
+      expiresAt,
+      user: publicUser(updatedUser)
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'server_error', message: err.message });
+  }
 });
 
 /**

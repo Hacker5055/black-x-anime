@@ -47,7 +47,13 @@ export function publicUser(row) {
   }
 
   // Check VIP tier & expiration
-  let vipTier = row.vip_tier || (row.vip_status === 'VIP Basic' ? 'vip_basic' : 'free');
+  let vipTier =
+    row.vip_tier ||
+    (row.vip_status === 'VIP Monarch'
+      ? 'vip_monarch'
+      : row.vip_status === 'VIP Basic'
+      ? 'vip_basic'
+      : 'free');
   const vipExpiresAt = row.vip_expires_at || null;
   if (vipTier !== 'free' && vipExpiresAt) {
     const expTime = new Date(vipExpiresAt).getTime();
@@ -65,6 +71,13 @@ export function publicUser(row) {
     if (!badges.includes('gold_vip')) badges.unshift('gold_vip');
   }
 
+  const effectiveVip =
+    isDev || vipTier === 'vip_monarch'
+      ? 'VIP Monarch'
+      : vipTier === 'vip_basic'
+      ? 'VIP Basic'
+      : row.vip_status || null;
+
   return {
     id: row.id,
     username: row.username,
@@ -77,6 +90,8 @@ export function publicUser(row) {
     role: isDev ? 'developer' : row.role,
     isDeveloper: isDev,
     vipTier,
+    vipStatus: effectiveVip,
+    vip_status: effectiveVip,
     vipExpiresAt,
     badges,
     createdAt: row.created_at
