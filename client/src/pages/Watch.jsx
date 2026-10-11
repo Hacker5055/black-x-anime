@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
@@ -18,12 +18,15 @@ import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteF
 
 export default function Watch({ onOpenAuth }) {
   const { slug, ep } = useParams();
+  const [searchParams] = useSearchParams();
+  const sourceParam = (searchParams.get('source') || '').toLowerCase();
+  const srcSuffix = sourceParam ? `?source=${sourceParam}` : '';
   const episode = Number(ep) || 1;
   const navigate = useNavigate();
   const { t, lang, formatNumber } = useI18n();
   const { user } = useAuth();
 
-  const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}`), [slug]);
+  const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}${srcSuffix}`), [slug, srcSuffix]);
   const [episodeData, setEpisodeData] = useState(null); // { entries, downloads, resolved, resolvedDownloads }
   const [scraperDownloads, setScraperDownloads] = useState(null); // { cloudHosts, qualities }
   const [resolvingDlId, setResolvingDlId] = useState(null);
@@ -49,7 +52,7 @@ export default function Watch({ onOpenAuth }) {
     setSourcesLoading(true);
     setSourcesError(false);
     setEpisodeData(null);
-    api.get(`/api/stream/episode/${slug}/${episode}`)
+    api.get(`/api/stream/episode/${slug}/${episode}${srcSuffix}`)
       .then((d) => {
         if (!d?.entries?.length && !d?.downloads?.length) throw new Error('empty');
         setEpisodeData({
@@ -71,7 +74,7 @@ export default function Watch({ onOpenAuth }) {
     api.get(`/api/stream/download-sources/${slug}/${episode}`)
       .then((dlRes) => setScraperDownloads(dlRes))
       .catch(() => {});
-  }, [slug, episode]);
+  }, [slug, episode, srcSuffix]);
 
   useEffect(() => {
     loadSources();
@@ -203,7 +206,8 @@ export default function Watch({ onOpenAuth }) {
 
   const title = show ? ((lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn) : slug;
   const vipTier = resolveUserVipTier(user);
-  const [vipFastCdn, setVipFastCdn] = useState(() => vipTier === 'vip_basic' || vipTier === 'vip_monarch');
+  const isVipMember = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
+  const [vipFastCdn, setVipFastCdn] = useState(() => isVipMember);
   const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
   const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
 
@@ -364,8 +368,8 @@ export default function Watch({ onOpenAuth }) {
                   saveRef.current?.(pos, dur);
                 }}
                 onEnded={() => saveRef.current?.(lastPos.current.pos, lastPos.current.dur || lastPos.current.pos, true)}
-                onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}`) : null}
-                onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}`) : null}
+                onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}${srcSuffix}`) : null}
+                onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}${srcSuffix}`) : null}
                 nextLabel={nextEp ? t('watch.episodePicker', { n: formatNumber(nextEp.episode) }) : null}
               />
             </div>
@@ -473,9 +477,12 @@ export default function Watch({ onOpenAuth }) {
           {/* ---------- meta under player ---------- */}
           <div className="watch-meta glass reveal">
             <div style={{ flex: 1, minWidth: '220px' }}>
-              <div className="watch-meta__kicker">
-                <Link to={`/show/${slug}`}>{title}</Link>
+              <div className="watch-meta__kicker" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+                <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
+                <span style={{ fontSize: '0.72rem', padding: '0.12rem 0.55rem', borderRadius: '8px', background: 'rgba(34, 211, 238, 0.14)', border: '1px solid rgba(34, 211, 238, 0.35)', color: '#22d3ee', fontWeight: 800 }}>
+                  {show?.sourceName || (sourceParam === 'okanime' ? '🔥 OkAnime' : sourceParam === 'animeblkom' ? '💎 AnimeBlkom' : sourceParam === 'anime3rb' ? '⚡ Anime3rb' : '👑 WitAnime')}
+                </span>
               </div>
               <h1 className="watch-meta__title">
                 {t('watch.episodePicker', { n: formatNumber(episode) })}
@@ -535,7 +542,7 @@ export default function Watch({ onOpenAuth }) {
                 </button>
               )}
               {nextEp && (
-                <button type="button" className="btn btn--primary btn--sm" onClick={() => navigate(`/watch/${slug}/${nextEp.episode}`)}>
+                <button type="button" className="btn btn--primary btn--sm" onClick={() => navigate(`/watch/${slug}/${nextEp.episode}${srcSuffix}`)}>
                   <span className="btn__shine" />
                   {t('watch.nextEpisode')} →
                 </button>
@@ -737,7 +744,7 @@ export default function Watch({ onOpenAuth }) {
                     key={e.episode}
                     type="button"
                     className={`watch-ep ${e.episode === episode ? 'active' : ''}`}
-                    onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
+                    onClick={() => navigate(`/watch/${slug}/${e.episode}${srcSuffix}`)}
                   >
                     <span className="watch-ep__num">{formatNumber(e.episode)}</span>
                     <span className="watch-ep__label">

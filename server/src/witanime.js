@@ -184,6 +184,64 @@ function decodeEntities(s) {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }
 
+/**
+ * Fetch browse catalog page from witanime.site
+ * Supports pages 1..112+ (over 3,000 anime).
+ */
+export async function fetchBrowseAnimeList(page = 1) {
+  const p = Math.max(1, Number(page) || 1);
+  const cacheKey = `wita:browse:page:${p}`;
+  const cached = apiGet(cacheKey);
+  if (cached) return cached;
+
+  const path = p === 1 ? '/browse' : `/browse/page/${p}`;
+  let html = null;
+  try {
+    const res = await session(path);
+    html = res.html;
+  } catch (_) {}
+
+  if (!html) return { items: [], page: p, hasNext: false, totalPages: 112 };
+
+  const cheerio = await import('cheerio');
+  const $ = cheerio.load(html);
+  const items = [];
+  const seen = new Set();
+
+  $('a[href*="/anime/"]').each((_, el) => {
+    const $el = $(el);
+    const href = $el.attr('href') || '';
+    const mSlug = href.match(/\/anime\/([^/?#]+)/);
+    if (!mSlug) return;
+    const slug = mSlug[1];
+    if (seen.has(slug)) return;
+    seen.add(slug);
+
+    const poster = $el.find('img').attr('src') || $el.find('img').attr('data-src') || null;
+    const rawTitle = $el.find('h3').text().trim() || $el.find('img').attr('alt') || slug;
+    const title = decodeEntities(rawTitle);
+    const scoreText = $el.find('span:contains(".")').text().trim() || $el.text().match(/\b(\d\.\d)\b/)?.[1] || '';
+    const score = scoreText ? Number(scoreText) : null;
+
+    items.push({
+      slug,
+      kind: 'anime',
+      titleEn: title,
+      titleAr: title,
+      poster,
+      score,
+      url: `/show/${slug}?source=witanime`,
+      source: 'witanime',
+      sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
+    });
+  });
+
+  const hasNext = html.includes(`/browse/page/${p + 1}`) || p < 112;
+  const result = { items, page: p, hasNext, totalPages: 112 };
+  apiSet(cacheKey, result, 60 * 60 * 1000);
+  return result;
+}
+
 /** Search witanime for shows. */
 export async function searchShows(q) {
   const key = `wita:search:${q.toLowerCase().trim()}`;
