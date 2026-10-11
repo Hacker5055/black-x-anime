@@ -37,6 +37,7 @@ export default function Navbar({ onOpenAuth }) {
   const { t, lang } = useI18n();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navSearch, setNavSearch] = useState('');
   const navigate = useNavigate();
   const menuRef = useRef(null);
 
@@ -52,53 +53,75 @@ export default function Navbar({ onOpenAuth }) {
   }, []);
 
   const links = [
-    { to: '/', label: t('nav.home'), icon: '◈' },
-    { to: '/trending', label: lang === 'ar' ? 'الأعمال الرائجة 🔥' : 'Trending Anime 🔥', icon: '🔥' },
-    { to: '/browse', label: lang === 'ar' ? 'المكتبة 📖' : 'Library 📖', icon: '📖' },
-    { to: '/community', label: t('nav.community'), icon: '💬' },
-    { to: '/rankings', label: t('nav.rankings'), icon: '🏆' },
-    { to: '/mylist', label: t('nav.mylist'), icon: '♥' }
+    { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home' },
+    { to: '/trending', label: lang === 'ar' ? 'قائمة الأنمي' : 'Anime List' },
+    { to: '/trending?type=movie', label: lang === 'ar' ? 'أفلام' : 'Movies' },
+    { to: '/#season-trending', label: lang === 'ar' ? 'أنميات الموسم' : 'Season Anime', isHash: true },
+    { to: '/#schedule-section', label: lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule', isHash: true },
+    { to: '/browse', label: lang === 'ar' ? 'المانجا' : 'Manga' },
+    { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community' }
   ];
+
+  const handleNavSearchSubmit = (e) => {
+    e.preventDefault();
+    if (!navSearch.trim()) {
+      navigate('/trending');
+      return;
+    }
+    navigate(`/trending?q=${encodeURIComponent(navSearch.trim())}`);
+  };
 
   return (
     <>
-      <header className="nav">
-        <div className="nav__inner">
-          <NavLink to="/" className="nav__logo" aria-label="BLACK X">
-            <span className="nav__logo-mark">
-              <svg width="21" height="21" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-                <path d="M14 14 L32 40 L18 50 M50 14 L32 40 L46 50" stroke="url(#xg)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-                <defs>
-                  <linearGradient id="xg" x1="0" y1="0" x2="64" y2="64">
-                    <stop stopColor="#22d3ee" />
-                    <stop offset="0.55" stopColor="#8b5cf6" />
-                    <stop offset="1" stopColor="#f472b6" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            </span>
-            <span>
-              BLACK <span className="nav__logo-x">X</span>
-            </span>
-          </NavLink>
+      <header className="nav wit-exact-nav">
+        <div className="nav__inner wit-exact-nav__inner">
+          {/* Right side in RTL: Brand Logo + Links */}
+          <div className="wit-exact-nav__right">
+            <NavLink to="/" className="wit-brand" aria-label="BLACK X">
+              <span className="wit-brand__box">X</span>
+              <span className="wit-brand__text">BLACK X</span>
+            </NavLink>
 
-          <nav className="nav__links" aria-label="Main">
-            {links.map((l) => (
-              <NavLink
-                key={l.to}
-                to={l.to}
-                className={({ isActive }) => `nav__link ${isActive ? 'active' : ''}`}
-                end={l.to === '/'}
+            <nav className="wit-exact-nav__links" aria-label="Main">
+              {links.map((l) =>
+                l.isHash ? (
+                  <a key={l.to} href={l.to} className="wit-exact-nav__link">
+                    {l.label}
+                  </a>
+                ) : (
+                  <NavLink
+                    key={l.to}
+                    to={l.to}
+                    className={({ isActive }) => `wit-exact-nav__link ${isActive ? 'active' : ''}`}
+                    end={l.to === '/'}
+                  >
+                    {l.label}
+                  </NavLink>
+                )
+              )}
+            </nav>
+          </div>
+
+          {/* Left side in RTL: Search Pill with Filter button + Avatar */}
+          <div className="wit-exact-nav__left">
+            <form className="wit-nav-search" onSubmit={handleNavSearchSubmit}>
+              <span className="wit-nav-search__icon" aria-hidden="true">🔍</span>
+              <input
+                type="search"
+                className="wit-nav-search__input"
+                value={navSearch}
+                onChange={(e) => setNavSearch(e.target.value)}
+                placeholder={lang === 'ar' ? 'ابحث عن الأنمي والأفلام...' : 'Search anime & movies...'}
+              />
+              <button
+                type="button"
+                className="wit-nav-search__filter"
+                onClick={() => navigate(navSearch.trim() ? `/trending?q=${encodeURIComponent(navSearch.trim())}` : '/trending')}
               >
-                <span className="nav__label">{l.label}</span>
-              </NavLink>
-            ))}
-          </nav>
+                {lang === 'ar' ? 'التصفية' : 'Filter'}
+              </button>
+            </form>
 
-          <div className="nav__spacer" />
-
-          <div className="nav__actions">
-            <ShowSearch variant="nav" />
             <NotificationBell />
             <LanguageToggle />
             {!user ? (

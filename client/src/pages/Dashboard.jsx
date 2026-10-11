@@ -40,152 +40,215 @@ function WitSectionHeader({ icon, title, sub, linkTo, linkLabel }) {
   );
 }
 
-/* --------------------------- 0. Luxury Pitch-Black Glassy 3D Hero Stage --------------------------- */
-function Hero3DStage({ items = [] }) {
+/* --------------------------- 0. Exact WitAnime Cinema Hero Banner --------------------------- */
+function Hero3DStage({ items = [], trending = [] }) {
   const { lang, formatNumber } = useI18n();
   const navigate = useNavigate();
   const [activeIdx, setActiveIdx] = useState(0);
 
+  const heroPool = useMemo(() => {
+    const merged = [];
+    const seen = new Set();
+    for (const item of [...(items || []), ...(trending || [])]) {
+      const key = item.slug || item.id || item.titleEn;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+      if (merged.length >= 6) break;
+    }
+    return merged;
+  }, [items, trending]);
+
   useEffect(() => {
-    if (items.length <= 1) return undefined;
+    if (heroPool.length <= 1) return undefined;
     const id = setInterval(() => {
-      setActiveIdx((prev) => (prev + 1) % Math.min(items.length, 5));
+      setActiveIdx((prev) => (prev + 1) % heroPool.length);
     }, 6500);
     return () => clearInterval(id);
-  }, [items.length]);
+  }, [heroPool.length]);
 
-  if (!items || items.length === 0) return null;
-  const featuredList = items.slice(0, 5);
-  const current = featuredList[activeIdx] || featuredList[0];
-  const title = (lang === 'ar' ? current.titleAr : current.titleEn) || current.titleEn || current.slug;
+  if (!heroPool.length) return null;
+  const current = heroPool[activeIdx] || heroPool[0];
+  const displayTitle = current.titleEn || current.titleAr || current.slug;
+  const subLine =
+    current.titleAr && current.titleAr !== displayTitle
+      ? current.titleAr
+      : lang === 'ar'
+      ? 'القسم الجديد من الموسم متاح الآن بجودة عالية.'
+      : 'New season episodes streaming now in Full HD.';
+  const epCount = current.episodes || current.episode || 12;
+  const score = current.score ? (Number(current.score) / 10).toFixed(1) : '8.8';
+  const artwork = current.banner || current.poster || current.coverUrl || '';
 
   return (
-    <section className="bx-hero-3d">
-      <div
-        className="bx-hero-3d__backdrop"
-        style={{ backgroundImage: `url(${current.poster || ''})` }}
-        aria-hidden="true"
-      />
-      <div className="bx-hero-3d__noise" aria-hidden="true" />
+    <section className="wit-cinema-hero">
+      {/* Left Artwork Area (in RTL) with seamless black edge fade */}
+      <div className="wit-cinema-hero__art-wrap" aria-hidden="true">
+        <img
+          src={artwork}
+          alt={displayTitle}
+          className="wit-cinema-hero__art"
+          referrerPolicy="no-referrer"
+        />
+        <div className="wit-cinema-hero__fade" />
+      </div>
 
-      <div className="bx-hero-3d__inner">
-        <div className="bx-hero-3d__info">
-          <div className="bx-hero-3d__badges">
-            <span className="bx-glass-pill bx-glass-pill--gold">👑 VIP FHD 1080p</span>
-            <span className="bx-glass-pill bx-glass-pill--cyan">✨ 3D GLASS EDITION</span>
-            {current.episode && (
-              <span className="bx-glass-pill">
-                {lang === 'ar' ? `الحلقة ${formatNumber(current.episode)}` : `EP ${formatNumber(current.episode)}`}
-              </span>
-            )}
-          </div>
+      {/* Right Content Area (in RTL) */}
+      <div className="wit-cinema-hero__content">
+        <h1 className="wit-cinema-hero__title">{displayTitle}</h1>
 
-          <h1 className="bx-hero-3d__title">{title}</h1>
-
-          <p className="bx-hero-3d__desc">
-            {lang === 'ar'
-              ? 'استمتع بالمشاهدة الحصرية على سيرفرات BLACK X الزجاجية ثلاثية الأبعاد بجودة FHD 1080p بدون إعلانات، مع إشعارات فورية على هاتفك والكمبيوتر فور نزول الحلقات.'
-              : 'Stream in ultra-crisp FHD 1080p on BLACK X Pitch-Black 3D Glass servers with instant device notifications.'}
-          </p>
-
-          <div className="bx-hero-3d__actions">
-            <button
-              type="button"
-              className="bx-btn-3d bx-btn-3d--primary"
-              onClick={() =>
-                navigate(
-                  current.episode
-                    ? `/watch/${current.slug}/${current.episode}`
-                    : `/show/${current.slug}`
-                )
-              }
-            >
-              <span>▶</span>
-              <span>{lang === 'ar' ? 'مشاهدة الحلقة الآن' : 'Watch Episode Now'}</span>
-            </button>
-            <button
-              type="button"
-              className="bx-btn-3d bx-btn-3d--glass"
-              onClick={() => navigate(`/show/${current.slug}`)}
-            >
-              <span>ℹ️</span>
-              <span>{lang === 'ar' ? 'تفاصيل الأنمي' : 'Anime Details'}</span>
-            </button>
-          </div>
-
-          <div className="bx-hero-3d__thumbs">
-            {featuredList.map((it, idx) => (
-              <button
-                key={it.slug || idx}
-                type="button"
-                className={`bx-hero-3d__thumb ${idx === activeIdx ? 'active' : ''}`}
-                onClick={() => setActiveIdx(idx)}
-                title={it.titleAr || it.titleEn}
-              >
-                <img src={it.poster} alt={it.titleEn || ''} referrerPolicy="no-referrer" />
-              </button>
-            ))}
-          </div>
+        <div className="wit-cinema-hero__meta">
+          <span className="wit-cinema-hero__tv-pill">TV</span>
+          <span className="wit-cinema-hero__score-pill">★ {score}</span>
+          <span className="wit-cinema-hero__meta-text">
+            • 2026 • {formatNumber(epCount)} {lang === 'ar' ? 'حلقات' : 'Episodes'} •{' '}
+            {lang === 'ar' ? 'مستمر • أكشن، مغامرة، شونين' : 'Airing • Action, Adventure, Shonen'}
+          </span>
         </div>
 
-        <div className="bx-hero-3d__showcase">
-          <div
-            className="bx-hero-3d__card-wrap"
-            onClick={() => navigate(`/show/${current.slug}`)}
-            role="button"
-            tabIndex={0}
+        <p className="wit-cinema-hero__desc">{subLine}</p>
+
+        <div className="wit-cinema-hero__cta-row">
+          <button
+            type="button"
+            className="wit-watch-pill-btn"
+            onClick={() =>
+              navigate(
+                current.episode && current.slug
+                  ? `/watch/${current.slug}/${current.episode}`
+                  : current.slug
+                  ? `/show/${current.slug}`
+                  : `/trending?q=${encodeURIComponent(displayTitle)}`
+              )
+            }
           >
-            <div className="bx-hero-3d__aura" aria-hidden="true" />
-            <div className="bx-hero-3d__card">
-              <img src={current.poster} alt={title} referrerPolicy="no-referrer" />
-              <div className="bx-hero-3d__card-shine" />
-              <span className="bx-hero-3d__card-tag">
-                {lang === 'ar' ? '🔥 يعرض الآن • 3D' : '🔥 AIRING • 3D'}
-              </span>
-            </div>
-          </div>
+            <span className="wit-watch-pill-btn__arrow">▶</span>
+            <span>{lang === 'ar' ? 'شاهد الآن' : 'Watch Now'}</span>
+          </button>
+        </div>
+
+        {/* Pagination Dots */}
+        <div className="wit-hero-dots" role="tablist">
+          {heroPool.map((it, idx) => (
+            <button
+              key={it.slug || it.id || idx}
+              type="button"
+              className={`wit-hero-dot ${idx === activeIdx ? 'active' : ''}`}
+              onClick={() => setActiveIdx(idx)}
+              aria-label={`Slide ${idx + 1}`}
+            />
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-/* --------------------------- 1. Pinned Anime (الأنميات المثبتة) --------------------------- */
-function PinnedAnimeSection({ items = [], loading }) {
-  const { lang } = useI18n();
+/* --------------------------- 1. Split Row: الأكثر مشاهدة (1..6) + أشهر أنميات الموسم --------------------------- */
+function MostWatchedAndSeasonSplit({ latestItems = [], seasonItems = [], loading }) {
+  const { lang, formatNumber } = useI18n();
   const navigate = useNavigate();
 
-  return (
-    <section className="wit-section" id="pinned-anime">
-      <WitSectionHeader
-        icon="📌"
-        title={lang === 'ar' ? 'الأنميات المثبتة' : 'Pinned Season Anime'}
-        sub={lang === 'ar' ? 'أقوى أنميات الموسم المختارة بجودة FHD 1080p' : 'Top featured seasonal anime in FHD 1080p'}
-        linkTo="/trending"
-        linkLabel={lang === 'ar' ? 'قائمة الأنمي ←' : 'All Anime →'}
-      />
+  const rankedEpisodes = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const item of latestItems || []) {
+      if (!seen.has(item.slug)) {
+        seen.add(item.slug);
+        list.push(item);
+      }
+      if (list.length >= 6) break;
+    }
+    return list;
+  }, [latestItems]);
 
-      {loading ? (
-        <SkeletonGrid count={6} />
-      ) : (
-        <div className="wit-grid-anime grid-anime">
-          {items.slice(0, 6).map((item, i) => (
-            <ShowCard
-              key={item.slug || i}
-              show={{
-                slug: item.slug,
-                titleEn: item.titleEn,
-                titleAr: item.titleAr,
-                poster: item.poster,
-                episodes: item.episode,
-                color: item.color
-              }}
-              delay={i}
-              onClick={() => navigate(`/show/${item.slug}`)}
-            />
-          ))}
+  const sideAnime = useMemo(() => {
+    const source = seasonItems && seasonItems.length > 0 ? seasonItems : rankedEpisodes;
+    return source.slice(0, 6);
+  }, [seasonItems, rankedEpisodes]);
+
+  return (
+    <section className="wit-split-showcase" id="pinned-anime">
+      {/* Right Column in RTL: الأكثر مشاهدة (حلقات) */}
+      <div className="wit-split-showcase__main">
+        <div className="wit-bar-head">
+          <span className="wit-bar-head__line" />
+          <h2 className="wit-bar-head__title">{lang === 'ar' ? 'الأكثر مشاهدة' : 'Most Watched'}</h2>
+          <span className="wit-bar-head__tag">{lang === 'ar' ? 'حلقات' : 'Episodes'}</span>
         </div>
-      )}
+
+        {loading ? (
+          <SkeletonGrid count={6} />
+        ) : (
+          <div className="wit-ranked-grid">
+            {rankedEpisodes.map((item, idx) => {
+              const title = item.titleEn || item.titleAr || item.slug;
+              return (
+                <div key={item.slug || idx} className="bx-3d-stage">
+                  <article
+                    className="wit-ranked-card bx-3d-card"
+                    onClick={() => navigate(`/watch/${item.slug}/${item.episode || 1}`)}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="wit-ranked-card__poster">
+                      <img src={item.poster} alt={title} loading="lazy" referrerPolicy="no-referrer" />
+                      <div className="wit-ranked-card__shade" />
+
+                      {/* Top-Right White Rank Square (1, 2, 3, 4, 5, 6) */}
+                      <span className="wit-rank-num">{idx + 1}</span>
+
+                      {/* Top-Left Dark Episode Pill (الحلقة X) */}
+                      <span className="wit-rank-ep">
+                        {lang === 'ar'
+                          ? `الحلقة ${formatNumber(item.episode || 1)}`
+                          : `EP ${formatNumber(item.episode || 1)}`}
+                      </span>
+                    </div>
+                  </article>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Left Sidebar in RTL: أشهر أنميات الموسم */}
+      <aside className="wit-split-showcase__side">
+        <div className="wit-bar-head">
+          <span className="wit-bar-head__line" />
+          <h2 className="wit-bar-head__title">{lang === 'ar' ? 'أشهر أنميات الموسم' : 'Popular This Season'}</h2>
+        </div>
+
+        <div className="wit-season-side-box">
+          {sideAnime.map((item, idx) => {
+            const name = item.titleEn || item.titleAr || item.slug;
+            const poster = item.poster || item.coverUrl || '';
+            return (
+              <div
+                key={item.slug || item.id || idx}
+                className="wit-season-side-item"
+                onClick={() =>
+                  navigate(
+                    item.slug
+                      ? `/show/${item.slug}`
+                      : `/trending?q=${encodeURIComponent(name)}`
+                  )
+                }
+                role="button"
+                tabIndex={0}
+              >
+                <div className="wit-season-side-item__thumb">
+                  <img src={poster} alt={name} loading="lazy" referrerPolicy="no-referrer" />
+                </div>
+                <div className="wit-season-side-item__info">
+                  <div className="wit-season-side-item__title">{name}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
     </section>
   );
 }
@@ -517,25 +580,15 @@ export default function Dashboard({ onOpenAuth }) {
 
   return (
     <div className="wit-home-wrap">
-      {/* Quick Navigation Strip (Search form removed per user request) */}
-      <div className="wit-top-strip">
-        <div className="wit-quick-cats">
-          <a href="#pinned-anime" className="wit-cat-pill active">📌 {lang === 'ar' ? 'الأنميات المثبتة' : 'Pinned'}</a>
-          <a href="#latest-episodes" className="wit-cat-pill">🔥 {lang === 'ar' ? 'أحدث الحلقات' : 'Latest Episodes'}</a>
-          <a href="#schedule-section" className="wit-cat-pill">📅 {lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule'}</a>
-          <Link to="/trending" className="wit-cat-pill">📋 {lang === 'ar' ? 'قائمة الأنمي والأعمال الرائجة' : 'Anime List'}</Link>
-          <Link to="/browse" className="wit-cat-pill">📖 {lang === 'ar' ? 'المانجا والمانهوا' : 'Manga'}</Link>
-          <Link to="/profile?tab=referrals" className="wit-cat-pill wit-cat-pill--vip">
-            👑 {isVip ? (lang === 'ar' ? 'عضوية VIP مفعّلة ✓' : 'VIP Active ✓') : (lang === 'ar' ? 'اشترك في VIP (FHD 1080p)' : 'Get VIP FHD')}
-          </Link>
-        </div>
-      </div>
+      {/* 0. Exact WitAnime Cinema Hero Banner */}
+      <Hero3DStage items={pinnedItems} trending={trending || []} />
 
-      {/* 0. Luxury Pitch-Black Glassy 3D Hero Stage */}
-      <Hero3DStage items={pinnedItems} />
-
-      {/* 1. Pinned Season Anime (الأنميات المثبتة) */}
-      <PinnedAnimeSection items={pinnedItems} loading={!latest} />
+      {/* 1. Split Row: الأكثر مشاهدة (1..6) + أشهر أنميات الموسم */}
+      <MostWatchedAndSeasonSplit
+        latestItems={latest || []}
+        seasonItems={trending || []}
+        loading={!latest}
+      />
 
       {/* 2. Continue Watching (if logged in) */}
       <ContinueSection onOpenAuth={onOpenAuth} />

@@ -6012,5 +6012,496 @@ body {
   }
 }
 
+/* ============================================================================
+   EXACT SCREENSHOT LAYOUT: NAVBAR, FULL-BLEED CINEMA HERO & SPLIT SHOWCASE
+   ============================================================================ */
+
+.wit-exact-nav {
+  background: #080808 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  height: 68px !important;
+}
+
+.wit-exact-nav__inner {
+  max-width: 1440px !important;
+  margin: 0 auto;
+  padding: 0 1.5rem !important;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.wit-exact-nav__right {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.wit-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-decoration: none;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
+}
+
+.wit-brand__box {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #000000;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 1.05rem;
+}
+
+.wit-exact-nav__links {
+  display: flex;
+  align-items: center;
+  gap: 1.35rem;
+}
+
+.wit-exact-nav__link {
+  color: #a1a1aa;
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 700;
+  transition: color 0.18s ease;
+  white-space: nowrap;
+}
+
+.wit-exact-nav__link:hover,
+.wit-exact-nav__link.active {
+  color: #ffffff;
+}
+
+.wit-exact-nav__left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.wit-nav-search {
+  display: flex;
+  align-items: center;
+  background: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.28rem 0.65rem 0.28rem 0.35rem;
+  width: 280px;
+  gap: 0.45rem;
+}
+
+.wit-nav-search__icon {
+  font-size: 0.85rem;
+  opacity: 0.65;
+}
+
+.wit-nav-search__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.84rem;
+  min-width: 0;
+}
+
+.wit-nav-search__input::placeholder {
+  color: #71717a;
+}
+
+.wit-nav-search__filter {
+  background: #262626;
+  color: #e4e4e7;
+  border: none;
+  border-radius: 7px;
+  padding: 0.3rem 0.68rem;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wit-nav-search__filter:hover {
+  background: #3f3f46;
+  color: #ffffff;
+}
+
+/* Exact Seamless Full-Width Hero Banner (.wit-cinema-hero) */
+.wit-cinema-hero {
+  position: relative;
+  width: 100%;
+  min-height: 450px;
+  background: #080808;
+  border-radius: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2.5rem 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Artwork placed on the Left side in RTL (inset-inline-end: 0) */
+.wit-cinema-hero__art-wrap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 66%;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.wit-cinema-hero__art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  filter: contrast(1.06) brightness(0.88);
+  transform: scale(1.02);
+}
+
+/* Seamless 4-way fade into #080808 pitch-black */
+.wit-cinema-hero__fade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to left, #080808 0%, rgba(8, 8, 8, 0.82) 18%, rgba(8, 8, 8, 0.15) 55%, rgba(8, 8, 8, 0.78) 100%),
+    linear-gradient(to top, #080808 0%, transparent 28%, transparent 75%, #080808 100%);
+}
+
+[dir="ltr"] .wit-cinema-hero__fade {
+  background:
+    linear-gradient(to right, #080808 0%, rgba(8, 8, 8, 0.82) 18%, rgba(8, 8, 8, 0.15) 55%, rgba(8, 8, 8, 0.78) 100%),
+    linear-gradient(to top, #080808 0%, transparent 28%, transparent 75%, #080808 100%);
+}
+
+.wit-cinema-hero__content {
+  position: relative;
+  z-index: 2;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: start;
+  gap: 0.85rem;
+}
+
+.wit-cinema-hero__title {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.3vw, 2.75rem);
+  font-weight: 900;
+  line-height: 1.18;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wit-cinema-hero__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  color: #a1a1aa;
+  font-weight: 700;
+}
+
+.wit-cinema-hero__tv-pill {
+  background: #ffffff;
+  color: #000000;
+  font-weight: 900;
+  font-size: 0.72rem;
+  padding: 0.14rem 0.48rem;
+  border-radius: 5px;
+}
+
+.wit-cinema-hero__score-pill {
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.74rem;
+  padding: 0.14rem 0.5rem;
+  border-radius: 5px;
+}
+
+.wit-cinema-hero__desc {
+  margin: 0.15rem 0;
+  color: #a1a1aa;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.wit-cinema-hero__cta-row {
+  margin-top: 0.35rem;
+}
+
+/* Solid White Pill Button (▶ شاهد الآن) */
+.wit-watch-pill-btn {
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 999px;
+  padding: 0.72rem 2rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.wit-watch-pill-btn:hover {
+  transform: scale(1.04);
+  background: #e4e4e7;
+}
+
+.wit-watch-pill-btn__arrow {
+  font-size: 0.82rem;
+}
+
+/* Pagination Dots (• • • • ▬ •) */
+.wit-hero-dots {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 1.35rem;
+}
+
+.wit-hero-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.wit-hero-dot.active {
+  width: 22px;
+  background: #ffffff;
+}
+
+/* ============================================================================
+   SPLIT SHOWCASE: الأكثر مشاهدة (1..6) + أشهر أنميات الموسم SIDEBAR
+   ============================================================================ */
+.wit-split-showcase {
+  display: grid;
+  grid-template-columns: 1fr 310px;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+.wit-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.wit-bar-head__line {
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.wit-bar-head__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.wit-bar-head__tag {
+  background: #1f1f22;
+  color: #a1a1aa;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.18rem 0.58rem;
+  border-radius: 6px;
+}
+
+/* 6 Ranked Cards Row */
+.wit-ranked-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.wit-ranked-card {
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  cursor: pointer;
+}
+
+.wit-ranked-card__poster {
+  position: relative;
+  aspect-ratio: 2 / 2.9;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0a0a0a;
+}
+
+.wit-ranked-card__poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+
+.wit-ranked-card:hover .wit-ranked-card__poster img {
+  transform: scale(1.07);
+}
+
+.wit-ranked-card__shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, transparent 40%, rgba(0, 0, 0, 0.75) 100%);
+  pointer-events: none;
+}
+
+/* Top-Right White Rounded Square Rank Number (1, 2, 3, 4, 5, 6) */
+.wit-rank-num {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #000000;
+  font-weight: 900;
+  font-size: 0.82rem;
+  display: grid;
+  place-items: center;
+  z-index: 4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75);
+}
+
+/* Top-Left Dark Episode Pill (الحلقة X) */
+.wit-rank-ep {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 8px;
+  padding: 0.22rem 0.58rem;
+  border-radius: 7px;
+  background: rgba(10, 10, 10, 0.82);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  z-index: 4;
+}
+
+/* Left Sidebar: أشهر أنميات الموسم */
+.wit-season-side-box {
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.wit-season-side-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.wit-season-side-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wit-season-side-item__thumb {
+  width: 48px;
+  height: 62px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #050505;
+}
+
+.wit-season-side-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wit-season-side-item__info {
+  flex: 1;
+  min-width: 0;
+  text-align: end;
+}
+
+.wit-season-side-item__title {
+  color: #f4f4f5;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1024px) {
+  .wit-split-showcase {
+    grid-template-columns: 1fr;
+  }
+  .wit-exact-nav__links {
+    display: none;
+  }
+  .wit-nav-search {
+    width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .wit-cinema-hero {
+    min-height: 360px;
+    padding: 1.5rem 1rem;
+  }
+  .wit-cinema-hero__art-wrap {
+    width: 100%;
+    opacity: 0.45;
+  }
+  .wit-ranked-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+  .wit-nav-search {
+    display: none;
+  }
+}
+
+
 
 
