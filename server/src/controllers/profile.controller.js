@@ -3,6 +3,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** PUT /api/profile/customize — body { bannerUrl?, themePreference? } */
 export async function customizeProfile(req, res) {
@@ -27,6 +28,13 @@ export async function customizeProfile(req, res) {
     }
     if (Object.keys(data).length === 0) {
       return fail(res, 400, 'Nothing to update: provide bannerUrl and/or themePreference.');
+    }
+
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const changes = social.customizeUser(userId, data);
+      if (!changes) return fail(res, 404, 'User not found.');
+      return res.status(200).json({ success: true, message: 'Profile updated.' });
     }
 
     const prisma = getPrisma();

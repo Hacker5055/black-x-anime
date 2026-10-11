@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -105,7 +106,7 @@ export default function ShowDetail({ onOpenAuth }) {
         <div className="detail-hero__content">
           <div className="detail-poster">
             {show.poster ? (
-              <img src={show.poster} alt={title} referrerPolicy="no-referrer" />
+              <img onError={imgFallback} src={show.poster} alt={title} referrerPolicy="no-referrer" />
             ) : (
               <div style={{ aspectRatio: '2/2.85', background: `linear-gradient(150deg, ${color}, #0a0d18)` }} />
             )}

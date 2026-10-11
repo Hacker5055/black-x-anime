@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -266,7 +267,7 @@ export default function LandingHero({ items = [], onOpenAuth }) {
               onClick={() => navigate(`/show/${current.slug}`)}
               style={{ cursor: 'pointer' }}
             >
-              <img
+              <img onError={imgFallback}
                 src={current.poster || ''}
                 alt={displayTitle}
                 className="hero-carousel__poster-img"
@@ -308,7 +309,7 @@ export default function LandingHero({ items = [], onOpenAuth }) {
                   className={`hero-carousel__rail-item ${idx === activeIndex ? 'active' : ''}`}
                   onClick={() => setActiveIndex(idx)}
                 >
-                  <img
+                  <img onError={imgFallback}
                     src={item.poster || ''}
                     alt={itemTitle}
                     className="hero-carousel__rail-thumb"

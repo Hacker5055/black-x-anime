@@ -4236,3 +4236,19 @@ html, body, #root, .app-shell {
 @media (max-width: 640px) {
   .fx-grid--stats { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ===== fixes: navbar wrapping + hero description clipping ===== */
+.nav__label { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .nav__links .nav__label { display: none; }
+  .nav__links { gap: 0.35rem; }
+  .nav__link { padding-inline: 0.72rem; }
+}
+.hero-carousel__desc {
+  text-align: start;
+  overflow-wrap: break-word;
+  padding-inline-start: 2.6rem;
+}
+@media (min-width: 900px) {
+  .hero-carousel__desc { max-width: 52ch; }
+}

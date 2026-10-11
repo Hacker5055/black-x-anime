@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -424,7 +425,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                 }}
               >
                 {photoUrl ? (
-                  <img
+                  <img onError={imgFallback}
                     src={photoUrl}
                     alt={displayName}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -616,7 +617,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                       marginBottom: '0.65rem'
                     }}
                   >
-                    <img
+                    <img onError={imgFallback}
                       src={photoUrl}
                       alt="Device Preview"
                       style={{
@@ -694,7 +695,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                       }}
                       title={av.name}
                     >
-                      <img src={av.url} alt={av.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img onError={imgFallback} src={av.url} alt={av.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </button>
                   ))}
                 </div>
@@ -882,7 +883,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                               }}
                             >
                               {u.photoUrl ? (
-                                <img src={u.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img onError={imgFallback} src={u.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
                                 u.displayName?.[0]?.toUpperCase() || u.username?.[0]?.toUpperCase()
                               )}

@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -245,7 +246,7 @@ export function ShowSearch({ variant = 'nav' }) {
               }}
             >
               {s.poster ? (
-                <img src={s.poster} alt="" referrerPolicy="no-referrer" />
+                <img onError={imgFallback} src={s.poster} alt="" referrerPolicy="no-referrer" />
               ) : (
                 <div style={{ width: 38, height: 52, borderRadius: 6, background: '#1b2138' }} />
               )}

@@ -110,6 +110,14 @@ app.use('/api/gamification', gamificationRoutes);
 app.use('/api/creator', gamificationRoutes); // POST /submit lives in gamification.routes.js
 app.use('/api/support', supportRoutes);
 
+// Platform injectors (AI Studio _websocket-interceptor.js) register a
+// service worker via a relative URL — serve a valid one for ANY nested path
+// so registration stops failing with an HTML MIME SecurityError.
+const SW_JS = "self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});\n";
+app.get(/_service-worker\.js$/, (req, res) => {
+  res.type('application/javascript').send(SW_JS);
+});
+
 // Serve the built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {

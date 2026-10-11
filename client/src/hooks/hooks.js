@@ -134,3 +134,15 @@ export function useToasts() {
   }, []);
   return toasts;
 }
+
+/**
+ * Broken-image handler: swap to an inline SVG placeholder once (poster art
+ * from AniList/witanime CDNs rotates and can 404/CORS-fail).
+ */
+export const PLACEHOLDER_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 80'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231b2340'/%3E%3Cstop offset='1' stop-color='%232b1b45'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='80' fill='url(%23g)'/%3E%3Cpath d='M24 32h16M26 26h12M27 38h10' stroke='%233b4668' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E";
+export function imgFallback(e) {
+  const el = e.currentTarget;
+  if (el.dataset.fallback === '1') return;
+  el.dataset.fallback = '1';
+  el.src = PLACEHOLDER_IMG;
+}

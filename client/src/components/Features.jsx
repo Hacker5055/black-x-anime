@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 /**
  * Feature panels — ratings, gamification, follow, profile customization,
  * creator submissions and support tickets. Liquid-glass styling via the
@@ -37,6 +38,15 @@ export function RatingPanel({ slug, title }) {
   const [score, setScore] = useState(0);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user || !slug) return undefined;
+    let alive = true;
+    api.get(`/api/content/rating?slug=${encodeURIComponent(slug)}`)
+      .then((d) => { if (alive && d.rating?.score) setScore(d.rating.score); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [user, slug]);
 
   if (!user) {
     return (
@@ -133,7 +143,7 @@ export function GamificationPanel() {
             <div className="fx-badges">
               {data.unlockedBadges.map((b) => (
                 <span key={b.name} className="chip" title={b.name}>
-                  {b.iconUrl ? <img src={b.iconUrl} alt="" width={18} height={18} referrerPolicy="no-referrer" /> : '🏅'} {b.name}
+                  {b.iconUrl ? <img onError={imgFallback} src={b.iconUrl} alt="" width={18} height={18} referrerPolicy="no-referrer" /> : '🏅'} {b.name}
                 </span>
               ))}
             </div>

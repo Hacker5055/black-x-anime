@@ -3,6 +3,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** POST /api/support/ticket — body { subject, message } */
 export async function createTicket(req, res) {
@@ -16,6 +17,17 @@ export async function createTicket(req, res) {
     }
     if (!message || typeof message !== 'string' || !message.trim()) {
       return fail(res, 400, 'message is required.');
+    }
+
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const ticketId = social.createTicket(String(userId), subject.trim(), message.trim());
+      return res.status(201).json({
+        success: true,
+        ticketId,
+        status: 'OPEN',
+        message: 'Support ticket created.'
+      });
     }
 
     const prisma = getPrisma();

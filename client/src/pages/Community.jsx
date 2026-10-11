@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -85,6 +86,7 @@ export default function Community({ onOpenAuth }) {
     loadPosts();
 
     // Bind Firestore real-time listener if available
+    if (!user) return undefined; // live Firestore sync only for signed-in users
     const unsub = onCommunitySnapshot((fsPosts) => {
       if (fsPosts && fsPosts.length > 0) {
         // Merge with existing posts to ensure real-time update
@@ -353,7 +355,7 @@ export default function Community({ onOpenAuth }) {
             <div className="fb-composer__top">
               <div className="avatar fb-composer__avatar" style={{ background: user?.avatarColor || '#22d3ee' }}>
                 {(user?.photoURL || user?.photoUrl) ? (
-                  <img src={user.photoURL || user.photoUrl} alt="Avatar" />
+                  <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt="Avatar" />
                 ) : (
                   user?.displayName?.[0]?.toUpperCase() || '👤'
                 )}
@@ -378,7 +380,7 @@ export default function Community({ onOpenAuth }) {
             {/* Attached Image Preview if entered */}
             {imageUrl && (
               <div className="fb-composer__img-preview">
-                <img src={imageUrl} alt="Upload preview" onError={() => setImageUrl('')} />
+                <img onError={imgFallback} src={imageUrl} alt="Upload preview" onError={() => setImageUrl('')} />
                 <button
                   type="button"
                   className="fb-composer__img-remove"
@@ -540,7 +542,7 @@ export default function Community({ onOpenAuth }) {
                       <div className="fb-post-card__author">
                         <div className="avatar fb-post-card__avatar" style={{ background: isPostDev ? '#ec4899' : '#22d3ee' }}>
                           {post.author_avatar ? (
-                            <img src={post.author_avatar} alt={post.author_name} />
+                            <img onError={imgFallback} src={post.author_avatar} alt={post.author_name} />
                           ) : (
                             post.author_name?.[0]?.toUpperCase() || '👤'
                           )}
@@ -599,7 +601,7 @@ export default function Community({ onOpenAuth }) {
 
                       {post.image_url && (
                         <div className="fb-post-card__media">
-                          <img src={post.image_url} alt="Attached media" loading="lazy" />
+                          <img onError={imgFallback} src={post.image_url} alt="Attached media" loading="lazy" />
                         </div>
                       )}
                     </div>
@@ -708,7 +710,7 @@ export default function Community({ onOpenAuth }) {
                         <div className="fb-comments-composer">
                           <div className="avatar fb-comments-composer__avatar" style={{ background: user?.avatarColor || '#22d3ee' }}>
                             {(user?.photoURL || user?.photoUrl) ? (
-                              <img src={user.photoURL || user.photoUrl} alt="Me" />
+                              <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt="Me" />
                             ) : (
                               user?.displayName?.[0]?.toUpperCase() || '👤'
                             )}
@@ -759,7 +761,7 @@ export default function Community({ onOpenAuth }) {
                                 <div key={c.id} className="fb-comment-item">
                                   <div className="avatar fb-comment-item__avatar" style={{ background: isCommDev ? '#ec4899' : '#22d3ee' }}>
                                     {c.author_avatar ? (
-                                      <img src={c.author_avatar} alt={c.author_name} />
+                                      <img onError={imgFallback} src={c.author_avatar} alt={c.author_name} />
                                     ) : (
                                       c.author_name?.[0]?.toUpperCase() || '👤'
                                     )}

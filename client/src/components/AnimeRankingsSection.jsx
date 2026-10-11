@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -45,7 +46,7 @@ function CustomTooltip({ active, payload, lang }) {
       }}
     >
       {data.coverUrl && (
-        <img
+        <img onError={imgFallback}
           src={data.coverUrl}
           alt={data.name}
           style={{ width: '48px', height: '68px', objectFit: 'cover', borderRadius: '6px' }}
@@ -538,7 +539,7 @@ export default function AnimeRankingsSection({ onOpenAuth }) {
                   <div style={{ display: 'flex', gap: '0.85rem' }}>
                     {/* Poster + Rank Pill */}
                     <div style={{ position: 'relative', width: '84px', height: '118px', flexShrink: 0, borderRadius: '10px', overflow: 'hidden' }}>
-                      <img
+                      <img onError={imgFallback}
                         src={anime.coverUrl}
                         alt={title}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -709,7 +710,7 @@ export default function AnimeRankingsSection({ onOpenAuth }) {
 
             <div style={{ display: 'flex', gap: '0.85rem', marginBottom: '1.25rem', alignItems: 'center' }}>
               {rateModalItem.coverUrl && (
-                <img
+                <img onError={imgFallback}
                   src={rateModalItem.coverUrl}
                   alt={rateModalItem.titleEnglish}
                   style={{ width: '50px', height: '72px', objectFit: 'cover', borderRadius: '8px' }}

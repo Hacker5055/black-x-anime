@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -359,7 +360,7 @@ export default function SearchBar({
                     aria-selected={idx === highlightIndex}
                   >
                     {item.poster ? (
-                      <img
+                      <img onError={imgFallback}
                         src={item.poster}
                         alt={itemTitle}
                         className="hero-search-item__poster"

@@ -6,6 +6,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { social, ensureSocialTables, levelFromMinutes, progressPercentage, awardBadgesSqlite } from '../lib/socialDb.js';
 
 /* ---------------------------- leveling rules ----------------------------
  * Lifetime minutes (watch + read) drive the level:
@@ -13,17 +14,6 @@ import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
  *   progress = percentage through the current level (0–99.9, 1 decimal)
  * Badges unlock when requirement_threshold <= lifetime minutes.
  */
-const MINUTES_PER_LEVEL = 120;
-
-function levelFromMinutes(totalMinutes) {
-  return Math.floor(Math.max(0, totalMinutes) / MINUTES_PER_LEVEL) + 1;
-}
-
-function progressPercentage(totalMinutes) {
-  const t = Math.max(0, totalMinutes);
-  return Math.round(((t % MINUTES_PER_LEVEL) / MINUTES_PER_LEVEL) * 1000) / 10;
-}
-
 /** Award every badge whose threshold the user has crossed and not yet earned. */
 async function awardEligibleBadges(prisma, userId, totalMinutes) {
   const eligible = await prisma.badge.findMany({
@@ -50,6 +40,24 @@ export async function getStats(req, res) {
   try {
     const userId = getUserId(req);
     if (!userId) return fail(res, 401, 'Authentication required.');
+
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const key = String(userId);
+      const row = social.getStats(key);
+      const total = (row?.total_watch_time_min || 0) + (row?.total_read_time_min || 0);
+      const currentLevel = levelFromMinutes(total);
+      if (row && row.current_level !== currentLevel) social.setLevel(key, currentLevel);
+      return res.status(200).json({
+        success: true,
+        data: {
+          totalWatchTimeMin: row?.total_watch_time_min || 0,
+          currentLevel,
+          progressPercentage: progressPercentage(total),
+          unlockedBadges: social.userBadges(key).map((b) => ({ name: b.name, iconUrl: b.icon_url }))
+        }
+      });
+    }
 
     const prisma = getPrisma();
     const uid = String(userId);
@@ -108,6 +116,21 @@ export async function syncTime(req, res) {
     }
     const delta = Math.round(minutes);
 
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const key = String(userId);
+      const before = social.getStats(key);
+      const prevTotal = (before?.total_watch_time_min || 0) + (before?.total_read_time_min || 0);
+      const prevLevel = levelFromMinutes(prevTotal);
+      const field = type === 'watch' ? 'total_watch_time_min' : 'total_read_time_min';
+      const row = social.upsertStats(key, field, delta);
+      const total = row.total_watch_time_min + row.total_read_time_min;
+      const newLevel = levelFromMinutes(total);
+      if (row.current_level !== newLevel) social.setLevel(key, newLevel);
+      awardBadgesSqlite(key, total);
+      return res.status(200).json({ success: true, levelUp: newLevel > prevLevel, newLevel });
+    }
+
     const prisma = getPrisma();
     const uid = String(userId);
 
@@ -161,6 +184,16 @@ export async function submitCreator(req, res) {
     }
     if (parsed.protocol !== 'https:') {
       return fail(res, 400, 'videoUrl must be an https URL.');
+    }
+
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      social.submitCreator(String(userId), videoUrl);
+      return res.status(201).json({
+        success: true,
+        status: 'PENDING',
+        message: 'Submission received for VIP reward review.'
+      });
     }
 
     const prisma = getPrisma();

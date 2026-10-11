@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { api } from '../api.js';
@@ -189,7 +190,7 @@ export function DownloadModal({
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '1.15rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {showPoster && (
-              <img
+              <img onError={imgFallback}
                 src={showPoster}
                 alt={title}
                 style={{ width: '52px', height: '70px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(255, 255, 255, 0.15)' }}

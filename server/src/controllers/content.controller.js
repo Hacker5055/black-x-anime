@@ -3,6 +3,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
 export async function rateContent(req, res) {
@@ -20,6 +21,16 @@ export async function rateContent(req, res) {
     const s = Number(score);
     if (!Number.isInteger(s) || s < 1 || s > 10) {
       return fail(res, 400, 'score must be an integer between 1 and 10.');
+    }
+
+    // no DATABASE_URL -> SQLite social store (works on every host)
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const ep = episodeNumber !== undefined && episodeNumber !== null ? Number(episodeNumber) : 0;
+      if (!Number.isInteger(ep) || ep < 0) return fail(res, 400, 'episodeNumber must be a positive integer.');
+      if (!slug) return fail(res, 400, 'contentId or slug is required.');
+      social.upsertRating(String(userId), String(slug).slice(0, 120), ep, s, title != null ? String(title).slice(0, 200) : null);
+      return res.status(200).json({ success: true, message: 'Rating saved successfully.' });
     }
 
     const prisma = getPrisma();
@@ -80,5 +91,47 @@ export async function rateContent(req, res) {
     });
   } catch (err) {
     return prismaError(res, err, { notFound: 'Rating target not found.' });
+  }
+}
+
+/**
+ * GET /api/content/rating?slug=&episodeNumber= — the signed-in user's saved
+ * score for a show/episode, so the UI can restore highlighted stars.
+ */
+export async function getMyRating(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+    const slug = String(req.query.slug || '').trim();
+    if (!slug) return fail(res, 400, 'slug is required.');
+    const ep = req.query.episodeNumber !== undefined ? Number(req.query.episodeNumber) : 0;
+    if (!Number.isInteger(ep) || ep < 0) return fail(res, 400, 'episodeNumber must be a positive integer.');
+
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const row = social.getRating(String(userId), slug.slice(0, 120), ep);
+      return res.status(200).json({ success: true, rating: row ? { score: row.score } : null });
+    }
+
+    const prisma = getPrisma();
+    const user = await ensurePrismaUser(prisma, req.user);
+    const where = { user_id: user.id, content_id: '', episode_id: null };
+    // resolve content by slug (or contentId) then find the rating
+    let content = null;
+    if (req.query.contentId) content = await prisma.content.findUnique({ where: { id: String(req.query.contentId) } });
+    if (!content) content = await prisma.content.findUnique({ where: { slug: slug.slice(0, 120) } });
+    if (!content) return res.status(200).json({ success: true, rating: null });
+
+    let epId = null;
+    if (ep > 0) {
+      const epRow = await prisma.episodeChapter.findFirst({ where: { content_id: content.id, number: ep } });
+      epId = epRow?.id ?? null;
+    }
+    const rating = await prisma.rating.findFirst({
+      where: { user_id: user.id, content_id: content.id, episode_id: epId }
+    });
+    return res.status(200).json({ success: true, rating: rating ? { score: rating.score } : null });
+  } catch (err) {
+    return prismaError(res, err);
   }
 }

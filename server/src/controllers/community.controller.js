@@ -5,6 +5,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** POST /api/community/follow — body { targetUserId } */
 export async function followUser(req, res) {
@@ -18,6 +19,21 @@ export async function followUser(req, res) {
     }
     if (targetUserId !== undefined && targetUserId !== null && typeof targetUserId !== 'string') {
       return fail(res, 400, 'targetUserId must be a string.');
+    }
+
+    if (!process.env.DATABASE_URL) {
+      ensureSocialTables();
+      const key = String(userId);
+      const targetKey = targetUserId
+        ? String(targetUserId)
+        : 'name:' + String(targetUsername).slice(0, 40);
+      if (targetKey === key) return fail(res, 400, 'You cannot follow yourself.');
+      social.follow(key, targetKey);
+      return res.status(200).json({
+        success: true,
+        message: 'User followed successfully.',
+        isFollowing: true
+      });
     }
 
     const prisma = getPrisma();

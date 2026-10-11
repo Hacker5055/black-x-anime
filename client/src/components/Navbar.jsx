@@ -1,3 +1,4 @@
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -87,7 +88,7 @@ export default function Navbar({ onOpenAuth }) {
                 className={({ isActive }) => `nav__link ${isActive ? 'active' : ''}`}
                 end={l.to === '/'}
               >
-                {l.label}
+                <span className="nav__label">{l.label}</span>
               </NavLink>
             ))}
           </nav>
@@ -118,7 +119,7 @@ export default function Navbar({ onOpenAuth }) {
                   <div className="user-avatar-wrapper">
                     <span className="avatar user-avatar-circle" style={{ background: user.avatarColor, overflow: 'hidden' }}>
                       {(user.photoURL || user.photoUrl) ? (
-                        <img src={user.photoURL || user.photoUrl} alt={user.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt={user.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         user.displayName?.[0]?.toUpperCase() || 'X'
                       )}
