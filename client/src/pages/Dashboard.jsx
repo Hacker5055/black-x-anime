@@ -40,6 +40,116 @@ function WitSectionHeader({ icon, title, sub, linkTo, linkLabel }) {
   );
 }
 
+/* --------------------------- 0. Luxury Pitch-Black Glassy 3D Hero Stage --------------------------- */
+function Hero3DStage({ items = [] }) {
+  const { lang, formatNumber } = useI18n();
+  const navigate = useNavigate();
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  useEffect(() => {
+    if (items.length <= 1) return undefined;
+    const id = setInterval(() => {
+      setActiveIdx((prev) => (prev + 1) % Math.min(items.length, 5));
+    }, 6500);
+    return () => clearInterval(id);
+  }, [items.length]);
+
+  if (!items || items.length === 0) return null;
+  const featuredList = items.slice(0, 5);
+  const current = featuredList[activeIdx] || featuredList[0];
+  const title = (lang === 'ar' ? current.titleAr : current.titleEn) || current.titleEn || current.slug;
+
+  return (
+    <section className="bx-hero-3d">
+      <div
+        className="bx-hero-3d__backdrop"
+        style={{ backgroundImage: `url(${current.poster || ''})` }}
+        aria-hidden="true"
+      />
+      <div className="bx-hero-3d__noise" aria-hidden="true" />
+
+      <div className="bx-hero-3d__inner">
+        <div className="bx-hero-3d__info">
+          <div className="bx-hero-3d__badges">
+            <span className="bx-glass-pill bx-glass-pill--gold">👑 VIP FHD 1080p</span>
+            <span className="bx-glass-pill bx-glass-pill--cyan">✨ 3D GLASS EDITION</span>
+            {current.episode && (
+              <span className="bx-glass-pill">
+                {lang === 'ar' ? `الحلقة ${formatNumber(current.episode)}` : `EP ${formatNumber(current.episode)}`}
+              </span>
+            )}
+          </div>
+
+          <h1 className="bx-hero-3d__title">{title}</h1>
+
+          <p className="bx-hero-3d__desc">
+            {lang === 'ar'
+              ? 'استمتع بالمشاهدة الحصرية على سيرفرات BLACK X الزجاجية ثلاثية الأبعاد بجودة FHD 1080p بدون إعلانات، مع إشعارات فورية على هاتفك والكمبيوتر فور نزول الحلقات.'
+              : 'Stream in ultra-crisp FHD 1080p on BLACK X Pitch-Black 3D Glass servers with instant device notifications.'}
+          </p>
+
+          <div className="bx-hero-3d__actions">
+            <button
+              type="button"
+              className="bx-btn-3d bx-btn-3d--primary"
+              onClick={() =>
+                navigate(
+                  current.episode
+                    ? `/watch/${current.slug}/${current.episode}`
+                    : `/show/${current.slug}`
+                )
+              }
+            >
+              <span>▶</span>
+              <span>{lang === 'ar' ? 'مشاهدة الحلقة الآن' : 'Watch Episode Now'}</span>
+            </button>
+            <button
+              type="button"
+              className="bx-btn-3d bx-btn-3d--glass"
+              onClick={() => navigate(`/show/${current.slug}`)}
+            >
+              <span>ℹ️</span>
+              <span>{lang === 'ar' ? 'تفاصيل الأنمي' : 'Anime Details'}</span>
+            </button>
+          </div>
+
+          <div className="bx-hero-3d__thumbs">
+            {featuredList.map((it, idx) => (
+              <button
+                key={it.slug || idx}
+                type="button"
+                className={`bx-hero-3d__thumb ${idx === activeIdx ? 'active' : ''}`}
+                onClick={() => setActiveIdx(idx)}
+                title={it.titleAr || it.titleEn}
+              >
+                <img src={it.poster} alt={it.titleEn || ''} referrerPolicy="no-referrer" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bx-hero-3d__showcase">
+          <div
+            className="bx-hero-3d__card-wrap"
+            onClick={() => navigate(`/show/${current.slug}`)}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="bx-hero-3d__aura" aria-hidden="true" />
+            <div className="bx-hero-3d__card">
+              <img src={current.poster} alt={title} referrerPolicy="no-referrer" />
+              <div className="bx-hero-3d__card-shine" />
+              <span className="bx-hero-3d__card-tag">
+                {lang === 'ar' ? '🔥 يعرض الآن • 3D' : '🔥 AIRING • 3D'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* --------------------------- 1. Pinned Anime (الأنميات المثبتة) --------------------------- */
 function PinnedAnimeSection({ items = [], loading }) {
   const { lang } = useI18n();
@@ -441,6 +551,9 @@ export default function Dashboard({ onOpenAuth }) {
           </Link>
         </div>
       </div>
+
+      {/* 0. Luxury Pitch-Black Glassy 3D Hero Stage */}
+      <Hero3DStage items={pinnedItems} />
 
       {/* 1. Pinned Season Anime (الأنميات المثبتة) */}
       <PinnedAnimeSection items={pinnedItems} loading={!latest} />

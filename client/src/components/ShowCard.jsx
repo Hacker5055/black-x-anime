@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import {
@@ -25,11 +25,60 @@ function Poster({ src, alt, cls = '' }) {
 }
 
 /**
- * WitAnime A-to-Z Anime Card (`anime-card-container` style from witanime.site)
+ * Shared 3D perspective tilt + holographic glass glare controller
+ */
+function useLuxury3DTilt() {
+  const ref = useRef(null);
+
+  const handleMove = (clientX, clientY) => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1)));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1)));
+    const ry = (x - 0.5) * 20; // -10deg to +10deg
+    const rx = (0.5 - y) * 20; // -10deg to +10deg
+    el.style.setProperty('--rx', `${rx.toFixed(2)}deg`);
+    el.style.setProperty('--ry', `${ry.toFixed(2)}deg`);
+    el.style.setProperty('--gx', `${(x * 100).toFixed(1)}%`);
+    el.style.setProperty('--gy', `${(y * 100).toFixed(1)}%`);
+    el.style.setProperty('--glare', '1');
+  };
+
+  const handleMouseMove = (e) => handleMove(e.clientX, e.clientY);
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches[0]) {
+      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleReset = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.setProperty('--rx', '0deg');
+    el.style.setProperty('--ry', '0deg');
+    el.style.setProperty('--gx', '50%');
+    el.style.setProperty('--gy', '50%');
+    el.style.setProperty('--glare', '0');
+  };
+
+  return {
+    ref,
+    onMouseMove: handleMouseMove,
+    onMouseLeave: handleReset,
+    onTouchMove: handleTouchMove,
+    onTouchEnd: handleReset
+  };
+}
+
+/**
+ * Pitch-Black Glassy 3D Anime Card (`bx-3d-card`)
  */
 export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
-  const { t, lang, formatNumber } = useI18n();
+  const { lang, formatNumber } = useI18n();
   const navigate = useNavigate();
+  const tilt = useLuxury3DTilt();
 
   const title = (lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn || show.slug;
   const posterSrc = show.poster || show.coverUrl || show.banner || '';
@@ -57,78 +106,89 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
   };
 
   return (
-    <article
-      className="wit-anime-card anime-card reveal"
-      data-delay={delay % 5}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-      aria-label={title}
-    >
-      <div className="wit-anime-card__poster anime-card__poster">
-        <Poster src={posterSrc} alt={title} />
+    <div className="bx-3d-stage" data-delay={delay % 5}>
+      <article
+        ref={tilt.ref}
+        onMouseMove={tilt.onMouseMove}
+        onMouseLeave={tilt.onMouseLeave}
+        onTouchMove={tilt.onTouchMove}
+        onTouchEnd={tilt.onTouchEnd}
+        className="wit-anime-card bx-3d-card anime-card reveal"
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+        aria-label={title}
+      >
+        <div className="bx-3d-card__glare" aria-hidden="true" />
+        <div className="bx-3d-card__rim" aria-hidden="true" />
 
-        {/* WitAnime Top-Right Status Badge */}
-        <span className="wit-badge wit-badge--status">
-          {show.status === 'FINISHED'
-            ? (lang === 'ar' ? 'مكتمل' : 'Completed')
-            : (lang === 'ar' ? 'يعرض الان' : 'Airing')}
-        </span>
+        <div className="wit-anime-card__poster bx-3d-card__poster anime-card__poster">
+          <Poster src={posterSrc} alt={title} cls="bx-3d-card__img" />
+          <div className="bx-3d-card__vignette" aria-hidden="true" />
 
-        {/* WitAnime Top-Left Type / VIP FHD Badge */}
-        <span className="wit-badge wit-badge--type">
-          {show.kind === 'movie' ? 'MOVIE' : 'TV • FHD'}
-        </span>
-
-        {/* WitAnime Bottom-Right Episode Count Pill */}
-        {show.episodes && (
-          <span className="wit-badge wit-badge--ep">
-            {lang === 'ar' ? `${formatNumber(show.episodes)} حلقة` : `${formatNumber(show.episodes)} EP`}
+          {/* Floating 3D Status Badge */}
+          <span className="wit-badge wit-badge--status bx-3d-float-z2">
+            {show.status === 'FINISHED'
+              ? (lang === 'ar' ? 'مكتمل' : 'Completed')
+              : (lang === 'ar' ? 'يعرض الان' : 'Airing')}
           </span>
-        )}
 
-        {/* Quick Notification Bell on Bottom-Left */}
-        <button
-          type="button"
-          className={`wit-bell-btn ${subbed ? 'active' : ''}`}
-          onClick={handleBellClick}
-          title={lang === 'ar' ? 'تفعيل إشعارات الحلقات الجديدة على هاتفك/الكمبيوتر' : 'Enable Episode Alerts'}
-        >
-          {subbed ? '🔔' : '📲'}
-        </button>
+          {/* Floating 3D Type / VIP FHD Badge */}
+          <span className="wit-badge wit-badge--type bx-3d-float-z2">
+            {show.kind === 'movie' ? 'MOVIE' : '👑 FHD'}
+          </span>
 
-        {/* WitAnime Center Play Hover Overlay */}
-        <div className="wit-anime-card__hover">
-          <span className="wit-play-circle">▶</span>
+          {/* Floating 3D Episode Count Pill */}
+          {show.episodes && (
+            <span className="wit-badge wit-badge--ep bx-3d-float-z2">
+              {lang === 'ar' ? `${formatNumber(show.episodes)} حلقة` : `${formatNumber(show.episodes)} EP`}
+            </span>
+          )}
+
+          {/* Floating 3D Quick Notification Bell */}
+          <button
+            type="button"
+            className={`wit-bell-btn bx-3d-float-z2 ${subbed ? 'active' : ''}`}
+            onClick={handleBellClick}
+            title={lang === 'ar' ? 'تفعيل إشعارات الحلقات الجديدة على هاتفك/الكمبيوتر' : 'Enable Episode Alerts'}
+          >
+            {subbed ? '🔔' : '📲'}
+          </button>
+
+          {/* 3D Pop-Out Glass Play Orb */}
+          <div className="wit-anime-card__hover bx-3d-float-z3">
+            <span className="wit-play-circle bx-3d-orb">▶</span>
+          </div>
         </div>
-      </div>
 
-      <div className="wit-anime-card__body anime-card__body">
-        <h3 className="wit-anime-card__title anime-card__title" title={title}>
-          {title}
-        </h3>
-        {meta && (
-          <div className="wit-anime-card__meta anime-card__meta">
-            <span>{meta}</span>
-          </div>
-        )}
-        {progress != null && progress > 0 && (
-          <div className="anime-card__progress" title={`${Math.round(progress * 100)}%`}>
-            <div className="anime-card__progress-bar" style={{ width: `${Math.min(100, progress * 100)}%` }} />
-          </div>
-        )}
-      </div>
-    </article>
+        <div className="wit-anime-card__body bx-3d-card__body anime-card__body">
+          <h3 className="wit-anime-card__title anime-card__title" title={title}>
+            {title}
+          </h3>
+          {meta && (
+            <div className="wit-anime-card__meta anime-card__meta">
+              <span>{meta}</span>
+            </div>
+          )}
+          {progress != null && progress > 0 && (
+            <div className="anime-card__progress" title={`${Math.round(progress * 100)}%`}>
+              <div className="anime-card__progress-bar" style={{ width: `${Math.min(100, progress * 100)}%` }} />
+            </div>
+          )}
+        </div>
+      </article>
+    </div>
   );
 }
 
 /**
- * WitAnime A-to-Z Episode Card (`episodes-card-container` from witanime.site)
+ * Pitch-Black Glassy 3D Episode Card (`bx-3d-card`)
  */
 export function EpisodeTile({ item, onClick, delay = 0, progress }) {
   const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
+  const tilt = useLuxury3DTilt();
   const title = (lang === 'ar' ? item.titleAr : item.titleEn) || item.titleEn || item.slug;
   const [subbed, setSubbed] = useState(() => isAnimeEpisodeAlertEnabled(item.slug));
 
@@ -148,80 +208,135 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
   };
 
   return (
-    <article
-      className="wit-ep-card ep-tile reveal"
-      data-delay={delay % 5}
-      onClick={() => (onClick ? onClick(item) : navigate(`/watch/${item.slug}/${item.episode}`))}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && navigate(`/watch/${item.slug}/${item.episode}`)}
-    >
-      <div className="wit-ep-card__thumb ep-tile__thumb">
-        <Poster src={item.poster} alt={title} />
+    <div className="bx-3d-stage" data-delay={delay % 5}>
+      <article
+        ref={tilt.ref}
+        onMouseMove={tilt.onMouseMove}
+        onMouseLeave={tilt.onMouseLeave}
+        onTouchMove={tilt.onTouchMove}
+        onTouchEnd={tilt.onTouchEnd}
+        className="wit-ep-card bx-3d-card ep-tile reveal"
+        onClick={() => (onClick ? onClick(item) : navigate(`/watch/${item.slug}/${item.episode}`))}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && navigate(`/watch/${item.slug}/${item.episode}`)}
+      >
+        <div className="bx-3d-card__glare" aria-hidden="true" />
+        <div className="bx-3d-card__rim" aria-hidden="true" />
 
-        {/* WitAnime Episode Number Badge (Top Right / Bottom Right) */}
-        <div className="wit-ep-card__num ep-tile__num">
-          {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `${t('common.ep')} ${formatNumber(item.episode)}`}
-        </div>
+        <div className="wit-ep-card__thumb bx-3d-card__poster ep-tile__thumb">
+          <Poster src={item.poster} alt={title} cls="bx-3d-card__img" />
+          <div className="bx-3d-card__vignette" aria-hidden="true" />
 
-        {/* WitAnime FHD VIP Tag (Top Left) */}
-        <span className="wit-ep-card__vip">👑 FHD</span>
-
-        {/* Quick Alert Bell */}
-        <button
-          type="button"
-          className={`wit-bell-btn ${subbed ? 'active' : ''}`}
-          onClick={handleBellClick}
-          title={lang === 'ar' ? 'إشعارات الحلقات الجديدة' : 'Episode Notifications'}
-        >
-          {subbed ? '🔔' : '📲'}
-        </button>
-
-        <div className="wit-ep-card__play ep-tile__play">▶</div>
-
-        {progress != null && (
-          <div className="ep-tile__bar">
-            <div style={{ width: `${Math.min(100, progress * 100)}%` }} />
+          {/* Floating 3D Episode Number Badge */}
+          <div className="wit-ep-card__num ep-tile__num bx-3d-float-z2">
+            {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `${t('common.ep')} ${formatNumber(item.episode)}`}
           </div>
-        )}
-      </div>
 
-      <div className="wit-ep-card__body ep-tile__body">
-        <div className="wit-ep-card__title ep-tile__title" title={title}>
-          {title}
+          {/* Floating 3D FHD VIP Tag */}
+          <span className="wit-ep-card__vip bx-3d-float-z2">👑 FHD</span>
+
+          {/* Floating 3D Quick Alert Bell */}
+          <button
+            type="button"
+            className={`wit-bell-btn bx-3d-float-z2 ${subbed ? 'active' : ''}`}
+            onClick={handleBellClick}
+            title={lang === 'ar' ? 'تفعيل إشعارات الحلقات الجديدة على هاتفك/الكمبيوتر' : 'Enable Episode Alerts'}
+          >
+            {subbed ? '🔔' : '📲'}
+          </button>
+
+          {/* 3D Pop-Out Glass Play Orb */}
+          <div className="wit-anime-card__hover bx-3d-float-z3">
+            <span className="wit-play-circle bx-3d-orb">▶</span>
+          </div>
+
+          {progress != null && progress > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: '3px',
+                background: 'rgba(255,255,255,0.14)',
+                zIndex: 5
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(100, progress * 100)}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #f59e0b, #22d3ee)'
+                }}
+              />
+            </div>
+          )}
         </div>
-      </div>
-    </article>
+
+        <div className="wit-ep-card__body bx-3d-card__body ep-tile__body">
+          <h3 className="wit-ep-card__title ep-tile__title" title={title}>
+            {title}
+          </h3>
+        </div>
+      </article>
+    </div>
   );
 }
 
-/** Wide "continue watching" card with resume percent. */
-export function ContinueCard({ entry, onClick, delay = 0 }) {
+/**
+ * Continue Watching Card with 3D Glassy Tilt
+ */
+export function ContinueCard({ item, onRemove, delay = 0 }) {
   const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
-  const title = (lang === 'ar' ? entry.titleAr : entry.titleEn) || entry.titleEn || entry.slug;
+  const tilt = useLuxury3DTilt();
+  const title = (lang === 'ar' ? item.titleAr : item.titleEn) || item.titleEn || item.slug;
+  const pct = item.duration > 0 ? Math.min(1, item.position / item.duration) : 0;
 
   return (
-    <article
-      className="cont-card glass glass-hover reveal"
-      data-delay={delay % 5}
-      onClick={() => (onClick ? onClick(entry) : navigate(`/watch/${entry.slug}/${entry.episode}`))}
-      role="button"
-      tabIndex={0}
-    >
-      <div className="cont-card__poster">
-        <Poster src={entry.poster} alt={title} />
-        <div className="cont-card__play">▶</div>
-      </div>
-      <div className="cont-card__body">
-        <div className="cont-card__title">{title}</div>
-        <div className="cont-card__meta">
-          {t('watch.episodePicker', { n: formatNumber(entry.episode) })} · {t('mylist.progress', { percent: formatNumber(entry.percent ?? 0) })}
+    <div className="bx-3d-stage" data-delay={delay % 5}>
+      <article
+        ref={tilt.ref}
+        onMouseMove={tilt.onMouseMove}
+        onMouseLeave={tilt.onMouseLeave}
+        onTouchMove={tilt.onTouchMove}
+        onTouchEnd={tilt.onTouchEnd}
+        className="wit-ep-card bx-3d-card ep-tile reveal"
+        onClick={() => navigate(`/watch/${item.slug}/${item.episode}`)}
+        role="button"
+        tabIndex={0}
+      >
+        <div className="bx-3d-card__glare" aria-hidden="true" />
+        <div className="bx-3d-card__rim" aria-hidden="true" />
+        <div className="wit-ep-card__thumb bx-3d-card__poster ep-tile__thumb">
+          <Poster src={item.poster} alt={title} cls="bx-3d-card__img" />
+          <div className="bx-3d-card__vignette" aria-hidden="true" />
+          <div className="wit-ep-card__num ep-tile__num bx-3d-float-z2">
+            {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `${t('common.ep')} ${formatNumber(item.episode)}`}
+          </div>
+          {onRemove && (
+            <button
+              type="button"
+              className="wit-bell-btn bx-3d-float-z2"
+              onClick={(e) => { e.stopPropagation(); onRemove(item); }}
+              title={t('common.close')}
+            >
+              ✕
+            </button>
+          )}
+          <div className="wit-anime-card__hover bx-3d-float-z3">
+            <span className="wit-play-circle bx-3d-orb">▶</span>
+          </div>
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '4px', background: 'rgba(255,255,255,0.16)', zIndex: 5 }}>
+            <div style={{ width: `${Math.round(pct * 100)}%`, height: '100%', background: 'linear-gradient(90deg, #f59e0b, #22d3ee)' }} />
+          </div>
         </div>
-        <div className="anime-card__progress" style={{ marginBlockStart: '0.65rem' }}>
-          <div className="anime-card__progress-bar" style={{ width: `${Math.min(100, entry.percent ?? 0)}%` }} />
+        <div className="wit-ep-card__body bx-3d-card__body ep-tile__body">
+          <h3 className="wit-ep-card__title ep-tile__title" title={title}>{title}</h3>
         </div>
-      </div>
-    </article>
+      </article>
+    </div>
   );
 }
+
