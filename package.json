@@ -1,7 +1,7 @@
 {
   "name": "black-x",
   "version": "1.0.0",
-  "description": "BLACK X — Interactive Anime Tracker & Prediction Engine (bilingual EN/AR)",
+  "description": "BLACK X \\u2014 Interactive Anime Tracker & Prediction Engine (bilingual EN/AR)",
   "type": "module",
   "private": true,
   "scripts": {
@@ -13,7 +13,9 @@
     "start": "node server/src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "lab": "vite --config client/vite.config.js --open /zellige-3d-lab.html",
+    "check:ornaments": "node tools/ornament-node-smoke.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.2",
@@ -26,7 +28,8 @@
     "express": "^5.1.0",
     "firebase": "^13.0.0",
     "jsonwebtoken": "^9.0.2",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.4",

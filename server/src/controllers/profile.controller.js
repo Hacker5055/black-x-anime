@@ -5,13 +5,20 @@ import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { social, ensureSocialTables, levelFromMinutes, getLevelRank, db as socialSqlite } from '../lib/socialDb.js';
 
-/** PUT /api/profile/customize — body { bannerUrl?, themePreference?, frameStyle?, ornament? } */
+/**
+ * PUT /api/profile/customize — body
+ * { bannerUrl?, themePreference?, frameStyle?, ornament?, bannerStyle? }
+ *
+ * `frameStyle` / `ornament` / `bannerStyle` are preset ids resolved on the
+ * client by client/src/ornaments/core/ornaments.js — they are stored as opaque
+ * strings so new ornaments can ship without a migration.
+ */
 export async function customizeProfile(req, res) {
   try {
     const userId = getUserId(req);
     if (!userId) return fail(res, 401, 'Authentication required.');
 
-    const { bannerUrl, themePreference, frameStyle, ornament } = req.body || {};
+    const { bannerUrl, themePreference, frameStyle, ornament, bannerStyle } = req.body || {};
     const data = {};
 
     if (bannerUrl !== undefined) {
@@ -32,8 +39,11 @@ export async function customizeProfile(req, res) {
     if (ornament !== undefined) {
       data.ornament = String(ornament).trim();
     }
+    if (bannerStyle !== undefined) {
+      data.banner_style = String(bannerStyle).trim();
+    }
     if (Object.keys(data).length === 0) {
-      return fail(res, 400, 'Nothing to update: provide bannerUrl, themePreference, or frameStyle.');
+      return fail(res, 400, 'Nothing to update: provide bannerUrl, themePreference, frameStyle, ornament or bannerStyle.');
     }
 
         var socialFallback = () => {
@@ -95,6 +105,7 @@ export async function getProfile(req, res) {
           themePreference: prof.theme_preference ?? row.theme_preference ?? null,
           frameStyle: prof.frame_style ?? row.frame_style ?? 'default',
           ornament: prof.ornament ?? row.ornament ?? 'none',
+          bannerStyle: prof.banner_style ?? row.banner_style ?? 'off',
           vipStatus: refInfo.isVipUnlocked ? 'VIP Basic' : (row.vip_status || null),
           referralCode: `BLACKX-${(row.username || 'USER').toUpperCase()}`,
           totalWatchTimeMin: st?.total_watch_time_min || 0,
@@ -140,6 +151,9 @@ export async function getProfile(req, res) {
         photoUrl: user.photo_url ?? null,
         bannerUrl: user.banner_url ?? null,
         themePreference: user.theme_preference ?? null,
+        frameStyle: user.frame_style ?? 'default',
+        ornament: user.ornament ?? 'none',
+        bannerStyle: user.banner_style ?? 'off',
         totalWatchTimeMin: user.stats?.total_watch_time_min || 0,
         level: levelFromMinutes(total),
         followers, following,

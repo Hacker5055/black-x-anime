@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BLACK X · Zellige 3D — محرّك الزخارف والإطارات ثلاثية الأبعاد</title>
+<meta name="description" content="Live 3D avatar frames and profile banners: Three.js transmission glass, UnrealBloom, mouse-follow gyro, orbiting particles — plus an engineered Midjourney / Runway prompt kit." />
+<style>
+  /* ============================================================
+     BLACK X · Zellige 3D lab — standalone (no bundler, no npm)
+     Palette + glass language mirrors client/src/styles/app.css
+     ============================================================ */
+  :root {
+    --bg-0:#06070d; --bg-1:#0a0d18;
+    --ink:#eef1ff; --ink-dim:#9aa3c7; --ink-faint:#5d678c;
+    --cyan:#22d3ee; --violet:#8b5cf6; --magenta:#f472b6; --amber:#fbbf24;
+    --glass:linear-gradient(135deg, rgba(255,255,255,.075), rgba(255,255,255,.022) 45%, rgba(255,255,255,.05));
+    --line:rgba(255,255,255,.1); --line-hi:rgba(255,255,255,.22);
+    --r-lg:22px; --r-md:16px; --r-sm:12px;
+    --ease:cubic-bezier(.22,1,.36,1);
+    --shadow:0 24px 60px -28px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.12);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{
+    background:
+      radial-gradient(1100px 620px at 82% -8%, rgba(139,92,246,.18), transparent 60%),
+      radial-gradient(900px 560px at 8% 104%, rgba(34,211,238,.14), transparent 55%),
+      linear-gradient(180deg,var(--bg-1),var(--bg-0) 55%);
+    background-attachment:fixed;
+    color:var(--ink);
+    font-family:'Space Grotesk','Cairo','Segoe UI',system-ui,-apple-system,sans-serif;
+    font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+  html[dir="rtl"] body{font-family:'Cairo','Space Grotesk',system-ui,sans-serif}
+  h1,h2,h3,h4{margin:0 0 .35em;line-height:1.18;font-weight:800;letter-spacing:-.02em}
+  html[dir="rtl"] h1,html[dir="rtl"] h2,html[dir="rtl"] h3{letter-spacing:0}
+  p{margin:0 0 .8em}
+  button{font:inherit;color:inherit;cursor:pointer}
+  ::selection{background:rgba(34,211,238,.32)}
+  code,pre,textarea{font-family:ui-monospace,'SFMono-Regular','Cascadia Code',Menlo,Consolas,monospace}
+
+  .wrap{max-width:1500px;margin:0 auto;padding:clamp(18px,3vw,40px) clamp(14px,2.5vw,30px) 80px}
+  .glass{background:var(--glass);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3)}
+
+  /* ---------------- header ---------------- */
+  header.top{display:flex;flex-wrap:wrap;gap:1.2rem;align-items:center;justify-content:space-between;margin-bottom:1.6rem}
+  .brand{display:flex;align-items:center;gap:.85rem}
+  .brand__mark{width:46px;height:46px;border-radius:15px;background:linear-gradient(140deg,#101527,#05070f);border:1px solid var(--line-hi);display:grid;place-items:center;box-shadow:0 0 26px rgba(34,211,238,.25),inset 0 1px 0 rgba(255,255,255,.16)}
+  .brand__mark span{font-weight:900;font-size:1.15rem;background:linear-gradient(120deg,var(--cyan),var(--violet) 55%,var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand h1{font-size:clamp(1.15rem,2.4vw,1.7rem)}
+  .brand p{color:var(--ink-dim);font-size:.86rem;margin:0}
+  .top__actions{display:flex;gap:.5rem;flex-wrap:wrap}
+
+  .btn{border:1px solid var(--line);background:rgba(255,255,255,.045);border-radius:99px;padding:.55rem 1rem;font-weight:700;font-size:.84rem;transition:transform .18s var(--ease),background .2s,border-color .2s,box-shadow .2s}
+  .btn:hover{background:rgba(255,255,255,.1);border-color:var(--line-hi);transform:translateY(-1px)}
+  .btn--on{background:linear-gradient(135deg,rgba(34,211,238,.24),rgba(139,92,246,.26));border-color:var(--cyan);box-shadow:0 0 22px rgba(34,211,238,.3)}
+  .btn--primary{background:linear-gradient(135deg,var(--cyan),var(--violet));border-color:transparent;color:#04060d}
+  .btn--primary:hover{box-shadow:0 12px 30px -10px rgba(34,211,238,.6)}
+
+  /* ---------------- tabs ---------------- */
+  .tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1.1rem}
+  .tab{padding:.6rem 1.15rem;border-radius:14px 14px 4px 4px;border:1px solid transparent;background:transparent;color:var(--ink-dim);font-weight:800;font-size:.9rem}
+  .tab[aria-selected="true"]{color:#fff;background:var(--glass);border-color:var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+  .panel[hidden]{display:none}
+
+  /* ---------------- lab layout ---------------- */
+  .lab{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(310px,.92fr);gap:1.1rem}
+  @media (max-width:1080px){.lab{grid-template-columns:1fr}}
+  .stage{position:relative;overflow:hidden;border-radius:var(--r-lg);min-height:440px;display:grid;place-items:center}
+  .stage[data-mode="banner"]{min-height:300px}
+  .stage__bg{position:absolute;inset:0;transition:background .7s ease}
+  .stage__grid{position:absolute;inset:0;opacity:.4;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:46px 46px;mask-image:radial-gradient(closest-side,#000 30%,transparent 100%)}
+  #stageCanvas{position:relative;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #stageCanvas:active{cursor:grabbing}
+  .stage__avatar{position:absolute;left:50%;top:50%;translate:-50% -50%;width:132px;height:132px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.16);box-shadow:0 18px 40px -18px #000,inset 0 0 0 1px rgba(255,255,255,.08);display:grid;place-items:center;font-weight:900;font-size:2.6rem;background:linear-gradient(140deg,#22d3ee,#8b5cf6);transition:width .35s var(--ease),height .35s var(--ease),opacity .3s}
+  .stage[data-mode="banner"] .stage__avatar,.stage[data-clip="off"] .stage__avatar{opacity:0}
+  .stage__hud{position:absolute;inset-inline:12px;bottom:10px;display:flex;gap:.4rem;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;pointer-events:none}
+  .hud__chips{display:flex;gap:.35rem;flex-wrap:wrap;pointer-events:auto}
+  .chip{font-size:.72rem;font-weight:700;padding:.22rem .6rem;border-radius:99px;background:rgba(6,7,13,.62);border:1px solid var(--line);color:var(--ink-dim);backdrop-filter:blur(8px)}
+  .chip b{color:var(--ink)}
+  .stage__tools{display:flex;gap:.35rem;pointer-events:auto}
+  .mini{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(6,7,13,.62);border:1px solid var(--line);color:var(--ink);font-size:.85rem;padding:0}
+  .mini:hover{border-color:var(--cyan)}
+  .stage__label{position:absolute;top:12px;inset-inline-start:14px;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);font-weight:800}
+
+  /* ---------------- controls ---------------- */
+  .panel{padding:1.05rem 1.1rem;max-height:min(78vh,940px);overflow:auto;scrollbar-width:thin}
+  .panel h3{font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin:1.3rem 0 .55rem;font-weight:800}
+  .panel h3:first-child{margin-top:0}
+  .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:.45rem}
+  .preset{display:flex;gap:.5rem;align-items:center;text-align:start;padding:.5rem .55rem;border-radius:var(--r-sm);border:1px solid var(--line);background:rgba(255,255,255,.03);transition:.2s var(--ease)}
+  .preset:hover{background:rgba(255,255,255,.075);transform:translateY(-2px)}
+  .preset[aria-pressed="true"]{border-color:var(--pc,var(--cyan));background:rgba(255,255,255,.09);box-shadow:0 0 20px color-mix(in srgb,var(--pc,#22d3ee) 40%,transparent)}
+  .preset i{font-style:normal;font-size:1.05rem;line-height:1}
+  .preset div{min-width:0}
+  .preset b{display:block;font-size:.79rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .preset small{color:var(--ink-faint);font-size:.68rem}
+  .row{display:flex;align-items:center;gap:.6rem;margin-bottom:.62rem}
+  .row label{flex:1;font-size:.83rem;color:var(--ink-dim);font-weight:600}
+  .row output{font-size:.76rem;font-weight:800;color:var(--cyan);min-width:44px;text-align:end;font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1.35;-webkit-appearance:none;appearance:none;height:4px;border-radius:99px;background:linear-gradient(90deg,var(--cyan) var(--p,50%),rgba(255,255,255,.13) var(--p,50%));outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#eaf9ff;border:2px solid var(--cyan);box-shadow:0 0 12px rgba(34,211,238,.8);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:#eaf9ff;border:2px solid var(--cyan);cursor:pointer}
+  .seg{display:flex;gap:.3rem;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:99px;padding:.22rem}
+  .seg button{border:0;background:transparent;color:var(--ink-dim);border-radius:99px;padding:.32rem .72rem;font-size:.76rem;font-weight:800}
+  .seg button[aria-pressed="true"]{background:linear-gradient(135deg,rgba(34,211,238,.3),rgba(139,92,246,.3));color:#fff}
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.83rem;color:var(--ink-dim);font-weight:600;margin-bottom:.5rem}
+  .toggle{position:relative;width:40px;height:22px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid var(--line);transition:.22s;flex:0 0 auto}
+  .toggle::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:16px;height:16px;border-radius:50%;background:var(--ink);transition:.22s var(--ease)}
+  html[dir="rtl"] .toggle::after{translate:0 0}
+  .toggle[aria-pressed="true"]{background:linear-gradient(90deg,var(--cyan),var(--violet));border-color:transparent}
+  .toggle[aria-pressed="true"]::after{background:#04060d;translate:calc(100% * var(--flip,1) * 1.15) 0}
+  html[dir="rtl"] .toggle[aria-pressed="true"]::after{translate:-18.4px 0}
+  html[dir="ltr"] .toggle[aria-pressed="true"]::after{translate:18.4px 0}
+  .hint{font-size:.74rem;color:var(--ink-faint);line-height:1.5}
+  hr.sep{border:0;border-top:1px solid var(--line);margin:1.1rem 0}
+
+  /* ---------------- filmstrip ---------------- */
+  .strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem;margin-top:1.1rem}
+  .card{position:relative;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--line);background:#05070f;aspect-ratio:1;padding:0;text-align:start;transition:.28s var(--ease)}
+  .card:hover{transform:translateY(-4px);border-color:var(--line-hi);box-shadow:0 20px 40px -22px #000}
+  .card[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 0 26px rgba(34,211,238,.34)}
+  .card canvas{position:absolute;inset:0;width:100%;height:100%}
+  .card__bg{position:absolute;inset:0}
+  .card__ava{position:absolute;left:50%;top:50%;translate:-50% -50%;width:44%;height:44%;border-radius:50%;overflow:hidden;border:1.5px solid rgba(255,255,255,.2);display:grid;place-items:center;font-weight:900;color:#fff;font-size:1.1rem}
+  .card__meta{position:absolute;inset-inline:0;bottom:0;padding:.5rem .6rem;background:linear-gradient(transparent,rgba(3,4,9,.92));display:flex;align-items:center;gap:.35rem}
+  .card__meta b{font-size:.78rem}
+  .card__meta i{font-style:normal}
+
+  /* ---------------- prompts ---------------- */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:1rem}
+  @media (max-width:640px){.pgrid{grid-template-columns:1fr}}
+  .prompt{padding:1rem 1.05rem 1.1rem;border-radius:var(--r-lg);display:flex;flex-direction:column;gap:.6rem}
+  .prompt__head{display:flex;justify-content:space-between;gap:.7rem;align-items:flex-start}
+  .prompt__head b{font-size:.98rem}
+  .prompt__tool{font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.28);border-radius:8px;padding:.16rem .5rem;white-space:nowrap}
+  pre.code{margin:0;padding:.85rem .95rem;border-radius:var(--r-sm);background:rgba(2,4,10,.72);border:1px solid var(--line);color:#d6e4ff;font-size:.79rem;line-height:1.62;white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto}
+  .prompt__foot{display:flex;justify-content:space-between;align-items:center;gap:.7rem}
+  .note{font-size:.75rem;color:var(--ink-faint);flex:1}
+  .copy{border:1px solid var(--line-hi);background:rgba(255,255,255,.06);border-radius:10px;padding:.34rem .8rem;font-size:.76rem;font-weight:800;white-space:nowrap}
+  .copy:hover{border-color:var(--cyan);color:var(--cyan)}
+  .copy[data-done="1"]{background:rgba(74,222,128,.18);border-color:rgba(74,222,128,.5);color:#8ff0b4}
+
+  /* ---------------- docs ---------------- */
+  .docs{padding:clamp(1.1rem,2.4vw,1.9rem)}
+  .docs h2{font-size:1.3rem}
+  .docs h4{margin:1.5rem 0 .45rem;font-size:.95rem;color:var(--cyan)}
+  .docs ol,.docs ul{padding-inline-start:1.25rem;margin:.2rem 0 .9rem}
+  .docs li{margin-bottom:.35rem;color:var(--ink-dim)}
+  .docs code{background:rgba(2,4,10,.7);border:1px solid var(--line);border-radius:6px;padding:.06rem .34rem;font-size:.82em;color:#a5f3fc}
+  .docs pre{background:rgba(2,4,10,.72);border:1px solid var(--line);border-radius:var(--r-sm);padding:.85rem;overflow:auto;font-size:.79rem;line-height:1.6}
+  table{width:100%;border-collapse:collapse;font-size:.8rem;margin:.4rem 0 1rem}
+  th,td{border-bottom:1px solid var(--line);padding:.42rem .5rem;text-align:start}
+  th{color:var(--ink-faint);font-weight:800;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  td b{color:var(--ink)}
+  .toast{position:fixed;bottom:22px;left:50%;translate:-50% 0;background:rgba(6,8,16,.94);border:1px solid var(--line-hi);border-radius:99px;padding:.6rem 1.15rem;font-size:.84rem;font-weight:700;box-shadow:0 20px 50px -18px #000;opacity:0;transition:.3s var(--ease);pointer-events:none;z-index:9}
+  .toast[data-show="1"]{opacity:1;translate:-50% -8px}
+  .fallback{display:none;font-size:.85rem;color:var(--amber)}
+  /* CSS poster mode (no WebGL): a live 2D stand-in for every ornament */
+  .avatar-frame{position:absolute;border-radius:50%;pointer-events:none}
+  .avatar-frame--fallback{inset:-6%}
+  .avatar-frame--royal-flame{border:3px solid #f97316;box-shadow:0 0 15px #f97316,inset 0 0 10px #ef4444;animation:flamePulse 2s infinite alternate}
+  .avatar-frame--cyber-neon{border:3px solid #22d3ee;box-shadow:0 0 18px #22d3ee,inset 0 0 8px #06b6d4;animation:cyberGlitch 3s infinite}
+  .avatar-frame--shadow-monarch{border:3px solid #8b5cf6;box-shadow:0 0 20px #8b5cf6,0 0 35px #6d28d9;animation:shadowAura 2.5s infinite alternate}
+  .avatar-frame--imperial-gold{border:3px solid #eab308;box-shadow:0 0 16px #eab308,inset 0 0 10px #ca8a04;animation:goldShine 3.4s infinite}
+  .avatar-frame--sakura-blossom{border:3px solid #f472b6;box-shadow:0 0 18px #f472b6,inset 0 0 8px #ec4899;animation:sakuraFloat 6s infinite}
+  .avatar-frame--prismatic-diamond{border:3px solid #38bdf8;box-shadow:0 0 20px #38bdf8,0 0 30px #c084fc;animation:prismShift 7s infinite linear}
+  .avatar-frame--aurora-veil{border:3px solid #34d399;box-shadow:0 0 18px #34d399,inset 0 0 12px #67e8f9;animation:auroraWave 4s infinite alternate}
+  .avatar-frame--celestial-void{border:3px solid #a855f7;box-shadow:0 0 20px #a855f7,inset 0 0 12px #818cf8;animation:celestialDrift 9s infinite linear}
+  .avatar-frame--dragon-ascension{border:3px solid #10b981;box-shadow:0 0 18px #10b981,inset 0 0 10px #34d399;animation:dragonAscend 5s infinite ease-in-out}
+  @keyframes celestialDrift{0%{transform:rotate(0)}50%{transform:rotate(180deg) scale(1.02)}100%{transform:rotate(360deg)}}
+  @keyframes dragonAscend{0%,100%{box-shadow:0 0 14px #10b981,inset 0 0 8px #fbbf24;border-color:#10b981}35%{box-shadow:0 0 26px #34d399,inset 0 0 14px #a7f3d0;border-color:#6ee7b7}70%{box-shadow:0 0 20px #fbbf24,inset 0 0 10px #10b981;border-color:#a7f3d0}}
+  @keyframes flamePulse{0%{box-shadow:0 0 10px #f97316,0 0 20px #ef4444}100%{box-shadow:0 0 22px #fb923c,0 0 35px #dc2626}}
+  @keyframes cyberGlitch{0%,100%{border-color:#22d3ee;box-shadow:0 0 15px #22d3ee}50%{border-color:#f43f5e;box-shadow:0 0 22px #f43f5e}}
+  @keyframes shadowAura{0%{transform:scale(1);box-shadow:0 0 14px #8b5cf6}100%{transform:scale(1.04);box-shadow:0 0 26px #a855f7,0 0 40px #7c3aed}}
+  @keyframes goldShine{0%,100%{box-shadow:0 0 12px #eab308,inset 0 0 8px #ca8a04}50%{box-shadow:0 0 26px #fde047,inset 0 0 14px #facc15}}
+  @keyframes sakuraFloat{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.02) rotate(2deg)}}
+  @keyframes prismShift{0%,100%{border-color:#38bdf8}33%{border-color:#a78bfa}66%{border-color:#f0abfc}}
+  @keyframes auroraWave{0%{border-color:#34d399}50%{border-color:#5eead4}100%{border-color:#818cf8}}
+  .stage--css .stage__bg{filter:saturate(1.15)}
+  .footer{margin-top:2.2rem;text-align:center;color:var(--ink-faint);font-size:.78rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="brand__mark"><span>X</span></div>
+      <div>
+        <h1 data-en="Zellige 3D — Live profile ornaments engine" data-ar="زellige 3D — محرّك الزخارف الحيّة للملفات الشخصية">زellige 3D — محرّك الزخارف الحيّة للملفات الشخصية</h1>
+        <p data-en="Three.js transmission glass · UnrealBloom · mouse-follow gyro · + engineered Midjourney/Runway kit"
+           data-ar="زجاج Transmission في Three.js · توهج Bloom · تفاعل مع الماوس · + حزمة برومبتات مُهندَسة لـ Midjourney/Runway">زجاج Transmission في Three.js · توهج Bloom · تفاعل مع الماوس · + حزمة برومبتات مُهندَسة لـ Midjourney/Runway</p>
+      </div>
+    </div>
+    <div class="top__actions">
+      <button class="btn" id="langBtn" title="EN / ع">English</button>
+      <button class="btn btn--primary" id="copyCodeBtn" data-en="Copy component code" data-ar="انسخ كود المكوّن">انسخ كود المكوّن</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t-lab" aria-selected="true" data-panel="lab" data-en="① المختبر الحيّ" data-ar="① المختبر الحيّ">① المختبر الحيّ</button>
+    <button class="tab" role="tab" id="t-prompts" aria-selected="false" data-panel="prompts" data-en="② Prompt kit" data-ar="② حزمة البرومبتات">② حزمة البرومبتات</button>
+    <button class="tab" role="tab" id="t-docs" aria-selected="false" data-panel="docs" data-en="③ Docs" data-ar="③ التوثيق">③ التوثيق</button>
+  </nav>
+
+  <!-- ============================ TAB 1 · LAB ============================ -->
+  <section class="panel" id="panel-lab">
+    <div class="lab">
+      <div>
+        <div class="glass stage" id="stage" data-mode="frame">
+          <div class="stage__bg" id="stageBg"></div>
+          <div class="stage__grid"></div>
+          <div class="stage__label" id="stageLabel">royal-flame</div>
+          <canvas id="stageCanvas"></canvas>
+          <div class="stage__avatar" id="stageAvatar">X</div>
+          <div class="stage__hud">
+            <div class="hud__chips">
+              <span class="chip" data-en="fps" data-ar="إطار"><b id="hudFps">—</b></span>
+              <span class="chip">tris <b id="hudTris">—</b></span>
+              <span class="chip">calls <b id="hudCalls">—</b></span>
+              <span class="chip">dpr <b id="hudDpr">—</b></span>
+              <span class="chip" id="hudQual">cinematic</span>
+            </div>
+            <div class="stage__tools">
+              <button class="mini" id="btnPulse" title="Burst">✦</button>
+              <button class="mini" id="btnSnap" title="Export PNG">⤓</button>
+              <button class="mini" id="btnReset" title="Reset view">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="fallback" id="fallback" style="margin-top:.7rem">
+          <span data-en="⚠ WebGL unavailable — showing the 2D CSS fallback frames instead."
+                  data-ar="⚠ تقنية WebGL غير متاحة — نُظهر الإطارات الورقية (CSS) كبديل.">⚠ WebGL غير متاح — نعرض البدائل CSS.</span>
+        </div>
+        <p class="hint" style="margin-top:.6rem"
+           data-en="Drag to spin · wheel to wind up · hover to tilt · click for a light burst. Every knob below is a live engine param — the same object you'd pass to React."
+           data-ar="اسحب للتدوير · العجلة للشحن · المرور فوق للحركة الجيروسكوبية · النقر لنبضة ضوء. كل مؤشّر أسفل هو باراميتر حقيقي في المحرّك — نفس الكائن الذي يمرَّر لـ React.">
+          اسحب للتدوير · العجلة للشحن · المرور فوق للحركة الجيروسكوبية · النقر لنبضة ضوء.
+        </p>
+
+        <div class="strip" id="strip"></div>
+      </div>
+
+      <aside class="glass panel">
+        <h3 data-en="1 · Ornament preset" data-ar="١ · اختيار الزخرفة">١ · اختيار الزخرفة</h3>
+        <div class="presets" id="frameList"></div>
+
+        <h3 data-en="2 · Banner preset (3D)" data-ar="٢ · البانرات ثلاثية الأبعاد">٢ · البانرات ثلاثية الأبعاد</h3>
+        <div class="presets" id="bannerList"></div>
+
+        <h3 data-en="3 · Interaction" data-ar="٣ · التفاعل">٣ · التفاعل</h3>
+        <div class="row"><label data-en="Gyro tilt" data-ar="ميل الجيروسكوب">ميل الجيروسكوب</label><input type="range" id="sTilt" min="0" max="0.6" step="0.01" value="0.26"><output id="oTilt">0.26</output></div>
+        <div class="row"><label data-en="Idle spin rad/s" data-ar="دوران خامل راديان/ث">دوران خامل</label><input type="range" id="sSpin" min="0" max="0.4" step="0.005" value="0.06"><output id="oSpin">0.060</output></div>
+        <div class="row"><label data-en="Scroll wind-up" data-ar="قوة عجلة الماوس">عجلة الماوس</label><input type="range" id="sScroll" min="0" max="3" step="0.05" value="1.2"><output id="oScroll">1.20</output></div>
+
+        <h3 data-en="4 · Material" data-ar="٤ · المادة الزجاجية">٤ · المادة الزجاجية</h3>
+        <div class="row"><label>Transmission</label><input type="range" id="sTrans" min="0" max="1" step="0.01" value="0.9"><output id="oTrans">0.90</output></div>
+        <div class="row"><label>Roughness</label><input type="range" id="sRough" min="0.01" max="0.6" step="0.01" value="0.08"><output id="oRough">0.08</output></div>
+        <div class="row"><label>IOR</label><input type="range" id="sIor" min="1" max="2.4" step="0.01" value="1.52"><output id="oIor">1.52</output></div>
+        <div class="row"><label>Emissive</label><input type="range" id="sEmis" min="0" max="6" step="0.05" value="2.4"><output id="oEmis">2.40</output></div>
+        <div class="row"><label data-en="Particles" data-ar="الجسيمات">الجسيمات</label><input type="range" id="sPart" min="0" max="2.5" step="0.05" value="1"><output id="oPart">1.00</output></div>
+
+        <h3 data-en="5 · Bloom & quality" data-ar="٥ · التوهج والجودة">٥ · التوهج والجودة</h3>
+        <div class="row"><label>Strength</label><input type="range" id="sBloomS" min="0" max="2" step="0.01" value="0.78"><output id="oBloomS">0.78</output></div>
+        <div class="row"><label>Radius</label><input type="range" id="sBloomR" min="0" max="1.2" step="0.01" value="0.72"><output id="oBloomR">0.72</output></div>
+        <div class="row"><label>Threshold</label><input type="range" id="sBloomT" min="0" max="0.9" step="0.01" value="0.42"><output id="oBloomT">0.42</output></div>
+        <div class="row">
+          <label data-en="Quality tier" data-ar="مستوى الجودة">مستوى الجودة</label>
+          <div class="seg" id="qualSeg">
+            <button data-q="cinematic" aria-pressed="true">Cine</button>
+            <button data-q="balanced" aria-pressed="false">Bal</button>
+            <button data-q="lite" aria-pressed="false">Lite</button>
+          </div>
+        </div>
+        <hr class="sep" />
+        <div class="switch"><span data-en="Bloom post-processing" data-ar="معالجة التوهج Bloom">معالجة التوهج</span><button class="toggle" id="tgBloom" aria-pressed="true"></button></div>
+        <div class="switch"><span data-en="Glass transmission pass" data-ar="طبقة انكسار الزجاج">طبقة الانكسار</span><button class="toggle" id="tgTrans" aria-pressed="true"></button></div>
+        <div class="switch"><span data-en="Clip rings over avatar" data-ar="قصّ الحلقات فوق الصورة">قصّ الحلقات فوق الصورة</span><button class="toggle" id="tgClip" aria-pressed="true"></button></div>
+        <div class="switch"><span data-en="Auto-rotate" data-ar="الدوران التلقائي">الدوران التلقائي</span><button class="toggle" id="tgSpin" aria-pressed="true"></button></div>
+        <div class="switch"><span data-en="Avatar image" data-ar="صورة الأفاتار (رابط)">صورة الأفاتار</span><button class="toggle" id="tgImg" aria-pressed="false"></button></div>
+        <input type="url" id="avatarUrl" placeholder="https://…/avatar.jpg" style="width:100%;margin-top:.35rem;background:rgba(2,4,10,.6);border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem;font-size:.78rem;display:none" />
+        <p class="hint" data-en="TIP · auto-degrade is armed: 3 seconds under 32 fps and the engine drops to the next tier by itself."
+              data-ar="تلميح · التنزيل التلقائي مُفعّل: أقل من 32 إطار/ث لثلاث ثوانٍ متتالية ويُنزل المحرّك الجودة درجةً وحده.">تلميح · التنزيل التلقائي مُفعّل.</p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============================ TAB 2 · PROMPTS ============================ -->
+  <section class="panel" id="panel-prompts" hidden>
+    <div class="glass" style="padding:1.1rem 1.2rem;margin-bottom:1rem">
+      <h2 style="font-size:1.05rem" data-en="② Engineered AI prompt kit — copy-ready" data-ar="② حزمة البرومبتات المُهندَسة — جاهزة للنسخ">② حزمة البرومبتات المُهندَسة — جاهزة للنسخ</h2>
+      <p class="hint" data-en="Rewritten from your guide: locked pure-black plates, web-composable lighting, seamlessness maths for loops, and the ffmpeg/alpha pipeline. Midjourney has no real alpha — the kit gives you both the `screen` route and the chroma-key route."
+               data-ar="أُعيدت صياغتها من دليلك: تثبيت الخلفية السوداء الصرفة، إضاءة قابلة للدمج في الويب، حسابات «اللوب بلا قطع»، ومسار ألفا/ffmpeg. Midjourney لا يُخرج شفافية حقيقية — الحزمة تعطيك مسار screen ومسار chroma-key معًا.">
+        أُعيدت صياغتها من دليلك: تثبيت الخلفية، إضاءة قابلة للدمج، وحسابات اللوب بلا قطع.
+      </p>
+    </div>
+    <div class="pgrid" id="promptGrid"></div>
+  </section>
+
+  <!-- ============================ TAB 3 · DOCS ============================ -->
+  <section class="panel" id="panel-docs" hidden>
+    <div class="glass docs" id="docsBody"></div>
+  </section>
+
+  <div class="footer" data-en="BLACK X · Zellige 3D · one file, zero build step — engine source lives in client/src/ornaments/core/"
+       data-ar="BLACK X · زellige 3D · ملف واحد بلا أدوات بناء — كود المحرّك في client/src/ornaments/core/">
+    BLACK X · زellige 3D · المحرّك في client/src/ornaments/core/
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+/* ══════════════════════════════════════════════════════════════════════════
+   Loader — two resolution paths, ONE copy of three.js at a time:
+     1. served from the repo (npm three + Vite):  /node_modules/three/…
+     2. opened from anywhere else:                 unpkg CDN
+   The engine module uses bare `three` / `three/addons/` specifiers, which an
+   importmap resolves — so `npm install three` is optional for this demo.
+   ══════════════════════════════════════════════════════════════════════════ */
+const CORE = '/client/src/ornaments/core/';
+const CDN  = 'https://unpkg.com/three@0.180.0/';
+const LOCAL = { three: '/node_modules/three/build/three.module.js', 'three/addons/': '/node_modules/three/examples/jsm/' };
+const REMOTE = { three: CDN + 'build/three.module.js', 'three/addons/': CDN + 'examples/jsm/' };
+
+function writeImportMap(map) {
+  document.getElementById('three-map')?.remove();
+  const s = document.createElement('script');
+  s.type = 'importmap';
+  s.id = 'three-map';
+  s.textContent = JSON.stringify({ imports: map });
+  document.head.appendChild(s);
+}
+
+const webgl = (() => {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); }
+  catch { return false; }
+})();
+
+let engine = null;          // main stage engine
+let engineMod = null;
+let presets = {}, banners = {}, promptKit = [];
+
+writeImportMap(LOCAL);
+
+async function loadCore() {
+  let localErr;
+  try {
+    return await Promise.all([import(CORE + 'engine.js'), import(CORE + 'ornaments.js'), import(CORE + 'prompts.js')]);
+  } catch (err) {
+    localErr = err;                       // no local three (file opened standalone)
+  }
+  writeImportMap(REMOTE);                // → rewrite the map to the CDN and retry
+  window.__THREE_URL = CDN;
+  try {
+    return await Promise.all([import(CORE + 'engine.js'), import(CORE + 'ornaments.js'), import(CORE + 'prompts.js')]);
+  } catch (err) {
+    console.warn('[zellige] CDN load failed after local failure', err);
+    // last resort: data-only modules (they import nothing), so the lab still
+    // renders its CSS poster gallery + the full prompt kit
+    const orn = await import(CORE + 'ornaments.js');
+    const kit = await import(CORE + 'prompts.js');
+    return [null, orn, kit, localErr];
+  }
+}
+
+async function boot() {
+  try {
+    const [eng, orn, kit, err] = await loadCore();
+    window.__FALLBACK = orn.CSS_FALLBACK;
+    window.__DETECT = orn.detectQuality;
+    if (err) console.warn('[zellige] three.js unavailable —', err.message);
+    engineMod = eng || null;
+    presets = orn.ORNAMENT_PRESETS; banners = orn.BANNER_PRESETS;
+    promptKit = kit.PROMPT_BLOCKS; window.__PROMPT_GROUP = kit.PROMPT_GROUPS;
+    window.__THREE_URL = window.__THREE_URL || CDN;
+    if (!eng || !webgl) { document.getElementById('fallback').style.display = 'block'; init(false); return; }
+    init(true);
+  } catch (err) {
+    console.warn('[zellige] could not load the engine →', err);
+    document.getElementById('fallback').style.display = 'block';
+    init(false);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════ UI ══════ */
+const $ = (s) => document.querySelector(s);
+const state = {
+  mode: 'frame',
+  ornament: 'royal-flame',
+  quality: 'cinematic',            // overwritten by detectQuality() in init()
+  bloom: true,
+  transmission: true,
+  clip: 'over',
+  tilt: 0.26, spin: 0.06, scroll: 1.2,
+  glass: { transmission: 0.9, roughness: 0.08, ior: 1.52, emissive: 2.4 },
+  particleSpeed: 1,
+  bloomK: { strength: 0.78, radius: 0.72, threshold: 0.42 },
+  autoRotate: true,
+  avatarSrc: null,
+  lang: 'ar'
+};
+
+const minis = [];
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.dataset.show = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => (el.dataset.show = '0'), 1800);
+}
+
+function paintFallbackStage() {
+  const p = currentPreset();
+  if (!p) return;
+  $('#stageBg').style.background = p.background || '#05070d';
+  $('#stageLabel').textContent = p.id + ' · css';
+  const ava = $('#stageAvatar');
+  ava.style.width = state.mode === 'banner' ? '0px' : '132px';
+  ava.style.height = state.mode === 'banner' ? '0px' : '132px';
+}
+
+function currentPreset() {
+  const src = state.mode === 'banner' ? banners : presets;
+  return src[state.ornament] || Object.values(src)[0] || null;
+}
+
+function buildLists() {
+  if (!presets || !banners) { presets = {}; banners = {}; }
+  const mk = (obj, group) => Object.values(obj).map((p) => `
+    <button class="preset" data-id="${p.id}" data-group="${group}" aria-pressed="${p.id === state.ornament}" style="--pc:${p.colors?.primary || '#22d3ee'}">
+      <i>${p.icon}</i>
+      <div><b data-en="${p.labelEn}" data-ar="${p.labelAr}">${state.lang === 'ar' ? p.labelAr : p.labelEn}</b>
+      <small>${p.id}</small></div>
+    </button>`).join('');
+  $('#frameList').innerHTML = mk(presets, 'frame');
+  $('#bannerList').innerHTML = mk(banners, 'banner');
+  document.querySelectorAll('.preset').forEach((b) => b.addEventListener('click', () => select(b.dataset.id, b.dataset.group)));
+}
+
+function select(id, group) {
+  state.mode = group;
+  state.ornament = id;
+  const p = currentPreset();
+  document.querySelectorAll('.preset').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b.dataset.id === id && b.dataset.group === group)));
+  document.querySelectorAll('.card').forEach((c) =>
+    c.setAttribute('aria-pressed', String(c.dataset.id === id && c.dataset.group === group)));
+  if (p) {
+    $('#stageBg').style.background = p.background || '#05070d';
+    $('#stageLabel').textContent = id;
+    state.bloomK = { strength: 0.7, radius: 0.7, threshold: 0.35, ...(p.bloom || {}) };
+    state.tilt = p.tilt ?? state.tilt;
+    state.scroll = p.scrollRotation ?? state.scroll;
+    state.spin = p.rig?.spin ?? state.spin;
+    setSlider('sTilt', state.tilt);
+    setSlider('sScroll', state.scroll);
+    setSlider('sSpin', state.spin);
+    setSlider('sBloomS', state.bloomK.strength);
+    setSlider('sBloomR', state.bloomK.radius);
+    setSlider('sBloomT', state.bloomK.threshold);
+  }
+  const stage = $('#stage');
+  stage.dataset.mode = group;
+  stage.style.height = group === 'banner' ? 'clamp(180px, 30vh, 300px)' : 'clamp(420px, 56vh, 560px)';
+  mount();
+}
+
+function setSlider(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = v;
+  el.dispatchEvent(new Event('input'));
+}
+
+/* ---------------------------------------------------------------- mount */
+async function mount() {
+  if (!engineMod) { paintFallbackStage(); return; }
+  engine?.dispose();
+  engine = null;
+  const p = currentPreset();
+  if (!p) return;
+  const { mountOrnament } = engineMod;
+  engine = await mountOrnament({
+    canvas: $('#stageCanvas'),
+    container: $('#stage'),
+    mode: state.mode,
+    ornament: state.ornament,
+    quality: state.quality,
+    interactive: true,
+    pointerMode: 'block',        // drag-to-spin + wheel wind-up + click burst
+    reduceMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    clip: state.clip,
+    avatarSrc: state.avatarSrc,
+    avatarLabel: ($('#stageAvatar').textContent || 'X').trim(),
+    avatarColor: p.colors?.primary || '#22d3ee',
+    overrides: { tilt: state.tilt, scrollRotation: state.scroll, rig: { spin: state.spin } },
+    bloomStrength: state.bloom ? state.bloomK.strength : 0,
+    bloomRadius: state.bloomK.radius,
+    bloomThreshold: state.bloomK.threshold,
+    transmission: state.transmission,
+    glassTransmission: state.glass.transmission,
+    glassRoughness: state.glass.roughness,
+    glassIor: state.glass.ior,
+    emissive: state.glass.emissive,
+    particleSpeed: state.particleSpeed,
+    autoRotate: state.autoRotate,
+    onStats: ({ fps, tris, calls, dpr }) => {
+      $('#hudFps').textContent = fps.toFixed(0);
+      $('#hudTris').textContent = tris > 999 ? (tris / 1000).toFixed(1) + 'k' : tris;
+      $('#hudCalls').textContent = calls;
+      $('#hudDpr').textContent = dpr.toFixed(2);
+    },
+    onDegrade: () => {
+      const order = ['cinematic', 'balanced', 'lite'];
+      const next = order[Math.min(order.indexOf(state.quality) + 1, order.length - 1)];
+      if (next !== state.quality) { state.quality = next; syncQuality(); toast(state.lang === 'ar' ? 'تنزيل الجودة تلقائيًا → ' + next : 'Auto-degraded quality → ' + next); }
+    }
+  });
+  engine?.pulse?.(0.6);
+}
+
+function syncQuality() {
+  document.querySelectorAll('#qualSeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.q === state.quality)));
+  $('#hudQual').textContent = state.quality;
+  mount();
+}
+
+/* ------------------------------------------------------- preview gallery */
+function buildStrip() {
+  const host = $('#strip');
+  host.innerHTML = '';
+  minis.length = 0;
+  const all = [...Object.values(presets).map((p) => ({ ...p, group: 'frame' })), ...Object.values(banners).map((p) => ({ ...p, group: 'banner' }))];
+  if (!engineMod) {
+    host.innerHTML = all.map((p) => `<button class="glass card" data-id="${p.id}" data-group="${p.group}" style="aspect-ratio:${p.group === 'banner' ? '16/7' : '1'}">
+        <div class="card__bg" style="background:${p.background}"></div>
+        ${p.css ? `<span class="avatar-frame avatar-frame--${p.id} avatar-frame--fallback" style="inset:-8%"></span>` : ''}
+        <span class="card__ava" style="background:linear-gradient(140deg,${p.colors?.primary},${p.colors?.accent})">X</span>
+        <div class="card__meta"><i>${p.icon}</i><b>${state.lang === 'ar' ? p.labelAr : p.labelEn}</b></div></button>`).join('');
+    host.querySelectorAll('.card').forEach((c) => c.addEventListener('click', () => select(c.dataset.id, c.dataset.group)));
+    return;
+  }
+  all.forEach((p) => {
+    const btn = document.createElement('button');
+    btn.className = 'card';
+    btn.dataset.id = p.id;
+    btn.dataset.group = p.group;
+    btn.setAttribute('aria-pressed', String(p.id === state.ornament));
+    btn.innerHTML = `<div class="card__bg" style="background:${p.background}"></div>
+      <canvas></canvas>
+      ${p.group === 'frame' ? `<div class="card__ava" style="background:linear-gradient(140deg,${p.colors?.primary},${p.colors?.accent})">X</div>` : ''}
+      <div class="card__meta"><i>${p.icon}</i><b>${state.lang === 'ar' ? p.labelAr : p.labelEn}</b></div>`;
+    host.appendChild(btn);
+    btn.addEventListener('click', () => select(p.id, p.group));
+    const { mountOrnament } = engineMod;
+    mountOrnament({
+      canvas: btn.querySelector('canvas'), container: btn, mode: p.group, ornament: p.id,
+      quality: 'lite', interactive: true, clip: p.group === 'frame' ? 'off' : 'over',
+      avatarLabel: 'X', avatarColor: p.colors?.primary, bloom: true
+    }).then((e) => e && minis.push(e));
+  });
+}
+
+/* -------------------------------------------------------------- controls */
+function bindRange(id, out, fmt, apply) {
+  const el = document.getElementById(id);
+  const o = document.getElementById(out);
+  const paint = () => {
+    const p = ((el.value - el.min) / (el.max - el.min)) * 100;
+    el.style.setProperty('--p', p + '%');
+    o.textContent = fmt(parseFloat(el.value));
+  };
+  el.addEventListener('input', () => { paint(); apply(parseFloat(el.value)); });
+  paint();
+  return el;
+}
+
+function bindToggle(id, get, set) {
+  const el = document.getElementById(id);
+  el.setAttribute('aria-pressed', String(get()));
+  el.addEventListener('click', () => { const v = !(el.getAttribute('aria-pressed') === 'true'); el.setAttribute('aria-pressed', String(v)); set(v); });
+  return el;
+}
+
+function wire() {
+  const f2 = (v) => v.toFixed(2);
+  bindRange('sTilt', 'oTilt', f2, (v) => { state.tilt = v; engine?.setOptions({ tilt: v }); });
+  bindRange('sSpin', 'oSpin', (v) => v.toFixed(3), (v) => { state.spin = v; engine?.setOptions({ spin: v }); });
+  bindRange('sScroll', 'oScroll', f2, (v) => { state.scroll = v; engine?.setOptions({ scrollRotation: v }); });
+  bindRange('sTrans', 'oTrans', f2, (v) => { state.glass.transmission = v; engine?.setOptions({ glassTransmission: v }); });
+  bindRange('sRough', 'oRough', f2, (v) => { state.glass.roughness = v; engine?.setOptions({ glassRoughness: v }); });
+  bindRange('sIor', 'oIor', f2, (v) => { state.glass.ior = v; engine?.setOptions({ glassIor: v }); });
+  bindRange('sEmis', 'oEmis', f2, (v) => { state.glass.emissive = v; engine?.setOptions({ emissive: v }); });
+  bindRange('sPart', 'oPart', f2, (v) => { state.particleSpeed = v; engine?.setOptions({ particleSpeed: v }); });
+  bindRange('sBloomS', 'oBloomS', f2, (v) => { state.bloomK.strength = v; engine?.setOptions({ bloomStrength: v }); });
+  bindRange('sBloomR', 'oBloomR', f2, (v) => { state.bloomK.radius = v; engine?.setOptions({ bloomRadius: v }); });
+  bindRange('sBloomT', 'oBloomT', f2, (v) => { state.bloomK.threshold = v; engine?.setOptions({ bloomThreshold: v }); });
+
+  document.querySelectorAll('#qualSeg button').forEach((b) => b.addEventListener('click', () => { state.quality = b.dataset.q; syncQuality(); }));
+
+  bindToggle('tgBloom', () => state.bloom, (v) => { state.bloom = v; engine?.setBloom(v); if (v) engine?.setOptions({ bloomStrength: state.bloomK.strength }); });
+  bindToggle('tgTrans', () => state.transmission, (v) => { state.transmission = v; engine?.setOptions({ transmission: v }); });
+  bindToggle('tgClip', () => state.clip === 'over', (v) => { state.clip = v ? 'over' : 'off'; $('#stage').dataset.clip = state.clip; mount(); });
+  bindToggle('tgSpin', () => state.autoRotate, (v) => { state.autoRotate = v; engine?.setOptions({ autoRotate: v }); });
+  bindToggle('tgImg', () => !!state.avatarSrc, (v) => {
+    $('#avatarUrl').style.display = v ? 'block' : 'none';
+    state.avatarSrc = v ? ($('#avatarUrl').value || null) : null;
+    engine?.setAvatar({ src: state.avatarSrc, label: 'X', color: currentPreset()?.colors?.primary });
+  });
+  $('#avatarUrl').addEventListener('change', (e) => { state.avatarSrc = e.target.value || null; engine?.setAvatar({ src: state.avatarSrc, label: 'X' }); });
+
+  $('#stage').addEventListener('pointerenter', () => engine?.pulse(0.45));
+  $('#stage').addEventListener('click', (e) => { if (e.target.closest('button,input')) return; engine?.pulse(1); });
+  $('#btnPulse').addEventListener('click', () => engine?.pulse(1.4));
+  $('#btnReset').addEventListener('click', () => { engine?.setOptions({ spin: currentPreset()?.rig?.spin ?? 0.06 }); engine?.setAvatar({ src: state.avatarSrc, label: 'X' }); toast('↺'); });
+  $('#btnSnap').addEventListener('click', () => {
+    if (!engine) return toast(state.lang === 'ar' ? 'لا يوجد مجسّم لالتقاطه' : 'No model to capture');
+    const a = document.createElement('a');
+    a.download = `blackx-${state.ornament}.png`;
+    a.href = engine.toDataURL('image/png', 0.95);
+    a.click();
+    toast(state.lang === 'ar' ? 'تم تصدير PNG بخلفية شفافة ✓' : 'Exported transparent PNG ✓');
+  });
+  $('#copyCodeBtn').addEventListener('click', () => copy(componentSnippet()));
+
+  document.querySelectorAll('#qualSeg,#frameList,#bannerList').forEach(() => {});
+  document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === tab)));
+    document.querySelectorAll('.panel').forEach((p) => (p.hidden = p.id !== 'panel-' + tab.dataset.panel));
+    if (tab.dataset.panel !== 'lab') minis.forEach((m) => m.setOptions({ autoRotate: false }));
+    else minis.forEach((m) => m.setOptions({ autoRotate: true }));
+  }));
+}
+
+function copy(text) {
+  navigator.clipboard?.writeText(text).then(
+    () => toast(state.lang === 'ar' ? 'نُسخ إلى الحافظة ✓' : 'Copied to clipboard ✓'),
+    () => toast('⚠ clipboard blocked')
+  );
+}
+
+/* the copyable, drop-in snippet for the user's own page */
+function componentSnippet() {
+  const o = JSON.stringify({
+    mode: state.mode,
+    ornament: state.ornament,
+    quality: state.quality,
+    // motion
+    tilt: +state.tilt.toFixed(3),
+    spin: +state.spin.toFixed(3),
+    scrollRotation: +state.scroll.toFixed(2),
+    autoRotate: state.autoRotate,
+    // MeshPhysicalMaterial
+    transmission: state.transmission,
+    glassTransmission: +state.glass.transmission.toFixed(2),
+    glassRoughness: +state.glass.roughness.toFixed(2),
+    glassIor: +state.glass.ior.toFixed(2),
+    emissive: +state.glass.emissive.toFixed(2),
+    // post-processing
+    bloom: state.bloom,
+    bloomStrength: +state.bloomK.strength.toFixed(2),
+    bloomRadius: +state.bloomK.radius.toFixed(2),
+    bloomThreshold: +state.bloomK.threshold.toFixed(2),
+    // particles + avatar
+    particleSpeed: +state.particleSpeed.toFixed(2),
+    clip: state.clip
+  }, null, 2).replace(/\n/g, '\n    ');
+  return `<!-- BLACK X · Zellige 3D — generated from the live customizer -->
+<canvas id="frame" style="width:100%;height:100%;display:block"></canvas>
+<script type="importmap">
+{ "imports": { "three": "${window.__THREE_URL}build/three.module.js",
+               "three/addons/": "${window.__THREE_URL}examples/jsm/" } }
+<\/script>
+<script type="module">
+  import { OrnamentEngine } from '${CORE}engine.js';
+
+  const engine = new OrnamentEngine({
+    canvas: document.getElementById('frame'),
+    container: document.getElementById('frame').parentElement,
+    ...${o}
+  });
+
+  // avatar disc: clipped against a THREE.Plane so the glass band refracts the
+  // photo (r180 transmission) while the torus crosses in front of the face
+  await engine.setAvatar({
+    src: 'https://your.cdn/avatar.jpg',   // null → initials fallback
+    label: 'X',
+    color: '${currentPreset()?.colors?.primary || '#22d3ee'}'
+  });
+
+  // resize is automatic (ResizeObserver). Dispose when you unmount:
+  addEventListener('pagehide', () => engine.dispose());
+<\/script>`;
+}
+
+/* ------------------------------------------------------------- i18n + docs */
+function applyLang() {
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
+  document.querySelectorAll('[data-en]').forEach((el) => {
+    el.textContent = el.dataset[state.lang] ?? el.textContent;
+  });
+  document.querySelectorAll('.preset,.card').forEach((el) => {
+    const src = el.dataset.group === 'banner' ? banners : presets;
+    const p = src?.[el.dataset.id];
+    if (p) {
+      const b = el.querySelector('b');
+      if (b) b.textContent = state.lang === 'ar' ? p.labelAr : p.labelEn;
+    }
+  });
+  $('#langBtn').textContent = state.lang === 'ar' ? 'English' : 'عربي';
+  renderPrompts();
+  renderDocs();
+}
+
+function renderPrompts() {
+  const groups = window.__PROMPT_GROUP || [];
+  const host = $('#promptGrid');
+  if (!host) return;
+  host.innerHTML = (groups.length ? groups : [{ id: 'frames' }]).map((g) => {
+    const items = promptKit.filter((p) => p.group === g.id);
+    if (!items.length) return '';
+    const head = `<div style="grid-column:1/-1;margin-top:.4rem"><h2 style="font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)">${state.lang === 'ar' ? g.labelAr : g.labelEn}</h2></div>`;
+    return head + items.map((p) => `
+      <article class="glass prompt">
+        <div class="prompt__head">
+          <div><b>${state.lang === 'ar' ? p.titleAr : p.titleEn}</b></div>
+          <span class="prompt__tool">${p.tool}</span>
+        </div>
+        <pre class="code" dir="ltr">${escapeHtml(p.code)}</pre>
+        <div class="prompt__foot">
+          <span class="note">${state.lang === 'ar' ? p.notesAr : p.notesEn}</span>
+          <button class="copy" data-copy="${p.id}">${state.lang === 'ar' ? 'نسخ' : 'Copy'}</button>
+        </div>
+      </article>`).join('');
+  }).join('');
+  host.querySelectorAll('.copy').forEach((b) => b.addEventListener('click', () => {
+    const p = promptKit.find((x) => x.id === b.dataset.copy);
+    copy(p.code);
+    b.dataset.done = '1';
+    setTimeout(() => (b.dataset.done = '0'), 1400);
+  }));
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+const DOCS_AR = `
+<h2>③ التوثيق — الدمج، الأداء، ومعايير التصميم</h2>
+<p>هذا الملف <b>مستقل تمامًا</b>: لا React، لا npm، لا Vite. المحرّك كائن واحد <code>OrnamentEngine</code> يستطيع أن يعمل في أي صفحة.</p>
+
+<h4>١ · الملفات</h4>
+<pre>client/src/ornaments/core/engine.js      ← المحرّك (Three.js r180) — بدون أي اعتماد على React
+client/src/ornaments/core/ornaments.js   ← كتالوج الـ presets + طبقات الجودة
+client/src/ornaments/core/prompts.js     ← حزمة البرومبتات المُهندَسة
+zellige-3d-lab.html                       ← هذه الصفحة</pre>
+
+<h4>٢ · التركيب في React</h4>
+<pre>import { OrnamentAvatar } from '../ornaments/OrnamentAvatar.jsx';
+
+&lt;OrnamentAvatar userId={u.id} frameStyle={u.frameStyle} size={132} /&gt;</pre>
+<p>المكوّن يختار الجودة تلقائيًا من الجهاز، يوقف الريندر خارج الشاشة، ويعود إلى إطار CSS لو تعذّر WebGL.</p>
+
+<h4>٣ · الميزانية الحقيقية (قياس داخل <code>engine.getStats()</code>)</h4>
+<table><tr><th>البند</th><th>قيمي</th></tr>
+<tr><td><b>مثلثات</b></td><td>≈ 22k عند balanced</td></tr>
+<tr><td><b>Draw calls</b></td><td>≤ 12</td></tr>
+<tr><td><b>Bloom</b></td><td>UnrealBloomPass + OutputPass (ACES) — HalfFloat، samples 4 على Cine فقط</td></tr>
+<tr><td><b>Transmission</b></td><td>ممرّ إضافي واحد للشاشة (أغلى بند) — يُطفأ تلقائيًا على Lite</td></tr>
+<tr><td><b>الجسيمات</b></td><td>Points + ShaderMaterial، Additive، بلا depthWrite، حجم من gl_PointSize</td></tr>
+<tr><td><b>الطاقة/الحرارة</b></td><td>IntersectionObserver + visibilitychange + التنزيل التلقائي تحت 32fps</td></tr></table>
+
+<h4>٤ · قواعد الدمج مع صور AI</h4>
+<ol>
+<li>لا شفافية في Midjourney: اطلب <code>pure flat black #000000</code> ودمج بـ <code>mix-blend-mode:screen</code>، أو لوحة <code>#FF00FF</code> + <code>chromakey</code> في ffmpeg.</li>
+<li>الضوء داخل الصورة يجب أن يطابق <b>rim light خلفي</b> نفس اتجاه إضاءة Three.js، وإلا يبدو العنصر «ملصوقًا».</li>
+<li>الإطار يدور؟ اجعل الصورة المولّدة متماثلة دائريًا (تدويرها لا يُكشف) أو ثبّتها ودُر بالحلبة فقط.</li>
+<li>حجم الملف المستهدف للوب المتحرك: ≤ 400KB (VP9 alpha) مع <code>poster</code> WebP بحجم ≤ 20KB للّوبيز LCP.</li>
+<li>لا تُشغّل فيديو الإطار لكل منشور في الفيد — شغّله للـ hover فقط أو عند ظهور الملف الشخصي.</li>
+</ol>
+
+<h4>٥ · إتاحة وسهولة استخدام</h4>
+<ul>
+<li><code>prefers-reduced-motion</code> → الدوران الخامل ×0.15، التخميد ×3.5، لا وميض.</li>
+<li>الإطار زخرفة فقط: <code>pointer-events:none</code> على الطبقات، والصورة الحقيقية تبقى قابلة للتحديد.</li>
+<li>تباين نصّ البانر: تدرّج سفلي 94% أسود مرسوم داخل الكنفس نفسه (لا CSS overlay إضافي).</li>
+</ul>
+
+<h4>٦ · استكشاف الأخطاء</h4>
+<table><tr><th>العَرَض</th><th>السبب والحل</th></tr>
+<tr><td>الزجاج أسود/مظلم</td><td>لا يوجد envMap — المحرّك يبني PMREM RoomEnvironment؛ تأكد أن <code>quality.transmission</code> مفعّل.</td></tr>
+<tr><td>هالة بيضاء مفرطة</td><td>threshold منخفض جدًّا — ارفعه إلى 0.35+ أو أنقص emissive إلى 2.0.</td></tr>
+<tr><td>هبوط FPS على الجوال</td><td><code>quality:'lite'</code> (يوقف transmission ويُنقص الجسيمات 55%).</td></tr>
+<tr><td>حوافّ متقطّعة للحلقات</td><td>antialias مع EffectComposer لا تعمل — استعمل <code>samples:4</code> على target الـ composer (Cine).</td></tr>
+<tr><td>الصورة لا تنكسر خلف الزجاج</td><td>يجب أن تكون <code>clip:'over'</code> وأن تبقى الحلقة <b>غير شفافة</b> حتى تدخل ممرّ transmission.</td></tr></table>
+`;
+
+const DOCS_EN = `
+<h2>③ Docs — integration, budget, compositing rules</h2>
+<p>This file is <b>fully standalone</b>: no React, no npm, no bundler. The engine is one class, <code>OrnamentEngine</code>, that runs anywhere.</p>
+
+<h4>1 · Files</h4>
+<pre>client/src/ornaments/core/engine.js      ← the Three.js r180 engine (React-free)
+client/src/ornaments/core/ornaments.js   ← preset catalog + quality tiers
+client/src/ornaments/core/prompts.js     ← engineered prompt kit
+zellige-3d-lab.html                       ← this page</pre>
+
+<h4>2 · React drop-in</h4>
+<pre>import { OrnamentAvatar } from '../ornaments/OrnamentAvatar.jsx';
+
+&lt;OrnamentAvatar userId={u.id} frameStyle={u.frameStyle} size={132} /&gt;</pre>
+<p>The wrapper auto-picks the quality tier, pauses when offscreen, and falls back to the CSS frame when WebGL is missing.</p>
+
+<h4>3 · Real budget (from <code>engine.getStats()</code>)</h4>
+<table><tr><th>Item</th><th>Value</th></tr>
+<tr><td><b>Triangles</b></td><td>≈ 22k at balanced</td></tr>
+<tr><td><b>Draw calls</b></td><td>≤ 12</td></tr>
+<tr><td><b>Bloom</b></td><td>UnrealBloomPass + OutputPass (ACES) · HalfFloat · samples 4 on Cine only</td></tr>
+<tr><td><b>Transmission</b></td><td>one extra full-screen pass (priciest) · auto-off on Lite</td></tr>
+<tr><td><b>Particles</b></td><td>Points + ShaderMaterial · additive · no depthWrite · sized by gl_PointSize</td></tr>
+<tr><td><b>Idle cost</b></td><td>IntersectionObserver + visibilitychange + auto-degrade under 32 fps</td></tr></table>
+
+<h4>4 · Rules for compositing AI stills</h4>
+<ol>
+<li>Midjourney has no alpha: request <code>pure flat black #000000</code> and blend with <code>mix-blend-mode:screen</code>, or use a <code>#FF00FF</code> plate + <code>chromakey</code>.</li>
+<li>The still's light must match the engine's <b>rear rim light</b> direction or the asset looks pasted on.</li>
+<li>If the ring rotates, generate a rotationally symmetric frame (or pin the image and rotate only the rig).</li>
+<li>Motion-asset budget: ≤ 400 KB VP9-alpha with a ≤ 20 KB WebP poster for LCP.</li>
+<li>Never autoplay a frame video for every feed post — hover or profile-view only.</li>
+</ol>
+
+<h4>5 · Accessibility</h4>
+<ul>
+<li><code>prefers-reduced-motion</code> → idle spin ×0.15, damping ×3.5, no flicker.</li>
+<li>Ornaments are decorative: <code>pointer-events:none</code> on overlays, real image stays selectable.</li>
+<li>Banner text contrast: a 94% black bottom fade is painted into the canvas (no extra DOM layer).</li>
+</ul>
+
+<h4>6 · Troubleshooting</h4>
+<table><tr><th>Symptom</th><th>Cause / fix</th></tr>
+<tr><td>Glass renders black</td><td>No envMap — the engine builds a PMREM RoomEnvironment; make sure <code>quality.transmission</code> is on.</td></tr>
+<tr><td>Blown-out white halo</td><td>Threshold too low → 0.35+, or drop emissive to 2.0.</td></tr>
+<tr><td>Mobile fps dip</td><td><code>quality:'lite'</code> (kills transmission, −55% particles).</td></tr>
+<tr><td>Jagged ring edges</td><td>antialias is ignored with EffectComposer — use <code>samples:4</code> on the composer target.</td></tr>
+<tr><td>Avatar not refracting</td><td>Needs <code>clip:'over'</code> and the ring band must stay <b>opaque</b> so it joins the transmission pass.</td></tr></table>
+`;
+
+function renderDocs() {
+  const host = $('#docsBody');
+  if (host) host.innerHTML = state.lang === 'ar' ? DOCS_AR : DOCS_EN;
+}
+
+/* -------------------------------------------------------------- bootstrap */
+async function init(with3d) {
+  buildLists();
+  wire();
+  applyLang();
+  $('#langBtn').addEventListener('click', () => { state.lang = state.lang === 'ar' ? 'en' : 'ar'; applyLang(); });
+  try {
+    const det = window.__DETECT?.();
+    if (det?.tier) state.quality = det.tier === 'css' ? 'lite' : det.tier;
+  } catch { /* keep cinematic */ }
+  const stage = $('#stage');
+  stage.style.height = 'clamp(420px, 56vh, 560px)';
+  const ro = new ResizeObserver(() => engine?.setSize?.());
+  ro.observe(stage);
+  if (with3d) { await mount(); buildStrip(); }
+  // keep the tab-switch scroll position stable
+  addEventListener('beforeunload', () => { engine?.dispose(); minis.forEach((m) => m.dispose()); });
+}
+
+boot();
+</script>
+</body>
+</html>

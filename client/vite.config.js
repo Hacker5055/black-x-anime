@@ -2,12 +2,40 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import fs from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Dev-only static passthrough.
+ * The build-less lab page (`/zellige-3d-lab.html`) lives at the repo root and
+ * imports `/client/src/ornaments/core/*` + `/node_modules/three/*` through an
+ * import map, so a plain `npx vite` can run the whole 3D engine with no extra
+ * setup. Production builds are untouched (nothing is copied into `dist`).
+ */
+function rootLabPreview(rootDir) {
+  return {
+    name: 'blackx-root-lab-preview',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = decodeURIComponent((req.url || '').split('?')[0]);
+        const allowed = /^\/(zellige-3d-lab\.html|client\/.+|node_modules\/three\/.+)$/;
+        if (!allowed.test(url)) return next();
+        const file = resolve(rootDir, '.' + url);
+        if (!file.startsWith(rootDir)) return next();
+        res.setHeader('Content-Type', file.endsWith('.html') ? 'text/html; charset=utf-8'
+          : file.endsWith('.js') ? 'text/javascript; charset=utf-8'
+          : file.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/plain; charset=utf-8');
+        fs.createReadStream(file).on('error', () => next()).pipe(res);
+      });
+    }
+  };
+}
+
 export default defineConfig({
   root: __dirname,
-  plugins: [react()],
+  plugins: [rootLabPreview(resolve(__dirname, '..')), react()],
   server: {
     host: '0.0.0.0',
     port: 3000,

@@ -22,6 +22,24 @@ favorites (watchlist) and continue-watching — all persisted per user.
 - 🔐 **Auth** — JWT httpOnly cookies, demo accounts below
 - 📡 **AniList GraphQL** — trending/season discovery with live metadata (never hardcoded)
 
+## ✨ 3D profile ornaments — زخارف ثلاثية الأبعاد (new)
+
+Avatar frames and profile banners as **live 3D objects**: real transmission glass,
+UnrealBloom, damped mouse-follow gyro, GLSL glyph rings, orbiting embers — plus an
+engineered Midjourney / Runway prompt kit for composable AI assets.
+
+```bash
+npm install three                                  # already in package.json
+npm run lab                                        # → /zellige-3d-lab.html (no build step)
+npm run check:ornaments                              # engine smoke test in Node (no browser)
+```
+
+- Engine lives in `client/src/ornaments/core/` and has **zero React dependency**
+- Graceful by default: 2D CSS frames when WebGL is missing, `quality:'css'` to opt out,
+  `prefers-reduced-motion` honoured, auto-degrade under 32 fps, offscreen = paused
+- Presets are pure data — add an ornament without touching Three.js
+- Docs (AR): [`docs/ornaments-3d.md`](docs/ornaments-3d.md)
+
 ## Stack
 
 | Layer     | Tech                                                        |

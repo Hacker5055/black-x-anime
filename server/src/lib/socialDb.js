@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS social_profiles (
   banner_url TEXT,
   theme_preference TEXT,
   frame_style TEXT DEFAULT 'default',
-  ornament TEXT DEFAULT 'none'
+  ornament TEXT DEFAULT 'none',
+  banner_style TEXT DEFAULT 'off'
 );
 CREATE TABLE IF NOT EXISTS social_tickets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,6 +103,7 @@ CREATE TABLE IF NOT EXISTS social_library_items (
     'theme_preference TEXT',
     'frame_style TEXT',
     'ornament TEXT',
+    'banner_style TEXT',
     'vip_status TEXT',
     'referral_code TEXT'
   ]) {
@@ -109,7 +111,8 @@ CREATE TABLE IF NOT EXISTS social_library_items (
   }
   for (const col of [
     'frame_style TEXT',
-    'ornament TEXT'
+    'ornament TEXT',
+    'banner_style TEXT DEFAULT \'off\''
   ]) {
     try { db.exec(`ALTER TABLE social_profiles ADD COLUMN ${col}`); } catch { /* exists */ }
   }
@@ -488,6 +491,7 @@ export const social = {
     const themePreference = data.themePreference !== undefined ? data.themePreference : data.theme_preference;
     const frameStyle = data.frameStyle !== undefined ? data.frameStyle : data.frame_style;
     const ornament = data.ornament !== undefined ? data.ornament : data.ornament;
+    const bannerStyle = data.bannerStyle !== undefined ? data.bannerStyle : data.banner_style;
 
     const key = String(userId);
     const cur = db.prepare('SELECT * FROM social_profiles WHERE user_key = ?').get(key) || {};
@@ -495,16 +499,18 @@ export const social = {
     const t = themePreference !== undefined ? themePreference : cur.theme_preference ?? null;
     const f = frameStyle !== undefined ? frameStyle : cur.frame_style ?? 'default';
     const o = ornament !== undefined ? ornament : cur.ornament ?? 'none';
+    const bs = bannerStyle !== undefined ? bannerStyle : cur.banner_style ?? 'off';
 
     db.prepare(`
-      INSERT INTO social_profiles (user_key, banner_url, theme_preference, frame_style, ornament)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO social_profiles (user_key, banner_url, theme_preference, frame_style, ornament, banner_style)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_key) DO UPDATE SET
         banner_url = excluded.banner_url,
         theme_preference = excluded.theme_preference,
         frame_style = excluded.frame_style,
-        ornament = excluded.ornament
-    `).run(key, b ?? null, t ?? null, f ?? 'default', o ?? 'none');
+        ornament = excluded.ornament,
+        banner_style = excluded.banner_style
+    `).run(key, b ?? null, t ?? null, f ?? 'default', o ?? 'none', bs ?? 'off');
 
     try {
       const sets = []; const args = [];
@@ -512,6 +518,7 @@ export const social = {
       if (themePreference !== undefined) { sets.push('theme_preference = ?'); args.push(themePreference); }
       if (frameStyle !== undefined) { sets.push('frame_style = ?'); args.push(frameStyle); }
       if (ornament !== undefined) { sets.push('ornament = ?'); args.push(ornament); }
+      if (bannerStyle !== undefined) { sets.push('banner_style = ?'); args.push(bannerStyle); }
       if (sets.length) { args.push(key); db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...args); }
     } catch { /* legacy table optional */ }
     return 1;
