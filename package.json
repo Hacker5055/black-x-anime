@@ -5,12 +5,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k -n server,client -c magenta,cyan \"npm:server\" \"npm:client\"",
+    "dev": "npm run build && node server/src/index.js",
     "server": "node --watch server/src/index.js",
     "client": "vite --config client/vite.config.js",
     "seed": "node server/src/seed.js",
     "build": "vite build client",
-    "start": "NODE_ENV=production node server/src/index.js",
+    "start": "node server/src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev"

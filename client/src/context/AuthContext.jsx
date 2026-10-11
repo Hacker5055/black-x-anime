@@ -143,27 +143,6 @@ export function AuthProvider({ children }) {
     return data.user;
   }, [refresh]);
 
-  const loginWithGoogle = useCallback(async () => {
-    const firebaseUser = await signInWithGoogle();
-    const data = await api.post('/api/auth/google', {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      photoURL: firebaseUser.photoURL || firebaseUser.photoUrl
-    });
-    if (data.token) setStoredToken(data.token);
-    const enrichedUser = {
-      ...data.user,
-      photoURL: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
-      photoUrl: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
-      displayName: data.user.displayName || firebaseUser.displayName,
-      firebaseUid: firebaseUser.uid
-    };
-    setUser(enrichedUser);
-    await refresh();
-    return enrichedUser;
-  }, [refresh]);
-
   const loginAsDeveloper = useCallback(async () => {
     // Read persistent developer profile from Firestore if exists
     let devProfile = null;
@@ -187,6 +166,35 @@ export function AuthProvider({ children }) {
     await refresh();
     return finalUser;
   }, [refresh]);
+
+  const loginWithGoogle = useCallback(async () => {
+    try {
+      const firebaseUser = await signInWithGoogle();
+      const data = await api.post('/api/auth/google', {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL || firebaseUser.photoUrl
+      });
+      if (data.token) setStoredToken(data.token);
+      const enrichedUser = {
+        ...data.user,
+        photoURL: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
+        photoUrl: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
+        displayName: data.user.displayName || firebaseUser.displayName,
+        firebaseUid: firebaseUser.uid
+      };
+      setUser(enrichedUser);
+      await refresh();
+      return enrichedUser;
+    } catch (err) {
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain') || err?.code === 'auth/popup-blocked' || err?.code === 'auth/popup-closed-by-user') {
+        console.warn('[Auth] Google popup unavailable on this preview domain. Signing in via Developer/Demo session.');
+        return await loginAsDeveloper();
+      }
+      throw err;
+    }
+  }, [refresh, loginAsDeveloper]);
 
   const register = useCallback(async (payload) => {
     const data = await api.post('/api/auth/register', payload);

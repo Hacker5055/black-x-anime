@@ -57,8 +57,7 @@ try {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const isProd = process.env.NODE_ENV === 'production';
-const PORT = isProd ? (Number(process.env.PORT) || 3000) : (Number(process.env.SERVER_PORT) || 4001);
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
@@ -109,19 +108,6 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/creator', gamificationRoutes); // POST /submit lives in gamification.routes.js
 app.use('/api/support', supportRoutes);
-
-// Health/diagnostic endpoint — which store is active on this host.
-app.get('/api/health/db', async (req, res) => {
-  let prisma = 'off';
-  if (process.env.DATABASE_URL) {
-    try {
-      const { getPrisma } = await import('./lib/prisma.js');
-      await getPrisma().$queryRaw`SELECT 1`;
-      prisma = 'ok';
-    } catch { prisma = 'down'; }
-  }
-  res.json({ ok: true, store: 'sqlite', prismaFallback: true, prisma });
-});
 
 // Platform injectors (AI Studio _websocket-interceptor.js) register a
 // service worker via a relative URL — serve a valid one for ANY nested path
