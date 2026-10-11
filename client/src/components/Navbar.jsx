@@ -5,6 +5,7 @@ import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ShowSearch } from './Modals.jsx';
 import { UserBadges } from './UserBadges.jsx';
+import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -116,7 +117,7 @@ export default function Navbar({ onOpenAuth }) {
                   onClick={() => setMenuOpen((v) => !v)}
                   aria-label={user.displayName || 'User profile'}
                 >
-                  <div className="user-avatar-wrapper">
+                  <div className="user-avatar-wrapper" style={{ position: 'relative' }}>
                     <span className="avatar user-avatar-circle" style={{ background: user.avatarColor, overflow: 'hidden' }}>
                       {(user.photoURL || user.photoUrl) ? (
                         <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt={user.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -124,6 +125,11 @@ export default function Navbar({ onOpenAuth }) {
                         user.displayName?.[0]?.toUpperCase() || 'X'
                       )}
                     </span>
+                    <LiveCreatureOverlay
+                      ornament={user.frameStyle || (typeof localStorage !== 'undefined' && localStorage.getItem('profile_frame_style')) || 'royal-flame'}
+                      mode="frame"
+                      size={40}
+                    />
                     {/* Verification badges attached directly beside/on user picture like Facebook and Instagram */}
                     {isDev ? (
                       <span className="avatar-badge avatar-badge--dev" title="👑 مطور BLACK X">👑</span>

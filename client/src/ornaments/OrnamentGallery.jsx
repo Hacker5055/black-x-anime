@@ -19,6 +19,7 @@ import { useI18n } from '../i18n/I18nProvider.jsx';
 
 import Ornament3D from './Ornament3D.jsx';
 import { ORNAMENT_PRESETS, BANNER_PRESETS, QUALITY_TIERS, detectQuality } from './core/ornaments.js';
+import { LiveCreatureOverlay } from '../components/LiveAvatarOrnament.jsx';
 
 const OFF_PRESET = {
   id: 'default',
@@ -143,9 +144,10 @@ export default function OrnamentGallery({
               onBlur={() => setHovered(null)}
               disabled={disabled}
             >
-              <span className="orn-tile__poster" style={{ background: p.background || 'transparent' }}>
+              <span className="orn-tile__poster" style={{ background: p.background || 'transparent', position: 'relative' }}>
                 {!isOff && p.css && <span className={`avatar-frame avatar-frame--${p.id}`} />}
                 {!isOff && !p.css && p.skyline && <span className="orn-tile__city" style={{ background: p.colors?.primary }} />}
+                {!isOff && !isBanner && <LiveCreatureOverlay ornament={p.id} mode="frame" size={44} />}
                 <span className="orn-tile__ava">
                   {avatar.photoUrl ? <img src={avatar.photoUrl} alt="" loading="lazy" /> : (avatar.label || 'X').slice(0, 2).toUpperCase()}
                 </span>
