@@ -57,3 +57,48 @@ export async function createTicket(req, res) {
     return prismaError(res, err, { notFound: 'User not found.' });
   }
 }
+
+/** GET /api/support/my-tickets */
+export async function getMyTickets(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+    ensureSocialTables();
+    const tickets = social.getTickets(String(userId), false);
+    return res.json({ success: true, tickets });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_to_fetch_tickets' });
+  }
+}
+
+/** GET /api/support/admin/tickets — for developer/admin */
+export async function getAdminTickets(req, res) {
+  try {
+    const userId = getUserId(req);
+    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || req.user?.isDeveloper;
+    if (!userId || !isDev) return fail(res, 403, 'Developer/Admin access required.');
+    ensureSocialTables();
+    const tickets = social.getTickets(String(userId), true);
+    return res.json({ success: true, tickets });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_admin_tickets' });
+  }
+}
+
+/** POST /api/support/admin/tickets/:id/reply */
+export async function replyAdminTicket(req, res) {
+  try {
+    const userId = getUserId(req);
+    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || req.user?.isDeveloper;
+    if (!userId || !isDev) return fail(res, 403, 'Developer/Admin access required.');
+    const { id } = req.params;
+    const { reply, status = 'RESOLVED' } = req.body || {};
+    if (!reply || !reply.trim()) return fail(res, 400, 'Reply message is required.');
+    
+    ensureSocialTables();
+    const updated = social.replyTicket(id, reply.trim(), status);
+    return res.json({ success: true, message: 'Reply sent and ticket updated', ticket: updated });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_admin_reply' });
+  }
+}

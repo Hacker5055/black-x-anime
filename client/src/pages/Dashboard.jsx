@@ -247,6 +247,125 @@ export default function Dashboard({ onOpenAuth }) {
     });
   }, [latest, trending]);
 
+/* ------------------------ expanded library showcase ------------------------ */
+function LibraryShowcaseSection() {
+  const { lang } = useI18n();
+  const libraryCategories = [
+    {
+      id: 'manga',
+      titleAr: '📖 المانجا اليابانية',
+      titleEn: '📖 Manga Library',
+      descAr: 'فصول مترجمة لأقوى سلاسل المانجا الأسبوعية والشهرية',
+      descEn: 'Popular translated weekly and monthly manga chapters',
+      color: '#f472b6',
+      badge: 'MANGA',
+      cover: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30013-ul2E8b4b7p1T.png'
+    },
+    {
+      id: 'manhwa',
+      titleAr: '⚡ المانهوا الكورية',
+      titleEn: '⚡ Korean Manhwa',
+      descAr: 'أعمال ملونة بالكامل، من سولو ليفلينج إلى وجهات النظر الشاملة',
+      descEn: 'Full-color webtoons, action dungeons, and rebirth epics',
+      color: '#a78bfa',
+      badge: 'MANHWA',
+      cover: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&auto=format&fit=crop&q=80'
+    },
+    {
+      id: 'novel',
+      titleAr: '📚 الروايات الخفيفة',
+      titleEn: '📚 Light Novels',
+      descAr: 'الروايات الأصلية المقتبس منها أشهر الأنميات العالمية',
+      descEn: 'Original web and light novels behind major anime adaptations',
+      color: '#38bdf8',
+      badge: 'NOVEL',
+      cover: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&auto=format&fit=crop&q=80'
+    },
+    {
+      id: 'book',
+      titleAr: '📕 الكتب والمراجع',
+      titleEn: '📕 Books & Literature',
+      descAr: 'كتب الفكر والخيال العلمي والأدب الكلاسيكي العالمي',
+      descEn: 'Classics, world literature, philosophy, and mind-expanding books',
+      color: '#fb923c',
+      badge: 'BOOK',
+      cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80'
+    }
+  ];
+
+  return (
+    <section className="section">
+      <div className="section__head">
+        <div>
+          <h2 className="section__title">
+            📚 {lang === 'ar' ? 'المكتبة الموسعة: مانجا، مانهوا، روايات، وكتب' : 'Expanded Library: Manga, Manhwa, Novels & Books'}
+          </h2>
+          <p className="section__sub">
+            {lang === 'ar'
+              ? 'تصفح واقرأ آلاف الفصول والكتب مع تسجيل مدة القراءة وزيادة مستواك (XP) تلقائياً!'
+              : 'Explore and read chapters while tracking reading time to level up your rank!'}
+          </p>
+        </div>
+        <Link className="section__link" to="/browse?category=manga">
+          {lang === 'ar' ? 'استعراض الكل' : 'Browse All'} →
+        </Link>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
+        {libraryCategories.map((cat) => (
+          <Link
+            key={cat.id}
+            to={`/browse?category=${cat.id}`}
+            className="glass glass-hover"
+            style={{
+              padding: '1.25rem',
+              borderRadius: '18px',
+              textDecoration: 'none',
+              color: 'inherit',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              overflow: 'hidden',
+              border: `1px solid ${cat.color}35`
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <span className={`media-tag-badge media-tag-badge--${cat.id}`}>
+                {cat.badge}
+              </span>
+              <span style={{ fontSize: '0.82rem', color: cat.color, fontWeight: 700 }}>
+                {lang === 'ar' ? 'تصفح الآن ←' : 'Explore →'}
+              </span>
+            </div>
+
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: '0 0 0.4rem', color: '#fff' }}>
+              {lang === 'ar' ? cat.titleAr : cat.titleEn}
+            </h3>
+
+            <p style={{ fontSize: '0.84rem', color: 'var(--ink-dim)', margin: '0 0 1rem', lineHeight: 1.45, flex: 1 }}>
+              {lang === 'ar' ? cat.descAr : cat.descEn}
+            </p>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.4rem 0.75rem',
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              fontSize: '0.76rem',
+              color: 'var(--cyan)'
+            }}>
+              <span>⚡</span>
+              <span>{lang === 'ar' ? 'قراءة فصول تكسبك نقاط XP فورية' : 'Earn XP while reading'}</span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
   return (
     <>
       <LandingHero
@@ -256,6 +375,7 @@ export default function Dashboard({ onOpenAuth }) {
 
       <ContinueSection onOpenAuth={onOpenAuth} />
       <LatestSection items={latest || []} loading={!latest} error={error} onRetry={loadLatest} />
+      <LibraryShowcaseSection />
       <FavoritesSection onOpenAuth={onOpenAuth} />
       <TrendingSection />
     </>

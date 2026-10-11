@@ -4252,3 +4252,181 @@ html, body, #root, .app-shell {
 @media (min-width: 900px) {
   .hero-carousel__desc { max-width: 52ch; }
 }
+
+/* ==========================================================================
+   EXPANDED FEATURES: FRAMES, BANNERS, MEDIA TABS, REFERRALS, LEVELING, TICKETS
+   ========================================================================== */
+
+/* --- Avatar Frames & Ornaments --- */
+.avatar-frame-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-frame {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+.avatar-frame--royal-flame {
+  border: 3px solid #f97316;
+  box-shadow: 0 0 15px #f97316, inset 0 0 10px #ef4444;
+  animation: flamePulse 2s infinite alternate;
+}
+@keyframes flamePulse {
+  0% { box-shadow: 0 0 10px #f97316, 0 0 20px #ef4444; }
+  100% { box-shadow: 0 0 22px #fb923c, 0 0 35px #dc2626; border-color: #fdba74; }
+}
+
+.avatar-frame--cyber-neon {
+  border: 3px solid #22d3ee;
+  box-shadow: 0 0 18px #22d3ee, inset 0 0 8px #06b6d4;
+  animation: cyberGlitch 3s infinite;
+}
+@keyframes cyberGlitch {
+  0%, 100% { border-color: #22d3ee; box-shadow: 0 0 15px #22d3ee; }
+  50% { border-color: #f43f5e; box-shadow: 0 0 22px #f43f5e; }
+}
+
+.avatar-frame--shadow-monarch {
+  border: 3px solid #8b5cf6;
+  box-shadow: 0 0 20px #8b5cf6, 0 0 35px #6d28d9;
+  animation: shadowAura 2.5s infinite alternate;
+}
+@keyframes shadowAura {
+  0% { transform: scale(1); box-shadow: 0 0 14px #8b5cf6; }
+  100% { transform: scale(1.04); box-shadow: 0 0 26px #a855f7, 0 0 40px #7c3aed; }
+}
+
+.avatar-frame--imperial-gold {
+  border: 3px solid #eab308;
+  box-shadow: 0 0 16px #eab308, inset 0 0 10px #ca8a04;
+}
+
+.avatar-frame--sakura-blossom {
+  border: 3px solid #f472b6;
+  box-shadow: 0 0 18px #f472b6, inset 0 0 8px #ec4899;
+}
+
+.avatar-frame--prismatic-diamond {
+  border: 3px solid #38bdf8;
+  box-shadow: 0 0 20px #38bdf8, 0 0 30px #c084fc;
+}
+
+/* --- Profile Banner --- */
+.profile-banner {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #090d16, #161c2e);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: -50px;
+}
+.profile-banner__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-banner__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 40%, rgba(6, 7, 13, 0.95) 100%);
+}
+
+/* --- Media Library Tabs & Badges --- */
+.media-tabs {
+  display: flex;
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.media-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.media-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.media-tab-btn.active {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(139, 92, 246, 0.25));
+  border-color: var(--cyan);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.3);
+}
+
+.media-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.media-tag-badge--manga { background: rgba(244, 114, 182, 0.2); color: #f472b6; border: 1px solid rgba(244, 114, 182, 0.4); }
+.media-tag-badge--manhwa { background: rgba(139, 92, 246, 0.2); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.4); }
+.media-tag-badge--novel { background: rgba(34, 211, 238, 0.2); color: #38bdf8; border: 1px solid rgba(34, 211, 238, 0.4); }
+.media-tag-badge--book { background: rgba(251, 146, 60, 0.2); color: #fb923c; border: 1px solid rgba(251, 146, 60, 0.4); }
+
+/* --- VIP Unlock Box & Referrals --- */
+.vip-card-banner {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.18), rgba(245, 158, 11, 0.08));
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.referral-box {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+/* --- Ticket Status Badges --- */
+.ticket-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 99px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+.ticket-status--open { background: rgba(251, 191, 36, 0.18); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.4); }
+.ticket-status--progress { background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }
+.ticket-status--resolved { background: rgba(52, 211, 153, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); }
+

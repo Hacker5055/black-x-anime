@@ -3,15 +3,15 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
-import { social, ensureSocialTables, levelFromMinutes, db as socialSqlite } from '../lib/socialDb.js';
+import { social, ensureSocialTables, levelFromMinutes, getLevelRank, db as socialSqlite } from '../lib/socialDb.js';
 
-/** PUT /api/profile/customize — body { bannerUrl?, themePreference? } */
+/** PUT /api/profile/customize — body { bannerUrl?, themePreference?, frameStyle?, ornament? } */
 export async function customizeProfile(req, res) {
   try {
     const userId = getUserId(req);
     if (!userId) return fail(res, 401, 'Authentication required.');
 
-    const { bannerUrl, themePreference } = req.body || {};
+    const { bannerUrl, themePreference, frameStyle, ornament } = req.body || {};
     const data = {};
 
     if (bannerUrl !== undefined) {
@@ -26,8 +26,14 @@ export async function customizeProfile(req, res) {
       }
       data.theme_preference = themePreference.trim();
     }
+    if (frameStyle !== undefined) {
+      data.frame_style = String(frameStyle).trim();
+    }
+    if (ornament !== undefined) {
+      data.ornament = String(ornament).trim();
+    }
     if (Object.keys(data).length === 0) {
-      return fail(res, 400, 'Nothing to update: provide bannerUrl and/or themePreference.');
+      return fail(res, 400, 'Nothing to update: provide bannerUrl, themePreference, or frameStyle.');
     }
 
         var socialFallback = () => {
@@ -76,6 +82,9 @@ export async function getProfile(req, res) {
       const total = (st?.total_watch_time_min || 0) + (st?.total_read_time_min || 0);
       const followers = socialSqlite.prepare('SELECT COUNT(*) c FROM social_follows WHERE following_key = ?').get(key).c;
       const following = socialSqlite.prepare('SELECT COUNT(*) c FROM social_follows WHERE follower_key = ?').get(key).c;
+      const curLevel = levelFromMinutes(total);
+      const rank = getLevelRank(curLevel);
+      const refInfo = social.getReferrals(key);
       return res.status(200).json({
         success: true,
         data: {
@@ -84,8 +93,16 @@ export async function getProfile(req, res) {
           photoUrl: row.photo_url ?? null,
           bannerUrl: prof.banner_url ?? row.banner_url ?? null,
           themePreference: prof.theme_preference ?? row.theme_preference ?? null,
+          frameStyle: prof.frame_style ?? row.frame_style ?? 'default',
+          ornament: prof.ornament ?? row.ornament ?? 'none',
+          vipStatus: refInfo.isVipUnlocked ? 'VIP Basic' : (row.vip_status || null),
+          referralCode: `BLACKX-${(row.username || 'USER').toUpperCase()}`,
           totalWatchTimeMin: st?.total_watch_time_min || 0,
-          level: levelFromMinutes(total),
+          totalReadTimeMin: st?.total_read_time_min || 0,
+          totalMinutes: total,
+          xp: total * 10,
+          level: curLevel,
+          rank,
           followers, following,
           badges: social.userBadges(key).map((b) => ({ name: b.name, iconUrl: b.icon_url }))
         }

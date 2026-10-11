@@ -6,7 +6,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
-import { social, ensureSocialTables, levelFromMinutes, progressPercentage, awardBadgesSqlite, db as socialSqlite } from '../lib/socialDb.js';
+import { social, ensureSocialTables, levelFromMinutes, progressPercentage, awardBadgesSqlite, getLevelRank, db as socialSqlite } from '../lib/socialDb.js';
 
 /* ---------------------------- leveling rules ----------------------------
  * Lifetime minutes (watch + read) drive the level:
@@ -48,12 +48,16 @@ export async function getStats(req, res) {
       const total = (row?.total_watch_time_min || 0) + (row?.total_read_time_min || 0);
       const currentLevel = levelFromMinutes(total);
       if (row && row.current_level !== currentLevel) social.setLevel(key, currentLevel);
+      const rank = getLevelRank(currentLevel);
       return res.status(200).json({
         success: true,
         data: {
           totalWatchTimeMin: row?.total_watch_time_min || 0,
           totalReadTimeMin: row?.total_read_time_min || 0,
+          totalMinutes: total,
+          xp: total * 10,
           currentLevel,
+          rank,
           progressPercentage: progressPercentage(total),
           unlockedBadges: social.userBadges(key).map((b) => ({ name: b.name, iconUrl: b.icon_url }))
         }
@@ -275,5 +279,57 @@ export async function getCreatorSummary(req, res) {
   } catch (err) {
     if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'User not found.' });
+  }
+}
+
+/** GET /api/gamification/referrals */
+export async function getReferralInfo(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+    ensureSocialTables();
+    const key = String(userId);
+    const username = req.user?.username || 'user';
+    const referralCode = `BLACKX-${username.toUpperCase()}`;
+    const info = social.getReferrals(key);
+    return res.json({
+      success: true,
+      data: {
+        referralCode,
+        referralLink: `https://blackx.app/?ref=${referralCode}`,
+        count: info.count,
+        target: info.target,
+        isVipUnlocked: info.isVipUnlocked,
+        referrals: info.referrals
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_referrals' });
+  }
+}
+
+/** POST /api/gamification/referrals/mock-invite — simulates a friend joining via user referral */
+export async function mockInviteFriend(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+    ensureSocialTables();
+    const key = String(userId);
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const friendName = `otaku_friend_${randomSuffix}`;
+    const info = social.addReferral(key, friendName);
+    return res.json({
+      success: true,
+      message: `Friend @${friendName} joined using your invite!`,
+      data: {
+        newFriend: friendName,
+        count: info.count,
+        target: info.target,
+        isVipUnlocked: info.isVipUnlocked,
+        referrals: info.referrals
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_mock_invite' });
   }
 }

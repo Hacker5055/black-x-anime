@@ -5,7 +5,7 @@
  */
 import { Router } from 'express';
 import { attachUser } from '../lib/api.js';
-import { getStats, syncTime, submitCreator, getCreatorSummary } from '../controllers/gamification.controller.js';
+import { getStats, syncTime, submitCreator, getCreatorSummary, getReferralInfo, mockInviteFriend } from '../controllers/gamification.controller.js';
 
 const router = Router();
 
@@ -15,6 +15,8 @@ router.get('/stats', getStats);
 router.post('/sync-time', syncTime);
 router.post('/submit', submitCreator);
 router.get('/creator/summary', getCreatorSummary);
+router.get('/referrals', getReferralInfo);
+router.post('/referrals/mock-invite', mockInviteFriend);
 
 // Static badge catalogue (same in every store — the seeded set).
 const BADGES = [

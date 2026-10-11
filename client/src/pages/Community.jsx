@@ -65,8 +65,52 @@ export default function Community({ onOpenAuth }) {
   const [loadingComments, setLoadingComments] = useState({});
   const [commentInputs, setCommentInputs] = useState({}); // postId -> string
   const [submittingComment, setSubmittingComment] = useState({});
+  const [followingSet, setFollowingSet] = useState(new Set());
 
   const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
+
+  // Load who user is following
+  useEffect(() => {
+    if (user?.username) {
+      api.get(`/api/community/network/${encodeURIComponent(user.username)}`)
+        .then((res) => {
+          if (res?.following && Array.isArray(res.following)) {
+            setFollowingSet(new Set(res.following));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.username]);
+
+  const handleToggleFollow = async (targetAuthor) => {
+    if (!user) {
+      onOpenAuth?.('login');
+      return;
+    }
+    if (!targetAuthor || targetAuthor === user.username) return;
+    const isFollowing = followingSet.has(targetAuthor);
+    try {
+      if (isFollowing) {
+        await api.post('/api/community/unfollow', { targetUsername: targetAuthor });
+        setFollowingSet((prev) => {
+          const next = new Set(prev);
+          next.delete(targetAuthor);
+          return next;
+        });
+        pushToast(lang === 'ar' ? `تم إلغاء متابعة ${targetAuthor}` : `Unfollowed @${targetAuthor}`, 'info');
+      } else {
+        await api.post('/api/community/follow', { targetUsername: targetAuthor });
+        setFollowingSet((prev) => {
+          const next = new Set(prev);
+          next.add(targetAuthor);
+          return next;
+        });
+        pushToast(lang === 'ar' ? `✓ تمت متابعة ${targetAuthor} بنجاح!` : `Followed @${targetAuthor}!`, 'success');
+      }
+    } catch (err) {
+      pushToast(err.message || 'Follow action failed', 'error');
+    }
+  };
 
   // Load posts from API + bind Firestore real-time snapshot
   const loadPosts = useCallback(async () => {
@@ -557,6 +601,27 @@ export default function Community({ onOpenAuth }) {
                               </span>
                             )}
                             <UserBadges badges={post.author_role === 'developer' ? ['dev'] : []} size="sm" />
+                            {user && post.author_name && post.author_name !== user.username && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm"
+                                onClick={() => handleToggleFollow(post.author_name)}
+                                style={{
+                                  fontSize: '0.72rem',
+                                  padding: '0.15rem 0.6rem',
+                                  borderRadius: '99px',
+                                  color: followingSet.has(post.author_name) ? '#34d399' : 'var(--cyan)',
+                                  borderColor: followingSet.has(post.author_name) ? 'rgba(52, 211, 153, 0.4)' : 'rgba(34, 211, 238, 0.4)',
+                                  background: followingSet.has(post.author_name) ? 'rgba(52, 211, 153, 0.12)' : 'rgba(34, 211, 238, 0.08)',
+                                  cursor: 'pointer',
+                                  fontWeight: 700
+                                }}
+                              >
+                                {followingSet.has(post.author_name)
+                                  ? (lang === 'ar' ? '✓ تتابعه' : 'Following')
+                                  : (lang === 'ar' ? '+ متابعة' : '+ Follow')}
+                              </button>
+                            )}
                           </div>
 
                           <div className="fb-post-card__sub-meta">

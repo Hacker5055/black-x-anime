@@ -32,7 +32,7 @@ function LanguageToggle() {
 }
 
 export default function Navbar({ onOpenAuth }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -52,6 +52,7 @@ export default function Navbar({ onOpenAuth }) {
   const links = [
     { to: '/', label: t('nav.home'), icon: '◈' },
     { to: '/browse', label: t('nav.browse'), icon: '⌕' },
+    { to: '/browse?category=manga', label: lang === 'ar' ? 'المكتبة 📖' : 'Library 📖', icon: '📖' },
     { to: '/community', label: t('nav.community'), icon: '💬' },
     { to: '/rankings', label: t('nav.rankings'), icon: '🏆' },
     { to: '/mylist', label: t('nav.mylist'), icon: '♥' },

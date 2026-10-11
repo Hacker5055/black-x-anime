@@ -108,3 +108,67 @@ export async function listPosts(req, res) {
     return prismaError(res, err);
   }
 }
+
+/** POST /api/community/unfollow — body { targetUserId, targetUsername } */
+export async function unfollowUser(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+
+    const { targetUserId, targetUsername } = req.body || {};
+    ensureSocialTables();
+    const key = String(userId);
+    const targetKey = targetUserId ? String(targetUserId) : 'name:' + String(targetUsername).slice(0, 40);
+
+    social.unfollow(key, targetKey);
+    return res.status(200).json({
+      success: true,
+      message: 'User unfollowed successfully.',
+      isFollowing: false
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_to_unfollow' });
+  }
+}
+
+/** GET /api/community/follow-status?targetUsername= */
+export async function getFollowStatus(req, res) {
+  try {
+    const userId = getUserId(req);
+    const targetUsername = String(req.query.targetUsername || '').trim();
+    if (!targetUsername) return res.status(400).json({ error: 'targetUsername required' });
+
+    ensureSocialTables();
+    const targetKey = 'name:' + targetUsername;
+    const isFollowing = userId ? social.isFollowing(String(userId), targetKey) : false;
+    const net = social.getNetwork(targetKey);
+
+    return res.json({
+      success: true,
+      isFollowing,
+      followersCount: net.followers.length,
+      followingCount: net.following.length
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_status' });
+  }
+}
+
+/** GET /api/community/network/:username */
+export async function getNetwork(req, res) {
+  try {
+    const username = String(req.params.username || '').trim();
+    ensureSocialTables();
+    const key = 'name:' + username;
+    const net = social.getNetwork(key);
+    return res.json({
+      success: true,
+      followersCount: net.followers.length,
+      followingCount: net.following.length,
+      followers: net.followers.map(f => f.replace('name:', '')),
+      following: net.following.map(f => f.replace('name:', ''))
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'failed_network' });
+  }
+}

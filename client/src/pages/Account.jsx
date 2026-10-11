@@ -8,6 +8,7 @@ import {
   GamificationPanel,
   FollowPanel,
   CustomizePanel,
+  ReferralPanel,
   CreatorPanel,
   SupportPanel
 } from '../components/Features.jsx';
@@ -28,6 +29,7 @@ export default function Account() {
 
       <div className="fx-grid">
         <GamificationPanel />
+        <ReferralPanel />
         <FollowPanel />
         <CustomizePanel />
         <CreatorPanel />

@@ -3,7 +3,7 @@
  */
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
-import { social, ensureSocialTables } from '../lib/socialDb.js';
+import { social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
 export async function rateContent(req, res) {
@@ -137,5 +137,87 @@ export async function getMyRating(req, res) {
   } catch (err) {
       if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err);
+  }
+}
+
+/**
+ * GET /api/content/library?type=ALL|MANGA|MANHWA|NOVEL|BOOK&q=
+ */
+export async function getLibrary(req, res) {
+  try {
+    ensureSocialTables();
+    const type = String(req.query.type || 'ALL').trim();
+    const q = String(req.query.q || '').trim();
+    const items = social.getLibraryItems(type, q);
+    return res.json({ success: true, items });
+  } catch (err) {
+    console.error('getLibrary error:', err);
+    return res.status(500).json({ success: false, error: 'failed_to_fetch_library', items: [] });
+  }
+}
+
+/**
+ * GET /api/content/library/:id
+ */
+export async function getLibraryItemDetail(req, res) {
+  try {
+    ensureSocialTables();
+    const { id } = req.params;
+    const item = social.getLibraryItem(id);
+    if (!item) return res.status(404).json({ success: false, message: 'Item not found' });
+    
+    // Generate chapter/volume list for reading
+    const totalChapters = item.chapters_count || 20;
+    const isNovelOrBook = item.type === 'NOVEL' || item.type === 'BOOK';
+    const chapters = Array.from({ length: Math.min(totalChapters, 60) }, (_, i) => {
+      const num = i + 1;
+      return {
+        number: num,
+        title: isNovelOrBook ? `الفصل ${num}: البداية والتفاصيل` : `الفصل ${num}`,
+        pages: isNovelOrBook ? 18 : 22,
+        releaseDate: '2025'
+      };
+    });
+
+    return res.json({ success: true, item: { ...item, chapters } });
+  } catch (err) {
+    console.error('getLibraryItemDetail error:', err);
+    return res.status(500).json({ success: false, error: 'failed_to_fetch_item' });
+  }
+}
+
+/**
+ * POST /api/content/library/:id/read — logs reading minutes & awards XP/leveling!
+ */
+export async function logReadingProgress(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+    const { minutes = 15 } = req.body || {};
+    const delta = Math.max(1, Math.min(180, Number(minutes) || 15));
+    
+    ensureSocialTables();
+    const key = String(userId);
+    const before = social.getStats(key);
+    const prevTotal = (before?.total_watch_time_min || 0) + (before?.total_read_time_min || 0);
+    const prevLevel = levelFromMinutes(prevTotal);
+
+    const row = social.upsertStats(key, 'total_read_time_min', delta);
+    const total = row.total_watch_time_min + row.total_read_time_min;
+    const newLevel = levelFromMinutes(total);
+    if (row.current_level !== newLevel) social.setLevel(key, newLevel);
+    awardBadgesSqlite(key, total);
+
+    return res.json({
+      success: true,
+      message: 'Reading session recorded!',
+      minutesAdded: delta,
+      totalReadMinutes: row.total_read_time_min,
+      currentLevel: newLevel,
+      levelUp: newLevel > prevLevel
+    });
+  } catch (err) {
+    console.error('logReadingProgress error:', err);
+    return res.status(500).json({ success: false, error: 'failed_to_record_progress' });
   }
 }
