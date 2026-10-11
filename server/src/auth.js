@@ -46,9 +46,22 @@ export function publicUser(row) {
     badges = [];
   }
 
-  // Developer account gets gold_vip & blue_verified by default
+  // Check VIP tier & expiration
+  let vipTier = row.vip_tier || (row.vip_status === 'VIP Basic' ? 'vip_basic' : 'free');
+  const vipExpiresAt = row.vip_expires_at || null;
+  if (vipTier !== 'free' && vipExpiresAt) {
+    const expTime = new Date(vipExpiresAt).getTime();
+    if (!Number.isNaN(expTime) && expTime < Date.now()) {
+      vipTier = 'free';
+    }
+  }
+
+  // Developer account gets vip_monarch, gold_vip & blue_verified by default
   if (isDev) {
+    vipTier = 'vip_monarch';
     if (!badges.includes('blue_verified')) badges.unshift('blue_verified');
+    if (!badges.includes('gold_vip')) badges.unshift('gold_vip');
+  } else if (vipTier === 'vip_basic' || vipTier === 'vip_monarch') {
     if (!badges.includes('gold_vip')) badges.unshift('gold_vip');
   }
 
@@ -63,6 +76,8 @@ export function publicUser(row) {
     bio: row.bio,
     role: isDev ? 'developer' : row.role,
     isDeveloper: isDev,
+    vipTier,
+    vipExpiresAt,
     badges,
     createdAt: row.created_at
   };

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { VerifiedBadge } from './UserBadges.jsx';
+import { resolveUserVipTier } from './VipPlansAndDevCodes.jsx';
 import { pushToast } from '../hooks/hooks.js';
 
 const SCREEN_REACTIONS = [
@@ -38,7 +39,12 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
   const [pinTimestamp, setPinTimestamp] = useState(true);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [recordSec, setRecordSec] = useState(0);
+  const [isPrivateRoom, setIsPrivateRoom] = useState(false);
+  const [customSlugInput, setCustomSlugInput] = useState('');
   const recordTimerRef = useRef(null);
+
+  const vipTier = resolveUserVipTier(user);
+  const maxRoomViewers = vipTier === 'vip_monarch' ? 100 : vipTier === 'vip_basic' ? 25 : 5;
 
   const [messages, setMessages] = useState(() => {
     try {
@@ -166,6 +172,16 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
       spawnFloatingOverlay(`🎙️ ${authorName} ${lang === 'ar' ? 'أرسل تعليقاً صوتياً!' : 'sent a voice note!'}`, '#f472b6');
       pushToast(lang === 'ar' ? '🎙️ تم نشر تعليقك الصوتي على الدقيقة الحالية!' : '🎙️ Voice note posted at current timestamp!', 'success');
     } else {
+      const voiceCount = messages.filter((m) => m.isVoice).length;
+      if (vipTier === 'free' && voiceCount >= 2) {
+        pushToast(
+          lang === 'ar'
+            ? '🔒 الرسائل الصوتية المفتوحة بلا حدود متاحة لمشتركي باقة 🔮 VIP Monarch (199 ج.م)! (الحد المجاني: رسالتان)'
+            : '🔒 Unlimited Open Voice Notes require 🔮 VIP Monarch!',
+          'info'
+        );
+        return;
+      }
       setRecordingVoice(true);
       setRecordSec(1);
       recordTimerRef.current = setInterval(() => {
@@ -299,21 +315,63 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
       <div className="glass" style={{ padding: '1.35rem', borderRadius: '20px', border: '1px solid rgba(139, 92, 246, 0.28)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem', marginBottom: '1rem', paddingBottom: '0.85rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <span>🎭</span>
               {lang === 'ar' ? 'غرفة المشاهدة الجماعية والتعليقات الزمنية' : 'Live Watch Party & Timestamped Comments'}
               <span style={{ fontSize: '0.73rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(16, 185, 129, 0.18)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#34d399' }}>
-                ● {lang === 'ar' ? 'متصل الآن (4 مشاهدين)' : '4 Watching Live'}
+                ● {lang === 'ar' ? `4 / ${maxRoomViewers} مشاهد` : `4 / ${maxRoomViewers} Viewers`}
               </span>
+              {vipTier === 'vip_monarch' && (
+                <span style={{ fontSize: '0.7rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(168,85,247,0.22)', border: '1px solid #a855f7', color: '#e9d5ff' }}>
+                  🔮 سعة 100 مشاهد + صوتيات مفتوحة
+                </span>
+              )}
+              {vipTier === 'vip_basic' && (
+                <span style={{ fontSize: '0.7rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(245,158,11,0.2)', border: '1px solid #f59e0b', color: '#fde047' }}>
+                  ⚡ غرفة VIP خاصة (25 مشاهد)
+                </span>
+              )}
             </h3>
             <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--ink-dim)' }}>
               {lang === 'ar'
-                ? `كود الغرفة: ${roomCode} • شاهد الحلقة مع أصدقائك في نفس الثانية أو اترك تعليقاً صوتياً/نصياً عند الدقيقة الحالية`
-                : `Room Code: ${roomCode} • Watch together in real-time or pin voice/text comments to the current timestamp`}
+                ? `كود الغرفة: ${roomCode} ${isPrivateRoom ? '🔒 (غرفة خاصة برابط مخصص)' : ''} • شاهد الحلقة مع أصدقائك في نفس الثانية`
+                : `Room Code: ${roomCode} • Watch together in real-time`}
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => {
+                if (vipTier === 'free') {
+                  pushToast(
+                    lang === 'ar'
+                      ? '🔒 إنشاء غرف مشاهدة خاصة مع رابط مخصص يتطلب باقة ⚡ VIP Basic (99 ج.م) أو 🔮 VIP Monarch!'
+                      : '🔒 Private Watch Party rooms with custom link require ⚡ VIP Basic!',
+                    'info'
+                  );
+                  return;
+                }
+                const nextPriv = !isPrivateRoom;
+                setIsPrivateRoom(nextPriv);
+                if (nextPriv) {
+                  const customCode = customSlugInput.trim().toUpperCase() || `BX-VIP-${user?.username?.toUpperCase() || 'ELITE'}`;
+                  setRoomCode(customCode);
+                  setInParty(true);
+                  pushToast(lang === 'ar' ? `🔒 تم إنشاء غرفة VIP خاصة برابط مخصص: ${customCode}` : `🔒 Private VIP Room created: ${customCode}`, 'success');
+                }
+              }}
+              style={{
+                borderColor: isPrivateRoom ? '#f59e0b' : 'rgba(245, 158, 11, 0.4)',
+                color: isPrivateRoom ? '#fde047' : '#fcd34d',
+                fontWeight: 800
+              }}
+            >
+              🔒 {isPrivateRoom
+                ? (lang === 'ar' ? 'غرفة VIP خاصة مفعّلة ✓' : 'Private VIP Room ✓')
+                : (lang === 'ar' ? 'إنشاء غرفة خاصة برابط مخصص (VIP)' : 'Private Custom Room (VIP)')}
+            </button>
             <button
               type="button"
               className="btn btn--ghost btn--sm"

@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/hooks.js';
 import VideoPlayer from '../components/VideoPlayer.jsx';
 import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
+import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import { DownloadModal } from '../components/DownloadModal.jsx';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
@@ -189,6 +190,9 @@ export default function Watch({ onOpenAuth }) {
   const nextEp = idx >= 0 && idx < episodes.length - 1 ? episodes[idx + 1] : null;
 
   const title = show ? ((lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn) : slug;
+  const vipTier = resolveUserVipTier(user);
+  const [vipFastCdn, setVipFastCdn] = useState(() => vipTier === 'vip_basic' || vipTier === 'vip_monarch');
+  const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
 
   if (showQuery.loading && sourcesLoading) return <LiquidLoader />;
   if (showQuery.error && !show) {
@@ -231,25 +235,126 @@ export default function Watch({ onOpenAuth }) {
               </div>
             </div>
           ) : (
-            <VideoPlayer
-              entries={episodeData.entries}
-              resolved={episodeData.resolved}
-              onResolve={resolveEntry}
-              onOpenDownload={() => setDownloadModalOpen(true)}
-              title={title}
-              episodeLabel={t('watch.episodePicker', { n: formatNumber(episode) })}
-              startTime={resumeAt}
-              resumePrompt={resumeAt > 0}
-              onProgress={(pos, dur) => {
-                lastPos.current = { pos, dur };
-                saveRef.current?.(pos, dur);
-              }}
-              onEnded={() => saveRef.current?.(lastPos.current.pos, lastPos.current.dur || lastPos.current.pos, true)}
-              onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}`) : null}
-              onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}`) : null}
-              nextLabel={nextEp ? t('watch.episodePicker', { n: formatNumber(nextEp.episode) }) : null}
-            />
+            <div style={monarch4kHdr ? { filter: 'contrast(1.1) saturate(1.18) brightness(1.03)', transition: 'filter 0.3s ease' } : undefined}>
+              <VideoPlayer
+                entries={episodeData.entries}
+                resolved={episodeData.resolved}
+                onResolve={resolveEntry}
+                onOpenDownload={() => setDownloadModalOpen(true)}
+                title={title}
+                episodeLabel={t('watch.episodePicker', { n: formatNumber(episode) })}
+                startTime={resumeAt}
+                resumePrompt={resumeAt > 0}
+                onProgress={(pos, dur) => {
+                  lastPos.current = { pos, dur };
+                  saveRef.current?.(pos, dur);
+                }}
+                onEnded={() => saveRef.current?.(lastPos.current.pos, lastPos.current.dur || lastPos.current.pos, true)}
+                onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}`) : null}
+                onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}`) : null}
+                nextLabel={nextEp ? t('watch.episodePicker', { n: formatNumber(nextEp.episode) }) : null}
+              />
+            </div>
           )}
+
+          {/* ---------- VIP Fast CDN & 4K HDR 60FPS Streaming Bar ---------- */}
+          <div
+            className="glass"
+            style={{
+              marginTop: '0.85rem',
+              padding: '0.75rem 1.15rem',
+              borderRadius: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              border: monarch4kHdr ? '1px solid rgba(168,85,247,0.55)' : vipFastCdn ? '1px solid rgba(245,158,11,0.45)' : '1px solid rgba(255,255,255,0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#cbd5e1' }}>
+                📡 {lang === 'ar' ? 'محرك البث (Streaming Engine):' : 'Streaming Engine:'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (vipTier === 'free') {
+                    pushToast(
+                      lang === 'ar'
+                        ? '🔒 سيرفرات VIP Fast CDN فائقة السرعة بدون ضغط متاحة لباقة ⚡ VIP Basic (99 ج.م) أو 🔮 VIP Monarch!'
+                        : '🔒 VIP Fast CDN requires ⚡ VIP Basic or 🔮 VIP Monarch!',
+                      'info'
+                    );
+                    navigate('/profile?tab=referrals');
+                    return;
+                  }
+                  setVipFastCdn((v) => !v);
+                  pushToast(lang === 'ar' ? '🚀 تم التبديل إلى سيرفر VIP Fast CDN فائق السرعة بدون ضغط!' : '🚀 Switched to VIP Fast CDN!', 'success');
+                }}
+                style={{
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: '99px',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  background: vipFastCdn ? 'linear-gradient(135deg, #f59e0b, #eab308)' : 'rgba(255,255,255,0.06)',
+                  color: vipFastCdn ? '#090d16' : '#fde047',
+                  border: '1px solid rgba(245,158,11,0.5)'
+                }}
+              >
+                ⚡ VIP Fast CDN {vipFastCdn ? '✓' : '🔒'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (vipTier !== 'vip_monarch') {
+                    pushToast(
+                      lang === 'ar'
+                        ? '🔒 البث بدقة 4K HDR ومعدل إطارات 60fps متاح حصرياً لباقة 🔮 VIP Monarch (إمبراطور الظلال - 199 ج.م)!'
+                        : '🔒 4K HDR 60fps streaming requires 🔮 VIP Monarch!',
+                      'info'
+                    );
+                    navigate('/profile?tab=referrals');
+                    return;
+                  }
+                  setMonarch4kHdr((v) => !v);
+                  pushToast(lang === 'ar' ? '🔮 تم تفعيل معالج البث 4K HDR • 60FPS الفائق!' : '🔮 4K HDR • 60FPS Mode Active!', 'success');
+                }}
+                style={{
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: '99px',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  background: monarch4kHdr ? 'linear-gradient(135deg, #a855f7, #ec4899)' : 'rgba(255,255,255,0.06)',
+                  color: '#fff',
+                  border: '1px solid rgba(168,85,247,0.55)'
+                }}
+              >
+                🔮 4K HDR • 60FPS {monarch4kHdr ? '✓' : '🔒'}
+              </button>
+
+              {vipTier === 'vip_monarch' && (
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#34d399', padding: '0.2rem 0.6rem', borderRadius: '99px', background: 'rgba(16,185,129,0.14)' }}>
+                  ⏳ {lang === 'ar' ? 'وصول مبكر (Early Access مفعّل)' : 'Early Access Unlocked'}
+                </span>
+              )}
+            </div>
+
+            {vipTier === 'free' && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => navigate('/profile?tab=referrals')}
+                style={{ fontSize: '0.75rem', color: '#fde047', borderColor: 'rgba(250,204,21,0.4)', fontWeight: 800 }}
+              >
+                👑 {lang === 'ar' ? 'ترقية إلى VIP / تفعيل كود اشتراك' : 'Upgrade to VIP / Redeem Code'}
+              </button>
+            )}
+          </div>
 
           {/* ---------- meta under player ---------- */}
           <div className="watch-meta glass reveal">

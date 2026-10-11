@@ -13,6 +13,7 @@ import OrnamentGallery from '../ornaments/OrnamentGallery.jsx';
 import Avatar3DDecoration from '../components/Avatar3DDecoration.jsx';
 import MangaNovelReader from '../components/MangaNovelReader.jsx';
 import { OrnamentShop, WrappedCardPanel } from '../components/OrnamentShopAndWrapped.jsx';
+import { VipPlansSection, DevVipCodeGenerator, resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import { auth, onProfileSnapshot, onDeveloperProfileSnapshot } from '../firebase.js';
 
 // Helper to build instant, zero-404 SVG anime character portraits
@@ -898,16 +899,39 @@ export default function ProfileDashboard({ onOpenAuth }) {
                 }}>
                   ✓ Verified
                 </span>
-                <span style={{
-                  background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(249, 115, 22, 0.25))',
-                  border: '1px solid rgba(234, 179, 8, 0.5)',
-                  color: '#facc15',
-                  fontWeight: 800,
-                  fontSize: '0.73rem',
-                  padding: '0.18rem 0.55rem',
-                  borderRadius: '99px'
-                }}>
-                  ⭐ VIP Basic
+                <span
+                  onClick={() => setActiveTab('referrals')}
+                  style={{
+                    cursor: 'pointer',
+                    background:
+                      resolveUserVipTier(user, referralData) === 'vip_monarch'
+                        ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(236, 72, 153, 0.35))'
+                        : resolveUserVipTier(user, referralData) === 'vip_basic'
+                        ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.28), rgba(249, 115, 22, 0.28))'
+                        : 'rgba(255, 255, 255, 0.08)',
+                    border:
+                      resolveUserVipTier(user, referralData) === 'vip_monarch'
+                        ? '1px solid #a855f7'
+                        : resolveUserVipTier(user, referralData) === 'vip_basic'
+                        ? '1px solid #eab308'
+                        : '1px solid rgba(255, 255, 255, 0.2)',
+                    color:
+                      resolveUserVipTier(user, referralData) === 'vip_monarch'
+                        ? '#f3e8ff'
+                        : resolveUserVipTier(user, referralData) === 'vip_basic'
+                        ? '#facc15'
+                        : '#cbd5e1',
+                    fontWeight: 900,
+                    fontSize: '0.73rem',
+                    padding: '0.18rem 0.65rem',
+                    borderRadius: '99px'
+                  }}
+                >
+                  {resolveUserVipTier(user, referralData) === 'vip_monarch'
+                    ? '🔮 VIP Monarch 👑'
+                    : resolveUserVipTier(user, referralData) === 'vip_basic'
+                    ? '⚡ VIP Basic 👑'
+                    : (lang === 'ar' ? '🆓 مجاني (ترقية VIP)' : '🆓 Free (Upgrade VIP)')}
                 </span>
                 {customTitle && (
                   <span
@@ -1022,7 +1046,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
             { id: 'ratings', icon: '⭐', labelAr: 'تقييماتي', labelEn: 'My Ratings' },
             { id: 'activity', icon: '🏆', labelAr: 'المستوى والـ XP', labelEn: 'Level & XP' },
             { id: 'social', icon: '👥', labelAr: 'الأصدقاء والدعوات', labelEn: 'Friends & Invites' },
-            { id: 'referrals', icon: '🎁', labelAr: 'مكافأة VIP', labelEn: 'VIP Reward' },
+            { id: 'referrals', icon: '👑', labelAr: 'باقات VIP والأكواد', labelEn: 'VIP Plans & Codes' },
             { id: 'support', icon: '🎧', labelAr: 'الدعم الفني', labelEn: 'Support' },
             ...(isDeveloper ? [{ id: 'developer', icon: '👑', labelAr: t('profile.tabDev'), labelEn: t('profile.tabDev') }] : [])
           ].map((tb) => {
@@ -1861,6 +1885,19 @@ export default function ProfileDashboard({ onOpenAuth }) {
       {/* ================= TAB 4: Referrals & VIP Reward System ================= */}
       {activeTab === 'referrals' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          <VipPlansSection
+            user={user}
+            referralData={referralData}
+            onVipUpdated={(updatedUser) => {
+              if (updatedUser) applyRealtimeProfileUpdate?.(updatedUser);
+              refresh?.();
+            }}
+            onSelectFrame={(id) => {
+              setFrameStyle(id);
+              localStorage.setItem('profile_frame_style', id);
+            }}
+          />
+
           <div className="glass" style={{ padding: '2.25rem', borderRadius: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
               <span style={{ fontSize: '2rem' }}>🎁</span>
@@ -1948,6 +1985,9 @@ export default function ProfileDashboard({ onOpenAuth }) {
       )}
       {activeTab === 'developer' && isDeveloper && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+          {/* Real Developer Subscription Code Generator (VIP Basic & VIP Monarch in EGP) */}
+          <DevVipCodeGenerator />
+
           {/* Feature 1: Footer Text Editor */}
           <div className="glass" style={{ padding: '2.25rem', borderRadius: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBlockEnd: '0.5rem' }}>
