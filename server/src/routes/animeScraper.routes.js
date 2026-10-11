@@ -11,7 +11,8 @@ import {
   scraperGetEpisodeDl,
   scraperLatestEpisodes,
   scraperFetchSeasonals,
-  scraperGetAnimeInfo
+  scraperGetAnimeInfo,
+  scraperRandomAnime
 } from '../animeScraperApi.js';
 
 export const animeScraperRouter = express.Router();
@@ -75,5 +76,16 @@ animeScraperRouter.get('/get-anime-info/:s_id', async (req, res) => {
     res.json(results);
   } catch (err) {
     res.status(502).json({ error: 'get-anime-info failed', detail: err.message });
+  }
+});
+
+// GET /random-anime — returns shuffled random anime from 3v1ltw1n0x01/anime_scraper & WitAnime
+animeScraperRouter.get('/random-anime', async (req, res) => {
+  try {
+    const count = Math.min(48, Math.max(4, Number(req.query.count) || 24));
+    const results = await scraperRandomAnime(count);
+    res.json({ items: results, count: results.length });
+  } catch (err) {
+    res.status(502).json({ error: 'random-anime failed', detail: err.message, items: [] });
   }
 });

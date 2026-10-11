@@ -13,7 +13,8 @@ import {
   searchShows,
   fetchShow,
   fetchEpisode,
-  resolveDownloadEntry
+  resolveDownloadEntry,
+  fetchBrowseAnimeList
 } from './witanime.js';
 import { apiGet, apiSet } from './db.js';
 
@@ -447,3 +448,68 @@ export async function scraperGetEpisodeDl(eid, episodeNum = null) {
   apiSet(cacheKey, qualities, 30 * 60 * 1000);
   return qualities;
 }
+
+/**
+ * 7. `scraperRandomAnime(count = 24)` — GET /random-anime
+ * Fetches diverse / random anime from WitAnime scraper pages, seasonals, and browse catalog,
+ * shuffling them so every call surfaces fresh random anime for Trending & Discovery.
+ */
+const RANDOM_SEARCH_SEEDS = [
+  'a', 's', 'k', 'm', 'r', 't', 'b', 'd', 'n', 'h',
+  'piece', 'dragon', 'hero', 'slayer', 'hunter', 'black', 'naruto', 'bleach', 'jojo', 'titan'
+];
+
+export async function scraperRandomAnime(count = 24) {
+  const seed = RANDOM_SEARCH_SEEDS[Math.floor(Math.random() * RANDOM_SEARCH_SEEDS.length)];
+  const randomPage = Math.floor(Math.random() * 8) + 1;
+
+  const [pageSoup, seasonalList, browseList, seedResults] = await Promise.all([
+    getSoup(`قائمة-الانمي/page/${randomPage}/`).catch(() => ({ $: cheerio.load('') })),
+    scraperFetchSeasonals().catch(() => []),
+    typeof fetchBrowseAnimeList === 'function' ? fetchBrowseAnimeList().catch(() => []) : Promise.resolve([]),
+    scraperSearchAnime(seed).catch(() => [])
+  ]);
+
+  const pageItems = extractResults(pageSoup.$, pageSoup.$('.anime-card-container'));
+  const combined = [];
+  const seen = new Set();
+
+  const pushItem = (raw) => {
+    if (!raw) return;
+    const slug =
+      raw.slug ||
+      (raw.url || raw.anime_url || '').match(/\/(?:anime|movie)\/([^/]+)/)?.[1] ||
+      '';
+    const titleEn = raw.name || raw.titleEn || raw.alt || slug;
+    if (!slug && !titleEn) return;
+    const key = (slug || titleEn).toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    combined.push({
+      name: titleEn,
+      slug: slug || titleEn.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      titleEn,
+      titleAr: raw.titleAr || titleEn,
+      poster: raw.img || raw.src || raw.poster || '',
+      img: raw.img || raw.src || raw.poster || '',
+      url: raw.url || raw.anime_url || `/anime/${slug}`,
+      type: raw.type || 'TV',
+      status: raw.status || 'يعرض الان',
+      story: raw.story || '',
+      source: 'witanime',
+      sourceLabel: 'سيرفر BLACK X 1 (WitAnime API)'
+    });
+  };
+
+  [...pageItems, ...seedResults, ...seasonalList, ...browseList].forEach(pushItem);
+
+  // Fisher-Yates shuffle for true randomness
+  for (let i = combined.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [combined[i], combined[j]] = [combined[j], combined[i]];
+  }
+
+  return combined.slice(0, count);
+}
+

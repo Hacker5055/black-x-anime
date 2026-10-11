@@ -40,6 +40,8 @@ export default function TrendingAnime() {
   const [trendingList, setTrendingList] = useState([]);
   const [latestStreamList, setLatestStreamList] = useState([]);
   const [catalogList, setCatalogList] = useState([]);
+  const [randomScraperList, setRandomScraperList] = useState([]);
+  const [shufflingRandom, setShufflingRandom] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -52,14 +54,29 @@ export default function TrendingAnime() {
     setSubscribedSlugs(new Set(getSubscribedAnimeList().map((a) => a.slug)));
   }, []);
 
-  // Load initial trending + streaming anime for the selected source
+  const refreshRandomAnime = useCallback(async () => {
+    setShufflingRandom(true);
+    try {
+      const res = await api.get('/api/anime-scraper/random-anime?count=24');
+      if (Array.isArray(res?.items) && res.items.length) {
+        setRandomScraperList(res.items);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setShufflingRandom(false);
+    }
+  }, []);
+
+  // Load initial trending + streaming + random scraper anime for the selected source
   useEffect(() => {
     let alive = true;
     setLoading(true);
 
     const promises = [
       api.get(`/api/stream/latest?source=${selectedSource}`).catch(() => ({ items: [] })),
-      api.get(`/api/stream/catalog?source=${selectedSource}`).catch(() => ({ items: [] }))
+      api.get(`/api/stream/catalog?source=${selectedSource}`).catch(() => ({ items: [] })),
+      api.get('/api/anime-scraper/random-anime?count=24').catch(() => ({ items: [] }))
     ];
 
     if (selectedSource === 'all' || selectedSource === 'witanime') {
@@ -68,10 +85,11 @@ export default function TrendingAnime() {
       promises.push(Promise.resolve({ anime: [] }));
     }
 
-    Promise.all(promises).then(([latestData, catalogData, trendData]) => {
+    Promise.all(promises).then(([latestData, catalogData, randomData, trendData]) => {
       if (!alive) return;
       setLatestStreamList(latestData?.items || []);
       setCatalogList(catalogData?.items || []);
+      setRandomScraperList(randomData?.items || []);
       setTrendingList(trendData?.anime || []);
       setLoading(false);
     });
@@ -276,6 +294,28 @@ export default function TrendingAnime() {
           sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
         });
       }
+
+      // 4. Add random & seasonal anime from 3v1ltw1n0x01/anime_scraper API
+      for (const rnd of randomScraperList) {
+        const slugKey = `wita:${rnd.slug || rnd.name}`;
+        if (seen.has(slugKey)) continue;
+        seen.add(slugKey);
+        list.push({
+          id: `rnd-${rnd.slug || rnd.name}`,
+          slug: rnd.slug || null,
+          searchTitle: rnd.titleEn || rnd.name,
+          titleEn: rnd.titleEn || rnd.name || rnd.slug,
+          titleAr: rnd.titleAr || rnd.name || rnd.titleEn || rnd.slug,
+          poster: rnd.poster || rnd.img || rnd.src,
+          episodes: rnd.episodes || 12,
+          score: 93,
+          genres: ['Action', 'Adventure', 'Fantasy'],
+          isDirectStream: Boolean(rnd.slug),
+          isRandomPick: true,
+          source: 'witanime',
+          sourceLabel: '🎲 أنمي مقترح (WitAnime API)'
+        });
+      }
     }
 
     let filtered = list;
@@ -287,10 +327,13 @@ export default function TrendingAnime() {
 
     if (activeFilter === 'top') {
       filtered = [...filtered].sort((a, b) => (b.score || 0) - (a.score || 0));
+    } else if (activeFilter === 'random') {
+      const randomOnly = filtered.filter((it) => it.isRandomPick);
+      filtered = randomOnly.length ? randomOnly : [...filtered].sort(() => Math.random() - 0.5);
     }
 
     return filtered;
-  }, [searchResults, activeFilter, selectedSource, catalogList, latestStreamList, trendingList, selectedGenre, subscribedSlugs]);
+  }, [searchResults, activeFilter, selectedSource, catalogList, latestStreamList, trendingList, randomScraperList, selectedGenre, subscribedSlugs]);
 
   const handleOpenAnime = async (item) => {
     const srcQuery = item.source && item.source !== 'all' ? `?source=${item.source}` : '';
@@ -599,9 +642,10 @@ export default function TrendingAnime() {
 
       {/* Filter Tabs & Genre Chips */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {[
             { id: 'trending', ar: '🔥 الأكثر رواجاً الآن', en: '🔥 Trending Now' },
+            { id: 'random', ar: '🎲 أنميات عشوائية', en: '🎲 Random Anime' },
             { id: 'latest', ar: '🎬 أحدث الحلقات المضافة', en: '🎬 Latest Episodes' },
             { id: 'top', ar: '⭐ الأعلى تقييماً', en: '⭐ Top Rated' },
             { id: 'alerts', ar: `🔔 تنبيهاتك المفعّلة (${subscribedSlugs.size})`, en: `🔔 Your Alerts (${subscribedSlugs.size})` }
@@ -614,12 +658,36 @@ export default function TrendingAnime() {
                 setQuery('');
                 setSearchResults(null);
                 setActiveFilter(tb.id);
+                if (tb.id === 'random') {
+                  refreshRandomAnime();
+                }
               }}
               style={{ fontWeight: 800, padding: '0.5rem 1.05rem' }}
             >
               {lang === 'ar' ? tb.ar : tb.en}
             </button>
           ))}
+          <button
+            type="button"
+            className="chip"
+            disabled={shufflingRandom}
+            onClick={() => {
+              setQuery('');
+              setSearchResults(null);
+              setActiveFilter('random');
+              refreshRandomAnime();
+            }}
+            style={{
+              fontWeight: 900,
+              padding: '0.5rem 0.95rem',
+              borderColor: 'rgba(255,255,255,0.35)',
+              color: '#ffffff'
+            }}
+          >
+            {shufflingRandom
+              ? (lang === 'ar' ? '⏳ جاري الجلب...' : '⏳ Shuffling...')
+              : (lang === 'ar' ? '🔄 خلط أنميات عشوائية' : '🔄 Shuffle Random')}
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
