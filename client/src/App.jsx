@@ -63,6 +63,16 @@ export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const openAuth = (mode = 'login') => setAuthModal(mode);
 
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref') || params.get('invite');
+      if (ref) {
+        localStorage.setItem('blackx_referral_code', ref.trim());
+      }
+    } catch {}
+  }, []);
+
   return (
     <>
       <GooFilter />

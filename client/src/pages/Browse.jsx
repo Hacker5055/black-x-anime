@@ -79,14 +79,14 @@ export default function Browse() {
           type: (r.type || 'MANHWA').toUpperCase(),
           poster: r.coverUrl || r.poster || 'https://io.mangalik.net/wp-content/app/lekmanganet/512.png',
           banner: r.coverUrl || r.banner,
-          author: r.author || 'مانجا ليك (MangaLik)',
+          author: r.author || 'سيرفرات BLACK X',
           rating: r.rating || (r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.8'),
-          description_ar: r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر مانجا ليك.',
-          description_en: r.description || 'Full Arabic translated chapters on MangaLik.',
+          description_ar: r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر BLACK X.',
+          description_en: r.description || 'Full Arabic translated chapters on BLACK X.',
           chapters_count: r.chaptersCount || 25,
           status: r.status || 'مستمرة',
           genres: r.genres || ['أكشن', 'مترجم عربي'],
-          source: 'mangalik'
+          source: 'blackx'
         }));
         setLiveSearchResults(mapped);
       } else {
@@ -214,7 +214,7 @@ export default function Browse() {
               borderRadius: '99px'
             }}
           >
-            ⚡ {lang === 'ar' ? 'المصدر الحصري: مانجا ليك (MangaLik)' : 'Source: MangaLik'}
+            ⚡ {lang === 'ar' ? 'المصدر الحصري: سيرفرات BLACK X' : 'Source: BLACK X'}
           </span>
         </div>
         <p style={{ margin: '0.5rem 0 0', color: 'var(--ink-dim)', fontSize: '0.94rem' }}>
@@ -422,7 +422,7 @@ export default function Browse() {
           />
           <button type="submit" className="btn btn--primary">
             <span className="btn__shine" />
-            {lang === 'ar' ? 'بحث في مانجا ليك' : 'Search MangaLik'}
+            {lang === 'ar' ? 'بحث في مكتبة BLACK X' : 'Search BLACK X'}
           </button>
           {liveSearchResults !== null && (
             <button
@@ -632,7 +632,7 @@ export default function Browse() {
                 </h3>
 
                 <div style={{ fontSize: '0.78rem', color: 'var(--ink-dim)', marginBottom: '0.65rem' }}>
-                  ✍️ {item.author || 'MangaLik'} · {item.release_year || '2024'}
+                  ✍️ {item.author || 'BLACK X Manga'} · {item.release_year || '2024'}
                 </div>
 
                 {/* Genre chips */}
@@ -756,7 +756,7 @@ export default function Browse() {
                   {lang === 'ar' ? 'التقييم:' : 'Score:'} <strong style={{ color: '#fbbf24' }}>★ {selectedItem.rating} / 10</strong>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--ink-dim)' }}>
-                  {lang === 'ar' ? 'المصدر:' : 'Source:'} <strong style={{ color: '#38bdf8' }}>مانجا ليك (MangaLik)</strong>
+                  {lang === 'ar' ? 'المصدر:' : 'Source:'} <strong style={{ color: '#38bdf8' }}>سيرفرات BLACK X</strong>
                 </div>
               </div>
 
@@ -821,7 +821,7 @@ export default function Browse() {
               {/* Chapters list */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>
-                  📑 {lang === 'ar' ? 'الفصول المتاحة من مانجا ليك' : 'Chapters available on MangaLik'}
+                  📑 {lang === 'ar' ? 'الفصول المتاحة من سيرفرات BLACK X' : 'Chapters available on BLACK X'}
                 </h4>
                 <span style={{ fontSize: '0.8rem', color: 'var(--ink-dim)' }}>
                   {itemChapters.length} {lang === 'ar' ? 'فصل' : 'chapters'}
@@ -832,7 +832,7 @@ export default function Browse() {
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
                   <LiquidLoader />
                   <p style={{ fontSize: '0.85rem', color: 'var(--ink-dim)', marginTop: '0.5rem' }}>
-                    {lang === 'ar' ? 'جلب الفصول المباشرة من مانجا ليك...' : 'Fetching live chapters from MangaLik...'}
+                    {lang === 'ar' ? 'جلب الفصول المباشرة من سيرفرات BLACK X...' : 'Fetching live chapters from BLACK X...'}
                   </p>
                 </div>
               ) : itemChapters.length === 0 ? (

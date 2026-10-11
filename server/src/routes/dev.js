@@ -237,4 +237,72 @@ router.post('/test-log', requireDeveloper, (req, res) => {
   res.json({ ok: true, message: 'Diagnostic event logged successfully' });
 });
 
+/**
+ * Developer Only: VIP Subscription Code Generator & List
+ */
+router.get('/vip-codes', requireDeveloper, (req, res) => {
+  try {
+    const codes = db.prepare(`
+      SELECT id, code, tier, duration_days AS durationDays, price_egp AS priceEgp,
+             created_by AS createdBy, is_used AS isUsed,
+             used_by_user_id AS usedByUserId, used_by_username AS usedByUsername,
+             used_at AS usedAt, created_at AS createdAt
+      FROM vip_subscription_codes
+      ORDER BY id DESC
+      LIMIT 100
+    `).all();
+    res.json({ codes });
+  } catch (err) {
+    res.status(500).json({ error: 'db_error', message: err.message });
+  }
+});
+
+router.post('/vip-codes/generate', requireDeveloper, (req, res) => {
+  try {
+    const { tier = 'VIP Basic', durationDays = 30, priceEgp, customPrefix = 'BX' } = req.body || {};
+    const validTier = tier === 'VIP Monarch' ? 'VIP Monarch' : 'VIP Basic';
+    const days = Math.max(1, Number(durationDays) || 30);
+    const defaultPrice = validTier === 'VIP Monarch' ? 149 : 69;
+    const finalPrice = Number(priceEgp) > 0 ? Number(priceEgp) : defaultPrice;
+
+    // Generate random distinct alphanumeric key (e.g. BX-MONARCH-9X4K2P)
+    const tierCode = validTier === 'VIP Monarch' ? 'MONARCH' : 'BASIC';
+    const randChars = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const cleanPrefix = String(customPrefix || 'BX').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const code = `${cleanPrefix}-${tierCode}-${randChars}`;
+
+    const info = db.prepare(`
+      INSERT INTO vip_subscription_codes (code, tier, duration_days, price_egp, created_by, is_used)
+      VALUES (?, ?, ?, ?, ?, 0)
+    `).run(code, validTier, days, finalPrice, req.user?.email || 'developer');
+
+    logSystemEvent('info', 'vip', `Generated ${validTier} code ${code} (${days}d, ${finalPrice} EGP) by developer`);
+
+    res.json({
+      ok: true,
+      code: {
+        id: info.lastInsertRowid,
+        code,
+        tier: validTier,
+        durationDays: days,
+        priceEgp: finalPrice,
+        isUsed: 0,
+        createdAt: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'db_error', message: err.message });
+  }
+});
+
+router.delete('/vip-codes/:id', requireDeveloper, (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    db.prepare('DELETE FROM vip_subscription_codes WHERE id = ?').run(id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'db_error', message: err.message });
+  }
+});
+
 export default router;

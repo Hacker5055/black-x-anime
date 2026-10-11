@@ -856,11 +856,11 @@ export default function ProfileDashboard({ onOpenAuth }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem', color: 'var(--ink-dim)', fontSize: '0.9rem', fontWeight: 600 }}>
                 <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>@{username}</span>
                 <span>•</span>
-                <span><strong style={{ color: '#fff' }}>{socialNetwork?.followersCount ? formatNumber(socialNetwork.followersCount) : '12.4K'}</strong> {lang === 'ar' ? 'متابع' : 'followers'}</span>
+                <span><strong style={{ color: '#fff' }}>{formatNumber(socialNetwork?.followersCount ?? 0)}</strong> {lang === 'ar' ? 'متابع' : 'followers'}</span>
                 <span>•</span>
-                <span><strong style={{ color: '#fff' }}>{socialNetwork?.followingCount ? formatNumber(socialNetwork.followingCount) : '158'}</strong> {lang === 'ar' ? 'يتابع' : 'following'}</span>
+                <span><strong style={{ color: '#fff' }}>{formatNumber(socialNetwork?.followingCount ?? 0)}</strong> {lang === 'ar' ? 'يتابع' : 'following'}</span>
                 <span>•</span>
-                <span style={{ color: '#c084fc', fontWeight: 800 }}>⚡ LVL {gamificationStats?.currentLevel || 75}</span>
+                <span style={{ color: '#c084fc', fontWeight: 800 }}>⚡ LVL {gamificationStats?.currentLevel || 1}</span>
               </div>
 
               {/* Status & Role Pills */}
@@ -1062,8 +1062,11 @@ export default function ProfileDashboard({ onOpenAuth }) {
             setFrameStyle(id);
             localStorage.setItem('profile_frame_style', id);
           }}
-          bannerStyle={bannerOrnament}
-          onSelectBanner={setBannerOrnament}
+          bannerStyle={bannerStyle}
+          onSelectBanner={(id) => {
+            setBannerStyle(id);
+            localStorage.setItem('profile_banner_style', id);
+          }}
           customTitle={customTitle}
           onSelectTitle={setCustomTitle}
         />
@@ -1082,9 +1085,9 @@ export default function ProfileDashboard({ onOpenAuth }) {
         />
       )}
 
-      {/* ================= TAB 1: Profile & Customization (Facebook Two-Column Layout) ================= */}
+      {/* ================= TAB 1: Profile & Customization (Responsive Layout) ================= */}
       {activeTab === 'profile' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 350px) 1fr', gap: '1.75rem', alignItems: 'start' }}>
+        <div className="profile-dashboard-grid">
           {/* Facebook-Style Left "Intro / نبذة وإحصائيات" Card */}
           <div className="glass" style={{ padding: '1.5rem', textAlign: 'center', borderRadius: '20px', overflow: 'hidden' }}>
             <div style={{ textAlign: 'start', marginBottom: '0.75rem' }}>
@@ -1126,14 +1129,14 @@ export default function ProfileDashboard({ onOpenAuth }) {
                       boxShadow: '0 0 10px rgba(139, 92, 246, 0.6)'
                     }}
                   >
-                    LVL {gamificationStats?.currentLevel || 75}
+                    LVL {gamificationStats?.currentLevel || 1}
                   </span>
                 </div>
                 {/* Progress bar */}
                 <div style={{ height: '7px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '99px', overflow: 'hidden', marginBlock: '0.35rem' }}>
                   <div
                     style={{
-                      width: `${gamificationStats?.levelProgress || 84.5}%`,
+                      width: `${Math.min(100, gamificationStats?.levelProgress || ((user?.watchTimeMinutes || 0) % 60) * 1.6 || 0)}%`,
                       height: '100%',
                       background: 'linear-gradient(90deg, #8b5cf6, #22d3ee)',
                       boxShadow: '0 0 10px #8b5cf6'
@@ -1141,7 +1144,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#94a3b8' }}>
-                  <span>EXP {gamificationStats?.levelProgress ? `${Math.round(gamificationStats.levelProgress * 100)} / 10,000` : '8,450 / 10,000'}</span>
+                  <span>EXP {gamificationStats?.currentPoints ?? (user?.watchTimeMinutes ? user.watchTimeMinutes * 10 : 0)} / {gamificationStats?.nextLevelPoints || 1000}</span>
                   <span style={{ color: '#22d3ee', fontWeight: 600 }}>Level-up via Watch & Read</span>
                 </div>
               </div>
@@ -1162,40 +1165,46 @@ export default function ProfileDashboard({ onOpenAuth }) {
                     🎁 {lang === 'ar' ? 'نظام الدعوة ومكافأة VIP' : 'Social & Invite System'}
                   </span>
                   <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 800 }}>
-                    {referralData?.referralsCount || 14}/15 VIP Basic
+                    {referralData?.count ?? referralData?.referralsCount ?? 0}/{referralData?.target || 3} VIP Basic
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-around', marginBlock: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.4rem' }}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#22d3ee' }}>
-                      {socialNetwork?.followersCount ? formatNumber(socialNetwork.followersCount) : '12.4K'}
+                      {formatNumber(socialNetwork?.followersCount ?? 0)}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{lang === 'ar' ? 'المتابعون' : 'Followers'}</div>
                   </div>
                   <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }} />
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f472b6' }}>
-                      {socialNetwork?.followingCount || 158}
+                      {socialNetwork?.followingCount ?? 0}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{lang === 'ar' ? 'يتابع' : 'Following'}</div>
                   </div>
                   <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }} />
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fbbf24' }}>
-                      {referralData?.referralsCount || 14}
+                      {referralData?.count ?? referralData?.referralsCount ?? 0}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{lang === 'ar' ? 'الدعوات' : 'Invites'}</div>
                   </div>
                 </div>
               </div>
 
-              {/* Badges & Achievements (الشارات والإنجازات) Row */}
+              {/* Badges & Achievements Row */}
               <div style={{ marginBlock: '0.65rem 0.85rem' }}>
                 <div style={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 700, textAlign: 'start', marginBottom: '0.35rem' }}>
-                  🏆 {lang === 'ar' ? 'الشارات والإنجازات (Badges & Achievements)' : 'Badges & Achievements'}
+                  🏆 {lang === 'ar' ? 'الشارات والإنجازات (Badges)' : 'Badges & Achievements'}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                  <UserBadges badges={user?.badges?.length ? user.badges : ['blue_verified', 'gold_vip', 'contributor_master', 'hall_of_fame']} size="md" showLabels={false} />
+                  {user?.badges?.length ? (
+                    <UserBadges badges={user.badges} size="md" showLabels={false} />
+                  ) : (
+                    <span style={{ fontSize: '0.74rem', color: 'var(--ink-dim)', padding: '0.2rem' }}>
+                      {lang === 'ar' ? 'ابدأ المشاهدة والتفاعل لفتح شارات جديدة 🌟' : 'Watch & interact to earn badges 🌟'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1931,18 +1940,132 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   📋 {lang === 'ar' ? 'نسخ الرابط' : 'Copy Link'}
                 </button>
               </div>
+
+              {/* Instant Social Share Buttons */}
+              <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                    `انضم معي إلى منصة BLACK X لمشاهدة وقراءة أحدث الأنمي والمانجا بجودة فائقة! ${referralData?.referralLink || window.location.origin}`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn--sm"
+                  style={{ background: '#25D366', color: '#fff', textDecoration: 'none', fontWeight: 700 }}
+                >
+                  💬 WhatsApp
+                </a>
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(referralData?.referralLink || window.location.origin)}&text=${encodeURIComponent(
+                    'انضم معي إلى منصة BLACK X واستمتع بمشاهدة أحدث الأنمي مجاناً!'
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn--sm"
+                  style={{ background: '#0088cc', color: '#fff', textDecoration: 'none', fontWeight: 700 }}
+                >
+                  ✈️ Telegram
+                </a>
+              </div>
             </div>
 
-            {/* Mock Invite Simulation Button for testing */}
-            <button
-              type="button"
-              className="btn btn--ghost btn--block"
-              onClick={handleMockInvite}
-              disabled={invitingFriend}
-              style={{ border: '1px dashed rgba(255, 255, 255, 0.25)' }}
-            >
-              🚀 {invitingFriend ? '...' : (lang === 'ar' ? 'محاكاة دعوة صديق جديد لاختبار الترقية إلى VIP Basic' : 'Simulate friend invite to test VIP Basic unlock')}
-            </button>
+            {/* List of Real Referred Friends */}
+            <div style={{ marginTop: '1.25rem' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: '0 0 0.65rem', color: '#cbd5e1' }}>
+                👥 {lang === 'ar' ? 'الأصدقاء الذين انضموا عبر رابط دعوتك:' : 'Friends joined via your invite:'}
+              </h4>
+              {referralData?.referrals && referralData.referrals.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {referralData.referrals.map((r, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.6rem 1rem',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: 'var(--cyan)', fontWeight: 800 }}>@{r.referred_username}</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--ink-dim)' }}>
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}
+                        </span>
+                      </div>
+                      <span style={{ color: '#10b981', fontWeight: 700, fontSize: '0.78rem' }}>
+                        ✓ {lang === 'ar' ? 'دعوة ناجحة' : 'Joined'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '10px', textAlign: 'center', color: 'var(--ink-dim)', fontSize: '0.85rem' }}>
+                  {lang === 'ar' ? 'لم يسجل أي شخص عبر رابطك بعد. شارك الرابط في مجموعات الأنمي والأصدقاء لفتح VIP مجاناً!' : 'No one has joined yet. Share your link to unlock free VIP!'}
+                </div>
+              )}
+            </div>
+
+            {/* VIP Plans & Comparison Proposal Showcase */}
+            <div style={{ marginTop: '1.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 900, margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>👑</span> {lang === 'ar' ? 'خطط وباقات الـ VIP المقترحة (VIP Tiers Proposal)' : 'VIP Plans & Membership Tiers'}
+              </h3>
+              <p style={{ fontSize: '0.84rem', color: 'var(--ink-dim)', margin: '0 0 1rem', lineHeight: 1.5 }}>
+                {lang === 'ar'
+                  ? 'مقارنة شاملة بين الباقات المجانية وعضويات VIP، وكيفية الحصول عليها بدعوة الأصدقاء أو الترقية:'
+                  : 'Comprehensive comparison of free vs VIP tiers, and how to unlock them:'}
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                {/* Free Tier */}
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '14px', padding: '1.1rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>{lang === 'ar' ? 'الباقة الحالية' : 'Current Plan'}</div>
+                  <h4 style={{ fontSize: '1.05rem', margin: '0.2rem 0 0.75rem', fontWeight: 800, color: '#fff' }}>
+                    🎮 Free Otaku (مجاني)
+                  </h4>
+                  <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.8 }}>
+                    <li>{lang === 'ar' ? 'مشاهدة بجودة 720p / 1080p العادية' : 'Standard 720p/1080p stream'}</li>
+                    <li>{lang === 'ar' ? 'سيرفرات المشاهدة العامة' : 'Public streaming servers'}</li>
+                    <li>{lang === 'ar' ? 'غرف مشاهدة جماعية عامة' : 'Public watch party rooms'}</li>
+                    <li>{lang === 'ar' ? 'إطارات وزخارف أساسية' : 'Basic profile ornaments'}</li>
+                  </ul>
+                </div>
+
+                {/* VIP Basic Tier */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(245, 158, 11, 0.06))', border: '1px solid rgba(234, 179, 8, 0.4)', borderRadius: '14px', padding: '1.1rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700 }}>
+                    {lang === 'ar' ? 'هدية دعوة 3 أصدقاء 🎁' : 'Unlock with 3 Invites 🎁'}
+                  </div>
+                  <h4 style={{ fontSize: '1.05rem', margin: '0.2rem 0 0.75rem', fontWeight: 800, color: '#fbbf24' }}>
+                    ⚡ VIP Basic (صياد النخبة)
+                  </h4>
+                  <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#fef08a', lineHeight: 1.8 }}>
+                    <li>{lang === 'ar' ? 'شارة VIP الذهبية المميزة بجانب الاسم 👑' : 'Golden VIP badge next to name'}</li>
+                    <li>{lang === 'ar' ? 'سيرفرات فائقة السرعة VIP Fast CDN بدون ضغط' : 'VIP High-speed CDN servers'}</li>
+                    <li>{lang === 'ar' ? 'إنشاء غرف مشاهدة جماعية خاصة مع رابط مخصص' : 'Private Watch Party with custom link'}</li>
+                    <li>{lang === 'ar' ? 'فتح 5 إطارات وزخارف حصرية لملف الحساب' : 'Unlock 5 exclusive 3D frames'}</li>
+                  </ul>
+                </div>
+
+                {/* VIP Ultra / Monarch Tier */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.08))', border: '1px solid rgba(168, 85, 247, 0.45)', borderRadius: '14px', padding: '1.1rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#c084fc', fontWeight: 700 }}>
+                    {lang === 'ar' ? 'الباقة الإمبراطورية الملكية 👑' : 'Supreme Monarch Tier 👑'}
+                  </div>
+                  <h4 style={{ fontSize: '1.05rem', margin: '0.2rem 0 0.75rem', fontWeight: 800, color: '#e879f9' }}>
+                    🔮 VIP Monarch (إمبراطور الظلال)
+                  </h4>
+                  <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#f5d0fe', lineHeight: 1.8 }}>
+                    <li>{lang === 'ar' ? 'بث بدقة 4K HDR ومعدل إطارات 60fps' : 'Ultra 4K HDR & 60fps stream'}</li>
+                    <li>{lang === 'ar' ? 'وصول مبكر للحلقات وفصول المانجا قبل نشرها' : 'Early access to episodes & chapters'}</li>
+                    <li>{lang === 'ar' ? 'استوديو الذكاء الاصطناعي 3D Prompt Studio' : '3D AI Prompt Studio unlock'}</li>
+                    <li>{lang === 'ar' ? 'غرف جماعية تتسع لـ 100 مشاهد + رسائل صوتية مفتوحة' : '100-user rooms + unlimited voice notes'}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

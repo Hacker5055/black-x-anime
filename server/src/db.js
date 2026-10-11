@@ -142,6 +142,8 @@ CREATE TABLE IF NOT EXISTS community_posts (
   tag_name TEXT DEFAULT 'عام',
   content TEXT NOT NULL,
   image_url TEXT DEFAULT '',
+  voice_url TEXT DEFAULT '',
+  voice_duration INTEGER DEFAULT 0,
   is_pinned INTEGER DEFAULT 0,
   likes_count INTEGER DEFAULT 0,
   comments_count INTEGER DEFAULT 0,
@@ -169,6 +171,22 @@ CREATE TABLE IF NOT EXISTS community_comments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_comm_comments_post ON community_comments(post_id, created_at ASC);
+
+-- ===== VIP subscription codes & plans generator =====
+CREATE TABLE IF NOT EXISTS vip_subscription_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  tier TEXT NOT NULL,
+  duration_days INTEGER NOT NULL DEFAULT 30,
+  price_egp INTEGER NOT NULL,
+  created_by TEXT NOT NULL DEFAULT 'developer',
+  is_used INTEGER NOT NULL DEFAULT 0,
+  used_by_user_id INTEGER,
+  used_by_username TEXT,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_vip_codes_code ON vip_subscription_codes(code);
 `);
 
 // Safe column migrations
@@ -179,6 +197,16 @@ try {
 }
 try {
   db.exec("ALTER TABLE users ADD COLUMN badges TEXT DEFAULT '[]'");
+} catch {
+  /* column already exists */
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN vip_status TEXT DEFAULT NULL");
+} catch {
+  /* column already exists */
+}
+try {
+  db.exec("ALTER TABLE users ADD COLUMN vip_expires_at TEXT DEFAULT NULL");
 } catch {
   /* column already exists */
 }
@@ -221,6 +249,14 @@ try {
 } catch (err) {
   console.warn('Developer user setup note:', err.message);
 }
+
+// Ensure community_posts has voice columns
+try {
+  db.prepare("ALTER TABLE community_posts ADD COLUMN voice_url TEXT DEFAULT ''").run();
+} catch {}
+try {
+  db.prepare("ALTER TABLE community_posts ADD COLUMN voice_duration INTEGER DEFAULT 0").run();
+} catch {}
 
 // Initial seed for community if empty
 try {

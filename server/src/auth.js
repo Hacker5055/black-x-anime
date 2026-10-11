@@ -52,6 +52,8 @@ export function publicUser(row) {
     if (!badges.includes('gold_vip')) badges.unshift('gold_vip');
   }
 
+  const effectiveVip = isDev ? 'VIP Monarch' : (row.vip_status || null);
+
   return {
     id: row.id,
     username: row.username,
@@ -63,6 +65,9 @@ export function publicUser(row) {
     bio: row.bio,
     role: isDev ? 'developer' : row.role,
     isDeveloper: isDev,
+    vipStatus: effectiveVip,
+    vip_status: effectiveVip,
+    vipExpiresAt: row.vip_expires_at || null,
     badges,
     createdAt: row.created_at
   };

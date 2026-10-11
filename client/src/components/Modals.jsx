@@ -63,12 +63,17 @@ export function AuthModal({ initialMode = 'login', onClose }) {
         const u = await login(form.username.trim(), form.password);
         pushToast(t('auth.loginSuccess', { name: u.displayName || u.username }), 'success');
       } else {
+        const storedRef = localStorage.getItem('blackx_referral_code') || '';
         await register({
           username: form.username.trim(),
           email: form.email.trim(),
           password: form.password,
-          displayName: form.displayName.trim() || form.username.trim()
+          displayName: form.displayName.trim() || form.username.trim(),
+          referralCode: storedRef
         });
+        if (storedRef) {
+          localStorage.removeItem('blackx_referral_code');
+        }
         pushToast(t('auth.registerSuccess'), 'success');
       }
       onClose();

@@ -14,30 +14,28 @@ export const ANIME_MEME_STICKERS = [
   { id: 'hinokami', emoji: '🔥', labelAr: 'تنفس الشمس (Hinokami Kagura)', labelEn: 'Hinokami Kagura 🔥', bg: 'linear-gradient(135deg, #ef4444, #f97316)' }
 ];
 
-export function VoiceNoteWavePlayer({ duration = 5, label }) {
+export function VoiceNoteWavePlayer({ audioUrl, duration = 5, label }) {
   const { lang } = useI18n();
   const [playing, setPlaying] = useState(false);
+  const audioRef = useRef(null);
 
-  const handlePlay = () => {
-    setPlaying(true);
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        const ctx = new AudioCtx();
-        [340, 440, 520, 410, 490].forEach((freq, i) => {
-          const osc = ctx.createOscillator();
-          const g = ctx.createGain();
-          osc.frequency.value = freq;
-          g.gain.setValueAtTime(0.05, ctx.currentTime + i * 0.14);
-          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (i + 1) * 0.14);
-          osc.connect(g);
-          g.connect(ctx.destination);
-          osc.start(ctx.currentTime + i * 0.14);
-          osc.stop(ctx.currentTime + (i + 1) * 0.14);
+  const handlePlay = (e) => {
+    e?.stopPropagation?.();
+    if (audioUrl) {
+      const audio = audioRef.current;
+      if (!audio) return;
+      if (playing) {
+        audio.pause();
+        setPlaying(false);
+      } else {
+        audio.play().then(() => setPlaying(true)).catch((err) => {
+          console.warn('Audio playback error:', err);
         });
       }
-    } catch {}
-    setTimeout(() => setPlaying(false), 1200);
+    } else {
+      setPlaying(true);
+      setTimeout(() => setPlaying(false), 2000);
+    }
   };
 
   return (
@@ -53,6 +51,14 @@ export function VoiceNoteWavePlayer({ duration = 5, label }) {
         marginTop: '0.45rem'
       }}
     >
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onEnded={() => setPlaying(false)}
+        />
+      )}
       <button
         type="button"
         onClick={handlePlay}
@@ -72,7 +78,7 @@ export function VoiceNoteWavePlayer({ duration = 5, label }) {
         {playing ? '❚❚' : '▶'}
       </button>
       <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#fff' }}>
-        {label || (lang === 'ar' ? `🎙️ تعليق صوتي (${duration}ث)` : `🎙️ Voice Note (${duration}s)`)}
+        {label || (lang === 'ar' ? `🎙️ رسالة صوتية (${duration}ث)` : `🎙️ Voice Note (${duration}s)`)}
       </span>
       <span style={{ letterSpacing: '2px', color: playing ? '#f472b6' : 'var(--cyan)', fontWeight: 900 }}>
         ılılıllılılıllı

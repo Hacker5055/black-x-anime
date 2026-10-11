@@ -138,7 +138,7 @@ export function OrnamentShop({
   const { lang, formatNumber } = useI18n();
   const [filterCat, setFilterCat] = useState('all');
 
-  const baseShards = 1850 + (gamificationStats?.totalWatchTimeMin || 120) * 3;
+  const baseShards = (gamificationStats?.points || (gamificationStats?.totalWatchTimeMin || 0) * 5 || (user?.watchTimeMinutes || 0) * 5 || 0);
   const [spentShards, setSpentShards] = useState(() => {
     try { return Number(localStorage.getItem('blackx.spentShards') || 0); } catch { return 0; }
   });

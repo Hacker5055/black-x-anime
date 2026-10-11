@@ -291,12 +291,16 @@ export async function getReferralInfo(req, res) {
     const key = String(userId);
     const username = req.user?.username || 'user';
     const referralCode = `BLACKX-${username.toUpperCase()}`;
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const origin = req.headers.origin || (host ? `${proto}://${host}` : 'https://ais-dev-hwrerbuffecd5pq2in46o2-485761728435.europe-west1.run.app');
+    const referralLink = `${origin}/?ref=${referralCode}`;
     const info = social.getReferrals(key);
     return res.json({
       success: true,
       data: {
         referralCode,
-        referralLink: `https://blackx.app/?ref=${referralCode}`,
+        referralLink,
         count: info.count,
         target: info.target,
         isVipUnlocked: info.isVipUnlocked,

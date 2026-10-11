@@ -307,8 +307,8 @@ function LibraryShowcaseSection() {
           </h2>
           <p className="section__sub">
             {lang === 'ar'
-              ? 'اختر مباشرة من بين أشهر أعمال المانهوا والمانجا لقراءتها فورياً ومجاناً عبر مانجا ليك (MangaLik).'
-              : 'Pick from the highest-rated Korean Manhwa and Japanese Manga powered by MangaLik.'}
+              ? 'اختر مباشرة من بين أشهر أعمال المانهوا والمانجا لقراءتها فورياً ومجاناً عبر منصة BLACK X.'
+              : 'Pick from the highest-rated Korean Manhwa and Japanese Manga powered by BLACK X.'}
           </p>
         </div>
         <Link className="section__link" to="/browse">
