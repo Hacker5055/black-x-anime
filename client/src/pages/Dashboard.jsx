@@ -3,14 +3,176 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
-import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/hooks.js';
+import { useAsync } from '../hooks/hooks.js';
 import ShowCard, { EpisodeTile, ContinueCard } from '../components/ShowCard.jsx';
-import { LiquidLoader, SkeletonGrid, EmptyState } from '../components/Loading.jsx';
-import LandingHero from '../components/LandingHero.jsx';
+import { SkeletonGrid, EmptyState } from '../components/Loading.jsx';
+import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 
+const WEEK_DAYS = [
+  { id: 6, ar: 'السبت', en: 'Saturday' },
+  { id: 0, ar: 'الأحد', en: 'Sunday' },
+  { id: 1, ar: 'الإثنين', en: 'Monday' },
+  { id: 2, ar: 'الثلاثاء', en: 'Tuesday' },
+  { id: 3, ar: 'الأربعاء', en: 'Wednesday' },
+  { id: 4, ar: 'الخميس', en: 'Thursday' },
+  { id: 5, ar: 'الجمعة', en: 'Friday' }
+];
 
+/* --------------------------- WitAnime Section Header --------------------------- */
+function WitSectionHeader({ icon, title, sub, linkTo, linkLabel }) {
+  return (
+    <div className="wit-sec-header">
+      <div className="wit-sec-header__right">
+        <span className="wit-sec-header__bar" />
+        <div>
+          <h2 className="wit-sec-header__title">
+            {icon && <span>{icon}</span>} {title}
+          </h2>
+          {sub && <p className="wit-sec-header__sub">{sub}</p>}
+        </div>
+      </div>
+      {linkTo && (
+        <Link className="wit-sec-header__more" to={linkTo}>
+          {linkLabel || 'المزيد ←'}
+        </Link>
+      )}
+    </div>
+  );
+}
 
-/* --------------------------- continue watching --------------------------- */
+/* --------------------------- 1. Pinned Anime (الأنميات المثبتة) --------------------------- */
+function PinnedAnimeSection({ items = [], loading }) {
+  const { lang } = useI18n();
+  const navigate = useNavigate();
+
+  return (
+    <section className="wit-section" id="pinned-anime">
+      <WitSectionHeader
+        icon="📌"
+        title={lang === 'ar' ? 'الأنميات المثبتة' : 'Pinned Season Anime'}
+        sub={lang === 'ar' ? 'أقوى أنميات الموسم المختارة بجودة FHD 1080p' : 'Top featured seasonal anime in FHD 1080p'}
+        linkTo="/trending"
+        linkLabel={lang === 'ar' ? 'قائمة الأنمي ←' : 'All Anime →'}
+      />
+
+      {loading ? (
+        <SkeletonGrid count={6} />
+      ) : (
+        <div className="wit-grid-anime grid-anime">
+          {items.slice(0, 6).map((item, i) => (
+            <ShowCard
+              key={item.slug || i}
+              show={{
+                slug: item.slug,
+                titleEn: item.titleEn,
+                titleAr: item.titleAr,
+                poster: item.poster,
+                episodes: item.episode,
+                color: item.color
+              }}
+              delay={i}
+              onClick={() => navigate(`/show/${item.slug}`)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* --------------------------- 2. Latest Added Episodes (أحدث الحلقات المضافة) --------------------------- */
+function LatestSection({ items, loading, error, onRetry }) {
+  const { t, lang } = useI18n();
+  return (
+    <section className="wit-section" id="latest-episodes">
+      <WitSectionHeader
+        icon="🔥"
+        title={lang === 'ar' ? 'أحدث الحلقات المضافة' : t('dashboard.latest')}
+        sub={
+          lang === 'ar'
+            ? 'تنزل الحلقات الرسمية في نفس اليوم لمشتركي VIP (وتتأخر 24 ساعة للنسخة المجانية)'
+            : t('dashboard.latestSub')
+        }
+        linkTo="/trending"
+        linkLabel={lang === 'ar' ? 'عرض كل الحلقات ←' : 'All Episodes →'}
+      />
+
+      {loading ? (
+        <SkeletonGrid count={12} height={240} />
+      ) : error || items.length === 0 ? (
+        <div className="wit-panel" style={{ padding: '1.5rem' }}>
+          <EmptyState icon="📡" title={t('dashboard.sourceDown')}>
+            <button type="button" className="btn btn--ghost" onClick={onRetry}>{t('common.retry')}</button>
+          </EmptyState>
+        </div>
+      ) : (
+        <div className="wit-grid-episodes grid-episodes">
+          {items.slice(0, 18).map((it, i) => (
+            <EpisodeTile key={`${it.slug}-${it.episode}-${i}`} item={it} delay={i} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* --------------------------- 3. WitAnime Weekly Airing Schedule (مواعيد الحلقات) --------------------------- */
+function WeeklyScheduleSection({ items = [] }) {
+  const { lang } = useI18n();
+  const navigate = useNavigate();
+  const todayJs = new Date().getDay();
+  const [selectedDay, setSelectedDay] = useState(todayJs);
+
+  const dayItems = useMemo(() => {
+    if (!items.length) return [];
+    return items.filter((_, idx) => idx % 7 === selectedDay % 7 || idx < 6).slice(0, 6);
+  }, [items, selectedDay]);
+
+  return (
+    <section className="wit-section" id="schedule-section">
+      <WitSectionHeader
+        icon="📅"
+        title={lang === 'ar' ? 'مواعيد عرض الحلقات الأسبوعية' : 'Weekly Episode Airing Schedule'}
+        sub={lang === 'ar' ? 'اختر اليوم لمعرفة الأنميات التي تعرض فيه' : 'Select a day of the week to view airing anime'}
+      />
+
+      <div className="wit-days-bar">
+        {WEEK_DAYS.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            className={`wit-day-tab ${selectedDay === d.id ? 'active' : ''}`}
+            onClick={() => setSelectedDay(d.id)}
+          >
+            {lang === 'ar' ? d.ar : d.en}
+            {d.id === todayJs && (
+              <span className="wit-day-tab__today">{lang === 'ar' ? 'اليوم' : 'Today'}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="wit-grid-anime grid-anime">
+        {dayItems.map((it, i) => (
+          <ShowCard
+            key={`sched-${it.slug}-${i}`}
+            show={{
+              slug: it.slug,
+              titleEn: it.titleEn,
+              titleAr: it.titleAr,
+              poster: it.poster,
+              episodes: it.episode
+            }}
+            delay={i}
+            onClick={() => navigate(`/show/${it.slug}`)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* --------------------------- 4. Continue Watching --------------------------- */
 function ContinueSection({ onOpenAuth }) {
   const { t, lang } = useI18n();
   const { user } = useAuth();
@@ -26,145 +188,53 @@ function ContinueSection({ onOpenAuth }) {
   }, [user]);
 
   const items = data?.continueWatching || [];
+  if (!user || items.length === 0) return null;
 
   return (
-    <section className="section">
-      <div className="section__head">
-        <div>
-          <h2 className="section__title">▶️ {t('dashboard.continue')}</h2>
-          <p className="section__sub">{t('dashboard.continueSub')}</p>
-        </div>
-        {user && items.length > 0 && <Link className="section__link" to="/mylist">{t('common.more')} →</Link>}
+    <section className="wit-section">
+      <WitSectionHeader
+        icon="▶️"
+        title={t('dashboard.continue')}
+        sub={t('dashboard.continueSub')}
+        linkTo="/mylist"
+        linkLabel={lang === 'ar' ? 'قائمتي ←' : 'My List →'}
+      />
+      <div className="cont-row">
+        {items.slice(0, 6).map((e, i) => (
+          <ContinueCard key={`${e.slug}-${e.episode}`} entry={e} delay={i} />
+        ))}
       </div>
-
-      {!user ? (
-        <div className="glass" style={{ padding: '1.75rem' }}>
-          <EmptyState icon="🍿" title={t('dashboard.loginPrompt')} sub={t('auth.demoHint')}>
-            <button type="button" className="btn btn--primary" onClick={() => onOpenAuth('login')}>
-              <span className="btn__shine" />
-              {t('nav.login')}
-            </button>
-          </EmptyState>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="glass" style={{ padding: '1.35rem' }}>
-          <EmptyState icon="🫧" title={t('dashboard.emptyContinue')} />
-        </div>
-      ) : (
-        <div className="cont-row">
-          {items.slice(0, 6).map((e, i) => (
-            <ContinueCard key={`${e.slug}-${e.episode}`} entry={e} delay={i} />
-          ))}
-        </div>
-      )}
     </section>
   );
 }
 
-/* ------------------------------ latest eps ------------------------------ */
-function LatestSection({ items, loading, error, onRetry }) {
-  const { t } = useI18n();
-  return (
-    <section className="section">
-      <div className="section__head">
-        <div>
-          <h2 className="section__title">🔥 {t('dashboard.latest')}</h2>
-          <p className="section__sub">{t('dashboard.latestSub')}</p>
-        </div>
-        <Link className="section__link" to="/browse">{t('nav.browse')} →</Link>
-      </div>
-
-      {loading ? (
-        <SkeletonGrid count={8} height={280} />
-      ) : error || items.length === 0 ? (
-        <div className="glass" style={{ padding: '1.5rem' }}>
-          <EmptyState icon="📡" title={t('dashboard.sourceDown')}>
-            <button type="button" className="btn btn--ghost" onClick={onRetry}>{t('common.retry')}</button>
-          </EmptyState>
-        </div>
-      ) : (
-        <div className="grid-episodes">
-          {items.slice(0, 12).map((it, i) => (
-            <EpisodeTile key={`${it.slug}-${it.episode}`} item={it} delay={i} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-/* ------------------------------- favorites ------------------------------- */
-function FavoritesSection({ onOpenAuth, version }) {
-  const { t, lang } = useI18n();
-  const { user } = useAuth();
-  const [favs, setFavs] = useState(null);
-
-  useEffect(() => {
-    if (!user) { setFavs([]); return undefined; }
-    let alive = true;
-    api.get('/api/library/favorites')
-      .then((d) => alive && setFavs(d.favorites || []))
-      .catch(() => alive && setFavs([]));
-    return () => { alive = false; };
-  }, [user, version]);
-
-  const items = favs || [];
-
-  return (
-    <section className="section">
-      <div className="section__head">
-        <div>
-          <h2 className="section__title">❤️ {t('dashboard.favorites')}</h2>
-        </div>
-        {user && items.length > 0 && <Link className="section__link" to="/mylist">{t('common.more')} →</Link>}
-      </div>
-
-      {!user ? null : items.length === 0 ? (
-        <div className="glass" style={{ padding: '1.35rem' }}>
-          <EmptyState icon="💜" title={t('dashboard.emptyFavorites')} />
-        </div>
-      ) : (
-        <div className="grid-anime">
-          {items.slice(0, 6).map((s, i) => (
-            <ShowCard
-              key={s.slug}
-              show={{ ...s, episodes: s.episodes }}
-              delay={i}
-              meta={s.episodes ? t('show.episodeCount', { n: s.episodes }) : ''}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-/* ------------------------------- trending ------------------------------- */
+/* --------------------------- 5. Season Trending Anime (أنميات الموسم) --------------------------- */
 function TrendingSection() {
-  const { t, animeTitle } = useI18n();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
   const { data, loading, error, reload } = useAsync(() => api.get('/api/anime/trending'), []);
   const items = data?.anime || [];
 
   return (
-    <section className="section">
-      <div className="section__head">
-        <div>
-          <h2 className="section__title">📈 {t('dashboard.trending')}</h2>
-          <p className="section__sub">{t('dashboard.trendingSub')}</p>
-        </div>
-      </div>
+    <section className="wit-section">
+      <WitSectionHeader
+        icon="🍂"
+        title={lang === 'ar' ? 'أنميات الموسم الأكثر شعبية' : t('dashboard.trending')}
+        sub={lang === 'ar' ? 'الأعمال الأعلى مشاهدة وتقييماً هذا الموسم' : t('dashboard.trendingSub')}
+        linkTo="/trending"
+        linkLabel={lang === 'ar' ? 'كل الأعمال الرائجة ←' : 'Explore All →'}
+      />
 
       {loading ? (
         <SkeletonGrid count={6} />
       ) : error || items.length === 0 ? (
-        <div className="glass" style={{ padding: '1.5rem' }}>
+        <div className="wit-panel" style={{ padding: '1.5rem' }}>
           <EmptyState icon="📡" title={t('error.upstream')}>
             <button type="button" className="btn btn--ghost" onClick={reload}>{t('common.retry')}</button>
           </EmptyState>
         </div>
       ) : (
-        <div className="grid-anime">
+        <div className="wit-grid-anime grid-anime">
           {items.slice(0, 12).map((a, i) => (
             <ShowCard
               key={a.id}
@@ -174,10 +244,11 @@ function TrendingSection() {
                 titleAr: a.titleArabic,
                 poster: a.coverUrl,
                 color: a.color,
-                episodes: a.episodes
+                episodes: a.episodes,
+                status: a.status
               }}
               delay={i}
-              onClick={() => navigate(`/browse?q=${encodeURIComponent(a.titleEnglish || a.titleRomaji || '')}`)}
+              onClick={() => navigate(`/trending?q=${encodeURIComponent(a.titleEnglish || a.titleRomaji || '')}`)}
             />
           ))}
         </div>
@@ -186,14 +257,125 @@ function TrendingSection() {
   );
 }
 
-/* ------------------------------ dashboard ------------------------------ */
+/* --------------------------- 6. Manga & Manhwa Section --------------------------- */
+function LibraryShowcaseSection() {
+  const { lang } = useI18n();
+
+  const trendingPicks = [
+    {
+      id: 'solo-leveling',
+      titleAr: 'سولو ليفلينج (Solo Leveling)',
+      titleEn: 'Solo Leveling',
+      type: 'مانهوا',
+      rating: '9.9',
+      chapters: '205 فصل',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/Solo-Leveling-1.jpg'
+    },
+    {
+      id: 'omniscient-readers-viewpoint',
+      titleAr: 'وجهة نظر القارئ العليم',
+      titleEn: "Omniscient Reader's Viewpoint",
+      type: 'مانهوا',
+      rating: '9.9',
+      chapters: '220 فصل',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg'
+    },
+    {
+      id: 'one-piece',
+      titleAr: 'ون بيس (One Piece)',
+      titleEn: 'One Piece',
+      type: 'مانجا',
+      rating: '9.9',
+      chapters: '1160 فصل',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg'
+    },
+    {
+      id: 'jujutsu-kaisen',
+      titleAr: 'جوجوتسو كايسن',
+      titleEn: 'Jujutsu Kaisen',
+      type: 'مانجا',
+      rating: '9.8',
+      chapters: '270 فصل',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg'
+    }
+  ];
+
+  return (
+    <section className="wit-section">
+      <WitSectionHeader
+        icon="📖"
+        title={lang === 'ar' ? 'أحدث فصول المانجا والمانهوا' : 'Trending Manga & Manhwa'}
+        sub={lang === 'ar' ? 'قراءة مباشرة لجميع الفصول المترجمة بالعربية' : 'Read high-res chapters directly'}
+        linkTo="/browse"
+        linkLabel={lang === 'ar' ? 'دخول المكتبة ←' : 'Full Library →'}
+      />
+
+      <div className="wit-grid-anime grid-anime">
+        {trendingPicks.map((pick, i) => (
+          <ShowCard
+            key={pick.id}
+            show={{
+              slug: pick.id,
+              titleAr: pick.titleAr,
+              titleEn: pick.titleEn,
+              poster: pick.cover
+            }}
+            meta={pick.chapters}
+            delay={i}
+            onClick={() => { window.location.href = '/browse'; }}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* --------------------------- 7. Favorites --------------------------- */
+function FavoritesSection() {
+  const { t, lang } = useI18n();
+  const { user } = useAuth();
+  const [favs, setFavs] = useState([]);
+
+  useEffect(() => {
+    if (!user) { setFavs([]); return undefined; }
+    let alive = true;
+    api.get('/api/library/favorites')
+      .then((d) => alive && setFavs(d.favorites || []))
+      .catch(() => alive && setFavs([]));
+    return () => { alive = false; };
+  }, [user]);
+
+  if (!user || favs.length === 0) return null;
+
+  return (
+    <section className="wit-section">
+      <WitSectionHeader
+        icon="❤️"
+        title={t('dashboard.favorites')}
+        linkTo="/mylist"
+        linkLabel={lang === 'ar' ? 'عرض الكل ←' : 'View All →'}
+      />
+      <div className="wit-grid-anime grid-anime">
+        {favs.slice(0, 6).map((s, i) => (
+          <ShowCard key={s.slug} show={s} delay={i} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------ Main WitAnime Home Page ------------------------------ */
 export default function Dashboard({ onOpenAuth }) {
   const [latest, setLatest] = useState(null);
   const [trending, setTrending] = useState(null);
   const [error, setError] = useState(false);
+  const [quickQuery, setQuickQuery] = useState('');
 
-  const { t, lang } = useI18n();
+  const { lang } = useI18n();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const vipTier = resolveUserVipTier(user);
+  const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
 
   const loadLatest = useCallback(() => {
     setLatest(null);
@@ -211,8 +393,7 @@ export default function Dashboard({ onOpenAuth }) {
       .catch(() => setTrending([]));
   }, []);
 
-  // Build rich featured carousel anime items
-  const carouselItems = useMemo(() => {
+  const pinnedItems = useMemo(() => {
     if (!latest || latest.length === 0) return [];
     const seen = new Set();
     const unique = [];
@@ -223,187 +404,64 @@ export default function Dashboard({ onOpenAuth }) {
       }
       if (unique.length >= 6) break;
     }
+    return unique;
+  }, [latest]);
 
-    return unique.map((item, idx) => {
-      const match = (trending || []).find((t) => {
-        const titleL = (item.titleEn || '').toLowerCase();
-        const tRomaji = (t.titleRomaji || '').toLowerCase();
-        const tEng = (t.titleEnglish || '').toLowerCase();
-        return tRomaji.includes(titleL) || titleL.includes(tRomaji) || tEng.includes(titleL) || titleL.includes(tEng);
-      }) || (trending && trending[idx]);
-
-      return {
-        slug: item.slug,
-        titleEn: item.titleEn || match?.titleEnglish || match?.titleRomaji || item.slug,
-        titleAr: item.titleAr || match?.titleArabic || null,
-        poster: item.poster || match?.coverUrl,
-        banner: match?.bannerUrl || item.poster,
-        episode: item.episode || 1,
-        score: match?.score || (86 + (idx % 10)),
-        genres: match?.genres || ['Action', 'Adventure', 'Fantasy'],
-        description: match?.description ? match.description.replace(/<[^>]+>/g, '') : null,
-        color: match?.color || '#22d3ee'
-      };
-    });
-  }, [latest, trending]);
-
-/* ------------------------ Unified Manga & Manhwa Library Showcase ------------------------ */
-function LibraryShowcaseSection() {
-  const { lang } = useI18n();
-
-  const trendingPicks = [
-    {
-      id: 'solo-leveling',
-      titleAr: 'سولو ليفلينج (Solo Leveling)',
-      titleEn: 'Solo Leveling',
-      badge: 'MANHWA',
-      type: 'مانهو كورية',
-      rating: '9.9',
-      chapters: '205 فصلاً',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/Solo-Leveling-1.jpg',
-      color: '#8b5cf6'
-    },
-    {
-      id: 'omniscient-readers-viewpoint',
-      titleAr: 'وجهة نظر القارئ العليم',
-      titleEn: "Omniscient Reader's Viewpoint",
-      badge: 'MANHWA',
-      type: 'مانهو كورية',
-      rating: '9.9',
-      chapters: '220 فصلاً',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg',
-      color: '#6366f1'
-    },
-    {
-      id: 'one-piece',
-      titleAr: 'ون بيس (One Piece)',
-      titleEn: 'One Piece',
-      badge: 'MANGA',
-      type: 'مانجا يابانية',
-      rating: '9.9',
-      chapters: '1160 فصلاً',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg',
-      color: '#06b6d4'
-    },
-    {
-      id: 'jujutsu-kaisen',
-      titleAr: 'جوجوتسو كايسن',
-      titleEn: 'Jujutsu Kaisen',
-      badge: 'MANGA',
-      type: 'مانجا يابانية',
-      rating: '9.8',
-      chapters: '270 فصلاً',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg',
-      color: '#f43f5e'
-    }
-  ];
+  const handleQuickSearch = (e) => {
+    e.preventDefault();
+    if (!quickQuery.trim()) return;
+    navigate(`/trending?q=${encodeURIComponent(quickQuery.trim())}`);
+  };
 
   return (
-    <section className="section">
-      <div className="section__head">
-        <div>
-          <h2 className="section__title">
-            📖 {lang === 'ar' ? 'المكتبة (أشهر المانهوا والمانجا الرائجة)' : 'The Library (Trending Manga & Manhwa)'}
-          </h2>
-          <p className="section__sub">
-            {lang === 'ar'
-              ? 'اختر مباشرة من بين أشهر أعمال المانهوا والمانجا لقراءتها فورياً ومجاناً عبر منصة BLACK X.'
-              : 'Pick from the highest-rated Korean Manhwa and Japanese Manga powered by BLACK X.'}
-          </p>
-        </div>
-        <Link className="section__link" to="/browse">
-          {lang === 'ar' ? 'دخول المكتبة الكاملة' : 'Open Full Library'} →
-        </Link>
-      </div>
+    <div className="wit-home-wrap">
+      {/* WitAnime Top Search & Quick Navigation Strip */}
+      <div className="wit-top-strip">
+        <form className="wit-search-form" onSubmit={handleQuickSearch}>
+          <input
+            type="search"
+            className="wit-search-input"
+            value={quickQuery}
+            onChange={(e) => setQuickQuery(e.target.value)}
+            placeholder={lang === 'ar' ? 'ابحث عن أنمي هنا (مثال: One Piece, Solo Leveling, Bleach)...' : 'Search anime here...'}
+          />
+          <button type="submit" className="wit-search-btn">
+            🔍 {lang === 'ar' ? 'بحث' : 'Search'}
+          </button>
+        </form>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
-        {trendingPicks.map((pick) => (
-          <Link
-            key={pick.id}
-            to="/browse"
-            className="glass glass-hover"
-            style={{
-              padding: '1rem',
-              borderRadius: '16px',
-              textDecoration: 'none',
-              color: 'inherit',
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'relative',
-              overflow: 'hidden',
-              border: `1px solid ${pick.color}35`,
-              transition: 'transform 0.2s ease, border-color 0.2s ease'
-            }}
-          >
-            <div style={{ width: '100%', height: '230px', borderRadius: '12px', overflow: 'hidden', marginBottom: '0.85rem', position: 'relative' }}>
-              <img
-                src={pick.cover}
-                alt={pick.titleEn}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '8px',
-                  insetInlineStart: '8px',
-                  background: pick.color,
-                  color: '#fff',
-                  fontSize: '0.72rem',
-                  fontWeight: 800,
-                  padding: '0.2rem 0.55rem',
-                  borderRadius: '6px'
-                }}
-              >
-                {pick.type}
-              </span>
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '8px',
-                  insetInlineEnd: '8px',
-                  background: 'rgba(0, 0, 0, 0.8)',
-                  color: '#fbbf24',
-                  fontSize: '0.76rem',
-                  fontWeight: 800,
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: '6px'
-                }}
-              >
-                ★ {pick.rating}
-              </span>
-            </div>
-
-            <h3 style={{ fontSize: '1.02rem', fontWeight: 800, margin: '0 0 0.35rem', color: '#fff', lineHeight: 1.3 }}>
-              {lang === 'ar' ? pick.titleAr : pick.titleEn}
-            </h3>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '0.5rem' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--ink-dim)', fontWeight: 600 }}>
-                {pick.chapters}
-              </span>
-              <span style={{ fontSize: '0.82rem', color: pick.color, fontWeight: 700 }}>
-                {lang === 'ar' ? 'اقرأ الآن 📖' : 'Read Now 📖'}
-              </span>
-            </div>
+        <div className="wit-quick-cats">
+          <a href="#pinned-anime" className="wit-cat-pill active">📌 {lang === 'ar' ? 'الأنميات المثبتة' : 'Pinned'}</a>
+          <a href="#latest-episodes" className="wit-cat-pill">🔥 {lang === 'ar' ? 'أحدث الحلقات' : 'Latest Episodes'}</a>
+          <a href="#schedule-section" className="wit-cat-pill">📅 {lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule'}</a>
+          <Link to="/trending" className="wit-cat-pill">📋 {lang === 'ar' ? 'قائمة الأنمي والأعمال الرائجة' : 'Anime List'}</Link>
+          <Link to="/browse" className="wit-cat-pill">📖 {lang === 'ar' ? 'المانجا والمانهوا' : 'Manga'}</Link>
+          <Link to="/profile?tab=referrals" className="wit-cat-pill wit-cat-pill--vip">
+            👑 {isVip ? (lang === 'ar' ? 'عضوية VIP مفعّلة ✓' : 'VIP Active ✓') : (lang === 'ar' ? 'اشترك في VIP (FHD 1080p)' : 'Get VIP FHD')}
           </Link>
-        ))}
+        </div>
       </div>
-    </section>
-  );
-}
 
-  return (
-    <>
-      <LandingHero
-        items={carouselItems}
-        onOpenAuth={onOpenAuth}
-      />
+      {/* 1. Pinned Season Anime (الأنميات المثبتة) */}
+      <PinnedAnimeSection items={pinnedItems} loading={!latest} />
 
+      {/* 2. Continue Watching (if logged in) */}
       <ContinueSection onOpenAuth={onOpenAuth} />
+
+      {/* 3. Latest Added Episodes (أحدث الحلقات المضافة) */}
       <LatestSection items={latest || []} loading={!latest} error={error} onRetry={loadLatest} />
-      <LibraryShowcaseSection />
-      <FavoritesSection onOpenAuth={onOpenAuth} />
+
+      {/* 4. Weekly Airing Schedule (مواعيد الحلقات) */}
+      <WeeklyScheduleSection items={pinnedItems} />
+
+      {/* 5. Seasonal Trending Anime (أنميات الموسم) */}
       <TrendingSection />
-    </>
+
+      {/* 6. Manga & Manhwa Library */}
+      <LibraryShowcaseSection />
+
+      {/* 7. User Favorites */}
+      <FavoritesSection onOpenAuth={onOpenAuth} />
+    </div>
   );
 }

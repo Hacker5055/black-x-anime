@@ -194,7 +194,13 @@ export default function Navbar({ onOpenAuth }) {
       </header>
 
       <nav className="nav-mobile-tabs" aria-label="Mobile">
-        {links.map((l) => (
+        {[
+          { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home', icon: '🏠' },
+          { to: '/trending', label: lang === 'ar' ? 'الرائجة' : 'Trending', icon: '🔥' },
+          { to: '/browse', label: lang === 'ar' ? 'المكتبة' : 'Library', icon: '📖' },
+          { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community', icon: '💬' },
+          { to: '/profile', label: lang === 'ar' ? 'حسابي' : 'Profile', icon: '👤' }
+        ].map((l) => (
           <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')} end={l.to === '/'}>
             <span>{l.icon}</span>
             <span>{l.label}</span>

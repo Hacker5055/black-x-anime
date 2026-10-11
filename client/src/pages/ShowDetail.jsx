@@ -24,6 +24,7 @@ export default function ShowDetail({ onOpenAuth }) {
   const [fav, setFav] = useState(false);
   const [favBusy, setFavBusy] = useState(false);
   const [progress, setProgress] = useState({});
+  const [epFilter, setEpFilter] = useState('');
   const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
   const vipTier = resolveUserVipTier(user);
 
@@ -144,6 +145,34 @@ export default function ShowDetail({ onOpenAuth }) {
               <p className="detail-synopsis">{show.description}</p>
             )}
 
+            {/* WitAnime Metadata Grid (معلومات الأنمي) */}
+            <div className="wit-meta-grid">
+              <div className="wit-meta-item">
+                <span className="wit-meta-label">{lang === 'ar' ? 'النوع:' : 'Type:'}</span>
+                <span className="wit-meta-val">TV</span>
+              </div>
+              <div className="wit-meta-item">
+                <span className="wit-meta-label">{lang === 'ar' ? 'حالة الأنمي:' : 'Status:'}</span>
+                <span className="wit-meta-val" style={{ color: '#10b981' }}>{lang === 'ar' ? 'يعرض الان' : 'Airing'}</span>
+              </div>
+              <div className="wit-meta-item">
+                <span className="wit-meta-label">{lang === 'ar' ? 'عدد الحلقات:' : 'Episodes:'}</span>
+                <span className="wit-meta-val">{show.episodeCount || eps.length || '?'}</span>
+              </div>
+              <div className="wit-meta-item">
+                <span className="wit-meta-label">{lang === 'ar' ? 'مدة الحلقة:' : 'Duration:'}</span>
+                <span className="wit-meta-val">{lang === 'ar' ? '24 دقيقة' : '24 min'}</span>
+              </div>
+              <div className="wit-meta-item">
+                <span className="wit-meta-label">{lang === 'ar' ? 'المصدر:' : 'Source:'}</span>
+                <span className="wit-meta-val">{lang === 'ar' ? 'مانجا يابانية' : 'Manga'}</span>
+              </div>
+              <div className="wit-meta-item">
+                <span className="wit-meta-label">{lang === 'ar' ? 'الجودة المتوفرة:' : 'Quality:'}</span>
+                <span className="wit-meta-val" style={{ color: '#fde047' }}>👑 FHD 1080p VIP / HD</span>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBlockStart: '1.15rem' }}>
               {continueEp && (
                 <button
@@ -211,6 +240,21 @@ export default function ShowDetail({ onOpenAuth }) {
         <div className="section__head" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
           <h2 className="section__title">🎬 {t('show.episodesList')}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={epFilter}
+              onChange={(e) => setEpFilter(e.target.value)}
+              placeholder={lang === 'ar' ? '🔍 ابحث برقم الحلقة...' : '🔍 Filter episode #...'}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '8px',
+                background: '#131926',
+                border: '1px solid #28344b',
+                color: '#fff',
+                fontSize: '0.8rem',
+                width: '165px'
+              }}
+            />
             <span
               style={{
                 fontSize: '0.76rem',
@@ -236,48 +280,50 @@ export default function ShowDetail({ onOpenAuth }) {
           </div>
         ) : (
           <div className="ep-grid reveal">
-            {eps.map((e) => {
-              const p = progress[e.episode];
-              const pct = p && p.duration ? Math.min(1, p.position / p.duration) : p?.completed ? 1 : 0;
-              const maxEp = eps.length ? Math.max(...eps.map((item) => Number(item.episode || 0))) : 0;
-              const isLatest = eps.length > 1 && Number(e.episode) === maxEp;
-              return (
-                <button
-                  key={e.episode}
-                  type="button"
-                  className={`ep-chip ${p?.completed ? 'watched' : ''}`}
-                  onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
-                  style={
-                    isLatest
-                      ? {
-                          borderColor: vipTier === 'free' ? '#f59e0b' : '#10b981',
-                          position: 'relative'
-                        }
-                      : undefined
-                  }
-                >
-                  <span>{formatNumber(e.episode)}</span>
-                  {isLatest && (
-                    <span
-                      style={{
-                        fontSize: '0.62rem',
-                        fontWeight: 900,
-                        color: vipTier === 'free' ? '#fde047' : '#34d399',
-                        display: 'block',
-                        marginTop: '2px'
-                      }}
-                    >
-                      {vipTier === 'free' ? '⏳ VIP اليوم' : '👑 VIP'}
-                    </span>
-                  )}
-                  {p && (
-                    <span className="ep-chip__bar">
-                      <span style={{ width: `${Math.max(6, pct * 100)}%` }} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {eps
+              .filter((e) => !epFilter.trim() || String(e.episode).includes(epFilter.trim()))
+              .map((e) => {
+                const p = progress[e.episode];
+                const pct = p && p.duration ? Math.min(1, p.position / p.duration) : p?.completed ? 1 : 0;
+                const maxEp = eps.length ? Math.max(...eps.map((item) => Number(item.episode || 0))) : 0;
+                const isLatest = eps.length > 1 && Number(e.episode) === maxEp;
+                return (
+                  <button
+                    key={e.episode}
+                    type="button"
+                    className={`ep-chip ${p?.completed ? 'watched' : ''}`}
+                    onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
+                    style={
+                      isLatest
+                        ? {
+                            borderColor: vipTier === 'free' ? '#f59e0b' : '#10b981',
+                            position: 'relative'
+                          }
+                        : undefined
+                    }
+                  >
+                    <span>{lang === 'ar' ? `الحلقة ${formatNumber(e.episode)}` : `EP ${formatNumber(e.episode)}`}</span>
+                    {isLatest && (
+                      <span
+                        style={{
+                          fontSize: '0.62rem',
+                          fontWeight: 900,
+                          color: vipTier === 'free' ? '#fde047' : '#34d399',
+                          display: 'block',
+                          marginTop: '2px'
+                        }}
+                      >
+                        {vipTier === 'free' ? '⏳ VIP اليوم' : '👑 VIP'}
+                      </span>
+                    )}
+                    {p && (
+                      <span className="ep-chip__bar">
+                        <span style={{ width: `${Math.max(6, pct * 100)}%` }} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
           </div>
         )}
       </section>

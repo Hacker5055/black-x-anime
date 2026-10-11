@@ -505,52 +505,40 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* sources drawer */}
+      {/* WitAnime Always-Visible Streaming Servers Bar (سيرفرات المشاهدة) */}
       {entries.length > 0 && (
-        <div className={`player-sources ${panel ? 'open' : ''}`}>
-          <button type="button" className="player-sources__toggle" onClick={() => setPanel((v) => !v)}>
-            <span>⚙</span> {t('watch.sources')}
-            {active && <em>{active.server}{active.quality ? ` · ${active.quality}` : ''}</em>}
-          </button>
-          {panel && (
-            <div className="player-sources__list glass glass--strong">
-              {entries.map((e) => {
-                const src = resolved[e.id];
-                const isFhd = isFhdQuality(e.quality);
-                const locked = isFhd && !isVip;
-                return (
-                  <button
-                    key={e.id}
-                    type="button"
-                    className={`chip ${active?.id === e.id ? 'active' : ''}`}
-                    onClick={() => {
-                      pickSource(e);
-                      if (!locked) setPanel(false);
-                    }}
-                    style={
-                      isFhd
-                        ? {
-                            borderColor: locked ? 'rgba(245, 158, 11, 0.45)' : '#eab308',
-                            background: locked ? 'rgba(245, 158, 11, 0.08)' : 'rgba(234, 179, 8, 0.18)'
-                          }
-                        : undefined
-                    }
-                  >
-                    {busyId === e.id ? '⏳' : locked ? `🔒 ${e.server}` : isFhd ? `👑 ${e.server}` : e.server}
-                    <span style={{ opacity: 0.85, color: isFhd ? '#fde047' : undefined, fontWeight: isFhd ? 800 : undefined }}>
-                      {[
-                        isFhd ? `${e.quality || 'FHD'} • VIP` : (e.quality || 'HD'),
-                        e.version === 'dub' ? t('watch.dub') : t('watch.sub'),
-                        src ? (src.directUrl ? 'MP4' : 'EMBED') : '…'
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        <div className="wit-servers-box">
+          <div className="wit-servers-box__head">
+            <span>🖥️ {lang === 'ar' ? 'سيرفرات المشاهدة المتاحة (اختر السيرفر):' : 'Streaming Servers (Select Server):'}</span>
+            {active && (
+              <span className="wit-servers-box__active">
+                {active.server} {active.quality ? `· ${active.quality}` : ''}
+              </span>
+            )}
+          </div>
+          <div className="wit-servers-list">
+            {entries.map((e) => {
+              const isFhd = isFhdQuality(e.quality);
+              const locked = isFhd && !isVip;
+              const isSelected = active?.id === e.id;
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  className={`wit-server-tab ${isSelected ? 'active' : ''} ${isFhd ? 'wit-server-tab--vip' : ''}`}
+                  onClick={() => pickSource(e)}
+                >
+                  <span>
+                    {busyId === e.id ? '⏳ ' : locked ? '🔒 ' : isFhd ? '👑 ' : '▶ '}
+                    {e.server}
+                  </span>
+                  <small>
+                    {isFhd ? `${e.quality || 'FHD'} VIP` : (e.quality || 'HD')}
+                  </small>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

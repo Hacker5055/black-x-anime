@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
-import { applyLiveColor, hexToRgbString } from '../hooks/hooks.js';
+import {
+  isAnimeEpisodeAlertEnabled,
+  toggleAnimeEpisodeAlert
+} from '../utils/deviceNotifications.js';
 
 /** Poster image with graceful fallback when the URL is missing or broken. */
 function Poster({ src, alt, cls = '' }) {
-  const [broken, setBroken] = React.useState(false);
+  const [broken, setBroken] = useState(false);
   if (!src || broken) {
     return <div className={`anime-card__fallback ${cls}`}>{(alt || 'X').slice(0, 2)}</div>;
   }
@@ -22,102 +25,94 @@ function Poster({ src, alt, cls = '' }) {
 }
 
 /**
- * Auto-flipping poster component that rotates between available images (poster, banner, etc.)
- * with smooth transitions, 3D flip effects, and active indicator dots.
+ * WitAnime A-to-Z Anime Card (`anime-card-container` style from witanime.site)
  */
-function AutoFlipPoster({ images = [], alt = '', cls = '' }) {
-  const validImages = React.useMemo(() => {
-    const list = Array.isArray(images) ? images.filter(Boolean) : [images].filter(Boolean);
-    return list.length > 0 ? list : [];
-  }, [images]);
-
-  const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [isFlipping, setIsFlipping] = React.useState(false);
-
-  React.useEffect(() => {
-    if (validImages.length <= 1) return undefined;
-    const interval = setInterval(() => {
-      setIsFlipping(true);
-      setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % validImages.length);
-        setIsFlipping(false);
-      }, 350);
-    }, 3800);
-
-    return () => clearInterval(interval);
-  }, [validImages.length]);
-
-  if (validImages.length === 0) {
-    return <div className={`anime-card__fallback ${cls}`}>{(alt || 'X').slice(0, 2)}</div>;
-  }
-
-  const currentSrc = validImages[currentIndex] || validImages[0];
-
-  return (
-    <div className={`auto-flip-poster-container ${cls}`}>
-      <img
-        className={`auto-flip-poster-img ${isFlipping ? 'flipping' : ''}`}
-        src={currentSrc}
-        alt={alt}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
-      {validImages.length > 1 && (
-        <div className="auto-flip-dots">
-          {validImages.map((_, idx) => (
-            <span
-              key={idx}
-              className={`auto-flip-dot ${idx === currentIndex ? 'active' : ''}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Poster card for a show. Hover feeds the ambient glow. */
 export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
   const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
 
   const title = (lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn || show.slug;
-
-  const cardImages = React.useMemo(() => {
-    const arr = [];
-    if (show.poster) arr.push(show.poster);
-    if (show.banner && show.banner !== show.poster) arr.push(show.banner);
-    if (show.bannerUrl && show.bannerUrl !== show.poster) arr.push(show.bannerUrl);
-    if (show.coverUrl && show.coverUrl !== show.poster) arr.push(show.coverUrl);
-    return arr.length > 0 ? arr : [show.poster].filter(Boolean);
-  }, [show.poster, show.banner, show.bannerUrl, show.coverUrl]);
+  const posterSrc = show.poster || show.coverUrl || show.banner || '';
+  const targetSlug = show.slug || String(show.titleEn || 'anime').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const [subbed, setSubbed] = useState(() => isAnimeEpisodeAlertEnabled(targetSlug));
 
   const handleClick = () => {
     if (onClick) return onClick(show);
     navigate(`/show/${show.slug}`);
   };
 
+  const handleBellClick = async (e) => {
+    e.stopPropagation();
+    const nextState = await toggleAnimeEpisodeAlert(
+      {
+        slug: targetSlug,
+        titleAr: show.titleAr || title,
+        titleEn: show.titleEn || title,
+        poster: posterSrc,
+        latestEpisode: show.episodes || 1
+      },
+      lang
+    );
+    setSubbed(nextState);
+  };
+
   return (
     <article
-      className="anime-card reveal"
+      className="wit-anime-card anime-card reveal"
       data-delay={delay % 5}
-      style={{ '--card-rgb': hexToRgbString(show.color || '#22d3ee') }}
-      onMouseEnter={() => show.color && applyLiveColor(show.color)}
       onClick={handleClick}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && handleClick()}
       aria-label={title}
     >
-      <div className="anime-card__poster">
-        <AutoFlipPoster images={cardImages} alt={title} />
-        <div className="anime-card__glowtag">▶</div>
-      </div>
-      <div className="anime-card__body">
-        <h3 className="anime-card__title">{title}</h3>
-        <div className="anime-card__meta">
-          <span>{meta || (show.episodes ? t('show.episodeCount', { n: formatNumber(show.episodes) }) : show.kind === 'movie' ? '🎬' : '📺')}</span>
+      <div className="wit-anime-card__poster anime-card__poster">
+        <Poster src={posterSrc} alt={title} />
+
+        {/* WitAnime Top-Right Status Badge */}
+        <span className="wit-badge wit-badge--status">
+          {show.status === 'FINISHED'
+            ? (lang === 'ar' ? 'مكتمل' : 'Completed')
+            : (lang === 'ar' ? 'يعرض الان' : 'Airing')}
+        </span>
+
+        {/* WitAnime Top-Left Type / VIP FHD Badge */}
+        <span className="wit-badge wit-badge--type">
+          {show.kind === 'movie' ? 'MOVIE' : 'TV • FHD'}
+        </span>
+
+        {/* WitAnime Bottom-Right Episode Count Pill */}
+        {show.episodes && (
+          <span className="wit-badge wit-badge--ep">
+            {lang === 'ar' ? `${formatNumber(show.episodes)} حلقة` : `${formatNumber(show.episodes)} EP`}
+          </span>
+        )}
+
+        {/* Quick Notification Bell on Bottom-Left */}
+        <button
+          type="button"
+          className={`wit-bell-btn ${subbed ? 'active' : ''}`}
+          onClick={handleBellClick}
+          title={lang === 'ar' ? 'تفعيل إشعارات الحلقات الجديدة على هاتفك/الكمبيوتر' : 'Enable Episode Alerts'}
+        >
+          {subbed ? '🔔' : '📲'}
+        </button>
+
+        {/* WitAnime Center Play Hover Overlay */}
+        <div className="wit-anime-card__hover">
+          <span className="wit-play-circle">▶</span>
         </div>
+      </div>
+
+      <div className="wit-anime-card__body anime-card__body">
+        <h3 className="wit-anime-card__title anime-card__title" title={title}>
+          {title}
+        </h3>
+        {meta && (
+          <div className="wit-anime-card__meta anime-card__meta">
+            <span>{meta}</span>
+          </div>
+        )}
         {progress != null && progress > 0 && (
           <div className="anime-card__progress" title={`${Math.round(progress * 100)}%`}>
             <div className="anime-card__progress-bar" style={{ width: `${Math.min(100, progress * 100)}%` }} />
@@ -128,33 +123,73 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
   );
 }
 
-/** Compact episode tile (poster thumb + episode number). */
+/**
+ * WitAnime A-to-Z Episode Card (`episodes-card-container` from witanime.site)
+ */
 export function EpisodeTile({ item, onClick, delay = 0, progress }) {
   const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
   const title = (lang === 'ar' ? item.titleAr : item.titleEn) || item.titleEn || item.slug;
+  const [subbed, setSubbed] = useState(() => isAnimeEpisodeAlertEnabled(item.slug));
+
+  const handleBellClick = async (e) => {
+    e.stopPropagation();
+    const nextState = await toggleAnimeEpisodeAlert(
+      {
+        slug: item.slug,
+        titleAr: item.titleAr || title,
+        titleEn: item.titleEn || title,
+        poster: item.poster,
+        latestEpisode: item.episode || 1
+      },
+      lang
+    );
+    setSubbed(nextState);
+  };
 
   return (
     <article
-      className="ep-tile reveal"
+      className="wit-ep-card ep-tile reveal"
       data-delay={delay % 5}
       onClick={() => (onClick ? onClick(item) : navigate(`/watch/${item.slug}/${item.episode}`))}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && navigate(`/watch/${item.slug}/${item.episode}`)}
     >
-      <div className="ep-tile__thumb">
+      <div className="wit-ep-card__thumb ep-tile__thumb">
         <Poster src={item.poster} alt={title} />
-        <div className="ep-tile__play">▶</div>
-        <div className="ep-tile__num">{t('common.ep')} {formatNumber(item.episode)}</div>
+
+        {/* WitAnime Episode Number Badge (Top Right / Bottom Right) */}
+        <div className="wit-ep-card__num ep-tile__num">
+          {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `${t('common.ep')} ${formatNumber(item.episode)}`}
+        </div>
+
+        {/* WitAnime FHD VIP Tag (Top Left) */}
+        <span className="wit-ep-card__vip">👑 FHD</span>
+
+        {/* Quick Alert Bell */}
+        <button
+          type="button"
+          className={`wit-bell-btn ${subbed ? 'active' : ''}`}
+          onClick={handleBellClick}
+          title={lang === 'ar' ? 'إشعارات الحلقات الجديدة' : 'Episode Notifications'}
+        >
+          {subbed ? '🔔' : '📲'}
+        </button>
+
+        <div className="wit-ep-card__play ep-tile__play">▶</div>
+
         {progress != null && (
           <div className="ep-tile__bar">
             <div style={{ width: `${Math.min(100, progress * 100)}%` }} />
           </div>
         )}
       </div>
-      <div className="ep-tile__body">
-        <div className="ep-tile__title">{title}</div>
+
+      <div className="wit-ep-card__body ep-tile__body">
+        <div className="wit-ep-card__title ep-tile__title" title={title}>
+          {title}
+        </div>
       </div>
     </article>
   );
