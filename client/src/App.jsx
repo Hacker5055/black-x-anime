@@ -10,6 +10,7 @@ import Browse from './pages/Browse.jsx';
 import ShowDetail from './pages/ShowDetail.jsx';
 import Watch from './pages/Watch.jsx';
 import MyList from './pages/MyList.jsx';
+import Account from './pages/Account.jsx';
 import ProfileDashboard from './pages/ProfileDashboard.jsx';
 import Rankings from './pages/Rankings.jsx';
 import Community from './pages/Community.jsx';
@@ -81,7 +82,7 @@ export default function App() {
               <Route path="/watch/:slug/:ep" element={<Watch onOpenAuth={openAuth} />} />
               <Route path="/mylist" element={<MyList onOpenAuth={openAuth} />} />
               <Route path="/profile" element={<ProfileDashboard onOpenAuth={openAuth} />} />
-              <Route path="/account" element={<Navigate to="/profile" replace />} />
+              <Route path="/account" element={<Account />} />
               <Route path="/settings" element={<Navigate to="/profile" replace />} />
               {/* legacy prediction-engine routes → home */}
               <Route path="/arena" element={<Navigate to="/" replace />} />

@@ -2,7 +2,7 @@
  * Profile & customization controller — PUT /api/profile/customize
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
 
 /** PUT /api/profile/customize — body { bannerUrl?, themePreference? } */
 export async function customizeProfile(req, res) {
@@ -30,6 +30,7 @@ export async function customizeProfile(req, res) {
     }
 
     const prisma = getPrisma();
+    await ensurePrismaUser(prisma, req.user);
     await prisma.user.update({ where: { id: String(userId) }, data });
 
     return res.status(200).json({

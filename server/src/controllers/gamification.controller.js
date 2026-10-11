@@ -5,7 +5,7 @@
  *   POST /api/creator/submit
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
 
 /* ---------------------------- leveling rules ----------------------------
  * Lifetime minutes (watch + read) drive the level:
@@ -54,6 +54,7 @@ export async function getStats(req, res) {
     const prisma = getPrisma();
     const uid = String(userId);
 
+    await ensurePrismaUser(prisma, req.user);
     const user = await prisma.user.findUnique({
       where: { id: uid },
       include: {
@@ -110,7 +111,7 @@ export async function syncTime(req, res) {
     const prisma = getPrisma();
     const uid = String(userId);
 
-    const user = await prisma.user.findUnique({ where: { id: uid } });
+    const user = await ensurePrismaUser(prisma, req.user);
     if (!user) return fail(res, 404, 'User not found.');
 
     const before = await prisma.userStats.findUnique({ where: { user_id: uid } });
@@ -165,7 +166,7 @@ export async function submitCreator(req, res) {
     const prisma = getPrisma();
     const uid = String(userId);
 
-    const user = await prisma.user.findUnique({ where: { id: uid } });
+    const user = await ensurePrismaUser(prisma, req.user);
     if (!user) return fail(res, 404, 'User not found.');
 
     await prisma.creatorSubmission.create({

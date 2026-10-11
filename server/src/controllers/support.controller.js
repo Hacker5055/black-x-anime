@@ -2,7 +2,7 @@
  * Support tickets controller — POST /api/support/ticket
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
 
 /** POST /api/support/ticket — body { subject, message } */
 export async function createTicket(req, res) {
@@ -21,7 +21,7 @@ export async function createTicket(req, res) {
     const prisma = getPrisma();
     const uid = String(userId);
 
-    const user = await prisma.user.findUnique({ where: { id: uid } });
+    const user = await ensurePrismaUser(prisma, req.user);
     if (!user) return fail(res, 404, 'User not found.');
 
     const ticket = await prisma.supportTicket.create({

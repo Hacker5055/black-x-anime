@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { useAsync, useDominantColor, applyLiveColor, pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
+import { RatingPanel } from '../components/Features.jsx';
 import { auth, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
 
 export default function ShowDetail({ onOpenAuth }) {
@@ -161,6 +162,8 @@ export default function ShowDetail({ onOpenAuth }) {
           </div>
         </div>
       </section>
+
+      <RatingPanel slug={slug} title={title} />
 
       <section className="section">
         <div className="section__head">

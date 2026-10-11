@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useI18n } from '../i18n/I18nProvider.jsx';
+import { api } from '../api.js';
 
 const fmt = (s) => {
   if (!Number.isFinite(s) || s < 0) s = 0;
@@ -45,6 +46,13 @@ export default function VideoPlayer({
   const [activeId, setActiveId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [playing, setPlaying] = useState(false);
+  // watch-time tracking -> POST /api/gamification/sync-time (gamification)
+  const lastTsRef = useRef(0);
+  const playedRef = useRef(0);
+  useEffect(() => () => {
+    const rem = Math.floor(playedRef.current / 60) || (playedRef.current > 20 ? 1 : 0);
+    if (rem > 0) api.post('/api/gamification/sync-time', { sessionMinutes: rem, type: 'watch' }).catch(() => {});
+  }, []);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -259,7 +267,18 @@ export default function VideoPlayer({
             preload="metadata"
             onPlay={() => { setPlaying(true); setEnded(false); wake(); }}
             onPause={() => { setPlaying(false); setShowControls(true); save(true); }}
-            onTimeUpdate={(e) => { setCurrent(e.target.currentTime); save(); }}
+            onTimeUpdate={(e) => {
+              const v = e.target;
+              if (!v.paused && v.currentTime > lastTsRef.current) playedRef.current += v.currentTime - lastTsRef.current;
+              lastTsRef.current = v.currentTime;
+              setCurrent(v.currentTime);
+              save();
+              if (playedRef.current >= 60) {
+                const mins = Math.floor(playedRef.current / 60);
+                playedRef.current -= mins * 60;
+                api.post('/api/gamification/sync-time', { sessionMinutes: mins, type: 'watch' }).catch(() => {});
+              }
+            }}
             onLoadedMetadata={(e) => {
               setDuration(e.target.duration || 0);
               if (startTime > 0 && e.target.currentTime < 1 && showResume) {

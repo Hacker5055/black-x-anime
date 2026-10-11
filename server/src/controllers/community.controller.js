@@ -4,7 +4,7 @@
  *   GET  /api/community/posts
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
 
 /** POST /api/community/follow — body { targetUserId } */
 export async function followUser(req, res) {
@@ -12,20 +12,40 @@ export async function followUser(req, res) {
     const userId = getUserId(req);
     if (!userId) return fail(res, 401, 'Authentication required.');
 
-    const { targetUserId } = req.body || {};
-    if (!targetUserId || typeof targetUserId !== 'string') {
+    const { targetUserId, targetUsername } = req.body || {};
+    if (!targetUserId && !targetUsername) {
       return fail(res, 400, 'targetUserId is required.');
     }
-
-    const uid = String(userId);
-    const targetId = String(targetUserId);
-    if (targetId === uid) {
-      return fail(res, 400, 'You cannot follow yourself.');
+    if (targetUserId !== undefined && targetUserId !== null && typeof targetUserId !== 'string') {
+      return fail(res, 400, 'targetUserId must be a string.');
     }
 
     const prisma = getPrisma();
-    const target = await prisma.user.findUnique({ where: { id: targetId } });
-    if (!target) return fail(res, 404, 'User not found.');
+    const me = await ensurePrismaUser(prisma, req.user);
+    if (!me) return fail(res, 404, 'User not found.');
+    const uid = me.id;
+
+    // target by id (spec) or by username (site UI) — username targets get
+    // provisioned on the fly so follow works across the auth bridge.
+    let targetId = targetUserId ? String(targetUserId) : null;
+    if (!targetId) {
+      const name = String(targetUsername).slice(0, 40);
+      const existing = await prisma.user.findUnique({ where: { username: name } });
+      if (existing) {
+        targetId = existing.id;
+      } else {
+        const created = await prisma.user.create({
+          data: { username: name, email: `${name}@blackx.local`, password_hash: 'external', display_name: name }
+        });
+        targetId = created.id;
+      }
+    } else {
+      const target = await prisma.user.findUnique({ where: { id: targetId } });
+      if (!target) return fail(res, 404, 'User not found.');
+    }
+    if (targetId === uid) {
+      return fail(res, 400, 'You cannot follow yourself.');
+    }
 
     // idempotent follow
     await prisma.follow.upsert({

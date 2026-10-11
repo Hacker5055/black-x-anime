@@ -40,3 +40,38 @@ export function prismaError(res, err, { notFound = 'Record not found.' } = {}) {
   console.error('[api]', err?.code || '', err?.message || err);
   return fail(res, 500, 'Internal server error.');
 }
+
+/**
+ * Identity bridge: the app authenticates via the SQLite/JWT (or Firebase)
+ * layer while the social/gamification features live in the Prisma DB.
+ * Provisioning a matching User row on first use keeps FKs happy and lets
+ * every feature work without a manual user migration.
+ */
+export async function ensurePrismaUser(prisma, reqUser) {
+  const rawId = getUserId({ user: reqUser });
+  if (rawId == null) return null;
+  const id = String(rawId);
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (existing) return existing;
+
+  const u = (reqUser && typeof reqUser === 'object') ? reqUser : {};
+  const baseName = String(u.username || u.uid || `user_${id}`).slice(0, 40);
+  const displayName = u.displayName || u.display_name || baseName;
+  const make = (suffix, emailPrefix) => ({
+    id,
+    username: suffix ? `${baseName}_${id}`.slice(0, 40) : baseName,
+    email: `${emailPrefix}${u.email || `${baseName}@blackx.local`}`.slice(0, 80),
+    password_hash: 'external',
+    display_name: String(displayName).slice(0, 60),
+    role: u.role === 'admin' ? 'admin' : 'user',
+    is_verified: Boolean(u.is_verified || u.isVerified || u.role === 'developer' || u.role === 'admin')
+  });
+  try {
+    return await prisma.user.create({ data: make(false, '') });
+  } catch (err) {
+    if (err?.code === 'P2002') {
+      return prisma.user.create({ data: make(true, `${id}.`) });
+    }
+    throw err;
+  }
+}
