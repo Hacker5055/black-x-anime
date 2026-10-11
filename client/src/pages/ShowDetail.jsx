@@ -1,6 +1,6 @@
 import { imgFallback } from '../hooks/hooks.js';
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
@@ -16,11 +16,14 @@ import { auth, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../f
 
 export default function ShowDetail({ onOpenAuth }) {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
+  const sourceParam = (searchParams.get('source') || '').toLowerCase();
+  const srcSuffix = sourceParam ? `?source=${sourceParam}` : '';
   const navigate = useNavigate();
   const { t, lang, formatNumber } = useI18n();
   const { user } = useAuth();
 
-  const { data, loading, error } = useAsync(() => api.get(`/api/stream/show/${slug}`), [slug]);
+  const { data, loading, error } = useAsync(() => api.get(`/api/stream/show/${slug}${srcSuffix}`), [slug, srcSuffix]);
   const [fav, setFav] = useState(false);
   const [favBusy, setFavBusy] = useState(false);
   const [progress, setProgress] = useState({});
@@ -178,7 +181,7 @@ export default function ShowDetail({ onOpenAuth }) {
                 <button
                   type="button"
                   className="btn btn--primary"
-                  onClick={() => navigate(`/watch/${slug}/${continueEp.episode}`)}
+                  onClick={() => navigate(`/watch/${slug}/${continueEp.episode}${srcSuffix}`)}
                 >
                   <span className="btn__shine" />
                   ▶ {progress[continueEp.episode] ? t('common.continue') : t('common.watchNow')} · {t('common.ep')} {continueEp.episode}
@@ -223,7 +226,7 @@ export default function ShowDetail({ onOpenAuth }) {
                 <button
                   type="button"
                   className="btn btn--ghost"
-                  onClick={() => navigate(`/watch/${slug}/${continueEp?.episode || 1}`)}
+                  onClick={() => navigate(`/watch/${slug}/${continueEp?.episode || 1}${srcSuffix}`)}
                   title={t('watch.downloadEpisode')}
                 >
                   📥 {t('watch.downloadEpisode')}
@@ -292,7 +295,7 @@ export default function ShowDetail({ onOpenAuth }) {
                     key={e.episode}
                     type="button"
                     className={`ep-chip ${p?.completed ? 'watched' : ''}`}
-                    onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
+                    onClick={() => navigate(`/watch/${slug}/${e.episode}${srcSuffix}`)}
                     style={
                       isLatest
                         ? {

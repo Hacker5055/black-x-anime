@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
@@ -18,12 +18,15 @@ import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteF
 
 export default function Watch({ onOpenAuth }) {
   const { slug, ep } = useParams();
+  const [searchParams] = useSearchParams();
+  const sourceParam = (searchParams.get('source') || '').toLowerCase();
+  const srcSuffix = sourceParam ? `?source=${sourceParam}` : '';
   const episode = Number(ep) || 1;
   const navigate = useNavigate();
   const { t, lang, formatNumber } = useI18n();
   const { user } = useAuth();
 
-  const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}`), [slug]);
+  const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}${srcSuffix}`), [slug, srcSuffix]);
   const [episodeData, setEpisodeData] = useState(null); // { entries, downloads, resolved, resolvedDownloads }
   const [sourcesError, setSourcesError] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(true);
@@ -47,7 +50,7 @@ export default function Watch({ onOpenAuth }) {
     setSourcesLoading(true);
     setSourcesError(false);
     setEpisodeData(null);
-    api.get(`/api/stream/episode/${slug}/${episode}`)
+    api.get(`/api/stream/episode/${slug}/${episode}${srcSuffix}`)
       .then((d) => {
         if (!d?.entries?.length && !d?.downloads?.length) throw new Error('empty');
         setEpisodeData({
@@ -64,7 +67,7 @@ export default function Watch({ onOpenAuth }) {
       })
       .catch(() => setSourcesError(true))
       .finally(() => setSourcesLoading(false));
-  }, [slug, episode]);
+  }, [slug, episode, srcSuffix]);
 
   useEffect(() => {
     loadSources();
@@ -196,7 +199,8 @@ export default function Watch({ onOpenAuth }) {
 
   const title = show ? ((lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn) : slug;
   const vipTier = resolveUserVipTier(user);
-  const [vipFastCdn, setVipFastCdn] = useState(() => vipTier === 'vip_basic' || vipTier === 'vip_monarch');
+  const isVipMember = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
+  const [vipFastCdn, setVipFastCdn] = useState(() => isVipMember);
   const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
   const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
 
@@ -357,8 +361,8 @@ export default function Watch({ onOpenAuth }) {
                   saveRef.current?.(pos, dur);
                 }}
                 onEnded={() => saveRef.current?.(lastPos.current.pos, lastPos.current.dur || lastPos.current.pos, true)}
-                onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}`) : null}
-                onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}`) : null}
+                onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}${srcSuffix}`) : null}
+                onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}${srcSuffix}`) : null}
                 nextLabel={nextEp ? t('watch.episodePicker', { n: formatNumber(nextEp.episode) }) : null}
               />
             </div>
@@ -467,7 +471,7 @@ export default function Watch({ onOpenAuth }) {
           <div className="watch-meta glass reveal">
             <div style={{ flex: 1, minWidth: '220px' }}>
               <div className="watch-meta__kicker">
-                <Link to={`/show/${slug}`}>{title}</Link>
+                <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
               </div>
               <h1 className="watch-meta__title">
@@ -528,7 +532,7 @@ export default function Watch({ onOpenAuth }) {
                 </button>
               )}
               {nextEp && (
-                <button type="button" className="btn btn--primary btn--sm" onClick={() => navigate(`/watch/${slug}/${nextEp.episode}`)}>
+                <button type="button" className="btn btn--primary btn--sm" onClick={() => navigate(`/watch/${slug}/${nextEp.episode}${srcSuffix}`)}>
                   <span className="btn__shine" />
                   {t('watch.nextEpisode')} →
                 </button>
@@ -575,9 +579,9 @@ export default function Watch({ onOpenAuth }) {
                     👑 {lang === 'ar' ? 'الجودة الخارقة FHD (1080p • VIP)' : 'Full HD (1080p • VIP)'}
                   </span>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {episodeData.entries.slice(0, 5).map((entry) => (
+                    {episodeData.entries.slice(0, 5).map((entry, idx) => (
                       <button
-                        key={`dl-fhd-${entry.index}`}
+                        key={`dl-fhd-${entry.id || entry.index || idx}`}
                         type="button"
                         className="wit-server-tab wit-server-tab--vip"
                         onClick={() => {
@@ -594,8 +598,8 @@ export default function Watch({ onOpenAuth }) {
                           setDownloadModalOpen(true);
                         }}
                       >
-                        <span>📥 {entry.label}</span>
-                        <small>{isVipMember ? '1080p' : '🔒 VIP'}</small>
+                        <span>📥 {entry.server || entry.label || `سيرفر ${idx + 1}`}</span>
+                        <small>{isVipMember ? (entry.quality || '1080p') : '🔒 VIP'}</small>
                       </button>
                     ))}
                   </div>
@@ -619,15 +623,15 @@ export default function Watch({ onOpenAuth }) {
                     🖥️ {lang === 'ar' ? 'الجودة العالية HD (720p • مجاناً)' : 'High Definition HD (720p • Free)'}
                   </span>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {episodeData.entries.slice(0, 5).map((entry) => (
+                    {episodeData.entries.slice(0, 5).map((entry, idx) => (
                       <button
-                        key={`dl-hd-${entry.index}`}
+                        key={`dl-hd-${entry.id || entry.index || idx}`}
                         type="button"
                         className="wit-server-tab"
                         onClick={() => setDownloadModalOpen(true)}
                       >
-                        <span>📥 {entry.label}</span>
-                        <small>720p</small>
+                        <span>📥 {entry.server || entry.label || `سيرفر ${idx + 1}`}</span>
+                        <small>{entry.quality || '720p'}</small>
                       </button>
                     ))}
                   </div>
@@ -662,7 +666,7 @@ export default function Watch({ onOpenAuth }) {
                     key={e.episode}
                     type="button"
                     className={`watch-ep ${e.episode === episode ? 'active' : ''}`}
-                    onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
+                    onClick={() => navigate(`/watch/${slug}/${e.episode}${srcSuffix}`)}
                   >
                     <span className="watch-ep__num">{formatNumber(e.episode)}</span>
                     <span className="watch-ep__label">

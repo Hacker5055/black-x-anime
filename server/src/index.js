@@ -21,10 +21,6 @@ import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
 
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://postgres@localhost:5432/blackx';
-}
-
 // never let a stray async error kill the API (client aborts during video
 // streaming are the usual suspects)
 process.on('unhandledRejection', (err) => {
@@ -44,8 +40,6 @@ try {
     seedAll({ quick: true })
       .then(() => {
         console.log('🌱 Quick seed done — enriching metadata in background');
-        // self-heal: keep trying in case the source rate-limits or the host
-        // IP starts cold — stops after ~5 attempts (≈15 min)
         const attempt = (n) => enrichLibrary()
           .then(() => console.log('✨ Library enriched with live metadata'))
           .catch((err) => {
@@ -62,7 +56,7 @@ try {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
@@ -79,8 +73,13 @@ app.get('/api/health', (req, res) => {
  */
 app.get('/api/proxy-image', async (req, res) => {
   try {
-    const url = new URL(String(req.query.url || ''));
-    const ok = url.hostname === 's4.anilist.co' || url.hostname === 'images.witanime.site';
+    if (!req.query.url) return res.status(400).json({ error: 'missing_url' });
+    const url = new URL(req.query.url);
+    const ok = url.hostname === 's4.anilist.co' ||
+      url.hostname === 'images.witanime.site' ||
+      url.hostname === 'anime3rb.com' ||
+      url.hostname.endsWith('.anime3rb.com') ||
+      url.hostname.includes('mangalik.net');
     if (!ok) {
       return res.status(400).json({ error: 'bad_host', message: 'Host not allowed' });
     }

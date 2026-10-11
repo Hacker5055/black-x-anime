@@ -41,8 +41,10 @@ export default {
     } catch {
       return new Response('bad url', { status: 400 });
     }
-    // only the streaming source — this relay is not an open proxy
-    if (dest.hostname !== 'witanime.site' && !dest.hostname.endsWith('.witanime.site')) {
+    // only the streaming sources (WitAnime + Anime3rb) — this relay is not an open proxy
+    const isWita = dest.hostname === 'witanime.site' || dest.hostname.endsWith('.witanime.site');
+    const isAnime3rb = dest.hostname === 'anime3rb.com' || dest.hostname.endsWith('.anime3rb.com');
+    if (!isWita && !isAnime3rb) {
       return new Response('host not allowed', { status: 403 });
     }
 
