@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { api } from '../api.js';
+import { pushToast } from '../hooks/hooks.js';
+
+export function isFhdQuality(q) {
+  const s = String(q || '').toUpperCase();
+  return s.includes('FHD') || s.includes('1080') || s.includes('4K') || s.includes('2160');
+}
 
 const fmt = (s) => {
   if (!Number.isFinite(s) || s < 0) s = 0;
@@ -35,9 +41,12 @@ export default function VideoPlayer({
   onNext,
   onPrev,
   nextLabel,
-  resumePrompt = false
+  resumePrompt = false,
+  vipTier = 'free',
+  onRequireVip
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
   const videoRef = useRef(null);
   const shellRef = useRef(null);
   const hideTimer = useRef(null);
@@ -68,10 +77,21 @@ export default function VideoPlayer({
   const activeSource = active ? resolved[active.id] : null;
   const embedMode = Boolean(activeSource && !activeSource.directUrl);
 
-  // auto-pick the first entry (server side pre-resolves the best candidate)
+  // auto-pick the first entry (for Free users, prefer non-FHD HD/SD server first if available)
   useEffect(() => {
-    if (!activeId && entries.length) setActiveId(entries[0].id);
-  }, [entries, activeId]);
+    if (!activeId && entries.length) {
+      if (!isVip) {
+        const freeServer = entries.find((e) => !isFhdQuality(e.quality));
+        const chosen = freeServer || entries[0];
+        setActiveId(chosen.id);
+        if (!resolved[chosen.id] && onResolve) {
+          onResolve(chosen).catch(() => {});
+        }
+      } else {
+        setActiveId(entries[0].id);
+      }
+    }
+  }, [entries, activeId, isVip, resolved, onResolve]);
 
   /* ------------------------------ controls ------------------------------ */
   const wake = useCallback(() => {
@@ -116,6 +136,16 @@ export default function VideoPlayer({
   const pickSource = useCallback(
     async (entry) => {
       if (!entry) return;
+      if (isFhdQuality(entry.quality) && !isVip) {
+        pushToast(
+          lang === 'ar'
+            ? '👑 سيرفرات المشاهدة بجودة FHD 1080p حصرية لمشتركي VIP فقط! اشترك الآن أو فعّل كودك لفتح الجودة الفائقة.'
+            : '👑 FHD 1080p streaming servers are exclusive to VIP members! Upgrade or redeem a code to unlock.',
+          'info'
+        );
+        onRequireVip?.();
+        return;
+      }
       setEnded(false);
       setActiveId(entry.id);
       if (!resolved[entry.id] && onResolve) {
@@ -127,7 +157,7 @@ export default function VideoPlayer({
         }
       }
     },
-    [resolved, onResolve]
+    [resolved, onResolve, isVip, lang, onRequireVip]
   );
 
   // keyboard shortcuts
@@ -486,17 +516,33 @@ export default function VideoPlayer({
             <div className="player-sources__list glass glass--strong">
               {entries.map((e) => {
                 const src = resolved[e.id];
+                const isFhd = isFhdQuality(e.quality);
+                const locked = isFhd && !isVip;
                 return (
                   <button
                     key={e.id}
                     type="button"
                     className={`chip ${active?.id === e.id ? 'active' : ''}`}
-                    onClick={() => { pickSource(e); setPanel(false); }}
+                    onClick={() => {
+                      pickSource(e);
+                      if (!locked) setPanel(false);
+                    }}
+                    style={
+                      isFhd
+                        ? {
+                            borderColor: locked ? 'rgba(245, 158, 11, 0.45)' : '#eab308',
+                            background: locked ? 'rgba(245, 158, 11, 0.08)' : 'rgba(234, 179, 8, 0.18)'
+                          }
+                        : undefined
+                    }
                   >
-                    {busyId === e.id ? '⏳' : e.server}
-                    <span style={{ opacity: 0.7 }}>
-                      {[e.quality, e.version === 'dub' ? t('watch.dub') : t('watch.sub'),
-                        src ? (src.directUrl ? 'MP4' : 'EMBED') : '…']
+                    {busyId === e.id ? '⏳' : locked ? `🔒 ${e.server}` : isFhd ? `👑 ${e.server}` : e.server}
+                    <span style={{ opacity: 0.85, color: isFhd ? '#fde047' : undefined, fontWeight: isFhd ? 800 : undefined }}>
+                      {[
+                        isFhd ? `${e.quality || 'FHD'} • VIP` : (e.quality || 'HD'),
+                        e.version === 'dub' ? t('watch.dub') : t('watch.sub'),
+                        src ? (src.directUrl ? 'MP4' : 'EMBED') : '…'
+                      ]
                         .filter(Boolean)
                         .join(' · ')}
                     </span>

@@ -7,6 +7,11 @@ import { api } from '../api.js';
 import { useAsync, useDominantColor, applyLiveColor, pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { RatingPanel } from '../components/Features.jsx';
+import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
+import {
+  isAnimeEpisodeAlertEnabled,
+  toggleAnimeEpisodeAlert
+} from '../utils/deviceNotifications.js';
 import { auth, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
 
 export default function ShowDetail({ onOpenAuth }) {
@@ -19,6 +24,12 @@ export default function ShowDetail({ onOpenAuth }) {
   const [fav, setFav] = useState(false);
   const [favBusy, setFavBusy] = useState(false);
   const [progress, setProgress] = useState({});
+  const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
+  const vipTier = resolveUserVipTier(user);
+
+  useEffect(() => {
+    setAlertEnabled(isAnimeEpisodeAlertEnabled(slug));
+  }, [slug]);
 
   const show = data?.show;
   const color = useDominantColor(show?.poster, '#22d3ee');
@@ -124,6 +135,9 @@ export default function ShowDetail({ onOpenAuth }) {
               <span className="badge badge--cat">{show.episodeCount ? t('show.episodeCount', { n: formatNumber(show.episodeCount) }) : '?'}</span>
               <span className="badge badge--open">{t('watch.sub')}</span>
               <span className="badge badge--score">HD</span>
+              <span className="badge" style={{ background: 'rgba(234,179,8,0.22)', color: '#fde047', fontWeight: 900 }}>
+                👑 FHD 1080p • VIP
+              </span>
             </div>
 
             {show.description && (
@@ -141,6 +155,33 @@ export default function ShowDetail({ onOpenAuth }) {
                   ▶ {progress[continueEp.episode] ? t('common.continue') : t('common.watchNow')} · {t('common.ep')} {continueEp.episode}
                 </button>
               )}
+              <button
+                type="button"
+                className={`btn ${alertEnabled ? 'btn--primary' : 'btn--ghost'}`}
+                onClick={async () => {
+                  const maxEp = eps.length ? Math.max(...eps.map((e) => Number(e.episode || 0))) : 1;
+                  const nextState = await toggleAnimeEpisodeAlert(
+                    {
+                      slug,
+                      titleAr: show.titleAr || title,
+                      titleEn: show.titleEn || title,
+                      poster: show.poster || '',
+                      latestEpisode: maxEp
+                    },
+                    lang
+                  );
+                  setAlertEnabled(nextState);
+                }}
+                style={
+                  alertEnabled
+                    ? { background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#041016', fontWeight: 900 }
+                    : { borderColor: 'rgba(34,211,238,0.45)', color: 'var(--cyan)', fontWeight: 800 }
+                }
+              >
+                {alertEnabled
+                  ? (lang === 'ar' ? '🔔 إشعارات الحلقات مفعّلة على جهازك ✓' : '🔔 Episode Device Alerts On ✓')
+                  : (lang === 'ar' ? '📲 تفعيل إشعارات الحلقات الجديدة' : '📲 Notify Me on New Episodes')}
+              </button>
               <button
                 type="button"
                 className={`btn ${fav ? 'btn--violet' : 'btn--ghost'}`}
@@ -167,9 +208,26 @@ export default function ShowDetail({ onOpenAuth }) {
       <RatingPanel slug={slug} title={title} />
 
       <section className="section">
-        <div className="section__head">
+        <div className="section__head" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
           <h2 className="section__title">🎬 {t('show.episodesList')}</h2>
-          <span className="chip" style={{ cursor: 'default' }}>{formatNumber(eps.length)} {t('common.episodes')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: '0.76rem',
+                fontWeight: 800,
+                padding: '0.28rem 0.75rem',
+                borderRadius: '99px',
+                background: vipTier === 'free' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                border: vipTier === 'free' ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.4)',
+                color: vipTier === 'free' ? '#fde047' : '#34d399'
+              }}
+            >
+              {vipTier === 'free'
+                ? (lang === 'ar' ? '⏳ الحلقات الرسمية الجديدة تفتح لمشتركي VIP في نفس اليوم، وتتأخر 24 ساعة للنسخة المجانية' : '⏳ Official new episodes drop same-day for VIP, 24h delay for Free')
+                : (lang === 'ar' ? '👑 عضويتك VIP: جميع الحلقات الرسمية تنزل لك في نفس اليوم وبجودة FHD 1080p!' : '👑 VIP Active: Same-day official episodes & FHD 1080p unlocked!')}
+            </span>
+            <span className="chip" style={{ cursor: 'default' }}>{formatNumber(eps.length)} {t('common.episodes')}</span>
+          </div>
         </div>
 
         {eps.length === 0 ? (
@@ -181,14 +239,37 @@ export default function ShowDetail({ onOpenAuth }) {
             {eps.map((e) => {
               const p = progress[e.episode];
               const pct = p && p.duration ? Math.min(1, p.position / p.duration) : p?.completed ? 1 : 0;
+              const maxEp = eps.length ? Math.max(...eps.map((item) => Number(item.episode || 0))) : 0;
+              const isLatest = eps.length > 1 && Number(e.episode) === maxEp;
               return (
                 <button
                   key={e.episode}
                   type="button"
                   className={`ep-chip ${p?.completed ? 'watched' : ''}`}
                   onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
+                  style={
+                    isLatest
+                      ? {
+                          borderColor: vipTier === 'free' ? '#f59e0b' : '#10b981',
+                          position: 'relative'
+                        }
+                      : undefined
+                  }
                 >
                   <span>{formatNumber(e.episode)}</span>
+                  {isLatest && (
+                    <span
+                      style={{
+                        fontSize: '0.62rem',
+                        fontWeight: 900,
+                        color: vipTier === 'free' ? '#fde047' : '#34d399',
+                        display: 'block',
+                        marginTop: '2px'
+                      }}
+                    >
+                      {vipTier === 'free' ? '⏳ VIP اليوم' : '👑 VIP'}
+                    </span>
+                  )}
                   {p && (
                     <span className="ep-chip__bar">
                       <span style={{ width: `${Math.max(6, pct * 100)}%` }} />

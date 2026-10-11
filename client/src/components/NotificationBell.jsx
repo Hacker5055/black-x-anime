@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
+import { sendNativeDeviceNotification } from '../utils/deviceNotifications.js';
+import { pushToast } from '../hooks/hooks.js';
 
 export default function NotificationBell() {
   const { lang } = useI18n();
@@ -101,6 +103,31 @@ export default function NotificationBell() {
       .catch(() => {});
   }, [user]);
 
+  useEffect(() => {
+    const onNewEpAlert = (e) => {
+      const d = e.detail;
+      if (!d) return;
+      setItems((prev) => [
+        {
+          id: d.id || `ep-${Date.now()}`,
+          cat: 'manga',
+          icon: '🎬',
+          titleAr: d.title,
+          titleEn: d.title,
+          bodyAr: d.body,
+          bodyEn: d.body,
+          timeAr: 'الآن',
+          timeEn: 'Just now',
+          to: d.url || '/trending',
+          unread: true
+        },
+        ...prev
+      ]);
+    };
+    window.addEventListener('blackx:new-episode-alert', onNewEpAlert);
+    return () => window.removeEventListener('blackx:new-episode-alert', onNewEpAlert);
+  }, []);
+
   const unreadCount = items.filter((i) => i.unread).length;
   const filtered = items.filter((i) => filter === 'all' || i.cat === filter);
 
@@ -198,7 +225,7 @@ export default function NotificationBell() {
           <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
             {[
               { id: 'all', ar: 'الكل', en: 'All' },
-              { id: 'manga', ar: '📖 الفصول', en: '📖 Chapters' },
+              { id: 'manga', ar: '📖 الفصول والحلقات', en: '📖 Episodes' },
               { id: 'community', ar: '💬 المجتمع', en: '💬 Social' },
               { id: 'reward', ar: '💎 المكافآت', en: '💎 Rewards' }
             ].map((tb) => (
@@ -221,6 +248,53 @@ export default function NotificationBell() {
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = await sendNativeDeviceNotification({
+                title: lang === 'ar' ? '🎬 إشعارات حلقات BLACK X مفعّلة!' : '🎬 BLACK X Episode Alerts Active!',
+                body:
+                  lang === 'ar'
+                    ? 'ستصلك إشعارات الحلقات الجديدة مباشرة على شاشة هاتفك أو جهاز الكمبيوتر فور نزولها.'
+                    : 'New anime episode alerts will now appear directly on your phone or computer!',
+                url: '/trending'
+              });
+              if (ok) {
+                pushToast(
+                  lang === 'ar'
+                    ? '📲 تم تفعيل وإرسال إشعار حي على هاتفك / جهاز الكمبيوتر بنجاح!'
+                    : '📲 Sent native device notification successfully!',
+                  'success'
+                );
+              } else {
+                pushToast(
+                  lang === 'ar'
+                    ? '🔔 يرجى السماح بإشعارات المتصفح لتصلك تنبيهات الحلقات على جهازك.'
+                    : '🔔 Please allow browser notifications in your browser settings.',
+                  'info'
+                );
+              }
+            }}
+            style={{
+              width: '100%',
+              marginBottom: '0.65rem',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(139, 92, 246, 0.22))',
+              border: '1px solid rgba(34, 211, 238, 0.45)',
+              color: '#fff',
+              fontSize: '0.76rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            📲 {lang === 'ar' ? 'تفعيل وتجربة إشعارات الهاتف والكمبيوتر' : 'Enable & Test Phone/PC Notifications'}
+          </button>
 
           <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {filtered.map((n) => (

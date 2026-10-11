@@ -316,19 +316,19 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.86rem' }}>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
-                <span>✔️</span> {lang === 'ar' ? 'مشاهدة الحلقات بجودة قياسية 720p / 1080p' : 'Standard 720p / 1080p streaming'}
+                <span>✔️</span> {lang === 'ar' ? 'مشاهدة وتحميل الحلقات بجودة قياسية HD 720p / SD' : 'Standard HD 720p / SD streaming & downloads'}
+              </li>
+              <li style={{ display: 'flex', gap: '0.5rem', color: '#fde047' }}>
+                <span>⏳</span> {lang === 'ar' ? 'الحلقات الرسمية الجديدة تفتح بعد 24 ساعة من يوم نزولها' : 'Official new episodes unlock 24h after release day'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
                 <span>✔️</span> {lang === 'ar' ? 'الانضمام لغرف المشاهدة العامة (بحد أقصى 5 مشاهدين)' : 'Public Watch Party rooms (max 5 viewers)'}
               </li>
-              <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
-                <span>✔️</span> {lang === 'ar' ? 'زخرفة افتراضية واحدة + 3 رسائل صوتية يومياً' : '1 default ornament + 3 voice notes/day'}
+              <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
+                <span>🔒</span> {lang === 'ar' ? 'سيرفرات المشاهدة والتحميل بجودة FHD 1080p حصرية لمشتركي VIP' : 'FHD 1080p streaming & download servers locked (VIP only)'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
-                <span>🔒</span> {lang === 'ar' ? 'بدون سيرفرات VIP Fast CDN أو دقة 4K HDR 60fps' : 'No VIP Fast CDN or 4K HDR 60fps'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
-                <span>🔒</span> {lang === 'ar' ? 'بدون غرف خاصة أو وصول مبكر للحلقات والفصول' : 'No Private Rooms or Early Access'}
+                <span>🔒</span> {lang === 'ar' ? 'بدون غرف خاصة أو مشاهدة في نفس يوم العرض' : 'No Private Rooms or Same-Day Release Access'}
               </li>
             </ul>
           </div>
@@ -401,6 +401,12 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
             </div>
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem', fontSize: '0.88rem' }}>
+              <li style={{ display: 'flex', gap: '0.55rem', color: '#fde047', fontWeight: 800 }}>
+                <span>🎬</span> {lang === 'ar' ? 'فتح سيرفرات المشاهدة والتحميل بجودة FHD 1080p الحصرية' : 'Unlock exclusive FHD 1080p streaming & download servers'}
+              </li>
+              <li style={{ display: 'flex', gap: '0.55rem', color: '#34d399', fontWeight: 800 }}>
+                <span>⚡</span> {lang === 'ar' ? 'نزول الحلقات الرسمية في نفس يوم عرضها فوراً (بدون تأخير 24 ساعة)' : 'Same-day official episode release (no 24h free delay)'}
+              </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
                 <span>👑</span> {lang === 'ar' ? 'شارة VIP الذهبية المميزة بجانب الاسم 👑' : 'Exclusive Golden VIP Badge next to your name 👑'}
               </li>

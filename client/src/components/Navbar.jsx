@@ -53,6 +53,7 @@ export default function Navbar({ onOpenAuth }) {
 
   const links = [
     { to: '/', label: t('nav.home'), icon: '◈' },
+    { to: '/trending', label: lang === 'ar' ? 'الأعمال الرائجة 🔥' : 'Trending Anime 🔥', icon: '🔥' },
     { to: '/browse', label: lang === 'ar' ? 'المكتبة 📖' : 'Library 📖', icon: '📖' },
     { to: '/community', label: t('nav.community'), icon: '💬' },
     { to: '/rankings', label: t('nav.rankings'), icon: '🏆' },

@@ -7,6 +7,11 @@ import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/
 import VideoPlayer from '../components/VideoPlayer.jsx';
 import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
+import {
+  isEpisodeDelayedForFreeUser,
+  isAnimeEpisodeAlertEnabled,
+  toggleAnimeEpisodeAlert
+} from '../utils/deviceNotifications.js';
 import { DownloadModal } from '../components/DownloadModal.jsx';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
@@ -193,6 +198,19 @@ export default function Watch({ onOpenAuth }) {
   const vipTier = resolveUserVipTier(user);
   const [vipFastCdn, setVipFastCdn] = useState(() => vipTier === 'vip_basic' || vipTier === 'vip_monarch');
   const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
+  const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
+
+  useEffect(() => {
+    setAlertEnabled(isAnimeEpisodeAlertEnabled(slug));
+  }, [slug]);
+
+  const maxEpisodeNum = episodes.length ? Math.max(...episodes.map((e) => Number(e.episode || 0))) : 0;
+  const isLatestOfficialEp = episodes.length > 1 && Number(episode) === maxEpisodeNum;
+  const isDelayedForFree = isEpisodeDelayedForFreeUser({
+    episodeNumber: episode,
+    totalEpisodes: maxEpisodeNum,
+    vipTier
+  });
 
   if (showQuery.loading && sourcesLoading) return <LiquidLoader />;
   if (showQuery.error && !show) {
@@ -210,7 +228,94 @@ export default function Watch({ onOpenAuth }) {
       <div className="watch-layout">
         <div className="watch-main">
           {/* ---------- the player ---------- */}
-          {sourcesLoading ? (
+          {isDelayedForFree ? (
+            <div className="player-shell glass">
+              <div
+                className="player-stage"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '390px',
+                  padding: '2.5rem 1.5rem',
+                  textAlign: 'center',
+                  background: 'radial-gradient(circle at 50% 25%, rgba(168, 85, 247, 0.28), rgba(6, 8, 16, 0.96) 75%)'
+                }}
+              >
+                <div style={{ fontSize: '3.2rem', marginBottom: '0.75rem' }}>⏳👑</div>
+                <span
+                  style={{
+                    padding: '0.3rem 0.9rem',
+                    borderRadius: '999px',
+                    background: 'rgba(245, 158, 11, 0.2)',
+                    border: '1px solid #f59e0b',
+                    color: '#fde047',
+                    fontWeight: 900,
+                    fontSize: '0.8rem',
+                    marginBottom: '0.85rem'
+                  }}
+                >
+                  {lang === 'ar'
+                    ? '👑 عرض اليوم الرسمي — متاح فوراً لمشتركي VIP فقط'
+                    : '👑 Official Release Day — Instant Access for VIP Members'}
+                </span>
+                <h2 style={{ margin: '0 0 0.6rem', fontSize: '1.45rem', fontWeight: 900 }}>
+                  {lang === 'ar'
+                    ? `الحلقة ${formatNumber(episode)} متاحة الآن لمشتركي VIP، وتفتح للنسخة المجانية بعد 24 ساعة`
+                    : `Episode ${formatNumber(episode)} is live now for VIP members, and unlocks for Free users in 24 hours`}
+                </h2>
+                <p style={{ maxWidth: '560px', color: 'var(--ink-dim)', fontSize: '0.92rem', lineHeight: 1.65, marginBottom: '1.25rem' }}>
+                  {lang === 'ar'
+                    ? 'مشتركو باقات ⚡ VIP Basic و 🔮 VIP Monarch يشاهدون الحلقات الرسمية في نفس يوم صدورها وبجودة FHD 1080p / 4K بدون تأخير.'
+                    : '⚡ VIP Basic and 🔮 VIP Monarch members watch official episodes on release day in FHD 1080p / 4K with zero delay.'}
+                </p>
+
+                <div
+                  style={{
+                    padding: '0.65rem 1.4rem',
+                    borderRadius: '14px',
+                    background: 'rgba(0,0,0,0.55)',
+                    border: '1px solid rgba(34,211,238,0.4)',
+                    fontFamily: 'monospace',
+                    fontSize: '1.15rem',
+                    fontWeight: 900,
+                    color: 'var(--cyan)',
+                    marginBottom: '1.5rem'
+                  }}
+                >
+                  ⏱️ {lang === 'ar' ? 'الوقت المتبقي للنسخة المجانية: 23 ساعة و 59 دقيقة' : 'Free Release Countdown: 23h 59m'}
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => navigate('/profile?tab=referrals')}
+                    style={{
+                      background: 'linear-gradient(135deg, #f59e0b, #a855f7)',
+                      color: '#fff',
+                      fontWeight: 900,
+                      padding: '0.85rem 1.5rem',
+                      borderRadius: '14px'
+                    }}
+                  >
+                    👑 {lang === 'ar' ? 'اشترك في VIP أو فعّل كودك للمشاهدة فوراً' : 'Upgrade to VIP / Redeem Code to Watch Now'}
+                  </button>
+                  {prevEp && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => navigate(`/watch/${slug}/${prevEp.episode}`)}
+                      style={{ fontWeight: 800, padding: '0.85rem 1.35rem', borderRadius: '14px' }}
+                    >
+                      🎬 {lang === 'ar' ? `مشاهدة الحلقة السابقة المتاحة مجاناً (${formatNumber(prevEp.episode)})` : `Watch Previous Free Episode (${formatNumber(prevEp.episode)})`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : sourcesLoading ? (
             <div className="player-shell glass">
               <div className="player-stage" style={{ display: 'grid', placeItems: 'center', minHeight: '320px' }}>
                 <div className="liquid-loader">
@@ -245,6 +350,8 @@ export default function Watch({ onOpenAuth }) {
                 episodeLabel={t('watch.episodePicker', { n: formatNumber(episode) })}
                 startTime={resumeAt}
                 resumePrompt={resumeAt > 0}
+                vipTier={vipTier}
+                onRequireVip={() => navigate('/profile?tab=referrals')}
                 onProgress={(pos, dur) => {
                   lastPos.current = { pos, dur };
                   saveRef.current?.(pos, dur);
@@ -371,6 +478,32 @@ export default function Watch({ onOpenAuth }) {
             <div className="watch-meta__actions">
               <button
                 type="button"
+                className={`btn btn--sm ${alertEnabled ? 'btn--primary' : 'btn--ghost'}`}
+                onClick={async () => {
+                  const nextState = await toggleAnimeEpisodeAlert(
+                    {
+                      slug,
+                      titleAr: show?.titleAr || title,
+                      titleEn: show?.titleEn || title,
+                      poster: show?.poster || '',
+                      latestEpisode: maxEpisodeNum || episode
+                    },
+                    lang
+                  );
+                  setAlertEnabled(nextState);
+                }}
+                style={
+                  alertEnabled
+                    ? { background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#041016', fontWeight: 900 }
+                    : { borderColor: 'rgba(34,211,238,0.45)', color: 'var(--cyan)', fontWeight: 800 }
+                }
+              >
+                {alertEnabled
+                  ? (lang === 'ar' ? '🔔 إشعارات الجهاز مفعّلة ✓' : '🔔 Device Alerts On ✓')
+                  : (lang === 'ar' ? '📲 تفعيل إشعارات الحلقات' : '📲 Enable Episode Alerts')}
+              </button>
+              <button
+                type="button"
                 className="btn btn--primary btn--sm"
                 onClick={() => setDownloadModalOpen(true)}
                 style={{
@@ -422,20 +555,38 @@ export default function Watch({ onOpenAuth }) {
           </div>
           {sidebarOpen && (
             <div className="watch-side__list">
-              {(show?.episodes || []).map((e) => (
-                <button
-                  key={e.episode}
-                  type="button"
-                  className={`watch-ep ${e.episode === episode ? 'active' : ''}`}
-                  onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
-                >
-                  <span className="watch-ep__num">{formatNumber(e.episode)}</span>
-                  <span className="watch-ep__label">
-                    {t('watch.episodePicker', { n: formatNumber(e.episode) })}
-                  </span>
-                  {e.episode === episode && <span className="watch-ep__now">{t('show.playing')}</span>}
-                </button>
-              ))}
+              {(show?.episodes || []).map((e) => {
+                const isLatest = episodes.length > 1 && Number(e.episode) === maxEpisodeNum;
+                return (
+                  <button
+                    key={e.episode}
+                    type="button"
+                    className={`watch-ep ${e.episode === episode ? 'active' : ''}`}
+                    onClick={() => navigate(`/watch/${slug}/${e.episode}`)}
+                  >
+                    <span className="watch-ep__num">{formatNumber(e.episode)}</span>
+                    <span className="watch-ep__label">
+                      {t('watch.episodePicker', { n: formatNumber(e.episode) })}
+                    </span>
+                    {isLatest && (
+                      <span
+                        style={{
+                          fontSize: '0.66rem',
+                          fontWeight: 900,
+                          padding: '0.12rem 0.45rem',
+                          borderRadius: '99px',
+                          background: vipTier === 'free' ? 'rgba(245,158,11,0.22)' : 'rgba(16,185,129,0.22)',
+                          color: vipTier === 'free' ? '#fde047' : '#34d399',
+                          border: vipTier === 'free' ? '1px solid #f59e0b' : '1px solid #10b981'
+                        }}
+                      >
+                        {vipTier === 'free' ? '⏳ 24س / VIP 👑' : '👑 يوم العرض VIP'}
+                      </span>
+                    )}
+                    {e.episode === episode && <span className="watch-ep__now">{t('show.playing')}</span>}
+                  </button>
+                );
+              })}
             </div>
           )}
         </aside>

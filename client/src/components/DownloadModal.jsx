@@ -1,6 +1,10 @@
 import { imgFallback } from '../hooks/hooks.js';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { resolveUserVipTier } from './VipPlansAndDevCodes.jsx';
+import { isFhdQuality } from './VideoPlayer.jsx';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 
@@ -27,6 +31,11 @@ export function DownloadModal({
   onResolveStreaming
 }) {
   const { t, lang, formatNumber } = useI18n();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const vipTier = resolveUserVipTier(user);
+  const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
+
   const [loadingSources, setLoadingSources] = useState(false);
   const [sourcesData, setSourcesData] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
@@ -106,19 +115,36 @@ export function DownloadModal({
     const fromProps = downloads || [];
     const sourceList = fromApi.length > 0 ? fromApi : fromProps;
 
-    return sourceList.map((item) => {
+    return sourceList.map((item, idx) => {
       const res = resolvedDownloads[item.id] || {};
+      const rawQual = item.quality || (idx % 2 === 0 ? 'FHD' : 'HD');
       return {
         id: item.id,
         server: item.server || 'Server',
-        quality: item.quality || 'FHD',
+        quality: rawQual,
+        isFhd: isFhdQuality(rawQual),
         url: item.url || res.downloadUrl || null,
         directUrl: item.directUrl || res.directUrl || null
       };
     });
   }, [sourcesData, downloads, resolvedDownloads]);
 
+  const promptVipForFhd = () => {
+    pushToast(
+      lang === 'ar'
+        ? '👑 التحميل بجودة FHD 1080p حصري لمشتركي VIP فقط! يمكنك التحميل بجودة HD مجاناً أو الترقية إلى VIP الآن.'
+        : '👑 FHD 1080p downloads are exclusive to VIP members! Download in HD for free or upgrade to VIP.',
+      'info'
+    );
+    onClose?.();
+    navigate('/profile?tab=referrals');
+  };
+
   const handleOpenServer = async (item) => {
+    if (item.isFhd && !isVip) {
+      promptVipForFhd();
+      return;
+    }
     let url = item.url;
     if (!url && onResolveDownload) {
       setResolvingId(item.id);
@@ -137,6 +163,10 @@ export function DownloadModal({
   };
 
   const handleCopyServer = async (item) => {
+    if (item.isFhd && !isVip) {
+      promptVipForFhd();
+      return;
+    }
     let url = item.url;
     if (!url && onResolveDownload) {
       setResolvingId(item.id);
@@ -251,15 +281,48 @@ export function DownloadModal({
                 </span>
               </div>
 
+              {/* VIP FHD Notice Banner */}
+              <div
+                style={{
+                  marginBottom: '0.9rem',
+                  padding: '0.7rem 1rem',
+                  borderRadius: '12px',
+                  background: isVip ? 'rgba(16, 185, 129, 0.14)' : 'rgba(245, 158, 11, 0.14)',
+                  border: isVip ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.45)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: isVip ? '#34d399' : '#fde047' }}>
+                  {isVip
+                    ? (lang === 'ar' ? '👑 عضويتك VIP مفعّلة: سيرفرات التحميل بجودة FHD 1080p مفتوحة بالكامل لك!' : '👑 VIP Active: All FHD 1080p downloads are unlocked!')
+                    : (lang === 'ar' ? '🔒 التحميل بجودة FHD 1080p حصري لمشتركي VIP فقط (التحميل بجودة HD متاح مجاناً).' : '🔒 FHD 1080p downloads are exclusive to VIP members (HD is free).')}
+                </span>
+                {!isVip && (
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--sm"
+                    onClick={promptVipForFhd}
+                    style={{ background: 'linear-gradient(135deg, #f59e0b, #eab308)', color: '#090d16', fontWeight: 900 }}
+                  >
+                    👑 {lang === 'ar' ? 'فتح تحميل FHD الآن' : 'Unlock FHD VIP'}
+                  </button>
+                )}
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.65rem' }}>
                 {displayList.map((item, idx) => {
                   const isResolving = resolvingId === item.id;
+                  const lockedFhd = item.isFhd && !isVip;
                   return (
                     <div
                       key={`cloud-${idx}-${item.id}`}
                       style={{
                         background: 'rgba(0, 0, 0, 0.45)',
-                        border: '1px solid rgba(255, 255, 255, 0.09)',
+                        border: item.isFhd ? '1px solid rgba(234, 179, 8, 0.45)' : '1px solid rgba(255, 255, 255, 0.09)',
                         borderRadius: '12px',
                         padding: '0.85rem 1rem',
                         display: 'flex',
@@ -269,10 +332,18 @@ export function DownloadModal({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>
-                          🖥️ {item.server.toUpperCase()}
+                          {item.isFhd ? '👑' : '🖥️'} {item.server.toUpperCase()}
                         </span>
-                        <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(139, 92, 246, 0.25)', color: '#c084fc', fontWeight: 800 }}>
-                          {item.quality || 'FHD'}
+                        <span
+                          className="badge"
+                          style={{
+                            fontSize: '0.72rem',
+                            background: item.isFhd ? 'rgba(234, 179, 8, 0.22)' : 'rgba(34, 211, 238, 0.18)',
+                            color: item.isFhd ? '#fde047' : '#22d3ee',
+                            fontWeight: 900
+                          }}
+                        >
+                          {item.isFhd ? `${item.quality} • VIP 👑` : `${item.quality} • مجاني`}
                         </span>
                       </div>
 
@@ -281,17 +352,25 @@ export function DownloadModal({
                           <button
                             type="button"
                             className="btn btn--sm"
-                            onClick={() => handleDownloadDirectFile(item.directUrl, item.quality)}
+                            onClick={() => {
+                              if (lockedFhd) {
+                                promptVipForFhd();
+                                return;
+                              }
+                              handleDownloadDirectFile(item.directUrl, item.quality);
+                            }}
                             style={{
-                              background: 'linear-gradient(135deg, #06b6d4, #0284c7)',
+                              background: lockedFhd
+                                ? 'linear-gradient(135deg, #f59e0b, #b45309)'
+                                : 'linear-gradient(135deg, #06b6d4, #0284c7)',
                               color: '#fff',
-                              fontWeight: 700,
+                              fontWeight: 800,
                               fontSize: '0.8rem',
                               padding: '0.4rem 0.65rem'
                             }}
                             title={lang === 'ar' ? 'تحميل مباشر للملف بدون إعلانات' : 'Direct MP4 Download'}
                           >
-                            ⬇ {lang === 'ar' ? 'تحميل مباشر' : 'Direct'}
+                            {lockedFhd ? '🔒 VIP FHD' : `⬇ ${lang === 'ar' ? 'تحميل مباشر' : 'Direct'}`}
                           </button>
                         )}
                         <button
@@ -299,9 +378,18 @@ export function DownloadModal({
                           className="btn btn--primary btn--sm"
                           onClick={() => handleOpenServer(item)}
                           disabled={isResolving}
-                          style={{ flex: 1, fontSize: '0.82rem', padding: '0.4rem 0.65rem' }}
+                          style={{
+                            flex: 1,
+                            fontSize: '0.82rem',
+                            padding: '0.4rem 0.65rem',
+                            background: lockedFhd ? 'rgba(245, 158, 11, 0.22)' : undefined,
+                            border: lockedFhd ? '1px solid #f59e0b' : undefined,
+                            color: lockedFhd ? '#fde047' : undefined
+                          }}
                         >
-                          🌐 {isResolving ? (lang === 'ar' ? 'جارٍ التجهيز…' : 'Resolving…') : (lang === 'ar' ? 'فتح صفحة التحميل' : 'Open Page')}
+                          {lockedFhd
+                            ? (lang === 'ar' ? '🔒 حصري لمشتركي VIP' : '🔒 VIP Exclusive')
+                            : `🌐 ${isResolving ? (lang === 'ar' ? 'جارٍ التجهيز…' : 'Resolving…') : (lang === 'ar' ? 'فتح صفحة التحميل' : 'Open Page')}`}
                         </button>
                         <button
                           type="button"
@@ -311,7 +399,7 @@ export function DownloadModal({
                           title={lang === 'ar' ? 'نسخ رابط السيرفر' : 'Copy link'}
                           style={{ padding: '0.4rem 0.6rem' }}
                         >
-                          {copiedId === item.id ? '✓' : '🔗'}
+                          {lockedFhd ? '🔒' : copiedId === item.id ? '✓' : '🔗'}
                         </button>
                       </div>
                     </div>

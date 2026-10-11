@@ -7,6 +7,7 @@ import { GooFilter } from './components/Loading.jsx';
 import { useI18n } from './i18n/I18nProvider.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Browse from './pages/Browse.jsx';
+import TrendingAnime from './pages/TrendingAnime.jsx';
 import ShowDetail from './pages/ShowDetail.jsx';
 import Watch from './pages/Watch.jsx';
 import MyList from './pages/MyList.jsx';
@@ -84,6 +85,7 @@ export default function App() {
           <div className="container">
             <Routes>
               <Route path="/" element={<Dashboard onOpenAuth={openAuth} />} />
+              <Route path="/trending" element={<TrendingAnime />} />
               <Route path="/browse" element={<Browse />} />
               <Route path="/community" element={<Community onOpenAuth={openAuth} />} />
               <Route path="/rankings" element={<Rankings onOpenAuth={openAuth} />} />
