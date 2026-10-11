@@ -17,6 +17,7 @@ import profileRoutes from './routes/profile.routes.js';
 import gamificationRoutes from './routes/gamification.routes.js';
 import supportRoutes from './routes/support.routes.js';
 import mangaNovelRoutes from './routes/mangaNovel.routes.js';
+import { animeScraperRouter } from './routes/animeScraper.routes.js';
 import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
@@ -114,6 +115,8 @@ app.use('/api/gamification', gamificationRoutes);
 app.use('/api/creator', gamificationRoutes); // POST /submit lives in gamification.routes.js
 app.use('/api/support', supportRoutes);
 app.use('/api', mangaNovelRoutes); // Manga, Manhwa, Light Novels, AniList, MangaDex, Scraper & Tracking
+app.use('/api/anime-scraper', animeScraperRouter); // 3v1ltw1n0x01/anime_scraper API under /api/anime-scraper
+app.use('/', animeScraperRouter); // Also expose top-level /search-anime, /get-episodes, /get-episode-dl, /latest-episodes, /fetch-seasonals, /get-anime-info
 
 // Platform injectors (AI Studio _websocket-interceptor.js) register a
 // service worker via a relative URL — serve a valid one for ANY nested path

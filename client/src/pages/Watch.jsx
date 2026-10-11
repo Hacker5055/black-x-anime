@@ -25,6 +25,8 @@ export default function Watch({ onOpenAuth }) {
 
   const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}`), [slug]);
   const [episodeData, setEpisodeData] = useState(null); // { entries, downloads, resolved, resolvedDownloads }
+  const [scraperDownloads, setScraperDownloads] = useState(null); // { cloudHosts, qualities }
+  const [resolvingDlId, setResolvingDlId] = useState(null);
   const [sourcesError, setSourcesError] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
@@ -64,6 +66,11 @@ export default function Watch({ onOpenAuth }) {
       })
       .catch(() => setSourcesError(true))
       .finally(() => setSourcesLoading(false));
+
+    // Fetch multi-quality download links from 3v1ltw1n0x01/anime_scraper + WitAnime manifest
+    api.get(`/api/stream/download-sources/${slug}/${episode}`)
+      .then((dlRes) => setScraperDownloads(dlRes))
+      .catch(() => {});
   }, [slug, episode]);
 
   useEffect(() => {
@@ -536,105 +543,173 @@ export default function Watch({ onOpenAuth }) {
             </div>
           </div>
 
-          {/* ---------- WitAnime Direct Multi-Quality Download Table (جدول تحميل الحلقة) ---------- */}
-          {episodeData?.entries?.length > 0 && (
-            <div className="wit-section" style={{ marginTop: '0.85rem' }}>
-              <div className="wit-sec-header" style={{ marginBottom: '0.75rem', paddingBottom: '0.65rem' }}>
-                <div className="wit-sec-header__right">
-                  <span className="wit-sec-header__bar" />
-                  <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
-                    <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر' : 'Direct Episode Download Table'}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  className="wit-sec-header__more"
-                  onClick={() => setDownloadModalOpen(true)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {lang === 'ar' ? 'كل روابط التحميل ←' : 'All Download Links →'}
-                </button>
-              </div>
+          {/* ---------- WitAnime & anime_scraper Direct Multi-Quality Download Table (جدول تحميل الحلقة) ---------- */}
+          {(episodeData?.entries?.length > 0 || episodeData?.downloads?.length > 0 || scraperDownloads?.cloudHosts?.length > 0) && (() => {
+            const allDownloads = (scraperDownloads?.cloudHosts?.length ? scraperDownloads.cloudHosts : (episodeData?.downloads || [])).map((d, idx) => {
+              const res = episodeData?.resolvedDownloads?.[d.id] || {};
+              return {
+                id: d.id || `dl-${idx}`,
+                server: d.server || d.label || `Server ${idx + 1}`,
+                quality: String(d.quality || 'FHD').toUpperCase(),
+                url: d.url || res.downloadUrl || res.directUrl || null,
+                directUrl: d.directUrl || res.directUrl || null
+              };
+            });
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                {/* Row 1: FHD 1080p VIP */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '0.6rem',
-                    padding: '0.65rem 0.85rem',
-                    borderRadius: '10px',
-                    background: 'rgba(6, 6, 6, 0.9)',
-                    border: '1px solid rgba(255, 255, 255, 0.22)'
-                  }}
-                >
-                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#ffffff' }}>
-                    👑 {lang === 'ar' ? 'الجودة الخارقة FHD (1080p • VIP)' : 'Full HD (1080p • VIP)'}
-                  </span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {episodeData.entries.slice(0, 5).map((entry) => (
-                      <button
-                        key={`dl-fhd-${entry.index}`}
-                        type="button"
-                        className="wit-server-tab wit-server-tab--vip"
-                        onClick={() => {
-                          if (!isVipMember) {
-                            pushToast(
-                              lang === 'ar'
-                                ? '👑 تحميل جودة FHD 1080p متاح لمشتركي VIP فقط! افتح نافذة التحميل أو اشترك في VIP.'
-                                : '👑 FHD 1080p download is exclusive to VIP members!',
-                              'info'
-                            );
-                            navigate('/profile?tab=referrals');
-                            return;
-                          }
-                          setDownloadModalOpen(true);
-                        }}
-                      >
-                        <span>📥 {entry.label}</span>
-                        <small>{isVipMember ? '1080p' : '🔒 VIP'}</small>
-                      </button>
-                    ))}
+            const fhdLinks = allDownloads.filter((d) => d.quality.includes('FHD') || d.quality.includes('1080'));
+            const hdLinks = allDownloads.filter((d) => (d.quality.includes('HD') && !d.quality.includes('FHD')) || d.quality.includes('720'));
+            const sdLinks = allDownloads.filter((d) => d.quality.includes('SD') || d.quality.includes('480') || d.quality.includes('360'));
+
+            const handleDirectTableClick = async (dlItem, requireVip = false) => {
+              if (requireVip && !isVipMember) {
+                pushToast(
+                  lang === 'ar'
+                    ? '👑 تحميل جودة FHD 1080p متاح لمشتركي VIP فقط! يمكنك التحميل بجودة HD أو SD مجاناً.'
+                    : '👑 FHD 1080p download is exclusive to VIP members! Download HD/SD for free.',
+                  'info'
+                );
+                navigate('/profile?tab=referrals');
+                return;
+              }
+              let targetUrl = dlItem.directUrl || dlItem.url;
+              if (!targetUrl && dlItem.id) {
+                setResolvingDlId(dlItem.id);
+                const resolved = await resolveDownload(dlItem);
+                setResolvingDlId(null);
+                targetUrl = resolved?.directUrl || resolved?.downloadUrl || null;
+              }
+              if (targetUrl) {
+                window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                pushToast(lang === 'ar' ? `جاري فتح رابط التحميل (${dlItem.server})...` : `Opening download (${dlItem.server})...`, 'success');
+              } else {
+                setDownloadModalOpen(true);
+              }
+            };
+
+            return (
+              <div className="wit-section" style={{ marginTop: '0.85rem' }}>
+                <div className="wit-sec-header" style={{ marginBottom: '0.75rem', paddingBottom: '0.65rem' }}>
+                  <div className="wit-sec-header__right">
+                    <span className="wit-sec-header__bar" />
+                    <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
+                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (WitAnime API)' : 'Direct Episode Download Table'}
+                    </h3>
                   </div>
+                  <button
+                    type="button"
+                    className="wit-sec-header__more"
+                    onClick={() => setDownloadModalOpen(true)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {lang === 'ar' ? 'كل روابط التحميل ←' : 'All Download Links →'}
+                  </button>
                 </div>
 
-                {/* Row 2: HD 720p Free */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '0.6rem',
-                    padding: '0.65rem 0.85rem',
-                    borderRadius: '10px',
-                    background: 'rgba(6, 6, 6, 0.9)',
-                    border: '1px solid rgba(255, 255, 255, 0.14)'
-                  }}
-                >
-                  <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#d4d4d8' }}>
-                    🖥️ {lang === 'ar' ? 'الجودة العالية HD (720p • مجاناً)' : 'High Definition HD (720p • Free)'}
-                  </span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {episodeData.entries.slice(0, 5).map((entry) => (
-                      <button
-                        key={`dl-hd-${entry.index}`}
-                        type="button"
-                        className="wit-server-tab"
-                        onClick={() => setDownloadModalOpen(true)}
-                      >
-                        <span>📥 {entry.label}</span>
-                        <small>720p</small>
-                      </button>
-                    ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  {/* Row 1: الجودة الخارقة FHD (1080p) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.6rem',
+                      padding: '0.65rem 0.85rem',
+                      borderRadius: '10px',
+                      background: 'rgba(6, 6, 6, 0.9)',
+                      border: '1px solid rgba(255, 255, 255, 0.22)'
+                    }}
+                  >
+                    <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#ffffff' }}>
+                      👑 {lang === 'ar' ? 'الجودة الخارقة FHD (1080p)' : 'Full HD (1080p)'}
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {(fhdLinks.length ? fhdLinks : allDownloads.slice(0, 5)).map((dl) => (
+                        <button
+                          key={`dl-fhd-${dl.id}`}
+                          type="button"
+                          className="wit-server-tab wit-server-tab--vip"
+                          disabled={resolvingDlId === dl.id}
+                          onClick={() => handleDirectTableClick(dl, true)}
+                        >
+                          <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
+                          <small>{isVipMember ? '1080p' : '🔒 VIP'}</small>
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Row 2: الجودة العالية HD (720p • مجاناً) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.6rem',
+                      padding: '0.65rem 0.85rem',
+                      borderRadius: '10px',
+                      background: 'rgba(6, 6, 6, 0.9)',
+                      border: '1px solid rgba(255, 255, 255, 0.14)'
+                    }}
+                  >
+                    <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#d4d4d8' }}>
+                      🖥️ {lang === 'ar' ? 'الجودة العالية HD (720p • مجاناً)' : 'High Definition HD (720p • Free)'}
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {(hdLinks.length ? hdLinks : allDownloads.slice(0, 5)).map((dl) => (
+                        <button
+                          key={`dl-hd-${dl.id}`}
+                          type="button"
+                          className="wit-server-tab"
+                          disabled={resolvingDlId === dl.id}
+                          onClick={() => handleDirectTableClick(dl, false)}
+                        >
+                          <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
+                          <small>720p</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Row 3: الجودة المتوسطة SD (480p • مجاناً) */}
+                  {sdLinks.length > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '0.6rem',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '10px',
+                        background: 'rgba(6, 6, 6, 0.9)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                      }}
+                    >
+                      <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#a1a1aa' }}>
+                        📱 {lang === 'ar' ? 'الجودة المتوسطة SD (480p • مجاناً)' : 'Standard Definition SD (480p • Free)'}
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {sdLinks.map((dl) => (
+                          <button
+                            key={`dl-sd-${dl.id}`}
+                            type="button"
+                            className="wit-server-tab"
+                            disabled={resolvingDlId === dl.id}
+                            onClick={() => handleDirectTableClick(dl, false)}
+                          >
+                            <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
+                            <small>480p</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ---------- Watch Party Rooms & Timestamped / Voice Comments ---------- */}
           <WatchPartyPanel

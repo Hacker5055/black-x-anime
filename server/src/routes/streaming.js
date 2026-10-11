@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, resolveDownloadEntry, scrapeHealth, scrapeDiagnostics } from '../witanime.js';
+import { scraperGetEpisodeDl } from '../animeScraperApi.js';
 
 const router = Router();
 
@@ -156,8 +157,8 @@ router.post('/resolve-download', async (req, res) => {
 });
 
 /**
- * GET /api/stream/download-sources/:slug/:ep — resolves WitAnime's official download servers.
- * Strictly returns only the anime's official download sources from WitAnime.
+ * GET /api/stream/download-sources/:slug/:ep — resolves WitAnime's official download servers
+ * combined with 3v1ltw1n0x01/anime_scraper multi-quality base64 links (ul.quality-list).
  */
 router.get('/download-sources/:slug/:ep', async (req, res) => {
   const { slug } = req.params;
@@ -167,14 +168,17 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
   }
 
   try {
-    const payload = await fetchEpisode(slug, ep);
-    if (!payload) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });
+    const [payload, scraperQualities] = await Promise.all([
+      fetchEpisode(slug, ep).catch(() => null),
+      scraperGetEpisodeDl(slug, ep).catch(() => ({}))
+    ]);
 
-    const rawDownloads = payload.downloads || [];
+    const rawDownloads = payload?.downloads || [];
     const cloudHosts = [];
+    const seenUrls = new Set();
 
     for (const dl of rawDownloads) {
-      let resolved = payload.resolvedDownloads?.[dl.id] || null;
+      let resolved = payload?.resolvedDownloads?.[dl.id] || null;
 
       if (!resolved) {
         try {
@@ -183,6 +187,9 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
           // Keep resolving others gracefully if one encounters rate limiting or upstream lag
         }
       }
+
+      const finalUrl = resolved?.downloadUrl || resolved?.directUrl || null;
+      if (finalUrl) seenUrls.add(finalUrl);
 
       cloudHosts.push({
         id: dl.id,
@@ -194,15 +201,47 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
       });
     }
 
+    // Merge base64-decoded download links from 3v1ltw1n0x01/anime_scraper (ul.quality-list)
+    for (const [qualityGroup, links] of Object.entries(scraperQualities || {})) {
+      if (qualityGroup.endsWith('_servers') || !Array.isArray(links)) continue;
+      const qCode =
+        qualityGroup.includes('FHD') || qualityGroup.includes('1080')
+          ? 'FHD'
+          : qualityGroup.includes('HD') || qualityGroup.includes('720')
+          ? 'HD'
+          : 'SD';
+
+      links.forEach((linkUrl, idx) => {
+        if (!linkUrl || typeof linkUrl !== 'string' || seenUrls.has(linkUrl)) return;
+        seenUrls.add(linkUrl);
+        let hostLabel = 'Direct Server';
+        try {
+          hostLabel = new URL(linkUrl).hostname.replace(/^www\./, '').split('.')[0];
+        } catch {
+          // ignore
+        }
+        cloudHosts.push({
+          id: `scraper-dl-${slug}-${ep}-${qCode}-${idx}`,
+          server: hostLabel,
+          quality: qCode,
+          qualityLabel: qualityGroup,
+          url: linkUrl,
+          directUrl: null,
+          type: 'anime_scraper_dl'
+        });
+      });
+    }
+
     res.json({
       slug,
       episode: ep,
       cloudHosts,
+      qualities: scraperQualities || {},
       count: cloudHosts.length
     });
   } catch (err) {
     console.error('[stream/download-sources]', err.message);
-    res.status(502).json({ error: 'upstream', message: 'Could not resolve download sources', cloudHosts: [] });
+    res.status(502).json({ error: 'upstream', message: 'Could not resolve download sources', cloudHosts: [], qualities: {} });
   }
 });
 
