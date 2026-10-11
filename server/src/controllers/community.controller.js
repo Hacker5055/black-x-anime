@@ -4,7 +4,7 @@
  *   GET  /api/community/posts
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** POST /api/community/follow — body { targetUserId } */
@@ -21,7 +21,7 @@ export async function followUser(req, res) {
       return fail(res, 400, 'targetUserId must be a string.');
     }
 
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       const key = String(userId);
       const targetKey = targetUserId
@@ -34,7 +34,8 @@ export async function followUser(req, res) {
         message: 'User followed successfully.',
         isFollowing: true
       });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const me = await ensurePrismaUser(prisma, req.user);
@@ -76,6 +77,7 @@ export async function followUser(req, res) {
       isFollowing: true
     });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'User not found.' });
   }
 }

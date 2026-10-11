@@ -2,7 +2,7 @@
  * Support tickets controller — POST /api/support/ticket
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** POST /api/support/ticket — body { subject, message } */
@@ -19,7 +19,7 @@ export async function createTicket(req, res) {
       return fail(res, 400, 'message is required.');
     }
 
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       const ticketId = social.createTicket(String(userId), subject.trim(), message.trim());
       return res.status(201).json({
@@ -28,7 +28,8 @@ export async function createTicket(req, res) {
         status: 'OPEN',
         message: 'Support ticket created.'
       });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const uid = String(userId);
@@ -52,6 +53,7 @@ export async function createTicket(req, res) {
       message: 'Support ticket created.'
     });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'User not found.' });
   }
 }

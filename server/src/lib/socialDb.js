@@ -5,6 +5,7 @@
  * everywhere. Response shapes are identical in both modes.
  */
 import { db } from '../db.js';
+export { db };
 
 let ready = false;
 
@@ -53,6 +54,11 @@ CREATE TABLE IF NOT EXISTS social_submissions (
   video_url TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'PENDING',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS social_profiles (
+  user_key TEXT PRIMARY KEY,
+  banner_url TEXT,
+  theme_preference TEXT
 );
 CREATE TABLE IF NOT EXISTS social_tickets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,13 +153,26 @@ export const social = {
     ensureSocialTables();
     const bannerUrl = data.bannerUrl !== undefined ? data.bannerUrl : data.banner_url;
     const themePreference = data.themePreference !== undefined ? data.themePreference : data.theme_preference;
-    const sets = [];
-    const args = [];
-    if (bannerUrl !== undefined) { sets.push('banner_url = ?'); args.push(bannerUrl); }
-    if (themePreference !== undefined) { sets.push('theme_preference = ?'); args.push(themePreference); }
-    if (!sets.length) return 0;
-    args.push(userId);
-    return db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...args).changes;
+    const key = String(userId);
+    // reliable store: works for any auth id (Firebase uid, numeric, demo…)
+    const cur = db.prepare('SELECT banner_url, theme_preference FROM social_profiles WHERE user_key = ?').get(key) || {};
+    const b = bannerUrl !== undefined ? bannerUrl : cur.banner_url ?? null;
+    const t = themePreference !== undefined ? themePreference : cur.theme_preference ?? null;
+    db.prepare(`INSERT INTO social_profiles (user_key, banner_url, theme_preference) VALUES (?, ?, ?)
+      ON CONFLICT(user_key) DO UPDATE SET banner_url = excluded.banner_url, theme_preference = excluded.theme_preference`)
+      .run(key, b ?? null, t ?? null);
+    // best-effort mirror into the legacy users table (seeded demo accounts)
+    try {
+      const sets = []; const args = [];
+      if (bannerUrl !== undefined) { sets.push('banner_url = ?'); args.push(bannerUrl); }
+      if (themePreference !== undefined) { sets.push('theme_preference = ?'); args.push(themePreference); }
+      if (sets.length) { args.push(key); db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...args); }
+    } catch { /* legacy table optional */ }
+    return 1;
+  },
+  getUserProfile(userKey) {
+    ensureSocialTables();
+    return db.prepare('SELECT banner_url, theme_preference FROM social_profiles WHERE user_key = ?').get(String(userKey)) || {};
   }
 };
 

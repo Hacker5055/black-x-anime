@@ -2,7 +2,7 @@
  * Content & ratings controller — POST /api/content/rate
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
+import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { social, ensureSocialTables } from '../lib/socialDb.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
@@ -24,14 +24,15 @@ export async function rateContent(req, res) {
     }
 
     // no DATABASE_URL -> SQLite social store (works on every host)
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       const ep = episodeNumber !== undefined && episodeNumber !== null ? Number(episodeNumber) : 0;
       if (!Number.isInteger(ep) || ep < 0) return fail(res, 400, 'episodeNumber must be a positive integer.');
       if (!slug) return fail(res, 400, 'contentId or slug is required.');
       social.upsertRating(String(userId), String(slug).slice(0, 120), ep, s, title != null ? String(title).slice(0, 200) : null);
       return res.status(200).json({ success: true, message: 'Rating saved successfully.' });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const user = await ensurePrismaUser(prisma, req.user);
@@ -90,6 +91,7 @@ export async function rateContent(req, res) {
       message: 'Rating saved successfully.'
     });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'Rating target not found.' });
   }
 }
@@ -107,11 +109,12 @@ export async function getMyRating(req, res) {
     const ep = req.query.episodeNumber !== undefined ? Number(req.query.episodeNumber) : 0;
     if (!Number.isInteger(ep) || ep < 0) return fail(res, 400, 'episodeNumber must be a positive integer.');
 
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       const row = social.getRating(String(userId), slug.slice(0, 120), ep);
       return res.status(200).json({ success: true, rating: row ? { score: row.score } : null });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const user = await ensurePrismaUser(prisma, req.user);
@@ -132,6 +135,7 @@ export async function getMyRating(req, res) {
     });
     return res.status(200).json({ success: true, rating: rating ? { score: rating.score } : null });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err);
   }
 }

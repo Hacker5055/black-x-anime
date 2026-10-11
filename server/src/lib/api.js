@@ -75,3 +75,15 @@ export async function ensurePrismaUser(prisma, reqUser) {
     throw err;
   }
 }
+
+/** True when Prisma cannot reach a database (no URL, suspended host, refused...). */
+let dbBroken = false;
+/** Once a DB connection failure happens, stick to the SQLite store (circuit breaker). */
+export function dbIsBroken() { return dbBroken; }
+
+export function isDbUnavailable(err) {
+  const s = String((err && err.message) || err || '') + ' ' + String((err && err.code) || '') + ' ' + String((err && err.meta && (err.meta.code || err.meta.message)) || '');
+  const hit = /can't reach database|environment variable not found: database_url|econnrefused|econnreset|etimedout|epipe|getaddrinfo|p1001|p1017|p1008|connection terminated|database server|timeout.*acquir/i.test(s);
+  if (hit) dbBroken = true;
+  return hit;
+}

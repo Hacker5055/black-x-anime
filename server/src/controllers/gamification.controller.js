@@ -5,8 +5,8 @@
  *   POST /api/creator/submit
  */
 import { getPrisma } from '../lib/prisma.js';
-import { getUserId, fail, prismaError, ensurePrismaUser } from '../lib/api.js';
-import { social, ensureSocialTables, levelFromMinutes, progressPercentage, awardBadgesSqlite } from '../lib/socialDb.js';
+import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
+import { social, ensureSocialTables, levelFromMinutes, progressPercentage, awardBadgesSqlite, db as socialSqlite } from '../lib/socialDb.js';
 
 /* ---------------------------- leveling rules ----------------------------
  * Lifetime minutes (watch + read) drive the level:
@@ -41,7 +41,7 @@ export async function getStats(req, res) {
     const userId = getUserId(req);
     if (!userId) return fail(res, 401, 'Authentication required.');
 
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       const key = String(userId);
       const row = social.getStats(key);
@@ -52,12 +52,14 @@ export async function getStats(req, res) {
         success: true,
         data: {
           totalWatchTimeMin: row?.total_watch_time_min || 0,
+          totalReadTimeMin: row?.total_read_time_min || 0,
           currentLevel,
           progressPercentage: progressPercentage(total),
           unlockedBadges: social.userBadges(key).map((b) => ({ name: b.name, iconUrl: b.icon_url }))
         }
       });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const uid = String(userId);
@@ -90,12 +92,14 @@ export async function getStats(req, res) {
       success: true,
       data: {
         totalWatchTimeMin: user.stats?.total_watch_time_min || 0,
+        totalReadTimeMin: user.stats?.total_read_time_min || 0,
         currentLevel,
         progressPercentage: progressPercentage(total),
         unlockedBadges
       }
     });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'User not found.' });
   }
 }
@@ -116,7 +120,7 @@ export async function syncTime(req, res) {
     }
     const delta = Math.round(minutes);
 
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       const key = String(userId);
       const before = social.getStats(key);
@@ -129,7 +133,8 @@ export async function syncTime(req, res) {
       if (row.current_level !== newLevel) social.setLevel(key, newLevel);
       awardBadgesSqlite(key, total);
       return res.status(200).json({ success: true, levelUp: newLevel > prevLevel, newLevel });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const uid = String(userId);
@@ -162,6 +167,7 @@ export async function syncTime(req, res) {
       newLevel
     });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'User not found.' });
   }
 }
@@ -186,7 +192,7 @@ export async function submitCreator(req, res) {
       return fail(res, 400, 'videoUrl must be an https URL.');
     }
 
-    if (!process.env.DATABASE_URL) {
+        var socialFallback = () => {
       ensureSocialTables();
       social.submitCreator(String(userId), videoUrl);
       return res.status(201).json({
@@ -194,7 +200,8 @@ export async function submitCreator(req, res) {
         status: 'PENDING',
         message: 'Submission received for VIP reward review.'
       });
-    }
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
 
     const prisma = getPrisma();
     const uid = String(userId);
@@ -212,6 +219,61 @@ export async function submitCreator(req, res) {
       message: 'Submission received for VIP reward review.'
     });
   } catch (err) {
+      if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
+    return prismaError(res, err, { notFound: 'User not found.' });
+  }
+}
+
+/**
+ * GET /api/gamification/creator/summary?username= — creator analytics.
+ */
+export async function getCreatorSummary(req, res) {
+  try {
+    const me = getUserId(req);
+    if (!me) return fail(res, 401, 'Authentication required.');
+    const username = req.query.username ? String(req.query.username).slice(0, 40) : (req.user?.username || null);
+
+    var socialFallback = () => {
+      ensureSocialTables();
+      const keys = [String(me)];
+      if (username) keys.push('name:' + username);
+      const q = keys.map(() => '?').join(',');
+      const rows = socialSqlite.prepare(`SELECT status FROM social_submissions WHERE user_key IN (${q})`).all(...keys);
+      const totalSubmissions = rows.length;
+      const approved = rows.filter((r) => r.status === 'APPROVED').length;
+      const rejected = rows.filter((r) => r.status === 'REJECTED').length;
+      const pendingVideos = rows.filter((r) => r.status === 'PENDING').length;
+      const vipTier = approved >= 20 ? 'Diamond' : approved >= 10 ? 'Gold' : approved >= 5 ? 'Silver' : 'Bronze';
+      return res.status(200).json({
+        success: true,
+        data: { username: username || req.user?.username || null, totalSubmissions, approved, rejected, pendingVideos, vipTier }
+      });
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
+
+    const prisma = getPrisma();
+    let uid = String(me);
+    if (username && username !== req.user?.username) {
+      const u = await prisma.user.findUnique({ where: { username } });
+      if (!u) return fail(res, 404, 'User not found.');
+      uid = u.id;
+    } else {
+      await ensurePrismaUser(prisma, req.user);
+    }
+    const where = { user_id: uid };
+    const [totalSubmissions, approved, rejected, pendingVideos] = await Promise.all([
+      prisma.submission.count({ where }),
+      prisma.submission.count({ where: { ...where, status: 'APPROVED' } }),
+      prisma.submission.count({ where: { ...where, status: 'REJECTED' } }),
+      prisma.submission.count({ where: { ...where, status: 'PENDING' } })
+    ]);
+    const vipTier = approved >= 20 ? 'Diamond' : approved >= 10 ? 'Gold' : approved >= 5 ? 'Silver' : 'Bronze';
+    return res.status(200).json({
+      success: true,
+      data: { username: username || req.user?.username || null, totalSubmissions, approved, rejected, pendingVideos, vipTier }
+    });
+  } catch (err) {
+    if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
     return prismaError(res, err, { notFound: 'User not found.' });
   }
 }
