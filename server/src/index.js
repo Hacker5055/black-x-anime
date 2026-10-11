@@ -16,6 +16,7 @@ import communitySpecRoutes from './routes/community.routes.js';
 import profileRoutes from './routes/profile.routes.js';
 import gamificationRoutes from './routes/gamification.routes.js';
 import supportRoutes from './routes/support.routes.js';
+import mangaNovelRoutes from './routes/mangaNovel.routes.js';
 import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
@@ -108,6 +109,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/creator', gamificationRoutes); // POST /submit lives in gamification.routes.js
 app.use('/api/support', supportRoutes);
+app.use('/api', mangaNovelRoutes); // Manga, Manhwa, Light Novels, AniList, MangaDex, Scraper & Tracking
 
 // Platform injectors (AI Studio _websocket-interceptor.js) register a
 // service worker via a relative URL — serve a valid one for ANY nested path

@@ -7,6 +7,7 @@ import ShowCard, { EpisodeTile } from '../components/ShowCard.jsx';
 import { ShowSearch, Modal } from '../components/Modals.jsx';
 import { SkeletonGrid, EmptyState, LiquidLoader } from '../components/Loading.jsx';
 import { pushToast, imgFallback } from '../hooks/hooks.js';
+import MangaNovelReader from '../components/MangaNovelReader.jsx';
 
 export default function Browse() {
   const { t, lang } = useI18n();
@@ -28,6 +29,7 @@ export default function Browse() {
   const [selectedLibraryItem, setSelectedLibraryItem] = useState(null);
   const [activeChapter, setActiveChapter] = useState(null);
   const [loggingRead, setLoggingRead] = useState(false);
+  const [activeReaderItem, setActiveReaderItem] = useState(null);
 
   // Categories config
   const categories = [
@@ -46,6 +48,30 @@ export default function Browse() {
         const d = await api.get(`/api/stream/search?q=${encodeURIComponent(q)}`);
         setResults(d.items || []);
       } else {
+        const searchType = activeCategory === 'novel' ? 'novel' : 'manga';
+        try {
+          const liveRes = await api.get(`/api/search?query=${encodeURIComponent(q)}&type=${searchType}`);
+          if (liveRes?.results && liveRes.results.length > 0) {
+            const mapped = liveRes.results.map((r, i) => ({
+              id: r.id || r.mangaDexId || `res_${i}`,
+              mangaDexId: r.mangaDexId,
+              title_ar: r.title || r.romajiTitle,
+              title_en: r.romajiTitle || r.title || 'Manga',
+              poster: r.coverImage?.large || r.coverImage?.extraLarge || r.coverUrl || r.coverImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600',
+              type: activeCategory.toUpperCase(),
+              author: r.author || (r.source === 'mangadex' ? 'MangaDex (مترجم عربي)' : r.source === 'anilist' ? 'AniList' : 'المصدر العربي'),
+              rating: r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.3',
+              description_ar: r.description || r.synopsisArabic || r.arabicSynopsis || 'متاح بترجمة عربية وفصول مباشرة.',
+              description_en: r.description || 'Full Arabic translated chapters available.',
+              chapters_count: r.chapters || r.chaptersCount || 40,
+              source: r.source
+            }));
+            setLibraryItems(mapped);
+            return;
+          }
+        } catch (_) {}
+
+        // Fallback to library DB
         const d = await api.get(`/api/content/library?type=${activeCategory.toUpperCase()}&q=${encodeURIComponent(q)}`);
         setLibraryItems(d.items || []);
       }
@@ -100,14 +126,8 @@ export default function Browse() {
     }
   };
 
-  const openLibraryReader = async (item) => {
-    try {
-      const res = await api.get(`/api/content/library/${item.id}`);
-      setSelectedLibraryItem(res.item || item);
-      setActiveChapter(res.item?.chapters?.[0] || null);
-    } catch {
-      setSelectedLibraryItem(item);
-    }
+  const openLibraryReader = (item) => {
+    setActiveReaderItem(item);
   };
 
   const handleRecordReading = async () => {
@@ -445,6 +465,14 @@ export default function Browse() {
             </div>
           </div>
         </Modal>
+      )}
+      {/* Interactive Manga & Light Novel Reader */}
+      {activeReaderItem && (
+        <MangaNovelReader
+          item={activeReaderItem}
+          type={activeCategory === 'novel' ? 'novel' : 'manga'}
+          onClose={() => setActiveReaderItem(null)}
+        />
       )}
     </>
   );

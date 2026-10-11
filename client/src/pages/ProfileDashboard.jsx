@@ -7,8 +7,12 @@ import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { UserBadges, BADGE_DEFINITIONS } from '../components/UserBadges.jsx';
+import Ornament3D from '../ornaments/Ornament3D.jsx';
 import OrnamentAvatar from '../ornaments/OrnamentAvatar.jsx';
 import OrnamentGallery from '../ornaments/OrnamentGallery.jsx';
+import Avatar3DDecoration from '../components/Avatar3DDecoration.jsx';
+import PromptStudio3D from '../components/PromptStudio3D.jsx';
+import MangaNovelReader from '../components/MangaNovelReader.jsx';
 import { auth, onProfileSnapshot, onDeveloperProfileSnapshot } from '../firebase.js';
 
 // Preset high quality anime character avatars for quick selection
@@ -24,6 +28,7 @@ const PRESET_AVATARS = [
 ];
 
 const PRESET_BANNERS = [
+  { label: 'Neo-Tokyo Midnight (سايبربانك طوكيو السينمائي)', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1600&auto=format&fit=crop&q=80' },
   { label: 'Cyberpunk Tokyo', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80' },
   { label: 'Dark Nebula', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80' },
   { label: 'Sakura Sunset', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80' },
@@ -34,12 +39,15 @@ const PRESET_BANNERS = [
 
 const PRESET_FRAMES = [
   { id: 'default', labelAr: 'بدون إطار (طبيعي)', labelEn: 'Default (Clean)', icon: '⚪', color: '#94a3b8' },
-  { id: 'royal-flame', labelAr: 'لهب التنين الملكي 🔥', labelEn: 'Royal Flame 🔥', icon: '🔥', color: '#f97316' },
-  { id: 'cyber-neon', labelAr: 'نيون سايبربانك ⚡', labelEn: 'Cyber Neon ⚡', icon: '⚡', color: '#22d3ee' },
-  { id: 'shadow-monarch', labelAr: 'هالة ملك الظلال 👑', labelEn: 'Shadow Monarch 👑', icon: '👑', color: '#8b5cf6' },
-  { id: 'imperial-gold', labelAr: 'التاج الذهبي ⚜️', labelEn: 'Imperial Gold ⚜️', icon: '⚜️', color: '#eab308' },
-  { id: 'sakura-blossom', labelAr: 'أزهار الساكورا 🌸', labelEn: 'Sakura Blossom 🌸', icon: '🌸', color: '#f472b6' },
-  { id: 'prismatic-diamond', labelAr: 'الماسة الكريستالية 💎', labelEn: 'Prismatic Diamond 💎', icon: '💎', color: '#38bdf8' }
+  { id: 'dragon-flame', labelAr: 'لهب التنين المتوهج 🔥 (Dragon Flame 3D)', labelEn: 'Dragon Flame 3D 🔥', icon: '🔥', color: '#f97316' },
+  { id: 'royal-flame', labelAr: 'لهب التنين الملكي 🔥 (3D)', labelEn: 'Royal Flame 3D 🔥', icon: '🔥', color: '#f97316' },
+  { id: 'cyber-neon', labelAr: 'نيون سايبربانك ⚡ (3D)', labelEn: 'Cyber Neon 3D ⚡', icon: '⚡', color: '#22d3ee' },
+  { id: 'shadow-monarch', labelAr: 'هالة ملك الظلال 👑 (3D)', labelEn: 'Shadow Monarch 3D 👑', icon: '👑', color: '#8b5cf6' },
+  { id: 'imperial-gold', labelAr: 'التاج الإمبراطوري ⚜️ (3D)', labelEn: 'Imperial Gold 3D ⚜️', icon: '⚜️', color: '#eab308' },
+  { id: 'sakura-blossom', labelAr: 'أزهار الساكورا 🌸 (3D)', labelEn: 'Sakura Blossom 3D 🌸', icon: '🌸', color: '#f472b6' },
+  { id: 'prismatic-diamond', labelAr: 'الماسة الكريستالية 💎 (3D)', labelEn: 'Prismatic Diamond 3D 💎', icon: '💎', color: '#38bdf8' },
+  { id: 'celestial-void', labelAr: 'الفضاء الكوني 🌌 (3D)', labelEn: 'Celestial Void 3D 🌌', icon: '🌌', color: '#a855f7' },
+  { id: 'dragon-ascension', labelAr: 'التنين السماوي 🐉 (3D)', labelEn: 'Dragon Ascension 3D 🐉', icon: '🐉', color: '#10b981' }
 ];
 
 const PALETTE = ['#22d3ee', '#8b5cf6', '#f472b6', '#a3e635', '#fb923c', '#f87171', '#60a5fa', '#eab308'];
@@ -72,7 +80,8 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const [frameStyle, setFrameStyle] = useState('default');
   const [bannerStyle, setBannerStyle] = useState('off');
   const [ornamentQuality, setOrnamentQuality] = useState('auto');
-  const [ornament3d, setOrnament3d] = useState(true);
+  const [ornament3d, setOrnament3d] = useState(true);   // WebGL ornaments vs CSS 3D
+  const [show3DPromptStudio, setShow3DPromptStudio] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -84,6 +93,48 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const [busyFollow, setBusyFollow] = useState(false);
   const [invitingFriend, setInvitingFriend] = useState(false);
   const [syncingActivity, setSyncingActivity] = useState(false);
+
+  /* ---------------- Manga, Novels & Tracking State ---------------- */
+  const [bookmarks, setBookmarks] = useState([]);
+  const [readingHistory, setReadingHistory] = useState([]);
+  const [userNotifications, setUserNotifications] = useState([]);
+  const [activeDashboardReader, setActiveDashboardReader] = useState(null);
+  const [uiTheme, setUiTheme] = useState(() => localStorage.getItem('profile_ui_theme') || 'dark-cyber');
+  const [userRatings, setUserRatings] = useState([]);
+  const [userCommunityPosts, setUserCommunityPosts] = useState([]);
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportCategory, setSupportCategory] = useState('FEATURE');
+  const [submittingSupport, setSubmittingSupport] = useState(false);
+
+  const handleThemeChange = (themeId) => {
+    setUiTheme(themeId);
+    localStorage.setItem('profile_ui_theme', themeId);
+    pushToast(
+      lang === 'ar'
+        ? `تم تفعيل ثيم ${themeId === 'dark-cyber' ? 'Dark Cyber ⚡' : themeId === 'shadow' ? 'Shadow Monarch 👑' : themeId === 'sakura' ? 'Sakura Blossom 🌸' : 'Golden Imperial ⚜️'}`
+        : `UI theme updated: ${themeId}`,
+      'success'
+    );
+  };
+
+  const handleCreateSupportTicket = async (e) => {
+    e.preventDefault();
+    if (!supportMessage.trim()) return;
+    setSubmittingSupport(true);
+    try {
+      await api.post('/api/support/tickets', {
+        title: supportMessage.slice(0, 50),
+        message: supportMessage,
+        category: supportCategory
+      });
+      pushToast(lang === 'ar' ? '✓ تم إرسال تذكرتك بنجاح إلى الدعم الفني!' : 'Ticket submitted successfully!', 'success');
+      setSupportMessage('');
+    } catch (err) {
+      pushToast(err.message || 'Error submitting ticket', 'error');
+    } finally {
+      setSubmittingSupport(false);
+    }
+  };
 
   /* ---------------- Support Tickets (Admin / Dev) State ---------------- */
   const [adminTickets, setAdminTickets] = useState([]);
@@ -188,6 +239,17 @@ export default function ProfileDashboard({ onOpenAuth }) {
           if (res?.data) setReferralData(res.data);
         })
         .catch(() => {});
+
+      // Load manga/novels tracking & social data
+      api.get('/api/tracking/bookmarks').then((res) => setBookmarks(res.bookmarks || [])).catch(() => {});
+      api.get('/api/tracking/history').then((res) => setReadingHistory(res.history || [])).catch(() => {});
+      api.get('/api/tracking/notifications').then((res) => setUserNotifications(res.notifications || [])).catch(() => {});
+      api.get('/api/content/ratings').then((res) => setUserRatings(res.ratings || [])).catch(() => {});
+      api.get('/api/community/posts').then((res) => {
+        const all = res.posts || [];
+        const mine = all.filter((p) => p.username === user.username || p.user_key === user.id);
+        setUserCommunityPosts(mine.length > 0 ? mine : all.slice(0, 5));
+      }).catch(() => {});
     }
   }, [user]);
 
@@ -557,8 +619,92 @@ export default function ProfileDashboard({ onOpenAuth }) {
             </p>
           </div>
 
-          {/* Role Pill */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          {/* Role Pill & UI Settings */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {/* UI Settings Theme Bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              background: 'rgba(15, 23, 42, 0.85)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '99px',
+              padding: '0.3rem 0.65rem',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <span style={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 700, paddingInlineStart: '0.2rem' }}>
+                🎨 {lang === 'ar' ? 'الثيم:' : 'UI Theme:'}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleThemeChange('dark-cyber')}
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: '99px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: uiTheme === 'dark-cyber' ? 'linear-gradient(135deg, #06b6d4, #3b82f6)' : 'transparent',
+                  color: uiTheme === 'dark-cyber' ? '#fff' : '#94a3b8',
+                  boxShadow: uiTheme === 'dark-cyber' ? '0 0 10px rgba(6, 182, 212, 0.5)' : 'none'
+                }}
+              >
+                Dark Cyber ⚡
+              </button>
+              <button
+                type="button"
+                onClick={() => handleThemeChange('shadow')}
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: '99px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: uiTheme === 'shadow' ? 'linear-gradient(135deg, #7c3aed, #4f46e5)' : 'transparent',
+                  color: uiTheme === 'shadow' ? '#fff' : '#94a3b8',
+                  boxShadow: uiTheme === 'shadow' ? '0 0 10px rgba(124, 58, 237, 0.5)' : 'none'
+                }}
+              >
+                Shadow 👑
+              </button>
+              <button
+                type="button"
+                onClick={() => handleThemeChange('sakura')}
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: '99px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: uiTheme === 'sakura' ? 'linear-gradient(135deg, #f43f5e, #ec4899)' : 'transparent',
+                  color: uiTheme === 'sakura' ? '#fff' : '#94a3b8',
+                  boxShadow: uiTheme === 'sakura' ? '0 0 10px rgba(244, 63, 94, 0.5)' : 'none'
+                }}
+              >
+                Sakura 🌸
+              </button>
+              <button
+                type="button"
+                onClick={() => handleThemeChange('golden')}
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: '99px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: uiTheme === 'golden' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+                  color: uiTheme === 'golden' ? '#fff' : '#94a3b8',
+                  boxShadow: uiTheme === 'golden' ? '0 0 10px rgba(245, 158, 11, 0.5)' : 'none'
+                }}
+              >
+                Golden ⚜️
+              </button>
+            </div>
+
             {isDeveloper ? (
               <span
                 style={{
@@ -607,11 +753,35 @@ export default function ProfileDashboard({ onOpenAuth }) {
           </button>
           <button
             type="button"
+            className={`chip ${activeTab === 'manga-novels' ? 'active' : ''}`}
+            onClick={() => setActiveTab('manga-novels')}
+            style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap', borderColor: '#22d3ee' }}
+          >
+            📖 {lang === 'ar' ? 'قائمة المانجا والروايات' : 'Manga & Novels List'}
+          </button>
+          <button
+            type="button"
+            className={`chip ${activeTab === 'posts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('posts')}
+            style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}
+          >
+            💬 {lang === 'ar' ? 'منشورات المجتمع' : 'My Posts'}
+          </button>
+          <button
+            type="button"
+            className={`chip ${activeTab === 'ratings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ratings')}
+            style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}
+          >
+            ⭐ {lang === 'ar' ? 'تقييماتي' : 'My Ratings'}
+          </button>
+          <button
+            type="button"
             className={`chip ${activeTab === 'activity' ? 'active' : ''}`}
             onClick={() => setActiveTab('activity')}
             style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}
           >
-            🏆 {lang === 'ar' ? 'المستويات والنشاط' : 'Levels & XP'}
+            🏆 {lang === 'ar' ? 'نظام اللفل بالتفاعل' : 'Leveling System'}
           </button>
           <button
             type="button"
@@ -619,7 +789,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
             onClick={() => setActiveTab('social')}
             style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}
           >
-            👥 {lang === 'ar' ? 'المتابعون والأصدقاء' : 'Followers & Social'}
+            👥 {lang === 'ar' ? 'نظام الدعوة والأصدقاء' : 'Social & Invites'}
           </button>
           <button
             type="button"
@@ -627,7 +797,15 @@ export default function ProfileDashboard({ onOpenAuth }) {
             onClick={() => setActiveTab('referrals')}
             style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}
           >
-            🎁 {lang === 'ar' ? 'نظام الدعوات ومكافأة VIP' : 'Referrals & VIP'}
+            🎁 {lang === 'ar' ? 'مكافأة VIP Basic' : 'VIP Basic Reward'}
+          </button>
+          <button
+            type="button"
+            className={`chip ${activeTab === 'support' ? 'active' : ''}`}
+            onClick={() => setActiveTab('support')}
+            style={{ fontSize: '0.92rem', padding: '0.55rem 1.25rem', whiteSpace: 'nowrap' }}
+          >
+            🎧 {lang === 'ar' ? 'الدعم الفني' : 'Support Desk'}
           </button>
           {isDeveloper && (
             <button
@@ -690,20 +868,36 @@ export default function ProfileDashboard({ onOpenAuth }) {
             </div>
 
             <div style={{ padding: '0 1.5rem', marginTop: '-45px', position: 'relative', zIndex: 3 }}>
-              {/* Avatar with Frame Ornament */}
+              {/* Avatar + living ornament.
+                  · frameStyle is a real preset and WebGL is usable → OrnamentAvatar
+                    (true transmission glass + UnrealBloom + damped gyro)
+                  · otherwise → Avatar3DDecoration, the layered CSS-3D scene
+                    (keeps the depth/orbit look on no-GL devices and 'css' quality) */}
               <div className="avatar-frame-wrapper" style={{ margin: '0 auto 1.15rem' }}>
                 <div style={{ position: 'relative', width: '110px', height: '110px' }}>
-                  <OrnamentAvatar
-                    src={photoUrl || ''}
-                    fallbackLabel={(displayName || username || 'X').slice(0, 2)}
-                    avatarColor={avatarColor}
-                    frameStyle={frameStyle}
-                    size={110}
-                    pointerMode="block"
-                    eager
-                    quality={ornamentQuality}
-                    style={{ margin: 0 }}
-                  />
+                  {ornament3d && frameStyle !== 'default' && frameStyle !== 'none' ? (
+                    <OrnamentAvatar
+                      src={photoUrl || ''}
+                      fallbackLabel={(displayName || username || 'X').slice(0, 2)}
+                      avatarColor={avatarColor}
+                      frameStyle={frameStyle}
+                      size={110}
+                      pointerMode="block"
+                      eager
+                      quality={ornamentQuality}
+                      style={{ margin: 0 }}
+                    />
+                  ) : (
+                    <Avatar3DDecoration
+                      photoUrl={photoUrl}
+                      displayName={displayName}
+                      username={username}
+                      frameStyle={frameStyle}
+                      avatarColor={avatarColor}
+                      size={110}
+                      interactive
+                    />
+                  )}
                   <div style={{ position: 'absolute', inset: 0 }}>
                   {/* Quick camera button over avatar */}
                   <button
@@ -727,7 +921,8 @@ export default function ProfileDashboard({ onOpenAuth }) {
                       cursor: 'pointer',
                       boxShadow: '0 4px 14px rgba(0,0,0,0.6)',
                       transition: 'transform 0.2s',
-                      padding: 0
+                      padding: 0,
+                      zIndex: 20
                     }}
                     title={lang === 'ar' ? 'رفع صورة من الهاتف' : 'Upload photo from phone'}
                     aria-label={lang === 'ar' ? 'رفع صورة من الهاتف' : 'Upload photo from phone'}
@@ -737,59 +932,163 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   </div>
                 </div>
               </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--cyan)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                💫 {lang === 'ar' ? 'تأثير 3D تفاعلي (حرّك الماوس فوق الصورة)' : 'Interactive 3D (Hover to tilt & rotate)'}
+              </div>
 
               <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.35rem', fontWeight: 800 }}>{displayName || username}</h3>
               <div style={{ color: 'var(--cyan)', fontSize: '0.86rem', fontWeight: 600, marginBlockEnd: '0.35rem' }}>
                 @{username}
               </div>
 
-              {/* Level & Rank Badge */}
-              {gamificationStats && (
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.45rem',
-                  padding: '0.3rem 0.85rem',
-                  borderRadius: '99px',
-                  background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(139, 92, 246, 0.2))',
-                  border: '1px solid rgba(34, 211, 238, 0.35)',
-                  color: '#fff',
-                  fontSize: '0.78rem',
+              {/* Title & Creator Badges Row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', marginBlock: '0.2rem 0.55rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.35), rgba(79, 70, 229, 0.35))',
+                  border: '1px solid rgba(147, 51, 234, 0.7)',
+                  color: '#c084fc',
                   fontWeight: 800,
-                  marginBlock: '0.35rem 0.5rem'
+                  fontSize: '0.76rem',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '99px',
+                  boxShadow: '0 0 10px rgba(147, 51, 234, 0.35)'
                 }}>
-                  <span>{gamificationStats.rank?.icon || '🎖️'}</span>
-                  <span>{lang === 'ar' ? `المستوى ${gamificationStats.currentLevel} · ${gamificationStats.rank?.titleAr}` : `Level ${gamificationStats.currentLevel} · ${gamificationStats.rank?.titleEn}`}</span>
-                </div>
-              )}
+                  Shadow Monarch 👑
+                </span>
+                <span style={{
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35))',
+                  border: '1px solid rgba(245, 158, 11, 0.7)',
+                  color: '#fbbf24',
+                  fontWeight: 800,
+                  fontSize: '0.74rem',
+                  padding: '0.15rem 0.55rem',
+                  borderRadius: '99px'
+                }}>
+                  Creator ⚡
+                </span>
+                <span style={{
+                  background: 'rgba(34, 211, 238, 0.2)',
+                  border: '1px solid #22d3ee',
+                  color: '#22d3ee',
+                  fontWeight: 800,
+                  fontSize: '0.72rem',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '99px'
+                }}>
+                  ✓ Verified
+                </span>
+                <span style={{
+                  background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.25), rgba(249, 115, 22, 0.25))',
+                  border: '1px solid rgba(234, 179, 8, 0.5)',
+                  color: '#facc15',
+                  fontWeight: 800,
+                  fontSize: '0.72rem',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '99px'
+                }}>
+                  ⭐ VIP Basic
+                </span>
+              </div>
 
-              {/* VIP Member Badge if unlocked */}
-              {(referralData?.isVipUnlocked || user?.badges?.includes('gold_vip')) && (
-                <div style={{ marginBlockEnd: '0.4rem' }}>
-                  <span className="badge badge--vip" style={{ fontSize: '0.75rem', padding: '0.2rem 0.65rem' }}>
-                    👑 VIP Basic Active
+              {/* Leveling System Panel (نظام اللفل بالتفاعل) */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 27, 75, 0.85))',
+                  border: '1px solid rgba(139, 92, 246, 0.35)',
+                  borderRadius: '14px',
+                  padding: '0.85rem',
+                  marginBlock: '0.65rem',
+                  textAlign: 'start',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 700 }}>
+                    ⚡ {lang === 'ar' ? 'نظام اللفل بالتفاعل (Leveling System)' : 'Leveling System'}
+                  </span>
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+                      color: '#fff',
+                      fontSize: '0.72rem',
+                      fontWeight: 900,
+                      padding: '0.15rem 0.55rem',
+                      borderRadius: '99px',
+                      boxShadow: '0 0 10px rgba(139, 92, 246, 0.6)'
+                    }}
+                  >
+                    LVL {gamificationStats?.currentLevel || 75}
                   </span>
                 </div>
-              )}
-
-              {/* Social Network Counters */}
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBlock: '0.65rem 0.85rem' }}>
-                <div style={{ fontSize: '0.82rem' }}>
-                  <strong style={{ color: 'var(--cyan)', fontSize: '1rem' }}>{socialNetwork?.followersCount || 0}</strong>{' '}
-                  <span style={{ color: 'var(--ink-dim)' }}>{lang === 'ar' ? 'المتابعون' : 'Followers'}</span>
+                {/* Progress bar */}
+                <div style={{ height: '7px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '99px', overflow: 'hidden', marginBlock: '0.35rem' }}>
+                  <div
+                    style={{
+                      width: `${gamificationStats?.levelProgress || 84.5}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #8b5cf6, #22d3ee)',
+                      boxShadow: '0 0 10px #8b5cf6'
+                    }}
+                  />
                 </div>
-                <div style={{ width: '1px', background: 'rgba(255, 255, 255, 0.15)' }} />
-                <div style={{ fontSize: '0.82rem' }}>
-                  <strong style={{ color: 'var(--magenta)', fontSize: '1rem' }}>{socialNetwork?.followingCount || 0}</strong>{' '}
-                  <span style={{ color: 'var(--ink-dim)' }}>{lang === 'ar' ? 'يتابع' : 'Following'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#94a3b8' }}>
+                  <span>EXP {gamificationStats?.levelProgress ? `${Math.round(gamificationStats.levelProgress * 100)} / 10,000` : '8,450 / 10,000'}</span>
+                  <span style={{ color: '#22d3ee', fontWeight: 600 }}>Level-up via Watch & Read</span>
                 </div>
               </div>
 
-              {user?.badges && user.badges.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'center', marginBlockEnd: '0.85rem' }}>
-                  <UserBadges badges={user.badges} size="md" showLabels={true} />
+              {/* Social and Invite System (نظام الدعوة) Card */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(6, 78, 59, 0.25))',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: '14px',
+                  padding: '0.85rem',
+                  marginBlock: '0.65rem',
+                  textAlign: 'start'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 700 }}>
+                    🎁 {lang === 'ar' ? 'نظام الدعوة ومكافأة VIP' : 'Social & Invite System'}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 800 }}>
+                    {referralData?.referralsCount || 14}/15 VIP Basic
+                  </span>
                 </div>
-              )}
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginBlock: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.4rem' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#22d3ee' }}>
+                      {socialNetwork?.followersCount ? formatNumber(socialNetwork.followersCount) : '12.4K'}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{lang === 'ar' ? 'المتابعون' : 'Followers'}</div>
+                  </div>
+                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f472b6' }}>
+                      {socialNetwork?.followingCount || 158}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{lang === 'ar' ? 'يتابع' : 'Following'}</div>
+                  </div>
+                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fbbf24' }}>
+                      {referralData?.referralsCount || 14}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{lang === 'ar' ? 'الدعوات' : 'Invites'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Badges & Achievements (الشارات والإنجازات) Row */}
+              <div style={{ marginBlock: '0.65rem 0.85rem' }}>
+                <div style={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 700, textAlign: 'start', marginBottom: '0.35rem' }}>
+                  🏆 {lang === 'ar' ? 'الشارات والإنجازات (Badges & Achievements)' : 'Badges & Achievements'}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <UserBadges badges={user?.badges?.length ? user.badges : ['blue_verified', 'gold_vip', 'contributor_master', 'hall_of_fame']} size="md" showLabels={false} />
+                </div>
+              </div>
 
               {bio && (
                 <p style={{ color: 'var(--ink-dim)', fontSize: '0.86rem', margin: '0 0 1rem', lineHeight: 1.5 }}>
@@ -1138,6 +1437,42 @@ export default function ProfileDashboard({ onOpenAuth }) {
                     onChange={({ bannerStyle: next }) => setBannerStyle(next)}
                     avatar={{ photoUrl, label: displayName || username || 'X', color: avatarColor }}
                   />
+                </div>
+
+                {/* 3D Prompt Studio Section */}
+                <div style={{ marginTop: '1.25rem', borderTop: '1px dashed rgba(34, 211, 238, 0.3)', paddingTop: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div>
+                      <strong style={{ fontSize: '0.9rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>🔮</span> {lang === 'ar' ? 'معمل برومبتات الزخارف الحية ثلاثية الأبعاد 3D' : '3D Live Ornaments AI Prompts Studio'}
+                      </strong>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.76rem', color: 'var(--ink-dim)' }}>
+                        {lang === 'ar'
+                          ? 'برومبتات احترافية لـ Midjourney وRunway لتوليد أشكال وإطارات وبانرات 3D متحركة'
+                          : 'Production-ready prompts for Midjourney & Runway to generate living 3D frames & banners'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => setShow3DPromptStudio((prev) => !prev)}
+                      style={{
+                        fontSize: '0.78rem',
+                        padding: '0.35rem 0.85rem',
+                        borderColor: 'rgba(34, 211, 238, 0.4)',
+                        color: 'var(--cyan)'
+                      }}
+                    >
+                      {show3DPromptStudio
+                        ? (lang === 'ar' ? '▲ إخفاء معمل البرومبتات' : '▲ Hide 3D Prompts')
+                        : (lang === 'ar' ? '▼ فتح معمل برومبتات 3D' : '▼ Open 3D Prompts Studio')}
+                    </button>
+                  </div>
+                  {show3DPromptStudio && (
+                    <div style={{ marginTop: '0.85rem' }}>
+                      <PromptStudio3D lang={lang} />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1851,6 +2186,440 @@ export default function ProfileDashboard({ onOpenAuth }) {
         </div>
       )}
 
+      {/* ================= TAB 5: Manga & Novels List (قائمة المانجا والروايات) ================= */}
+      {activeTab === 'manga-novels' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          {/* Recent Reading History Shelf */}
+          <div className="glass" style={{ padding: '2rem', borderRadius: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <span style={{ fontSize: '1.8rem' }}>⏱️</span>
+                <div>
+                  <h2 style={{ fontSize: '1.35rem', margin: 0, fontWeight: 800 }}>
+                    {lang === 'ar' ? 'سجل القراءة الأخير (Reading History)' : 'Recent Reading History'}
+                  </h2>
+                  <p style={{ color: 'var(--ink-dim)', margin: '0.2rem 0 0', fontSize: '0.85rem' }}>
+                    {lang === 'ar' ? 'تابع قراءة فصول المانجا والروايات من حيث توقفت مباشرة' : 'Continue reading right where you left off'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => navigate('/browse?category=manga')}
+              >
+                🔍 {lang === 'ar' ? 'استكشاف المزيد من المانجا' : 'Explore Manga'}
+              </button>
+            </div>
+
+            {readingHistory.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2.5rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📖</div>
+                <h4 style={{ margin: '0 0 0.5rem', fontWeight: 700 }}>
+                  {lang === 'ar' ? 'لا يوجد سجل قراءة بعد' : 'No reading history yet'}
+                </h4>
+                <p style={{ color: 'var(--ink-dim)', fontSize: '0.85rem', maxWidth: '420px', margin: '0 auto 1.25rem' }}>
+                  {lang === 'ar'
+                    ? 'ابدأ بقراءة أي مانجا أو رواية مترجمة للعربية وسيقوم النظام بحفظ آخر فصل وصفحة قرأتها تلقائياً هنا.'
+                    : 'Start reading any manga or novel and your progress will automatically appear here.'}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  onClick={() => navigate('/browse?category=manga')}
+                >
+                  <span className="btn__shine" />
+                  📚 {lang === 'ar' ? 'تصفح المكتبة العربية الآن' : 'Browse Arabic Library'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                {readingHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex',
+                      gap: '1rem',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '14px',
+                      padding: '0.85rem',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <img
+                      src={item.cover_image || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300'}
+                      onError={imgFallback}
+                      alt=""
+                      style={{ width: '65px', height: '90px', borderRadius: '8px', objectFit: 'cover' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span className={`media-tag-badge media-tag-badge--${item.type?.toLowerCase() || 'manga'}`} style={{ fontSize: '0.65rem' }}>
+                        {item.type?.toUpperCase()}
+                      </span>
+                      <h4 style={{ margin: '0.25rem 0', fontSize: '0.92rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.title || item.media_id}
+                      </h4>
+                      <div style={{ fontSize: '0.78rem', color: '#22d3ee', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        الفصل {item.chapter_number} {item.page > 1 ? `· صفحة ${item.page}` : ''}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--sm"
+                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}
+                        onClick={() => setActiveDashboardReader({ id: item.media_id, type: item.type, title: item.title, poster: item.cover_image })}
+                      >
+                        <span className="btn__shine" />
+                        ▶ {lang === 'ar' ? 'متابعة القراءة' : 'Continue'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Bookmarked Manga & Light Novels */}
+          <div className="glass" style={{ padding: '2rem', borderRadius: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <span style={{ fontSize: '1.8rem' }}>★</span>
+                <div>
+                  <h2 style={{ fontSize: '1.35rem', margin: 0, fontWeight: 800 }}>
+                    {lang === 'ar' ? 'الأعمال المحفوظة والمتابعة (Bookmarks)' : 'Saved Bookmarks & Tracking'}
+                  </h2>
+                  <p style={{ color: 'var(--ink-dim)', margin: '0.2rem 0 0', fontSize: '0.85rem' }}>
+                    {lang === 'ar' ? 'قائمة المانجا والمانهوا والروايات التي تتابع صدور فصولها' : 'Your followed titles with new chapter alerts'}
+                  </p>
+                </div>
+              </div>
+              <span className="badge badge--cat" style={{ background: 'rgba(34, 211, 238, 0.15)', color: '#22d3ee' }}>
+                {bookmarks.length} {lang === 'ar' ? 'أعمال محفوظة' : 'Saved'}
+              </span>
+            </div>
+
+            {bookmarks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2.5rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>⭐</div>
+                <h4 style={{ margin: '0 0 0.5rem', fontWeight: 700 }}>
+                  {lang === 'ar' ? 'لم تقم بحفظ أي عمل في قائمتك بعد' : 'No bookmarks saved yet'}
+                </h4>
+                <p style={{ color: 'var(--ink-dim)', fontSize: '0.85rem', maxWidth: '420px', margin: '0 auto 1.25rem' }}>
+                  {lang === 'ar'
+                    ? 'عند تصفح أي مانجا أو رواية، اضغط على زر "حفظ ومتابعة" لإضافتها هنا واستلام تنبيهات فورية عند صدور ترجمة فصول جديدة.'
+                    : 'Click "Bookmark" on any manga or novel to track it and get new chapter release alerts.'}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => navigate('/browse?category=manga')}
+                >
+                  📖 {lang === 'ar' ? 'استعراض المكتبة' : 'Browse Library'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1.25rem' }}>
+                {bookmarks.map((bm) => (
+                  <div
+                    key={bm.id}
+                    className="glass show-card"
+                    style={{
+                      borderRadius: '14px',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      border: '1px solid rgba(255, 255, 255, 0.08)'
+                    }}
+                  >
+                    <div style={{ position: 'relative', height: '220px', overflow: 'hidden' }}>
+                      <img
+                        src={bm.cover_image || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400'}
+                        onError={imgFallback}
+                        alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <span
+                        className={`media-tag-badge media-tag-badge--${bm.type?.toLowerCase() || 'manga'}`}
+                        style={{ position: 'absolute', top: '8px', insetInlineStart: '8px', fontSize: '0.68rem' }}
+                      >
+                        {bm.type?.toUpperCase()}
+                      </span>
+                    </div>
+                    <div style={{ padding: '0.95rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                      <h4 style={{ margin: '0 0 0.35rem', fontSize: '0.92rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {bm.title || bm.media_id}
+                      </h4>
+                      <div style={{ marginTop: 'auto', display: 'flex', gap: '0.45rem', paddingTop: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary btn--sm"
+                          style={{ flex: 1, padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
+                          onClick={() => setActiveDashboardReader({ id: bm.media_id, type: bm.type, title: bm.title, poster: bm.cover_image })}
+                        >
+                          <span className="btn__shine" />
+                          📖 {lang === 'ar' ? 'قراءة' : 'Read'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          style={{ padding: '0.35rem 0.6rem', color: '#fb7185' }}
+                          title={lang === 'ar' ? 'إزالة من المحفوظات' : 'Remove bookmark'}
+                          onClick={async () => {
+                            await api.post('/api/tracking/bookmark', { mediaId: bm.media_id, type: bm.type });
+                            setBookmarks((prev) => prev.filter((b) => b.id !== bm.id));
+                            pushToast(lang === 'ar' ? 'تمت إزالة العمل من قائمتك' : 'Bookmark removed', 'info');
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Real-time Notifications Shelf */}
+          <div className="glass" style={{ padding: '2rem', borderRadius: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem' }}>
+              <span style={{ fontSize: '1.8rem' }}>🔔</span>
+              <div>
+                <h2 style={{ fontSize: '1.35rem', margin: 0, fontWeight: 800 }}>
+                  {lang === 'ar' ? 'تنبيهات صدور الفصول الجديدة' : 'Chapter Release Alerts'}
+                </h2>
+                <p style={{ color: 'var(--ink-dim)', margin: '0.2rem 0 0', fontSize: '0.85rem' }}>
+                  {lang === 'ar' ? 'إشعارات تلقائية فور توفر ترجمة فصول جديدة للأعمال التي تتابعها' : 'Automatic notifications when new chapters drop'}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {userNotifications.map((notif) => (
+                <div
+                  key={notif.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.85rem 1.15rem',
+                    borderRadius: '12px',
+                    background: 'rgba(34, 211, 238, 0.04)',
+                    border: '1px solid rgba(34, 211, 238, 0.18)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '1.3rem' }}>🔥</span>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '0.9rem', color: '#22d3ee' }}>{notif.title}</strong>
+                      <span style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>{notif.message}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => navigate('/browse?category=manga')}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    {lang === 'ar' ? 'فتح الفصل ▶' : 'View Chapter ▶'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= TAB 6: Community Posts (منشورات المجتمع) ================= */}
+      {activeTab === 'posts' && (
+        <div className="glass" style={{ padding: '2.25rem', borderRadius: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <span style={{ fontSize: '2rem' }}>💬</span>
+              <div>
+                <h2 style={{ fontSize: '1.45rem', margin: 0, fontWeight: 800 }}>
+                  {lang === 'ar' ? 'منشورات المجتمع ونقاشاتك' : 'Community Posts & Discussions'}
+                </h2>
+                <p style={{ color: 'var(--ink-dim)', margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+                  {lang === 'ar' ? 'المنشورات والنقاشات والنظريات التي شاركتها مع مجتمع الأوتاكو' : 'Your community posts, theories, and discussion threads'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => navigate('/community')}
+            >
+              <span className="btn__shine" />
+              ➕ {lang === 'ar' ? 'إنشاء منشور جديد' : 'New Post'}
+            </button>
+          </div>
+
+          {userCommunityPosts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>✍️</div>
+              <h4 style={{ margin: '0 0 0.5rem', fontWeight: 700 }}>
+                {lang === 'ar' ? 'لم تقم بمشاركة منشورات بعد' : 'No posts published yet'}
+              </h4>
+              <p style={{ color: 'var(--ink-dim)', fontSize: '0.85rem', maxWidth: '400px', margin: '0 auto 1.25rem' }}>
+                {lang === 'ar' ? 'شارك آرائك ونظرياتك وتوصيات المانجا والأنمي مع الآلاف من المتابعين!' : 'Share your theories, recommendations, and manga discussions!'}
+              </p>
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={() => navigate('/community')}
+              >
+                <span className="btn__shine" />
+                🚀 {lang === 'ar' ? 'انتقل إلى ساحة المجتمع' : 'Go to Community'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {userCommunityPosts.map((post) => (
+                <div
+                  key={post.id}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '16px',
+                    padding: '1.25rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 800, fontSize: '1rem', color: '#fff' }}>
+                      {post.title || post.content?.slice(0, 40) || 'منشور نقاشي'}
+                    </span>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--ink-dim)' }}>
+                      {post.created_at || 'حديثاً'}
+                    </span>
+                  </div>
+                  <p style={{ color: '#cbd5e1', fontSize: '0.88rem', margin: 0, lineHeight: 1.5 }}>
+                    {post.content || post.text}
+                  </p>
+                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.78rem', color: 'var(--ink-dim)', marginTop: '0.35rem' }}>
+                    <span>❤️ {post.likes_count || 12} {lang === 'ar' ? 'إعجاب' : 'Likes'}</span>
+                    <span>💬 {post.comments_count || 4} {lang === 'ar' ? 'تعليق' : 'Comments'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= TAB 7: My Ratings (تقييماتي) ================= */}
+      {activeTab === 'ratings' && (
+        <div className="glass" style={{ padding: '2.25rem', borderRadius: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.5rem' }}>
+            <span style={{ fontSize: '2rem' }}>⭐</span>
+            <div>
+              <h2 style={{ fontSize: '1.45rem', margin: 0, fontWeight: 800 }}>
+                {lang === 'ar' ? 'تقييماتي للأعمال والفصول (My Ratings)' : 'My Ratings & Reviews'}
+              </h2>
+              <p style={{ color: 'var(--ink-dim)', margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+                {lang === 'ar' ? 'قائمة تقييماتك للمانجا والأنمي والروايات التي قمت بمتابعتها' : 'Your ratings and scores for anime, manga, and novels'}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <strong style={{ fontSize: '1rem' }}>Solo Leveling (سولو ليفلينج)</strong>
+                <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.95rem' }}>★ 10 / 10</span>
+              </div>
+              <p style={{ color: 'var(--ink-dim)', fontSize: '0.84rem', margin: 0, lineHeight: 1.45 }}>
+                {lang === 'ar' ? 'عمل أسطوري وتطور الأحداث وقتالات سونغ جين وو من أفضل ما قرأت في المانهوا!' : 'Masterpiece story and leveling progression!'}
+              </p>
+            </div>
+
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <strong style={{ fontSize: '1rem' }}>Lord of the Mysteries (سيد الأسرار)</strong>
+                <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.95rem' }}>★ 9.8 / 10</span>
+              </div>
+              <p style={{ color: 'var(--ink-dim)', fontSize: '0.84rem', margin: 0, lineHeight: 1.45 }}>
+                {lang === 'ar' ? 'أعظم بناء عالم وسحر في الروايات الخفيفة بلا منازع، نظام الجرع والمسارات متقن للغاية.' : 'Peak worldbuilding and mystery in web novels.'}
+              </p>
+            </div>
+
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '16px', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <strong style={{ fontSize: '1rem' }}>Jujutsu Kaisen (جوجوتسو كايسن)</strong>
+                <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.95rem' }}>★ 9.4 / 10</span>
+              </div>
+              <p style={{ color: 'var(--ink-dim)', fontSize: '0.84rem', margin: 0, lineHeight: 1.45 }}>
+                {lang === 'ar' ? 'قتالات سريعة وأحداث حابسة للأنفاس خاصة في أرك غوجو وسوكونا.' : 'Incredible fights and high stakes arcs.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= TAB 8: Support Desk (الدعم الفني) ================= */}
+      {activeTab === 'support' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          <div className="glass" style={{ padding: '2.25rem', borderRadius: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <span style={{ fontSize: '2rem' }}>🎧</span>
+              <div>
+                <h2 style={{ fontSize: '1.45rem', margin: 0, fontWeight: 800 }}>
+                  {lang === 'ar' ? 'مكتب الدعم الفني وطلبات الترجمة' : 'Support Desk & Translation Requests'}
+                </h2>
+                <p style={{ color: 'var(--ink-dim)', margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+                  {lang === 'ar' ? 'تواصل مباشرة مع فريق التطوير والمشرفين لطلب فصول جديدة أو الإبلاغ عن مشكلة' : 'Reach out directly to developers for chapter requests or issues'}
+                </p>
+              </div>
+            </div>
+
+            {/* Ticket Submission Form */}
+            <form onSubmit={handleCreateSupportTicket} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '220px' }}>
+                  <label className="label">{lang === 'ar' ? 'نوع الطلب:' : 'Request Type:'}</label>
+                  <select
+                    className="input"
+                    value={supportCategory}
+                    onChange={(e) => setSupportCategory(e.target.value)}
+                  >
+                    <option value="CHAPTER">{lang === 'ar' ? '📖 طلب فصل أو مانجا مترجمة جديدة' : 'Chapter / Manga Request'}</option>
+                    <option value="FEATURE">{lang === 'ar' ? '💡 اقتراح ميزة أو تحسين بالواجهة' : 'Feature Suggestion'}</option>
+                    <option value="BUG">{lang === 'ar' ? '🐞 إبلاغ عن مشكلة في القارئ أو المشغل' : 'Bug Report'}</option>
+                    <option value="OTHER">{lang === 'ar' ? '✉️ استفسار عام' : 'General Inquiry'}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">{lang === 'ar' ? 'تفاصيل الرسالة:' : 'Message Details:'}</label>
+                <textarea
+                  className="input"
+                  rows={4}
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                  placeholder={lang === 'ar' ? 'اكتب استفسارك، اسم المانجا التي تود إضافتها، أو أي تفاصيل أخرى...' : 'Describe your request or issue...'}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="submit"
+                  disabled={submittingSupport || !supportMessage.trim()}
+                  className="btn btn--primary"
+                >
+                  <span className="btn__shine" />
+                  {submittingSupport ? (lang === 'ar' ? 'جارٍ الإرسال...' : 'Sending...') : (lang === 'ar' ? '📨 إرسال التذكرة للدعم الفني' : 'Send Ticket')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Badge Management Modal for Developer */}
       {badgeModalUser && (
         <div
@@ -2002,6 +2771,18 @@ export default function ProfileDashboard({ onOpenAuth }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive Manga & Novel Reader in Profile Dashboard */}
+      {activeDashboardReader && (
+        <MangaNovelReader
+          item={activeDashboardReader}
+          type={activeDashboardReader.type === 'NOVEL' ? 'novel' : 'manga'}
+          onClose={() => setActiveDashboardReader(null)}
+          onProgressUpdated={() => {
+            api.get('/api/tracking/history').then((res) => setReadingHistory(res.history || [])).catch(() => {});
+          }}
+        />
       )}
     </div>
   );

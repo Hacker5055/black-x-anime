@@ -17,7 +17,7 @@
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import Ornament3D, { CssFrame } from './Ornament3D.jsx';
-import { ORNAMENT_PRESETS } from './core/ornaments.js';
+import { ORNAMENT_PRESETS, resolveOrnamentId } from './core/ornaments.js';
 
 export default function OrnamentAvatar({
   src,
@@ -37,8 +37,9 @@ export default function OrnamentAvatar({
   onEngine
 }) {
   const [engine, setEngine] = useState(null);
-  const preset = ORNAMENT_PRESETS[frameStyle];
-  const use3d = enabled && frameStyle !== 'default' && frameStyle !== 'none';
+  const resolvedId = resolveOrnamentId(frameStyle);
+  const preset = ORNAMENT_PRESETS[resolvedId || frameStyle];
+  const use3d = enabled && !!resolvedId;
   const bandWidth = useMemo(() => Math.max(3, Math.round(size * 0.05)), [size]);
 
   const handleEngine = useCallback((inst) => {
@@ -86,7 +87,7 @@ export default function OrnamentAvatar({
 
   return (
     <Ornament3D
-      ornament={frameStyle}
+      ornament={resolvedId || frameStyle}
       mode="frame"
       size={size}
       enabled={enabled}

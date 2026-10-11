@@ -167,6 +167,10 @@
   .avatar-frame--sakura-blossom{border:3px solid #f472b6;box-shadow:0 0 18px #f472b6,inset 0 0 8px #ec4899;animation:sakuraFloat 6s infinite}
   .avatar-frame--prismatic-diamond{border:3px solid #38bdf8;box-shadow:0 0 20px #38bdf8,0 0 30px #c084fc;animation:prismShift 7s infinite linear}
   .avatar-frame--aurora-veil{border:3px solid #34d399;box-shadow:0 0 18px #34d399,inset 0 0 12px #67e8f9;animation:auroraWave 4s infinite alternate}
+  .avatar-frame--celestial-void{border:3px solid #a855f7;box-shadow:0 0 20px #a855f7,inset 0 0 12px #818cf8;animation:celestialDrift 9s infinite linear}
+  .avatar-frame--dragon-ascension{border:3px solid #10b981;box-shadow:0 0 18px #10b981,inset 0 0 10px #34d399;animation:dragonAscend 5s infinite ease-in-out}
+  @keyframes celestialDrift{0%{transform:rotate(0)}50%{transform:rotate(180deg) scale(1.02)}100%{transform:rotate(360deg)}}
+  @keyframes dragonAscend{0%,100%{box-shadow:0 0 14px #10b981,inset 0 0 8px #fbbf24;border-color:#10b981}35%{box-shadow:0 0 26px #34d399,inset 0 0 14px #a7f3d0;border-color:#6ee7b7}70%{box-shadow:0 0 20px #fbbf24,inset 0 0 10px #10b981;border-color:#a7f3d0}}
   @keyframes flamePulse{0%{box-shadow:0 0 10px #f97316,0 0 20px #ef4444}100%{box-shadow:0 0 22px #fb923c,0 0 35px #dc2626}}
   @keyframes cyberGlitch{0%,100%{border-color:#22d3ee;box-shadow:0 0 15px #22d3ee}50%{border-color:#f43f5e;box-shadow:0 0 22px #f43f5e}}
   @keyframes shadowAura{0%{transform:scale(1);box-shadow:0 0 14px #8b5cf6}100%{transform:scale(1.04);box-shadow:0 0 26px #a855f7,0 0 40px #7c3aed}}

@@ -225,6 +225,67 @@ export const ORNAMENT_PRESETS = {
     css: { border: '#38bdf8', glowA: '#38bdf8', glowB: '#c084fc', anim: 'prismShift' }
   },
 
+  /* ── presets mirroring the layered CSS-3D components (Avatar3DDecoration) ── */
+  'celestial-void': {
+    id: 'celestial-void',
+    icon: '🌌',
+    labelAr: 'الفضاء الكوني',
+    labelEn: 'Celestial Void',
+    descAr: 'قبة نجوم زجاجية بنفسجية مع مدارات كوكبية وحلقة أوج قصيرة.',
+    descEn: 'Violet star-globe glass with orbital planes and a short apogee loop.',
+    colors: { primary: '#a855f7', accent: '#c4b5fd', glow: '#818cf8' },
+    background: 'radial-gradient(circle at 50% 45%, #170b33 0%, #050410 74%)',
+    rig: { spin: 0.03 },
+    tilt: 0.3,
+    scrollRotation: 1.8,
+    rim: 1.25,
+    bloom: { strength: 0.88, radius: 0.9, threshold: 0.24 },
+    rings: [
+      { r: 1, tube: 0.046, radialSegments: 12, tubularSegments: 168, spin: 0.09, color: '#1a0f36', glass: { ...GLASS, transmission: 0.92, roughness: 0.06, ior: 1.58, attenuationColor: '#8b5cf6', emissive: '#8b5cf6', emissiveIntensity: 0.5 }, emissive: { color: '#a855f7', intensity: 2.1, scale: 0.7 } },
+      { r: 1.1, tube: 0.012, radialSegments: 6, tubularSegments: 168, spin: -0.3, tiltX: 0.95, color: '#c4b5fd', glass: null, emissive: { color: '#c4b5fd', intensity: 2.6 }, flat: true },
+      { r: 1.19, tube: 0.009, radialSegments: 6, tubularSegments: 168, spin: 0.24, tiltY: 1.15, color: '#67e8f9', glass: null, emissive: { color: '#7dd3fc', intensity: 2.4 }, flat: true }
+    ],
+    glyphs: { kind: 'rune', color: '#c084fc', color2: '#e9d5ff', radius: 1.27, width: 0.13, spokes: 12, opacity: 0.75 },
+    particles: {
+      count: 54, radius: 1.24, spread: 0.42, height: 0.5, rise: false,
+      speed: 0.3, size: 0.04, color: '#ddd6fe', color2: '#7dd3fc',
+      pulse: 1.3, fade: 0.9, twinkle: true
+    },
+    shards: { count: 7, color: '#150a2e', emissive: '#a855f7', radius: 1.33, size: 0.058, speed: 0.16, opacity: 0.9 },
+    css: { border: '#a855f7', glowA: '#a855f7', glowB: '#818cf8', anim: 'celestialDrift' }
+  },
+
+  'dragon-ascension': {
+    id: 'dragon-ascension',
+    icon: '🐉',
+    labelAr: 'التنين السماوي',
+    labelEn: 'Dragon Ascension',
+    descAr: 'شرائط يقين زمردية تصعد حلزونيًا مع جمر ونواة زجاجية داكنة.',
+    descEn: 'Jade ribbons spiralling upward with ember trails over a dark glass core.',
+    colors: { primary: '#10b981', accent: '#fbbf24', glow: '#34d399' },
+    background: 'radial-gradient(circle at 50% 62%, #04231b 0%, #050a0b 74%)',
+    rig: { spin: 0.04 },
+    tilt: 0.28,
+    scrollRotation: 1.4,
+    rim: 1.3,
+    bloom: { strength: 0.82, radius: 0.78, threshold: 0.3 },
+    rings: [
+      { r: 1, tube: 0.054, radialSegments: 12, tubularSegments: 168, spin: 0.12, color: '#052e25', glass: { ...GLASS, transmission: 0.86, roughness: 0.09, ior: 1.55, attenuationColor: '#10b981', emissive: '#059669', emissiveIntensity: 0.6 }, emissive: { color: '#34d399', intensity: 2.3, scale: 0.7 } },
+      { r: 1.09, tube: 0.015, radialSegments: 7, tubularSegments: 168, spin: -0.34, tiltX: 0.34, color: '#a7f3d0', glass: null, emissive: { color: '#6ee7b7', intensity: 2.7 }, flat: true },
+      { r: 1.18, tube: 0.01, radialSegments: 6, tubularSegments: 168, spin: 0.5, tiltX: -0.42, color: '#fbbf24', glass: null, emissive: { color: '#fcd34d', intensity: 2.9 }, flat: true }
+    ],
+    glyphs: { kind: 'filigree', color: '#6ee7b7', color2: '#fef3c7', radius: 1.26, width: 0.15, spokes: 20, opacity: 0.7 },
+    particles: {
+      count: 44, radius: 1.2, spread: 0.22, height: 0.85, rise: true,
+      speed: 0.4, size: 0.05, color: '#6ee7b7', color2: '#fde68a', pulse: 0.7, fade: 1
+    },
+    flameRings: [
+      { radius: 1.03, height: 0.22, color: '#10b981', accent: '#a7f3d0', speed: 0.62, amp: 0.55 },
+      { radius: 1.15, height: 0.14, color: '#fbbf24', accent: '#fff7d6', speed: -0.9, amp: 0.32 }
+    ],
+    css: { border: '#10b981', glowA: '#10b981', glowB: '#34d399', anim: 'dragonAscend' }
+  },
+
   /* ------------------------------------------------------------------ */
   'aurora-veil': {
     id: 'aurora-veil',
@@ -257,13 +318,31 @@ export const ORNAMENT_PRESETS = {
 
 export const ORNAMENT_IDS = Object.keys(ORNAMENT_PRESETS);
 
+/**
+ * Ids used by other parts of the app that share a look with a real preset.
+ * Keeps one source of truth (no duplicated geometry config) while letting
+ * `frameStyle: 'dragon-flame'` — which `Avatar3DDecoration` also aliases —
+ * mount a genuine WebGL ornament.
+ */
+export const ORNAMENT_ALIASES = {
+  'dragon-flame': 'royal-flame',
+  'flame-dragon': 'royal-flame',
+  'imperial-crown': 'imperial-gold'
+};
+
+export function resolveOrnamentId(id) {
+  if (!id || id === 'default' || id === 'none') return null;
+  if (ORNAMENT_PRESETS[id]) return id;
+  return ORNAMENT_ALIASES[id] || null;
+}
+
 export function getOrnament(id) {
-  return ORNAMENT_PRESETS[id] || null;
+  return ORNAMENT_PRESETS[resolveOrnamentId(id)] || null;
 }
 
 /** Shallow-merge a preset with per-instance overrides (never mutates input). */
 export function resolveOrnament(id, overrides = {}) {
-  const base = ORNAMENT_PRESETS[id];
+  const base = ORNAMENT_PRESETS[resolveOrnamentId(id) || id];
   if (!base) return null;
   return {
     ...base,
@@ -410,7 +489,9 @@ export const CSS_FALLBACK = {
   'imperial-gold': { border: '#eab308', glowA: '#eab308', glowB: '#ca8a04', animation: 'goldShine 3.4s infinite' },
   'sakura-blossom': { border: '#f472b6', glowA: '#f472b6', glowB: '#ec4899', animation: 'sakuraFloat 6s infinite' },
   'prismatic-diamond': { border: '#38bdf8', glowA: '#38bdf8', glowB: '#c084fc', animation: 'prismShift 7s infinite linear' },
-  'aurora-veil': { border: '#34d399', glowA: '#34d399', glowB: '#67e8f9', animation: 'auroraWave 4s infinite alternate' }
+  'aurora-veil': { border: '#34d399', glowA: '#34d399', glowB: '#67e8f9', animation: 'auroraWave 4s infinite alternate' },
+  'celestial-void': { border: '#a855f7', glowA: '#a855f7', glowB: '#818cf8', animation: 'celestialDrift 9s infinite linear' },
+  'dragon-ascension': { border: '#10b981', glowA: '#10b981', glowB: '#34d399', animation: 'dragonAscend 5s infinite ease-in-out' }
 };
 
 export function cssFrameStyle(id) {

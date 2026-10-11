@@ -62,7 +62,7 @@ npx vite --config client/vite.config.js
 
 ## ٣ · الـ Presets الحالية
 
-### إطارات (7)
+### إطارات (9)
 
 | `id` | الاسم | ملاحظة بصرية | bloom |
 | --- | --- | --- | --- |
@@ -73,6 +73,13 @@ npx vite --config client/vite.config.js
 | `sakura-blossom` | أزهار الساكورا | زجاج وردي حليبي + بتلات InstancedMesh | 0.52 / 0.86 / 0.55 |
 | `prismatic-diamond` | الماسة الكريستالية | `dispersion: 3.4` + `iridescence` + قزح | 0.90 / 0.64 / 0.28 |
 | `aurora-veil` | ستارة الشفق | أشرطة ضوء زمردية/فيروزية | 0.85 / 0.90 / 0.30 |
+| `celestial-void` | الفضاء الكوني | مدارات كوكبية مائلة + بريق نجوم | 0.88 / 0.90 / 0.24 |
+| `dragon-ascension` | التنين السماوي | شرائط يقين صاعدة + جمر ذهبي | 0.82 / 0.78 / 0.30 |
+
+> **معرّفات مرادَفة:** `resolveOrnamentId()` تخيط معارف المكوّنات الأخرى على الـ presets
+> الحقيقية — `'dragon-flame' → 'royal-flame'` (نفس ما يفعله `Avatar3DDecoration`)،
+> فلا تُترك أي قيمة محفوظة بلا مجسّم. استخدم `getOrnament(id)` / `resolveOrnament(id, overrides)`
+> ولا تحتاج لتذكّر الجدول.
 
 ### بانرات (4)
 
@@ -219,7 +226,21 @@ server/src/lib/socialDb.js (SQLite fallback) → أعمدة في social_profiles
 
 ---
 
-## ٨ · الإتاحة والسلوك المحترم
+## ٨ · التعايش مع `Avatar3DDecoration` (مكوّن CSS-3D)
+
+أضفت `main` مكوّنًا منفصلًا (`client/src/components/Avatar3DDecoration.jsx`) يبني نفس
+الفكرة بطبقات `transform: translateZ` بلا WebGL. القرار في `ProfileDashboard`:
+
+| الحالة | ما يُعرض |
+| --- | --- |
+| `frameStyle` = preset معروف + مفتاح 3D شغّال | `OrnamentAvatar` (WebGL حقيقي) |
+| `frameStyle = 'default'` أو مفتاح 3D مطفأ | `Avatar3DDecoration` (الطبقات CSS، كما هي) |
+
+كذلك: لن يحذف أيٌّ منهما الآخر، وكلاهما يقرأ نفس `frameStyle` المحفوظ، وشبكة الـ CSS
+الخاصة به (`avatar-3d-*`, `ornament-3d-ring-*`) والملفات الجديدة (`MangaNovelReader`,
+`PromptStudio3D`, `mangaNovel.*`) سليمة كما جاءت من `main`.
+
+## ٩ · الإتاحة والسلوك المحترم
 
 - `prefers-reduced-motion` → الدوران الخامل ×0.15، التخميد ×3.5 (استقرار شبه فوري)، لا وميض، لا نبضات.
 - `pointer-events` على الكانفس فقط في وضع تفاعلي؛ النص والأزرار فوق البانر تبقى قابلة للنقر
@@ -230,11 +251,11 @@ server/src/lib/socialDb.js (SQLite fallback) → أعمدة في social_profiles
 
 ---
 
-## ٩ · الاختبار
+## ١٠ · الاختبار
 
 ```bash
 node tools/ornament-node-smoke.mjs
-# ✓ 7 إطارات × 3 طبقات جودة + 4 بانرات × طبقتين، 564 نداء ريندر،
+# ✓ 9 إطارات × 3 طبقات جودة + 4 بانرات × طبقتين، 696 نداء ريندر،
 #   إعادة بناء، تبديل preset، bloom on/off، لقطة PNG، dispose — ALL PASS
 npx vite build client        # ✓ + يتأكد أن three لم تدخل الحزمة الأساسية
 ```
@@ -245,7 +266,7 @@ npx vite build client        # ✓ + يتأكد أن three لم تدخل الح�
 
 ---
 
-## ١٠ · خارطة الطريق (ما لم يُنفَّذ هنا عمدًا)
+## ١١ · خارطة الطريق (ما لم يُنفَّذ هنا عمدًا)
 
 1. **نظام قفل** — `imperial-gold` و `prismatic-diamond` كجوائز مستوى (`badge.threshold`
    موجودة أصلًا في `gamification.controller.js`)؛ الفوترة بـ VIP `vip_status`.

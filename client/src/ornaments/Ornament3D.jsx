@@ -11,7 +11,7 @@
  * ============================================================================
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ORNAMENT_PRESETS, detectQuality, WEBGL_PROBE } from './core/ornaments.js';
+import { ORNAMENT_PRESETS, resolveOrnamentId, detectQuality, WEBGL_PROBE } from './core/ornaments.js';
 
 /* Lazily import the engine once per document — three.js is ~600 KB raw, so it
    must never land in the initial chunk. */
@@ -106,8 +106,12 @@ export default function Ornament3D({
     return () => mq.removeEventListener?.('change', on);
   }, []);
 
-  const preset = ORNAMENT_PRESETS[ornament];
-  const active = enabled && tier !== 'css' && ornament !== 'default' && ornament !== 'none' && !!(preset || mode === 'banner');
+  /* `resolveOrnamentId` maps ids that only exist as CSS looks elsewhere in the
+     app (e.g. 'dragon-flame' → 'royal-flame'), so a preset saved by any screen
+     still mounts real geometry here. */
+  const resolvedId = resolveOrnamentId(ornament);
+  const preset = ORNAMENT_PRESETS[resolvedId || ornament];
+  const active = enabled && tier !== 'css' && !!resolvedId;
 
   /* -------- mount / unmount (visible-driven) -------- */
   useEffect(() => {
