@@ -110,6 +110,19 @@ app.use('/api/gamification', gamificationRoutes);
 app.use('/api/creator', gamificationRoutes); // POST /submit lives in gamification.routes.js
 app.use('/api/support', supportRoutes);
 
+// Health/diagnostic endpoint — which store is active on this host.
+app.get('/api/health/db', async (req, res) => {
+  let prisma = 'off';
+  if (process.env.DATABASE_URL) {
+    try {
+      const { getPrisma } = await import('./lib/prisma.js');
+      await getPrisma().$queryRaw`SELECT 1`;
+      prisma = 'ok';
+    } catch { prisma = 'down'; }
+  }
+  res.json({ ok: true, store: 'sqlite', prismaFallback: true, prisma });
+});
+
 // Platform injectors (AI Studio _websocket-interceptor.js) register a
 // service worker via a relative URL — serve a valid one for ANY nested path
 // so registration stops failing with an HTML MIME SecurityError.
