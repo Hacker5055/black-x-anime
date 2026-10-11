@@ -247,49 +247,54 @@ export default function Dashboard({ onOpenAuth }) {
     });
   }, [latest, trending]);
 
-/* ------------------------ expanded library showcase ------------------------ */
+/* ------------------------ Unified Manga & Manhwa Library Showcase ------------------------ */
 function LibraryShowcaseSection() {
   const { lang } = useI18n();
-  const libraryCategories = [
+
+  const trendingPicks = [
     {
-      id: 'manga',
-      titleAr: '📖 المانجا اليابانية',
-      titleEn: '📖 Manga Library',
-      descAr: 'فصول مترجمة لأقوى سلاسل المانجا الأسبوعية والشهرية',
-      descEn: 'Popular translated weekly and monthly manga chapters',
-      color: '#f472b6',
-      badge: 'MANGA',
-      cover: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30013-ul2E8b4b7p1T.png'
-    },
-    {
-      id: 'manhwa',
-      titleAr: '⚡ المانهوا الكورية',
-      titleEn: '⚡ Korean Manhwa',
-      descAr: 'أعمال ملونة بالكامل، من سولو ليفلينج إلى وجهات النظر الشاملة',
-      descEn: 'Full-color webtoons, action dungeons, and rebirth epics',
-      color: '#a78bfa',
+      id: 'solo-leveling',
+      titleAr: 'سولو ليفلينج (Solo Leveling)',
+      titleEn: 'Solo Leveling',
       badge: 'MANHWA',
-      cover: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&auto=format&fit=crop&q=80'
+      type: 'مانهو كورية',
+      rating: '9.9',
+      chapters: '205 فصلاً',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/Solo-Leveling-1.jpg',
+      color: '#8b5cf6'
     },
     {
-      id: 'novel',
-      titleAr: '📚 الروايات الخفيفة',
-      titleEn: '📚 Light Novels',
-      descAr: 'الروايات الأصلية المقتبس منها أشهر الأنميات العالمية',
-      descEn: 'Original web and light novels behind major anime adaptations',
-      color: '#38bdf8',
-      badge: 'NOVEL',
-      cover: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&auto=format&fit=crop&q=80'
+      id: 'omniscient-readers-viewpoint',
+      titleAr: 'وجهة نظر القارئ العليم',
+      titleEn: "Omniscient Reader's Viewpoint",
+      badge: 'MANHWA',
+      type: 'مانهو كورية',
+      rating: '9.9',
+      chapters: '220 فصلاً',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg',
+      color: '#6366f1'
     },
     {
-      id: 'book',
-      titleAr: '📕 الكتب والمراجع',
-      titleEn: '📕 Books & Literature',
-      descAr: 'كتب الفكر والخيال العلمي والأدب الكلاسيكي العالمي',
-      descEn: 'Classics, world literature, philosophy, and mind-expanding books',
-      color: '#fb923c',
-      badge: 'BOOK',
-      cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80'
+      id: 'one-piece',
+      titleAr: 'ون بيس (One Piece)',
+      titleEn: 'One Piece',
+      badge: 'MANGA',
+      type: 'مانجا يابانية',
+      rating: '9.9',
+      chapters: '1160 فصلاً',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg',
+      color: '#06b6d4'
+    },
+    {
+      id: 'jujutsu-kaisen',
+      titleAr: 'جوجوتسو كايسن',
+      titleEn: 'Jujutsu Kaisen',
+      badge: 'MANGA',
+      type: 'مانجا يابانية',
+      rating: '9.8',
+      chapters: '270 فصلاً',
+      cover: 'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg',
+      color: '#f43f5e'
     }
   ];
 
@@ -298,66 +303,87 @@ function LibraryShowcaseSection() {
       <div className="section__head">
         <div>
           <h2 className="section__title">
-            📚 {lang === 'ar' ? 'المكتبة الموسعة: مانجا، مانهوا، روايات، وكتب' : 'Expanded Library: Manga, Manhwa, Novels & Books'}
+            📖 {lang === 'ar' ? 'المكتبة (أشهر المانهوا والمانجا الرائجة)' : 'The Library (Trending Manga & Manhwa)'}
           </h2>
           <p className="section__sub">
             {lang === 'ar'
-              ? 'تصفح واقرأ آلاف الفصول والكتب مع تسجيل مدة القراءة وزيادة مستواك (XP) تلقائياً!'
-              : 'Explore and read chapters while tracking reading time to level up your rank!'}
+              ? 'اختر مباشرة من بين أشهر أعمال المانهوا والمانجا لقراءتها فورياً ومجاناً عبر مانجا ليك (MangaLik).'
+              : 'Pick from the highest-rated Korean Manhwa and Japanese Manga powered by MangaLik.'}
           </p>
         </div>
-        <Link className="section__link" to="/browse?category=manga">
-          {lang === 'ar' ? 'استعراض الكل' : 'Browse All'} →
+        <Link className="section__link" to="/browse">
+          {lang === 'ar' ? 'دخول المكتبة الكاملة' : 'Open Full Library'} →
         </Link>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem' }}>
-        {libraryCategories.map((cat) => (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+        {trendingPicks.map((pick) => (
           <Link
-            key={cat.id}
-            to={`/browse?category=${cat.id}`}
+            key={pick.id}
+            to="/browse"
             className="glass glass-hover"
             style={{
-              padding: '1.25rem',
-              borderRadius: '18px',
+              padding: '1rem',
+              borderRadius: '16px',
               textDecoration: 'none',
               color: 'inherit',
               display: 'flex',
               flexDirection: 'column',
               position: 'relative',
               overflow: 'hidden',
-              border: `1px solid ${cat.color}35`
+              border: `1px solid ${pick.color}35`,
+              transition: 'transform 0.2s ease, border-color 0.2s ease'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span className={`media-tag-badge media-tag-badge--${cat.id}`}>
-                {cat.badge}
+            <div style={{ width: '100%', height: '230px', borderRadius: '12px', overflow: 'hidden', marginBottom: '0.85rem', position: 'relative' }}>
+              <img
+                src={pick.cover}
+                alt={pick.titleEn}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '8px',
+                  insetInlineStart: '8px',
+                  background: pick.color,
+                  color: '#fff',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: '6px'
+                }}
+              >
+                {pick.type}
               </span>
-              <span style={{ fontSize: '0.82rem', color: cat.color, fontWeight: 700 }}>
-                {lang === 'ar' ? 'تصفح الآن ←' : 'Explore →'}
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '8px',
+                  insetInlineEnd: '8px',
+                  background: 'rgba(0, 0, 0, 0.8)',
+                  color: '#fbbf24',
+                  fontSize: '0.76rem',
+                  fontWeight: 800,
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '6px'
+                }}
+              >
+                ★ {pick.rating}
               </span>
             </div>
 
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: '0 0 0.4rem', color: '#fff' }}>
-              {lang === 'ar' ? cat.titleAr : cat.titleEn}
+            <h3 style={{ fontSize: '1.02rem', fontWeight: 800, margin: '0 0 0.35rem', color: '#fff', lineHeight: 1.3 }}>
+              {lang === 'ar' ? pick.titleAr : pick.titleEn}
             </h3>
 
-            <p style={{ fontSize: '0.84rem', color: 'var(--ink-dim)', margin: '0 0 1rem', lineHeight: 1.45, flex: 1 }}>
-              {lang === 'ar' ? cat.descAr : cat.descEn}
-            </p>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.4rem 0.75rem',
-              borderRadius: '10px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              fontSize: '0.76rem',
-              color: 'var(--cyan)'
-            }}>
-              <span>⚡</span>
-              <span>{lang === 'ar' ? 'قراءة فصول تكسبك نقاط XP فورية' : 'Earn XP while reading'}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '0.5rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--ink-dim)', fontWeight: 600 }}>
+                {pick.chapters}
+              </span>
+              <span style={{ fontSize: '0.82rem', color: pick.color, fontWeight: 700 }}>
+                {lang === 'ar' ? 'اقرأ الآن 📖' : 'Read Now 📖'}
+              </span>
             </div>
           </Link>
         ))}

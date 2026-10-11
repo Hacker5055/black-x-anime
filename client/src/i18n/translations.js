@@ -9,7 +9,7 @@ export const translations = {
     'app.dir': 'ltr',
 
     'nav.home': 'Home',
-    'nav.browse': 'Browse',
+    'nav.browse': 'Library 📖',
     'nav.community': 'Community',
     'nav.rankings': 'Rankings',
     'nav.mylist': 'My List',
@@ -346,7 +346,7 @@ export const translations = {
     'app.dir': 'rtl',
 
     'nav.home': 'الرئيسية',
-    'nav.browse': 'استكشاف',
+    'nav.browse': 'المكتبة 📖',
     'nav.community': 'المجتمع',
     'nav.rankings': 'التصنيفات',
     'nav.mylist': 'قائمتي',

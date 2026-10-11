@@ -4,6 +4,7 @@
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
+import { mangalikService } from '../services/mangalik.service.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
 export async function rateContent(req, res) {
@@ -166,18 +167,39 @@ export async function getLibraryItemDetail(req, res) {
     const item = social.getLibraryItem(id);
     if (!item) return res.status(404).json({ success: false, message: 'Item not found' });
     
-    // Generate chapter/volume list for reading
-    const totalChapters = item.chapters_count || 20;
-    const isNovelOrBook = item.type === 'NOVEL' || item.type === 'BOOK';
-    const chapters = Array.from({ length: Math.min(totalChapters, 60) }, (_, i) => {
-      const num = i + 1;
-      return {
-        number: num,
-        title: isNovelOrBook ? `الفصل ${num}: البداية والتفاصيل` : `الفصل ${num}`,
-        pages: isNovelOrBook ? 18 : 22,
-        releaseDate: '2025'
-      };
-    });
+    // Fetch genuine Arabic chapters from MangaLik
+    let chapters = [];
+    try {
+      const liveChapters = await mangalikService.getArabicChapters(id);
+      if (liveChapters && liveChapters.length > 0) {
+        chapters = liveChapters.map((c) => ({
+          number: c.chapterNumber || c.slug,
+          chapterId: c.chapterId,
+          title: c.title || `الفصل ${c.chapterNumber}`,
+          url: c.url,
+          slug: c.slug,
+          releaseDate: c.releaseDate || '2026',
+          scanlationGroup: c.scanlationGroup || 'مانجا ليك (MangaLik)'
+        }));
+      }
+    } catch (_) {}
+
+    // Fallback if network fails
+    if (chapters.length === 0) {
+      const totalChapters = item.chapters_count || 25;
+      chapters = Array.from({ length: Math.min(totalChapters, 60) }, (_, i) => {
+        const num = totalChapters - i;
+        return {
+          number: String(num),
+          chapterId: `${id}:${num}`,
+          title: `الفصل ${num}`,
+          url: `https://mangalik.net/manga/${id}/${num}/`,
+          slug: String(num),
+          releaseDate: '2026',
+          scanlationGroup: 'مانجا ليك (MangaLik)'
+        };
+      });
+    }
 
     return res.json({ success: true, item: { ...item, chapters } });
   } catch (err) {

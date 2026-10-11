@@ -135,7 +135,10 @@ CREATE TABLE IF NOT EXISTS social_library_items (
     ins.run('VIP Basic', '/assets/badge_vip.png', 0);
   }
 
-  // Seed Library items (Manga, Manhwa, Novels, Books)
+  // Clean up legacy fabricated items (mock manga, manhwa, novels, books)
+  db.exec("DELETE FROM social_library_items WHERE id LIKE 'manga_%' OR id LIKE 'manhwa_%' OR id LIKE 'novel_%' OR id LIKE 'book_%' OR type IN ('NOVEL', 'BOOK')");
+
+  // Seed authentic trending Manga & Manhwa catalog powered by MangaLik
   const libCount = db.prepare('SELECT COUNT(*) AS c FROM social_library_items').get()?.c || 0;
   if (libCount === 0) {
     const insLib = db.prepare(`
@@ -144,188 +147,346 @@ CREATE TABLE IF NOT EXISTS social_library_items (
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    // MANGA
+    // TRENDING MANHWA (المانهو الكورية الرائجة)
     insLib.run(
-      'manga_one_piece',
-      'ون بيس (One Piece)',
-      'One Piece',
-      'MANGA',
-      'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80',
-      1115,
-      'Eiichiro Oda',
-      9.8,
-      'قصة مونكي دي لوفي الذي يبحر في الغراند لاين بحثاً عن الكنز الأسطوري ون بيس ليصبح ملك القراصنة القادم.',
-      'Monkey D. Luffy embarks on an epic voyage to the Grand Line to find the legendary treasure One Piece and become King of the Pirates.',
-      'ONGOING',
-      JSON.stringify(['أكشن', 'مغامرات', 'كوميديا', 'خيال']),
-      1997
-    );
-    insLib.run(
-      'manga_berserk',
-      'بيرسيرك (Berserk)',
-      'Berserk',
-      'MANGA',
-      'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
-      375,
-      'Kentaro Miura',
-      9.9,
-      'غاتس المحارب الأسود يسعى للانتقام من صديقه السابق غريفيث وسط عالم مظلم مليء بالشياطين والحروب الدامية.',
-      'Guts, known as the Black Swordsman, seeks sanctuary from the demonic forces pursuing him and revenge on Griffith.',
-      'ONGOING',
-      JSON.stringify(['خيال مظلم', 'أكشن', 'دراما', 'عسكري']),
-      1989
-    );
-    insLib.run(
-      'manga_vagabond',
-      'فاغابوند (Vagabond)',
-      'Vagabond',
-      'MANGA',
-      'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80',
-      327,
-      'Takehiko Inoue',
-      9.7,
-      'رحلة الأسطورة مياموتو موساشي في السعي ليصبح الساموراي الأعظم الذي لا يُقهر تحت الشمس.',
-      'The journey of legendary swordsman Miyamoto Musashi as he aims to become invincible under the sun.',
-      'COMPLETED',
-      JSON.stringify(['ساموراي', 'تاريخي', 'فلسفي', 'سينين']),
-      1998
-    );
-
-    // MANHWA
-    insLib.run(
-      'manhwa_solo_leveling',
+      'solo-leveling',
       'سولو ليفلينج (ارتقاء المستوى الفردي)',
       'Solo Leveling',
       'MANHWA',
-      'https://images.unsplash.com/photo-1563089145-599997674d42?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200&auto=format&fit=crop&q=80',
-      200,
-      'Chugong / DUBU',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Solo-Leveling-1.jpg',
+      'https://ssolo.mangalik.net/manga2/arb4/data/manga_5ed13172a2b6e/138ea303a5e63f21e112fa1ace1e1a15/image-01.jpg',
+      205,
+      'Chugong / DUBU (REDICE Studio)',
       9.9,
-      'سونغ جين وو، أضعف صياد في العالم، يكتسب نظاماً غامضاً يتيح له الارتقاء بمستواه بمفرده ليتحول إلى حاكم الظلال.',
-      'Sung Jinwoo, the weakest hunter of all mankind, awakens a mysterious Quest log system allowing him to level up without limits.',
+      'قبل 10 سنوات، بعد ظهور الباب الذي يربط العالم الحقيقي بعالم الوحوش، يتحول سونغ جين وو من أضعف صياد في العالم إلى حاكم الظلال الأعظم بعد حصوله على نظام ترقية فردي.',
+      'Sung Jinwoo awakens a mysterious quest log that allows him to level up without limits in a world infested by dungeon gates.',
       'COMPLETED',
-      JSON.stringify(['أكشن', 'فانتازيا', 'أبراج', 'نظام']),
+      JSON.stringify(['أكشن', 'فانتازيا', 'أبراج', 'نظام', 'قوة خارقة', 'سحر']),
       2018
     );
+
     insLib.run(
-      'manhwa_orv',
+      'omniscient-readers-viewpoint',
       'وجهة نظر القارئ العليم (Omniscient Reader)',
       "Omniscient Reader's Viewpoint",
       'MANHWA',
-      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1563089145-599997674d42?w=1200&auto=format&fit=crop&q=80',
-      215,
-      'Sing Shong / Sleepy-C',
-      9.8,
-      'كيم دوكجا القارئ الوحيد لرواية نهاية العالم يجد أن أحداثها أصبحت حقيقة واقعية وهو الوحيد الذي يعرف نهايتها.',
-      'Kim Dokja was an ordinary office worker whose sole interest was reading his favorite web novel, until the story becomes reality.',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg',
+      220,
+      'Sing Shong / Sleepy-C (REDICE Studio)',
+      9.9,
+      'في اللحظة التي ظن فيها أن العالم قد دمر، ظهر عالم جديد. كيم دوكجا القارئ الوحيد لرواية نهاية العالم يجد أن أحداثها أصبحت حقيقة واقعية وهو الوحيد الذي يعرف نهايتها.',
+      'An ordinary office worker who was the sole reader of an apocalyptic web novel suddenly sees the story become bloody reality.',
       'ONGOING',
-      JSON.stringify(['فانتازيا', 'سيناريو', 'أبوكاليبس', 'أكشن']),
+      JSON.stringify(['أكشن', 'إثارة', 'فانتازيا', 'سيناريو', 'أبوكاليبس', 'وحوش']),
       2020
     );
+
     insLib.run(
-      'manhwa_tower_of_god',
-      'برج الإله (Tower of God)',
-      'Tower of God',
+      'solo-swordmaster',
+      'سيد السيف المنفرد (Solo Swordmaster)',
+      'Solo Swordmaster',
       'MANHWA',
-      'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80',
-      620,
-      'SIU',
-      9.6,
-      'بام يدخل البرج الغامض المليء بالاختبارات القاتلة بحثاً عن صديقته راشيل التي صعدت نحو القمة.',
-      'Twenty-Fifth Bam enters the mysterious Tower in search of Rachel, facing lethal tests on each floor.',
+      'https://io.mangalik.net/wp-content/uploads/2026/09/b207545cacdb3f27b56270eac54a3b86-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2026/09/b207545cacdb3f27b56270eac54a3b86-193x278.jpg',
+      25,
+      'MangaLik Studios',
+      9.8,
+      'في عصرٍ يستمدّ فيه الجميع قوتهم من الكوكبات، هناك رجلٌ واحد لا يؤمن سوى بالسيف. آخر سياف، ريمون أشفيلدر، يثبت أن السيف أقوى من كل المهارات.',
+      'In an age where everyone relies on constellations and divine skills, one lone swordsman climbs the peak solely through his blade.',
       'ONGOING',
-      JSON.stringify(['مغامرات', 'قوى خارقة', 'غموض', 'برج']),
-      2010
+      JSON.stringify(['أكشن', 'سحر', 'مغامرة', 'خيالي', 'سيافة']),
+      2024
     );
 
-    // LIGHT NOVELS
     insLib.run(
-      'novel_cote',
-      'فصل النخبة (Classroom of the Elite)',
-      'Classroom of the Elite',
-      'NOVEL',
-      'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80',
-      28,
-      'Shougo Kinugasa',
-      9.7,
-      'مدرسة كودو إيكوسي الحكومية حيث يحكم الذكاء والدهاء كل شيء، وأيانوكوجي كيوتاكا يخفي عبقريته المطلقة خلف هدوئه.',
-      'In a prestigious school where students compete for survival and social points, Kiyotaka Ayanokouji manipulates from the shadows.',
+      'nano-machine',
+      'نانو ماشين (Nano Machine)',
+      'Nano Machine',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2020/06/Nano-machine.png',
+      'https://io.mangalik.net/wp-content/uploads/2020/06/Nano-machine.png',
+      210,
+      'Jeolmu Hyeon / Geum Gangbulgoe',
+      9.8,
+      'تشيون يو وون، الابن غير الشرعي لسيد الطائفة الشيطانية المحاصر بالمؤامرات، يتلقى حقنة غامضة من آلات النانو الدقيقة من نسله القادم من المستقبل تغير مصيره للأبد.',
+      'An illegitimate prince of the Demonic Cult is injected with future nanomachines that reconstruct his body and martial capabilities.',
       'ONGOING',
-      JSON.stringify(['نفسي', 'مدرسي', 'غموض', 'دهاء']),
-      2015
+      JSON.stringify(['فنون قتالية', 'موريم', 'خيال علمي', 'أكشن', 'انتقام']),
+      2020
     );
+
     insLib.run(
-      'novel_rezero',
-      'ري: زيرو (Re:Zero Starting Life in Another World)',
-      'Re:Zero',
-      'NOVEL',
-      'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
-      38,
-      'Tappei Nagatsuki',
-      9.6,
-      'سوبارو ينتقل لعالم آخر ويكتشف قدرته على العودة بالزمن من نقطة الصفر كلما لاقى حتفه.',
-      'Subaru Natsuki is transported to another fantasy world and discovers his harrowing ability: Return by Death.',
+      'magic-emperor',
+      'الإمبراطور الشيطاني (Magic Emperor / Demonic Emperor)',
+      'Magic Emperor',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Demonic-Emperor-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Demonic-Emperor-193x278.jpg',
+      550,
+      'Ye Xiao / Wuer Manhua',
+      9.8,
+      'تشو يي-فان، إمبراطور السحر والشياطين الأسطوري، يتعرض للخيانة ويُقتل ليعود للحياة بجسد خادم ضعيف من عائلة نبيلة منحدرة ويصعد مجدداً للقمة بدهاء لا يعرف الرحمة.',
+      'The Demonic Emperor Zhuo Yifan is betrayed and reincarnated into the fragile body of a loyal family servant, plotting his supreme revenge.',
       'ONGOING',
-      JSON.stringify(['إيسيكاي', 'نفسي', 'سحر', 'دراما']),
+      JSON.stringify(['فنون قتالية', 'تناسخ', 'دهاء', 'سحر', 'أكشن']),
+      2019
+    );
+
+    insLib.run(
+      'return-of-the-mount-hua-sect',
+      'عودة طائفة جبل هوا (Return of the Mount Hua Sect)',
+      'Return of the Mount Hua Sect',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2021/03/Return_of_the_Mount_Hua_Sect-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2021/03/Return_of_the_Mount_Hua_Sect-193x278.jpg',
+      135,
+      'Biga / LICO Studio',
+      9.9,
+      'تشونغ ميونغ، قديس سيف زهر البرقوق الأسطوري الذي أطاح بزعيم الطائفة الشيطانية، يستيقظ بعد قرن كامل ليجد طائفته العظيمة في حالة دمار وإفلاس، فيقرر إعادتها لمجدها.',
+      'Chung Myung awakens 100 years into the future to find his beloved Mount Hua Sect fallen into ruins, swearing to restore it to glory.',
+      'ONGOING',
+      JSON.stringify(['موريم', 'كوميديا', 'سيافة', 'أكشن', 'تاريخي']),
+      2021
+    );
+
+    insLib.run(
+      'the-beginning-after-the-end',
+      'البداية بعد النهاية (The Beginning After The End)',
+      'The Beginning After The End',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/The-Beginning-After-the-End-2-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/The-Beginning-After-the-End-2-193x278.jpg',
+      180,
+      'TurtleMe / Fuyuki23',
+      9.8,
+      'الملك غراي، حاكم يمتلك القوة والثروة ولكن قلبه فارغ من المشاعر، يتجسد في عالم سحري مليء بالوحوش كـ آرثر ليوين، محاولاً حماية عائلته واكتشاف معنى الحياة الحقيقي.',
+      'King Grey reincarnates into a world of magic and monsters as Arthur Leywin, seeking to correct the mistakes of his past life.',
+      'ONGOING',
+      JSON.stringify(['سحر', 'إيسيكاي', 'مغامرة', 'أكشن', 'فانتازيا']),
+      2018
+    );
+
+    insLib.run(
+      'lookism',
+      'المظهر (Lookism)',
+      'Lookism',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2020/11/Lookism-193x278.png',
+      'https://io.mangalik.net/wp-content/uploads/2020/11/Lookism-193x278.png',
+      500,
+      'Park Tae-jun (PTJ Comics)',
+      9.8,
+      'بارك هيونغ سوك، فتى يتعرض للتنمر الشديد بسبب مظهره ووزنه، يستيقظ فجأة ليكتشف أنه حصل على جسد ثانٍ مثالي فائق الوسامة والقوة، ويبدأ حياة مزدوجة تغير كل شيء.',
+      'A bullied high schooler mysteriously awakens with an alternate, extraordinarily attractive and athletic body.',
+      'ONGOING',
+      JSON.stringify(['دراما', 'أكشن', 'قتالات شوارع', 'عصابات', 'حياة مدرسية']),
       2014
     );
 
-    // BOOKS
     insLib.run(
-      'book_art_of_war',
-      'فن الحرب (The Art of War)',
-      'The Art of War',
-      'BOOK',
-      'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80',
-      13,
-      'Sun Tzu (سون تزو)',
-      9.8,
-      'المرجع العسكري والفلسفي الأقدم في تاريخ البشرية حول التخطيط الاستراتيجي، القيادة، والانتصار دون قتال.',
-      'Ancient Chinese military treatise attributed to Sun Tzu, composed of 13 chapters on strategic leadership and conflict.',
-      'COMPLETED',
-      JSON.stringify(['فلسفة', 'استراتيجية', 'تاريخ', 'قيادة']),
-      -500
-    );
-    insLib.run(
-      'book_1984',
-      '1984 (رواية جورج أورويل)',
-      '1984',
-      'BOOK',
-      'https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
-      24,
-      'George Orwell (جورج أورويل)',
+      'eleceed',
+      'إليكيد (Eleceed)',
+      'Eleceed',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2020/07/Eleceed-1-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/07/Eleceed-1-193x278.jpg',
+      290,
+      'Son Je-ho / ZHENA',
       9.9,
-      'تحفة الديستوبيا العالمية عن الرقابة الشاملة، الأخ الأكبر، والتلاعب بالحقائق وحرية الفكر الإنساني.',
-      'Dystopian social science fiction novel exploring the dangers of totalitarianism, extreme surveillance, and thought control.',
-      'COMPLETED',
-      JSON.stringify(['ديستوبيا', 'أدب كلاسيكي', 'فلسفة', 'خيال']),
-      1949
-    );
-    insLib.run(
-      'book_atomic_habits',
-      'العادات الذرية (Atomic Habits)',
-      'Atomic Habits',
-      'BOOK',
-      'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200&auto=format&fit=crop&q=80',
-      20,
-      'James Clear (جيمس كلير)',
-      9.8,
-      'دليل عملي لتغيير العادات اليومية البسيطة التي تؤدي إلى تحولات جذرية ونجاحات استثنائية مع مرور الوقت.',
-      'An easy and proven way to build good habits and break bad ones through tiny 1% daily improvements.',
-      'COMPLETED',
-      JSON.stringify(['تطوير الذات', 'علم النفس', 'إنتاجية', 'عادات']),
+      'سيو جيوو، فتى طيب القلب يمتلك سرعة خارقة، ينقذ قطاً سميناً مصاباً يتبين أنه كادين، أحد أقوى الموقظين في العالم متخفياً في جسد قطة هرباً من أعدائه.',
+      'A kind-hearted boy with lightning reflex powers takes in an injured fat cat who turns out to be a legendary awakened warrior in disguise.',
+      'ONGOING',
+      JSON.stringify(['قوى خارقة', 'كوميديا', 'أكشن', 'صداقة', 'حيوانات أليفة']),
       2018
+    );
+
+    insLib.run(
+      'pick-me-up',
+      'بيك مي أب: غاشا لا نهائية (Pick Me Up)',
+      'Pick Me Up : Infinite Gacha',
+      'MANHWA',
+      'https://io.mangalik.net/wp-content/uploads/2022/12/19608928871162963660-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2022/12/19608928871162963660-193x278.jpg',
+      95,
+      'Hermod / Ntreev (Redice)',
+      9.8,
+      'لوكي، اللاعب المصنف رقم 1 عالمياً في لعبة الهاتف المستحيلة Pick Me Up، يُسحب فجأة إلى داخل اللعبة نفسها كبطل نجمة واحدة من الدرجة الأدنى، وعليه النجاة عبر أقصى المعارك.',
+      'The worlds top-ranked mobile gacha master is transported into the lethal game as a bottom-tier 1-star hero unit.',
+      'ONGOING',
+      JSON.stringify(['ألعاب', 'غاشا', 'بقاء', 'أكشن', 'استراتيجية']),
+      2022
+    );
+
+    // TRENDING MANGA (المانجا اليابانية الرائجة)
+    insLib.run(
+      'one-piece',
+      'ون بيس (One Piece)',
+      'One Piece',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg',
+      1160,
+      'Eiichiro Oda (إييتشيرو أودا)',
+      9.9,
+      'القوة والشهرة والثروة. مونكي دي لوفي وطاقم قبعة القش يبحرون في الغراند لاين بحثاً عن الكنز الأسطوري ون بيس ليصبح لوفي ملك القراصنة القادم.',
+      'Monkey D. Luffy embarks on an epic voyage to the Grand Line to find the legendary treasure One Piece and become King of the Pirates.',
+      'ONGOING',
+      JSON.stringify(['أكشن', 'مغامرات', 'كوميديا', 'شونين', 'قراصنة', 'خيال']),
+      1997
+    );
+
+    insLib.run(
+      'jujutsu-kaisen',
+      'جوجوتسو كايسن (Jujutsu Kaisen)',
+      'Jujutsu Kaisen',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg',
+      270,
+      'Gege Akutami (غيغي أكوتامي)',
+      9.8,
+      'يوجي إيتادوري يبتلع إصبع ملك اللعنات الأسطوري ريومن سوكونا لحماية أصدقائه، ويدخل مدرسة جوجوتسو لقتال الأرواح الملعونة والتصدي لنهاية العالم المحتومة.',
+      'Yuji Itadori swallows a cursed talisman—the finger of Ryomen Sukuna—and is thrown into the deadly realm of Jujutsu Sorcerers.',
+      'COMPLETED',
+      JSON.stringify(['شونين', 'لعنات', 'خارق للطبيعة', 'قتال', 'سحر']),
+      2018
+    );
+
+    insLib.run(
+      'chainsaw-man',
+      'رجل المنشار (Chainsaw Man)',
+      'Chainsaw Man',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Chainsaw-Man-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Chainsaw-Man-193x278.jpg',
+      175,
+      'Tatsuki Fujimoto (تاتسوكي فوجيموتو)',
+      9.8,
+      'دينجي، شاب يعيش في فقر مدقع ويسدد ديون والده بالصيد مع كلب المنشار بوتشيتا، يولد من جديد كهجين شيطان المنشار وينضم لقسم السلامة العامة لمقاتلة شياطين العالم.',
+      'Denji is betrayed and killed, but makes a pact with his pet devil Pochita to be reborn as Chainsaw Man.',
+      'ONGOING',
+      JSON.stringify(['شياطين', 'خيال مظلم', 'رعب', 'أكشن', 'كوميديا سوداء']),
+      2018
+    );
+
+    insLib.run(
+      'blue-lock',
+      'بلو لوك (Blue Lock)',
+      'Blue Lock',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2021/01/Blue-Lock-193x278.png',
+      'https://io.mangalik.net/wp-content/uploads/2021/01/Blue-Lock-193x278.png',
+      275,
+      'Muneyuki Kaneshiro / Yusuke Nomura',
+      9.7,
+      'بعد إقصاء اليابان من كأس العالم، يطلق الاتحاد مشروع بلو لوك لجمع 300 مهاجم شاب وحبسهم في منشأة قاسية لاختيار مهاجم واحد أناني يقود اليابان للمجد العالمي.',
+      'Japan creates Blue Lock, an intense prison-like training academy to forge the worlds ultimate, most egoistic striker.',
+      'ONGOING',
+      JSON.stringify(['رياضة', 'كرة قدم', 'نفسي', 'تنافس', 'شونين']),
+      2018
+    );
+
+    insLib.run(
+      'kingdom',
+      'المملكة (Kingdom)',
+      'Kingdom',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/06/kingdom-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/06/kingdom-193x278.jpg',
+      810,
+      'Yasuhisa Hara (ياسوهيسا هارا)',
+      9.9,
+      'في حقبة الممالك المتحاربة في الصين القديمة، يسعى الفتى شين ليصبح أعظم جنرال تحت السماء، متعاوناً مع الملك الشاب إي سي لتوحيد الصين بأكملها تحت راية واحدة.',
+      'In Warring States era China, orphan Xin strives to become the greatest general under the heavens and unify China with King Zheng.',
+      'ONGOING',
+      JSON.stringify(['تاريخي', 'حروب', 'استراتيجية', 'سينين', 'أكشن']),
+      2006
+    );
+
+    insLib.run(
+      'berserk',
+      'بيرسيرك (Berserk)',
+      'Berserk',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/10/berserk-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/10/berserk-193x278.jpg',
+      375,
+      'Kentaro Miura (كينتارو ميورا)',
+      9.9,
+      'غاتس المحارب الأسود يسعى للانتقام من صديقه السابق غريفيث وفرقة صقر الجحيم وسط عالم مظلم مليء بالشياطين والحروب الدامية وتضحيات الكسوف الأسطورية.',
+      'Guts, known as the Black Swordsman, seeks bloody vengeance against Griffith across a brutal, demon-infested dark fantasy world.',
+      'ONGOING',
+      JSON.stringify(['خيال مظلم', 'أكشن', 'دراما', 'عسكري', 'سينين']),
+      1989
+    );
+
+    insLib.run(
+      'hunter-x-hunter',
+      'القناص (Hunter X Hunter)',
+      'Hunter X Hunter',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2021/07/Hunter_X_Hunter_Vol_33_Manga-1879209_1024x1024-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2021/07/Hunter_X_Hunter_Vol_33_Manga-1879209_1024x1024-193x278.jpg',
+      405,
+      'Yoshihiro Togashi (يوشيهيرو توغاشي)',
+      9.9,
+      'غون فريكس ينطلق في رحلة خطيرة لاجتياز اختبار الصيادين المحترفين والبحث عن والده جين، متعرفاً على كيلوا وكورابيكا ويوريو في معارك ذكاء ونين معقدة.',
+      'Gon Freecss aspires to become a certified Hunter in order to track down his father, mastering the intricate combat art of Nen.',
+      'ONGOING',
+      JSON.stringify(['شونين', 'مغامرات', 'نين', 'قتال', 'استراتيجية']),
+      1998
+    );
+
+    insLib.run(
+      'bleach',
+      'بليتش (Bleach)',
+      'Bleach',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2021/06/Bleachanime-193x278.png',
+      'https://io.mangalik.net/wp-content/uploads/2021/06/Bleachanime-193x278.png',
+      686,
+      'Tite Kubo (تايت كوبو)',
+      9.7,
+      'إيتشيغو كوروساكي يكتسب قوى حاصد الأرواح شينيغامي من روكيا كوتشيكي، متحملاً واجب حماية البشر من الهولو والقتال في مجتمع الأرواح وحرب الكوينشي ألف عام.',
+      'Ichigo Kurosaki gains the powers of a Soul Reaper from Rukia Kuchiki, defending the Living World and Soul Society from ancient evils.',
+      'COMPLETED',
+      JSON.stringify(['شونين', 'أرواح', 'سيوف', 'خوارق', 'أكشن']),
+      2001
+    );
+
+    insLib.run(
+      'black-clover',
+      'بلاك كلوفر (Black Clover)',
+      'Black Clover',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Black-Clover-2-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/05/Black-Clover-2-193x278.jpg',
+      370,
+      'Yūki Tabata (يوكي تاباتا)',
+      9.7,
+      'أستا، فتى ولد بدون ذرة واحدة من السحر في عالم يحكمه السحر بالكامل، يحصل على غريموار الورقة الخماسية بسيف مضاد للسحر ويسعى ليصبح إمبراطور السحر القادم.',
+      'Asta, born without an ounce of magical energy in a world where magic is everything, receives a five-leaf clover Anti-Magic Grimoire.',
+      'ONGOING',
+      JSON.stringify(['سحر', 'شونين', 'عزيمة', 'أكشن', 'فرسان السحر']),
+      2015
+    );
+
+    insLib.run(
+      'boruto',
+      'بوروتو (Boruto: Two Blue Vortex)',
+      'Boruto',
+      'MANGA',
+      'https://io.mangalik.net/wp-content/uploads/2020/06/Boruto-193x278.jpg',
+      'https://io.mangalik.net/wp-content/uploads/2020/06/Boruto-193x278.jpg',
+      90,
+      'Masashi Kishimoto / Mikio Ikemoto',
+      9.6,
+      'بوروتو أوزوماكي يدخل عهد الدوامتين الزرقاوين بعد تبادل مصيره مع كواكي ومطاردته من قرية كونوها، ليعود بقوى نينجا خارقة للتصدي لعشيرة الأوتسوتسوكي وشجرة التشاكرا.',
+      'Boruto returns as a rogue shinobi in Two Blue Vortex, defending the ninja realm from Otsutsuki divine trees.',
+      'ONGOING',
+      JSON.stringify(['نينجا', 'شونين', 'قوى خارقة', 'أكشن']),
+      2016
     );
   }
 }

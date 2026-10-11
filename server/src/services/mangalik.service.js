@@ -20,6 +20,42 @@ const cache = {
 // Popular curated manga & manhwa available on MangaLik with genuine Arabic translations
 const POPULAR_MANGALIK_CATALOG = [
   {
+    id: 'solo-leveling',
+    slug: 'solo-leveling',
+    mangalikSlug: 'solo-leveling',
+    title: 'سولو ليفلينج (Solo Leveling)',
+    romajiTitle: 'Solo Leveling',
+    englishTitle: 'Solo Leveling',
+    arabicTitle: 'سولو ليفلينج (ارتقاء المستوى الفردي)',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/Solo-Leveling-1.jpg',
+    description: 'قبل 10 سنوات، بعد ظهور الباب الذي يربط العالم الحقيقي بعالم الوحوش، يتحول سونغ جين وو من أضعف صياد في العالم إلى حاكم الظلال الأعظم.',
+    status: 'مكتملة (COMPLETED)',
+    type: 'MANHWA',
+    genres: ['أكشن', 'فانتازيا', 'أبراج', 'نظام', 'مانهوا كورية'],
+    rating: '9.9',
+    chaptersCount: 205,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/solo-leveling/'
+  },
+  {
+    id: 'omniscient-readers-viewpoint',
+    slug: 'omniscient-readers-viewpoint',
+    mangalikSlug: 'omniscient-readers-viewpoint',
+    title: 'وجهة نظر القارئ العليم (Omniscient Reader)',
+    romajiTitle: "Omniscient Reader's Viewpoint",
+    englishTitle: "Omniscient Reader's Viewpoint",
+    arabicTitle: 'وجهة نظر القارئ العليم',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg',
+    description: 'في اللحظة التي ظن فيها أن العالم قد دمر، ظهر عالم جديد. كيم دوكجا القارئ الوحيد لرواية نهاية العالم يجد أن أحداثها أصبحت حقيقة واقعية.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANHWA',
+    genres: ['أكشن', 'إثارة', 'فانتازيا', 'أبوكاليبس', 'مانهوا كورية'],
+    rating: '9.9',
+    chaptersCount: 220,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/omniscient-readers-viewpoint/'
+  },
+  {
     id: 'solo-swordmaster',
     slug: 'solo-swordmaster',
     mangalikSlug: 'solo-swordmaster',
@@ -33,45 +69,9 @@ const POPULAR_MANGALIK_CATALOG = [
     type: 'MANHWA',
     genres: ['أكشن', 'مغامرة', 'سحر', 'خيالي', 'مانهوا كورية'],
     rating: '9.8',
-    chaptersCount: 20,
+    chaptersCount: 25,
     source: 'mangalik',
     sourceUrl: 'https://mangalik.net/manga/solo-swordmaster/'
-  },
-  {
-    id: 'the-mysterious-young-master',
-    slug: 'the-mysterious-young-master',
-    mangalikSlug: 'the-mysterious-young-master',
-    title: 'السيد الصغير الغامض (The Mysterious Young Master)',
-    romajiTitle: 'The Mysterious Young Master',
-    englishTitle: 'The Mysterious Young Master',
-    arabicTitle: 'السيد الصغير الغامض',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2026/10/01545c87ebc12f95a23603e69b331f2d-175x238.jpg',
-    description: 'قصة شاب غامض يمتلك قدرات خارقة يقلب موازين القوى في إمبراطورية الفنون القتالية.',
-    status: 'مستمرة (ONGOING)',
-    type: 'MANHUA',
-    genres: ['أكشن', 'فنون قتالية', 'خوارق', 'مانها'],
-    rating: '9.6',
-    chaptersCount: 19,
-    source: 'mangalik',
-    sourceUrl: 'https://mangalik.net/manga/the-mysterious-young-master/'
-  },
-  {
-    id: 'solo-leveling-arise-hunter-origin-sian-halat-story',
-    slug: 'solo-leveling-arise-hunter-origin-sian-halat-story',
-    mangalikSlug: 'solo-leveling-arise-hunter-origin-sian-halat-story',
-    title: 'سولو ليفلينج: أصل الصياد (Solo Leveling: Hunter Origin)',
-    romajiTitle: 'Solo Leveling: Arise Hunter Origin',
-    englishTitle: 'Solo Leveling: Arise Hunter Origin',
-    arabicTitle: 'سولو ليفلينج: قصة الصياد',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2026/08/solo-origin.jpg',
-    description: 'القصة الرسمية الجديدة من عالم Solo Leveling التي تكشف أسرار الصيادين والنظام وقوى الظلال.',
-    status: 'مستمرة (ONGOING)',
-    type: 'MANHWA',
-    genres: ['أكشن', 'بوابات', 'وحوش', 'نظام', 'مانهوا كورية'],
-    rating: '9.9',
-    chaptersCount: 35,
-    source: 'mangalik',
-    sourceUrl: 'https://mangalik.net/manga/solo-leveling-arise-hunter-origin-sian-halat-story/'
   },
   {
     id: 'nano-machine',
@@ -81,15 +81,51 @@ const POPULAR_MANGALIK_CATALOG = [
     romajiTitle: 'Nano Machine',
     englishTitle: 'Nano Machine',
     arabicTitle: 'نانو ماشين',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2024/01/nano-machine.jpg',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/06/Nano-machine.png',
     description: 'بعد تعرضه للظلم والخيانة في طائفة الشياطين، يُحقن الشاب تشون يو وون بآلات نانوية من المستقبل تغير مصيره تماماً.',
     status: 'مستمرة (ONGOING)',
     type: 'MANHWA',
     genres: ['أكشن', 'فنون قتالية', 'موريم', 'خيال علمي'],
     rating: '9.8',
-    chaptersCount: 215,
+    chaptersCount: 210,
     source: 'mangalik',
     sourceUrl: 'https://mangalik.net/manga/nano-machine/'
+  },
+  {
+    id: 'magic-emperor',
+    slug: 'magic-emperor',
+    mangalikSlug: 'magic-emperor',
+    title: 'الإمبراطور الشيطاني (Magic Emperor)',
+    romajiTitle: 'Magic Emperor',
+    englishTitle: 'Magic Emperor',
+    arabicTitle: 'الإمبراطور الشيطاني',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/Demonic-Emperor-193x278.jpg',
+    description: 'تشو يي-فان، إمبراطور السحر والشياطين الأسطوري، يتعرض للخيانة ويُقتل ليعود للحياة بجسد خادم ضعيف من عائلة نبيلة منحدرة ويصعد مجدداً للقمة.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANHWA',
+    genres: ['فنون قتالية', 'تناسخ', 'دهاء', 'سحر', 'أكشن'],
+    rating: '9.8',
+    chaptersCount: 550,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/magic-emperor/'
+  },
+  {
+    id: 'return-of-the-mount-hua-sect',
+    slug: 'return-of-the-mount-hua-sect',
+    mangalikSlug: 'return-of-the-mount-hua-sect',
+    title: 'عودة طائفة جبل هوا (Return of Mount Hua Sect)',
+    romajiTitle: 'Return of the Mount Hua Sect',
+    englishTitle: 'Return of the Mount Hua Sect',
+    arabicTitle: 'عودة طائفة جبل هوا',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2021/03/Return_of_the_Mount_Hua_Sect-193x278.jpg',
+    description: 'تشونغ ميونغ، قديس سيف زهر البرقوق الأسطوري، يستيقظ بعد قرن كامل ليجد طائفته العظيمة في حالة دمار وإفلاس، فيقرر إعادتها لمجدها.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANHWA',
+    genres: ['موريم', 'كوميديا', 'سيافة', 'أكشن', 'تاريخي'],
+    rating: '9.9',
+    chaptersCount: 135,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/return-of-the-mount-hua-sect/'
   },
   {
     id: 'the-beginning-after-the-end',
@@ -99,51 +135,87 @@ const POPULAR_MANGALIK_CATALOG = [
     romajiTitle: 'The Beginning After The End',
     englishTitle: 'The Beginning After The End',
     arabicTitle: 'البداية بعد النهاية',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2024/02/tbate.jpg',
-    description: 'الملك غري يمتلك قوة وثروة ومكانة منقطعة النظير في عالم محكوم بالقدرة العسكرية، ولكنه يولد من جديد في عالم سحري مليء بالوحوش والمؤامرات.',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/The-Beginning-After-the-End-2-193x278.jpg',
+    description: 'الملك غري يمتلك قوة وثروة ومكانة منقطعة النظير، ولكنه يولد من جديد في عالم سحري مليء بالوحوش والمؤامرات كـ آرثر ليوين.',
     status: 'مستمرة (ONGOING)',
     type: 'MANHWA',
     genres: ['إيسيكاي', 'سحر', 'أكشن', 'مغامرة'],
-    rating: '9.9',
-    chaptersCount: 185,
+    rating: '9.8',
+    chaptersCount: 180,
     source: 'mangalik',
     sourceUrl: 'https://mangalik.net/manga/the-beginning-after-the-end/'
   },
   {
-    id: 'tower-of-god',
-    slug: 'tower-of-god',
-    mangalikSlug: 'tower',
-    title: 'برج الإله (Tower of God)',
-    romajiTitle: 'Tower of God',
-    englishTitle: 'Tower of God',
-    arabicTitle: 'برج الإله',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2024/03/tower-of-god.jpg',
-    description: 'ماذا ترغب؟ الثروة؟ المجد؟ القوة؟ كل هذا وأكثر ينتظرك في قمة البرج إذا تمكنت من الصعود.',
+    id: 'lookism',
+    slug: 'lookism',
+    mangalikSlug: 'lookism',
+    title: 'المظهر (Lookism)',
+    romajiTitle: 'Lookism',
+    englishTitle: 'Lookism',
+    arabicTitle: 'المظهر',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/11/Lookism-193x278.png',
+    description: 'بارك هيونغ سوك يستيقظ فجأة ليكتشف أنه حصل على جسد ثانٍ مثالي فائق الوسامة والقوة، ويبدأ حياة مزدوجة تغير كل شيء.',
     status: 'مستمرة (ONGOING)',
     type: 'MANHWA',
-    genres: ['مغامرة', 'أكشن', 'غموض', 'خيال علمي'],
-    rating: '9.7',
-    chaptersCount: 620,
+    genres: ['دراما', 'أكشن', 'قتالات شوارع', 'عصابات'],
+    rating: '9.8',
+    chaptersCount: 500,
     source: 'mangalik',
-    sourceUrl: 'https://mangalik.net/manga/tower/'
+    sourceUrl: 'https://mangalik.net/manga/lookism/'
+  },
+  {
+    id: 'eleceed',
+    slug: 'eleceed',
+    mangalikSlug: 'eleceed',
+    title: 'إليكيد (Eleceed)',
+    romajiTitle: 'Eleceed',
+    englishTitle: 'Eleceed',
+    arabicTitle: 'إليكيد',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/07/Eleceed-1-193x278.jpg',
+    description: 'سيو جيوو، فتى يمتلك سرعة خارقة، ينقذ قطاً سميناً يتبين أنه كادين، أحد أقوى الموقظين في العالم متخفياً في جسد قطة.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANHWA',
+    genres: ['قوى خارقة', 'كوميديا', 'أكشن', 'صداقة'],
+    rating: '9.9',
+    chaptersCount: 290,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/eleceed/'
+  },
+  {
+    id: 'pick-me-up',
+    slug: 'pick-me-up',
+    mangalikSlug: 'pick-me-up',
+    title: 'بيك مي أب (Pick Me Up)',
+    romajiTitle: 'Pick Me Up : Infinite Gacha',
+    englishTitle: 'Pick Me Up : Infinite Gacha',
+    arabicTitle: 'بيك مي أب: غاشا لا نهائية',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2022/12/19608928871162963660-193x278.jpg',
+    description: 'اللاعب المصنف رقم 1 عالمياً في لعبة الهاتف المستحيلة يُسحب فجأة إلى داخل اللعبة كبطل نجمة واحدة من الدرجة الأدنى.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANHWA',
+    genres: ['ألعاب', 'غاشا', 'بقاء', 'أكشن'],
+    rating: '9.8',
+    chaptersCount: 95,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/pick-me-up/'
   },
   {
     id: 'one-piece',
-    slug: 'one-piece-strong-world-0',
-    mangalikSlug: 'one-piece-strong-world-0',
+    slug: 'one-piece',
+    mangalikSlug: 'one-piece',
     title: 'ون بيس (One Piece)',
     romajiTitle: 'One Piece',
     englishTitle: 'One Piece',
     arabicTitle: 'ون بيس',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2024/01/one-piece.jpg',
-    description: 'مغامرات مونكي دي لوفي وطاقم قبعة القش في البحث عن الكنز الأعظم الون بيس ليصبح ملك القراصنة.',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg',
+    description: 'مغامرات مونكي دي لوفي وطاقم قبعة القش في البحث عن الكنز الأعظم الون بيس ليصبح ملك القراصنة القادم.',
     status: 'مستمرة (ONGOING)',
     type: 'MANGA',
-    genres: ['أكشن', 'مغامرة', 'كوميديا', 'شونين'],
+    genres: ['أكشن', 'مغامرة', 'كوميديا', 'شونين', 'قراصنة'],
     rating: '9.9',
-    chaptersCount: 1120,
+    chaptersCount: 1160,
     source: 'mangalik',
-    sourceUrl: 'https://mangalik.net/manga/one-piece-strong-world-0/'
+    sourceUrl: 'https://mangalik.net/manga/one-piece/'
   },
   {
     id: 'jujutsu-kaisen',
@@ -153,15 +225,159 @@ const POPULAR_MANGALIK_CATALOG = [
     romajiTitle: 'Jujutsu Kaisen',
     englishTitle: 'Jujutsu Kaisen',
     arabicTitle: 'جوجوتسو كايسن',
-    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2024/01/jjk.jpg',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg',
     description: 'يوجي إيتادوري طالب في الثانوية يبتلع إصبع لعنة أسطورية ريومين سوكونا ليجد نفسه في عالم سحرة الجوجوتسو.',
     status: 'مكتملة (COMPLETED)',
     type: 'MANGA',
     genres: ['أكشن', 'خوارق', 'شونين', 'شياطين'],
     rating: '9.8',
-    chaptersCount: 271,
+    chaptersCount: 270,
     source: 'mangalik',
     sourceUrl: 'https://mangalik.net/manga/jujutsu-kaisen/'
+  },
+  {
+    id: 'chainsaw-man',
+    slug: 'chainsaw-man',
+    mangalikSlug: 'chainsaw-man',
+    title: 'رجل المنشار (Chainsaw Man)',
+    romajiTitle: 'Chainsaw Man',
+    englishTitle: 'Chainsaw Man',
+    arabicTitle: 'رجل المنشار',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/Chainsaw-Man-193x278.jpg',
+    description: 'دينجي يولد من جديد كهجين شيطان المنشار بعد تعاقده مع بوتشيتا وينضم لقسم السلامة العامة.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['شياطين', 'خيال مظلم', 'رعب', 'أكشن'],
+    rating: '9.8',
+    chaptersCount: 175,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/chainsaw-man/'
+  },
+  {
+    id: 'blue-lock',
+    slug: 'blue-lock',
+    mangalikSlug: 'blue-lock',
+    title: 'بلو لوك (Blue Lock)',
+    romajiTitle: 'Blue Lock',
+    englishTitle: 'Blue Lock',
+    arabicTitle: 'بلو لوك',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2021/01/Blue-Lock-193x278.png',
+    description: 'مشروع بلو لوك يجمع 300 مهاجم شاب لصناعة المهاجم الأناني الأكثر حسماً في تاريخ اليابان.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['رياضة', 'كرة قدم', 'نفسي', 'شونين'],
+    rating: '9.7',
+    chaptersCount: 275,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/blue-lock/'
+  },
+  {
+    id: 'kingdom',
+    slug: 'kingdom',
+    mangalikSlug: 'kingdom',
+    title: 'المملكة (Kingdom)',
+    romajiTitle: 'Kingdom',
+    englishTitle: 'Kingdom',
+    arabicTitle: 'المملكة',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/06/kingdom-193x278.jpg',
+    description: 'في حقبة الممالك المتحاربة في الصين، يسعى الفتى شين ليصبح أعظم جنرال تحت السماء ويوحد الصين.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['تاريخي', 'حروب', 'استراتيجية', 'سينين'],
+    rating: '9.9',
+    chaptersCount: 810,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/kingdom/'
+  },
+  {
+    id: 'berserk',
+    slug: 'berserk',
+    mangalikSlug: 'berserk',
+    title: 'بيرسيرك (Berserk)',
+    romajiTitle: 'Berserk',
+    englishTitle: 'Berserk',
+    arabicTitle: 'بيرسيرك',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/10/berserk-193x278.jpg',
+    description: 'غاتس المحارب الأسود يسعى للانتقام من صديقه السابق غريفيث وسط عالم مظلم مليء بالشياطين.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['خيال مظلم', 'أكشن', 'دراما', 'عسكري'],
+    rating: '9.9',
+    chaptersCount: 375,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/berserk/'
+  },
+  {
+    id: 'hunter-x-hunter',
+    slug: 'hunter-x-hunter',
+    mangalikSlug: 'hunter-x-hunter',
+    title: 'القناص (Hunter X Hunter)',
+    romajiTitle: 'Hunter X Hunter',
+    englishTitle: 'Hunter X Hunter',
+    arabicTitle: 'القناص',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2021/07/Hunter_X_Hunter_Vol_33_Manga-1879209_1024x1024-193x278.jpg',
+    description: 'غون فريكس ينطلق في رحلة لاجتياز اختبار الصيادين والبحث عن والده جين وإتقان قوى النين.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['شونين', 'مغامرات', 'نين', 'قتال'],
+    rating: '9.9',
+    chaptersCount: 405,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/hunter-x-hunter/'
+  },
+  {
+    id: 'bleach',
+    slug: 'bleach',
+    mangalikSlug: 'bleach',
+    title: 'بليتش (Bleach)',
+    romajiTitle: 'Bleach',
+    englishTitle: 'Bleach',
+    arabicTitle: 'بليتش',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2021/06/Bleachanime-193x278.png',
+    description: 'إيتشيغو كوروساكي يكتسب قوى الشينيغامي لحماية البشر ومجتمع الأرواح من الأخطار.',
+    status: 'مكتملة (COMPLETED)',
+    type: 'MANGA',
+    genres: ['شونين', 'أرواح', 'سيوف', 'خوارق'],
+    rating: '9.7',
+    chaptersCount: 686,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/bleach/'
+  },
+  {
+    id: 'black-clover',
+    slug: 'black-clover',
+    mangalikSlug: 'black-clover',
+    title: 'بلاك كلوفر (Black Clover)',
+    romajiTitle: 'Black Clover',
+    englishTitle: 'Black Clover',
+    arabicTitle: 'بلاك كلوفر',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/05/Black-Clover-2-193x278.jpg',
+    description: 'أستا الذي ولد بدون سحر يحصل على سيف مضاد للسحر ويسعى ليصبح إمبراطور السحر القادم.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['سحر', 'شونين', 'عزيمة', 'فرسان السحر'],
+    rating: '9.7',
+    chaptersCount: 370,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/black-clover/'
+  },
+  {
+    id: 'boruto',
+    slug: 'boruto',
+    mangalikSlug: 'boruto',
+    title: 'بوروتو (Boruto)',
+    romajiTitle: 'Boruto: Two Blue Vortex',
+    englishTitle: 'Boruto',
+    arabicTitle: 'بوروتو',
+    coverUrl: 'https://io.mangalik.net/wp-content/uploads/2020/06/Boruto-193x278.jpg',
+    description: 'بوروتو أوزوماكي يعود كنينجا ملاحق للدفاع عن كونوها والتصدي لقوى الأوتسوتسوكي.',
+    status: 'مستمرة (ONGOING)',
+    type: 'MANGA',
+    genres: ['نينجا', 'شونين', 'قوى خارقة'],
+    rating: '9.6',
+    chaptersCount: 90,
+    source: 'mangalik',
+    sourceUrl: 'https://mangalik.net/manga/boruto/'
   }
 ];
 
@@ -512,7 +728,7 @@ export const mangalikService = {
 
         // Match all chapter links in the page:
         // href="https://mangalik.net/manga/{cleanSlug}/{chapterNum}/"
-        const regex = new RegExp(`href=["'](https:\\/\\/mangalik\\.net\\/manga\\/${cleanSlug}\\/([^\\/"']+)\\/?)[^>]*>([\\s\\S]*?)<\\/a>`, 'gi');
+        const regex = new RegExp(`href=["'](https:\\/\\/mangalik\\.net\\/manga\\/${cleanSlug}\\/([^\\/"']+)\\/?)[^"']*["'][^>]*>([\\s\\S]*?)<\\/a>`, 'gi');
         let match;
         const seen = new Set();
 
@@ -522,7 +738,7 @@ export const mangalikService = {
           let rawText = match[3].replace(/<[^>]+>/g, '').trim();
 
           // Avoid duplicates or pagination anchors
-          if (seen.has(chSlug) || chSlug === 'feed' || chSlug === cleanSlug) continue;
+          if (seen.has(chSlug) || chSlug === 'feed' || chSlug === cleanSlug || chSlug.startsWith('page')) continue;
           seen.add(chSlug);
 
           // Extract numeric chapter
@@ -692,15 +908,15 @@ export const mangalikService = {
    * Slug normalizer
    */
   normalizeSlug(str) {
-    if (!str) return 'solo-swordmaster';
+    if (!str) return 'solo-leveling';
     let s = String(str).toLowerCase().trim();
     // remove prefixes like ms- or md-
     s = s.replace(/^(ms-|md-|mangaslayer-)/, '');
-    if (s.includes('solo-leveling') || s.includes('solo_leveling')) {
-      return 'solo-swordmaster'; // best active translated solo manhwa on mangalik
+    // clean query or URL artifacts
+    if (s.startsWith('http')) {
+      const parts = s.split('/manga/')[1]?.split('/')[0];
+      if (parts) return parts;
     }
-    if (s.includes('one-piece')) return 'one-piece-strong-world-0';
-    if (s.includes('tower')) return 'the-nerd-next-door-is-the-tower-master';
     return s;
   }
 };
