@@ -13,7 +13,7 @@ import { pushToast } from '../hooks/hooks.js';
  * Comprehensive multi-source episode downloader:
  * - Direct verified MP4 files (MP4Upload, MediaFire direct) with measured sizes
  * - Cloud storage hosts (Workupload, Mega, Gofile, Mediafire)
- * - Alternative external source mirrors (GateAnime, Anime4Up, OkAnime)
+ * - Dedicated high-speed official cloud nodes (BLACK X Direct Nodes)
  * - Safe proxy pipeline bypassing 403 Forbidden on direct downloads & copied links
  */
 export function DownloadModal({
@@ -239,7 +239,7 @@ export function DownloadModal({
                 📥 {t('watch.downloadTitle', { n: formatNumber(episode) })}
               </h2>
               <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: 'var(--ink-dim)' }}>
-                {lang === 'ar' ? 'روابط التحميل الرسمية المقدمة من مصدر الأنمي (WitAnime) مباشرة' : 'Official download servers provided directly by WitAnime'}
+                {lang === 'ar' ? 'روابط التحميل المباشرة وفائقة السرعة من سيرفرات BLACK X الرسمية' : 'Official high-speed download servers provided directly by BLACK X'}
               </p>
             </div>
           </div>
@@ -274,7 +274,7 @@ export function DownloadModal({
             <div>
               <div style={{ marginBottom: '0.85rem' }}>
                 <strong style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span>🌐</span> {lang === 'ar' ? 'سيرفرات التحميل الرسمية المتاحة (WitAnime)' : 'Official Download Servers (WitAnime)'}
+                  <span>🌐</span> {lang === 'ar' ? 'سيرفرات التحميل الرسمية المتاحة (BLACK X)' : 'Official Download Servers (BLACK X)'}
                 </strong>
                 <span style={{ fontSize: '0.78rem', color: 'var(--ink-dim)' }}>
                   {lang === 'ar' ? 'اختر السيرفر المفضل للتحميل بجودة عالية وبشكل مباشر' : 'Choose your preferred server to download in full quality'}

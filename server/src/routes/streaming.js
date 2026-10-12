@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, resolveDownloadEntry, scrapeHealth, scrapeDiagnostics, fetchBrowseAnimeList } from '../witanime.js';
 import { scraperGetEpisodeDl } from '../animeScraperApi.js';
-import { okanimeService, OKANIME_CATALOG } from '../services/okanime.service.js';
 
 const router = Router();
 
@@ -11,65 +10,34 @@ router.get('/sources', (req, res) => {
   res.json({
     sources: [
       {
-        id: 'all',
-        nameAr: '🌟 جميع مصادر BLACK X (الكل)',
-        nameEn: 'All BLACK X Sources',
-        badge: 'مدمج'
-      },
-      {
         id: 'witanime',
-        nameAr: '👑 سيرفر BLACK X 1 (WitAnime)',
-        nameEn: 'BLACK X Server 1 (WitAnime)',
-        site: 'https://witanime.site/',
-        badge: 'WitAnime'
-      },
-      {
-        id: 'okanime',
-        nameAr: '🔥 سيرفر BLACK X 2 (OkAnime)',
-        nameEn: 'BLACK X Server 2 (OkAnime)',
-        site: 'https://ww3.okanime.xyz/',
-        badge: 'OkAnime'
+        nameAr: '👑 سيرفر BLACK X',
+        nameEn: 'BLACK X Server',
+        site: 'https://black-x.live/',
+        badge: 'BLACK X'
       }
     ]
   });
 });
 
-/** GET /api/stream/catalog — complete catalog of anime across all BLACK X sources */
+/** GET /api/stream/catalog — complete catalog of anime across BLACK X */
 router.get('/catalog', async (req, res) => {
-  const source = (req.query.source || 'all').toLowerCase();
   const page = Math.max(1, Number(req.query.page) || 1);
   try {
     let items = [];
 
-    if (source === 'all' || source === 'okanime') {
-      try {
-        const okLive = await okanimeService.getBrowseCatalog(page);
-        if (okLive?.length) {
-          items = items.concat(okLive);
-        }
-      } catch (err) {
-        console.warn('okanime browse error:', err.message);
+    try {
+      const witaCatalog = await fetchBrowseAnimeList(page);
+      if (Array.isArray(witaCatalog) && witaCatalog.length > 0) {
+        items = witaCatalog.map((it) => ({
+          ...it,
+          source: 'witanime',
+          sourceName: 'سيرفر BLACK X',
+          sourceLabel: 'سيرفر BLACK X'
+        }));
       }
-      const okItems = OKANIME_CATALOG.map((a) => ({
-        ...a,
-        source: 'okanime',
-        sourceName: 'سيرفر BLACK X 2 (OkAnime)',
-        sourceLabel: 'سيرفر BLACK X 2 (OkAnime)'
-      }));
-      for (const ok of okItems) {
-        if (!items.some((it) => it.slug === ok.slug)) items.push(ok);
-      }
-    }
-
-    if (source === 'all' || source === 'witanime') {
-      try {
-        const witaBrowse = await fetchBrowseAnimeList(page);
-        if (witaBrowse?.items?.length) {
-          items = items.concat(witaBrowse.items);
-        }
-      } catch (err) {
-        console.warn('witanime browse fetch error:', err.message);
-      }
+    } catch (err) {
+      console.warn('catalog browse error:', err.message);
     }
 
     res.json({ items, count: items.length, page });
@@ -92,67 +60,22 @@ router.get('/diagnostics', async (req, res) => {
   }
 });
 
-/** GET /api/stream/latest — latest episodes grid across WitAnime & OkAnime */
+/** GET /api/stream/latest — latest episodes grid from BLACK X server */
 router.get('/latest', async (req, res) => {
-  const source = (req.query.source || 'all').toLowerCase();
   try {
     let witaItems = [];
-    let okItems = [];
-
-    if (source === 'all' || source === 'witanime') {
-      try {
-        const w = await fetchLatest();
-        witaItems = (w || []).map((it) => ({
-          ...it,
-          source: 'witanime',
-          sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
-        }));
-      } catch (e) {
-        console.warn('witanime fetch latest note:', e.message);
-      }
+    try {
+      const w = await fetchLatest();
+      witaItems = (w || []).map((it) => ({
+        ...it,
+        source: 'witanime',
+        sourceLabel: 'سيرفر BLACK X'
+      }));
+    } catch (e) {
+      console.warn('fetch latest note:', e.message);
     }
 
-    if (source === 'all' || source === 'okanime') {
-      try {
-        const o = await okanimeService.getLatestEpisodes();
-        okItems = (o || []).map((it) => ({
-          ...it,
-          source: 'okanime',
-          sourceLabel: 'سيرفر BLACK X 2 (OkAnime)'
-        }));
-      } catch (e) {
-        console.warn('okanime fetch latest note:', e.message);
-      }
-    }
-
-    let combined = [];
-    if (source === 'okanime') {
-      combined = okItems;
-    } else if (source === 'witanime') {
-      combined = witaItems;
-    } else {
-      // Interleave WitAnime & OkAnime
-      const maxLen = Math.max(witaItems.length, okItems.length);
-      const seen = new Set();
-      for (let i = 0; i < maxLen; i++) {
-        if (i < okItems.length) {
-          const k = `ok:${okItems[i].slug}`;
-          if (!seen.has(k)) {
-            seen.add(k);
-            combined.push(okItems[i]);
-          }
-        }
-        if (i < witaItems.length) {
-          const k = `wita:${witaItems[i].slug}`;
-          if (!seen.has(k)) {
-            seen.add(k);
-            combined.push(witaItems[i]);
-          }
-        }
-      }
-    }
-
-    res.json({ items: combined, totalCount: combined.length });
+    res.json({ items: witaItems, totalCount: witaItems.length });
   } catch (err) {
     console.error('[stream/latest]', err.message);
     res.status(502).json({ error: 'upstream', message: 'Streaming source unreachable', items: [] });
@@ -162,46 +85,19 @@ router.get('/latest', async (req, res) => {
 /** GET /api/stream/search?q=&source= */
 router.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
-  const source = (req.query.source || 'all').toLowerCase();
   if (!q) return res.json({ items: [] });
   try {
     let witaResults = [];
-    let a3rbResults = [];
-    let okResults = [];
+    try {
+      const w = await searchShows(q);
+      witaResults = (w || []).map((it) => ({
+        ...it,
+        source: 'witanime',
+        sourceLabel: 'سيرفر BLACK X'
+      }));
+    } catch (_) {}
 
-    if (source === 'all' || source === 'witanime') {
-      try {
-        const w = await searchShows(q);
-        witaResults = (w || []).map((it) => ({
-          ...it,
-          source: 'witanime',
-          sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
-        }));
-      } catch (_) {}
-    }
-
-    if (source === 'all' || source === 'okanime') {
-      try {
-        const o = await okanimeService.search(q);
-        okResults = (o || []).map((it) => ({
-          ...it,
-          source: 'okanime',
-          sourceLabel: 'سيرفر BLACK X 2 (OkAnime)'
-        }));
-      } catch (_) {}
-    }
-
-    const seen = new Set();
-    const merged = [];
-    for (const item of [...okResults, ...witaResults]) {
-      const key = `${item.source || 'src'}:${item.slug}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        merged.push(item);
-      }
-    }
-
-    res.json({ items: merged, totalCount: merged.length });
+    res.json({ items: witaResults, totalCount: witaResults.length });
   } catch (err) {
     console.error('[stream/search]', err.message);
     res.status(502).json({ error: 'upstream', message: 'Streaming source unreachable', items: [] });
@@ -210,40 +106,17 @@ router.get('/search', async (req, res) => {
 
 /** GET /api/stream/show/:slug?source= — metadata + episode list */
 router.get('/show/:slug', async (req, res) => {
-  const { slug } = req.params;
-  const source = (req.query.source || '').toLowerCase();
+  const cleanSlug = req.params.slug.replace(/^(wita-|ok-)/, '');
 
   try {
     let show = null;
-
-    if (source === 'witanime' || slug.startsWith('wita-')) {
-      try {
-        show = await fetchShow(slug.replace(/^wita-/, ''));
-        if (show) {
-          show.source = 'witanime';
-          show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
-        }
-      } catch (_) {}
-    } else if (source === 'okanime' || slug.startsWith('ok-')) {
-      show = await okanimeService.getShow(slug.replace(/^ok-/, ''));
-    }
-
-    // If requested source didn't match or no source was specified, automatic resilient fallback
-    if (!show) {
-      try {
-        show = await okanimeService.getShow(slug);
-      } catch (_) {}
-
-      if (!show) {
-        try {
-          show = await fetchShow(slug);
-          if (show) {
-            show.source = 'witanime';
-            show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
-          }
-        } catch (_) {}
+    try {
+      show = await fetchShow(cleanSlug);
+      if (show) {
+        show.source = 'witanime';
+        show.sourceName = 'سيرفر BLACK X';
       }
-    }
+    } catch (_) {}
 
     if (!show) return res.status(404).json({ error: 'not_found', message: 'Show not found' });
     res.json({ show });
@@ -259,8 +132,7 @@ router.get('/show-servers/:slug', async (req, res) => {
   const cleanSlug = slug.replace(/^(wita-|ok-)/, '');
 
   const availableServers = [
-    { id: 'witanime', name: 'سيرفر BLACK X 1 (WitAnime)', icon: '👑', domain: 'witanime.site', available: true },
-    { id: 'okanime', name: 'سيرفر BLACK X 2 (OkAnime)', icon: '🔥', domain: 'ww3.okanime.xyz', available: true }
+    { id: 'witanime', name: 'سيرفر BLACK X', icon: '👑', domain: 'black-x.live', available: true }
   ];
 
   res.json({ slug: cleanSlug, servers: availableServers });
@@ -270,7 +142,6 @@ router.get('/show-servers/:slug', async (req, res) => {
 router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   const episode = Number(req.params.ep);
   const cleanSlug = req.params.slug.replace(/^(ok-|wita-)/, '');
-  const sourceParam = (req.query.source || '').toLowerCase();
 
   if (!Number.isInteger(episode) || episode < 1) {
     return res.status(400).json({ error: 'invalid_episode', message: 'Invalid episode number' });
@@ -278,23 +149,10 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
 
   try {
     let data = null;
-
-    if (sourceParam === 'okanime' || req.params.slug.startsWith('ok-')) {
-      data = await okanimeService.getEpisode(cleanSlug, episode);
-    } else {
-      // First try OkAnime for immediate high-speed servers
-      try {
-        data = await okanimeService.getEpisode(cleanSlug, episode);
-      } catch (_) {}
-
-      // If OkAnime didn't have live sources, try WitAnime
-      if (!data || !data.entries?.length) {
-        try {
-          data = await fetchEpisode(cleanSlug, episode);
-        } catch (err) {
-          console.warn('witanime fetchEpisode error:', err.message);
-        }
-      }
+    try {
+      data = await fetchEpisode(cleanSlug, episode);
+    } catch (err) {
+      console.warn('witanime fetchEpisode error:', err.message);
     }
 
     if (!data) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });
@@ -379,22 +237,7 @@ router.post('/resolve-download', async (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
   }
 
-  // If this is an OkAnime download entry
-  if (String(entryId).startsWith('dl-ok-')) {
-    try {
-      const okData = await okanimeService.getEpisode(String(slug).replace(/^ok-/, ''), ep);
-      const match = okData?.downloads?.find((d) => d.id === entryId);
-      if (match) {
-        return res.json({
-          source: {
-            url: match.downloadUrl,
-            directUrl: match.downloadUrl
-          }
-        });
-      }
-    } catch (_) {}
-  }
-
+  // Resolve download server via BLACK X server manifest
   try {
     const source = await resolveDownloadEntry(String(slug), ep, String(entryId));
     if (!source) return res.status(404).json({ error: 'not_found', message: 'Download server not found' });
@@ -419,24 +262,6 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
   try {
     const cloudHosts = [];
     const seenUrls = new Set();
-
-    // Check OkAnime download sources
-    try {
-      const okData = await okanimeService.getEpisode(slug, ep);
-      if (okData?.downloads?.length) {
-        for (const dl of okData.downloads) {
-          if (dl.downloadUrl) seenUrls.add(dl.downloadUrl);
-          cloudHosts.push({
-            id: dl.id,
-            server: dl.server || 'OkAnime Server',
-            quality: dl.quality || 'FHD',
-            url: dl.downloadUrl,
-            directUrl: dl.downloadUrl,
-            type: 'okanime_download'
-          });
-        }
-      }
-    } catch (_) {}
 
     // Check WitAnime downloads
     try {
@@ -542,7 +367,6 @@ const ALLOWED_HOSTS = [
   'vidmoly.to',
   'wahmi.org',
   'uptobox.com',
-  'okanime.xyz',
   'share4max.com',
   'uqload.is',
   'uqload.com',

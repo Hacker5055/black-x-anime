@@ -465,36 +465,21 @@ export default function Watch({ onOpenAuth }) {
             {/* Provider source switcher */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.74rem', color: 'var(--ink-dim)', fontWeight: 800 }}>
-                {lang === 'ar' ? 'سيرفر المصدر:' : 'Source Server:'}
+                {lang === 'ar' ? 'سيرفر البث:' : 'Server:'}
               </span>
-              {[
-                { id: 'witanime', label: '👑 WitAnime' },
-                { id: 'okanime', label: '🔥 OkAnime' }
-              ].map((s) => {
-                const activeSrc = sourceParam || show?.source || (slug.startsWith('ok-') ? 'okanime' : 'witanime');
-                const isActive = activeSrc === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => navigate(`/watch/${slug}/${episode}?source=${s.id}`)}
-                    style={{
-                      padding: '0.25rem 0.65rem',
-                      borderRadius: '8px',
-                      fontSize: '0.74rem',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      background: isActive
-                        ? 'linear-gradient(135deg, #22d3ee, #06b6d4)'
-                        : 'rgba(255,255,255,0.06)',
-                      color: isActive ? '#030d1a' : '#cbd5e1',
-                      border: isActive ? '1px solid transparent' : '1px solid rgba(255,255,255,0.12)'
-                    }}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
+              <span
+                style={{
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '8px',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #22d3ee, #06b6d4)',
+                  color: '#030d1a',
+                  border: '1px solid transparent'
+                }}
+              >
+                👑 BLACK X
+              </span>
             </div>
 
             {vipTier === 'free' && (
@@ -516,7 +501,7 @@ export default function Watch({ onOpenAuth }) {
                 <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
                 <span style={{ fontSize: '0.72rem', padding: '0.12rem 0.55rem', borderRadius: '8px', background: 'rgba(34, 211, 238, 0.14)', border: '1px solid rgba(34, 211, 238, 0.35)', color: '#22d3ee', fontWeight: 800 }}>
-                  {show?.sourceName || (sourceParam === 'okanime' ? '🔥 OkAnime' : '👑 WitAnime')}
+                  👑 BLACK X
                 </span>
               </div>
               <h1 className="watch-meta__title">
@@ -634,7 +619,7 @@ export default function Watch({ onOpenAuth }) {
                   <div className="wit-sec-header__right">
                     <span className="wit-sec-header__bar" />
                     <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
-                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (WitAnime API)' : 'Direct Episode Download Table'}
+                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (سيرفر BLACK X)' : 'Direct Episode Download Table (BLACK X Server)'}
                     </h3>
                   </div>
                   <button

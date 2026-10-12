@@ -36,17 +36,10 @@ export default function ShowDetail({ onOpenAuth }) {
   }, [slug]);
 
   const show = data?.show;
-  const activeSource = sourceParam || show?.source || (slug.startsWith('ok-') ? 'okanime' : 'witanime');
-  const effectiveSuffix = `?source=${activeSource}`;
+  const activeSource = 'witanime';
+  const effectiveSuffix = '';
 
-  const currentServerName = (
-    activeSource === 'okanime' ? '🔥 سيرفر BLACK X 2 (OkAnime)' :
-    '👑 سيرفر BLACK X 1 (WitAnime)'
-  );
-
-  const handleSwitchSource = (srcId) => {
-    navigate(`/show/${slug}?source=${srcId}`);
-  };
+  const currentServerName = '👑 سيرفر BLACK X';
 
   const color = useDominantColor(show?.poster, '#22d3ee');
 
@@ -142,7 +135,7 @@ export default function ShowDetail({ onOpenAuth }) {
           <div>
             <div className="hero__badge">
               <span className="hero__badge-dot" />
-              {show.sourceName || (sourceParam === 'okanime' ? '🔥 سيرفر BLACK X 2 (OkAnime)' : t('browse.sourceNote'))}
+              {show.sourceName || t('browse.sourceNote')}
             </div>
             <h1 style={{ fontSize: 'clamp(1.75rem, 3.6vw, 2.65rem)', margin: '0.35rem 0 0' }}>{title}</h1>
             {otherTitle && <p className="detail-title-ar">{otherTitle}</p>}
@@ -265,12 +258,12 @@ export default function ShowDetail({ onOpenAuth }) {
             <span style={{ fontSize: '1.35rem' }}>📡</span>
             <div>
               <div style={{ fontWeight: 900, fontSize: '0.98rem' }}>
-                {lang === 'ar' ? 'سيرفرات البث والمصادر المتاحة لهذا الأنمي (BLACK X Multi-Source):' : 'Available Streaming Servers & Sources:'}
+                {lang === 'ar' ? 'سيرفر البث الرسمي لهذا الأنمي (BLACK X):' : 'Official BLACK X Streaming Server:'}
               </div>
               <div style={{ fontSize: '0.76rem', color: 'var(--ink-dim)' }}>
                 {lang === 'ar'
-                  ? 'اختر سيرفر المشاهدة المفضل لديك لتصفح حلقاته والتشغيل المباشر بدقة FHD وسيرفرات سريعة'
-                  : 'Select your preferred server to stream episodes in FHD without ads'}
+                  ? 'تشغيل مباشر بدقة FHD 1080p وترجمة عربية وسيرفرات فائقة السرعة بدون إعلانات'
+                  : 'Stream episodes directly in FHD 1080p without ads'}
               </div>
             </div>
           </div>
@@ -286,51 +279,32 @@ export default function ShowDetail({ onOpenAuth }) {
               color: 'var(--cyan)'
             }}
           >
-            {lang === 'ar' ? `السيرفر الحالي: ${currentServerName}` : `Active Server: ${currentServerName}`}
+            {lang === 'ar' ? 'السيرفر: 👑 BLACK X' : 'Server: 👑 BLACK X'}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-          {[
-            { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1 (WitAnime)', labelEn: 'Server 1 (WitAnime)', sub: 'witanime.site' },
-            { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 2 (OkAnime)', labelEn: 'Server 2 (OkAnime)', sub: 'ww3.okanime.xyz' }
-          ].map((srv) => {
-            const active = activeSource === srv.id;
-            return (
-              <button
-                key={srv.id}
-                type="button"
-                onClick={() => handleSwitchSource(srv.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.55rem 1.15rem',
-                  borderRadius: '12px',
-                  fontWeight: 900,
-                  fontSize: '0.84rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.22s ease',
-                  background: active
-                    ? srv.id === 'okanime'
-                      ? 'linear-gradient(135deg, #f97316, #e11d48)'
-                      : 'linear-gradient(135deg, #06b6d4, #8b5cf6)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  color: active ? '#040d1a' : '#cbd5e1',
-                  border: active ? '1px solid transparent' : '1px solid rgba(255, 255, 255, 0.12)',
-                  boxShadow: active ? '0 4px 18px rgba(34, 211, 238, 0.35)' : 'none'
-                }}
-              >
-                <span>{srv.icon}</span>
-                <span>{lang === 'ar' ? srv.labelAr : srv.labelEn}</span>
-                {active && (
-                  <span style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.35)', padding: '0.15rem 0.45rem', borderRadius: '6px' }}>
-                    ✓ {lang === 'ar' ? 'مفعّل' : 'Active'}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.55rem 1.15rem',
+              borderRadius: '12px',
+              fontWeight: 900,
+              fontSize: '0.84rem',
+              background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
+              color: '#040d1a',
+              border: '1px solid transparent',
+              boxShadow: '0 4px 18px rgba(34, 211, 238, 0.35)'
+            }}
+          >
+            <span>👑</span>
+            <span>{lang === 'ar' ? 'سيرفر BLACK X' : 'BLACK X Server'}</span>
+            <span style={{ fontSize: '0.72rem', background: 'rgba(0,0,0,0.35)', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '6px' }}>
+              ✓ {lang === 'ar' ? 'مفعّل ورسمي' : 'Active & Verified'}
+            </span>
+          </div>
         </div>
       </section>
 

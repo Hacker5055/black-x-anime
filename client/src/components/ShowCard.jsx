@@ -47,12 +47,6 @@ function useLuxury3DTilt() {
 
   const handleMouseMove = (e) => handleMove(e.clientX, e.clientY);
 
-  const handleTouchMove = (e) => {
-    if (e.touches && e.touches[0]) {
-      handleMove(e.touches[0].clientX, e.touches[0].clientY);
-    }
-  };
-
   const handleReset = () => {
     const el = ref.current;
     if (!el) return;
@@ -66,9 +60,7 @@ function useLuxury3DTilt() {
   return {
     ref,
     onMouseMove: handleMouseMove,
-    onMouseLeave: handleReset,
-    onTouchMove: handleTouchMove,
-    onTouchEnd: handleReset
+    onMouseLeave: handleReset
   };
 }
 
@@ -85,9 +77,14 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
   const targetSlug = show.slug || String(show.titleEn || 'anime').toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const [subbed, setSubbed] = useState(() => isAnimeEpisodeAlertEnabled(targetSlug));
 
-  const handleClick = () => {
+  const handleClick = (e) => {
+    if (e && e.target && e.target.closest && e.target.closest('.wit-bell-btn')) return;
     if (onClick) return onClick(show);
-    navigate(`/show/${show.slug}`);
+    if (targetSlug) {
+      navigate(`/show/${targetSlug}`);
+    } else {
+      navigate('/trending');
+    }
   };
 
   const handleBellClick = async (e) => {
@@ -207,19 +204,30 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
     setSubbed(nextState);
   };
 
+  const handleClick = (e) => {
+    if (e && e.target && e.target.closest && e.target.closest('.wit-bell-btn')) return;
+    if (onClick) return onClick(item);
+    if (item.episode && item.slug) {
+      navigate(`/watch/${item.slug}/${item.episode}`);
+    } else if (item.slug) {
+      navigate(`/show/${item.slug}`);
+    } else {
+      navigate('/trending');
+    }
+  };
+
   return (
     <div className="bx-3d-stage" data-delay={delay % 5}>
       <article
         ref={tilt.ref}
         onMouseMove={tilt.onMouseMove}
         onMouseLeave={tilt.onMouseLeave}
-        onTouchMove={tilt.onTouchMove}
-        onTouchEnd={tilt.onTouchEnd}
         className="wit-ep-card bx-3d-card ep-tile reveal"
-        onClick={() => (onClick ? onClick(item) : navigate(`/watch/${item.slug}/${item.episode}`))}
+        onClick={handleClick}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && navigate(`/watch/${item.slug}/${item.episode}`)}
+        onKeyDown={(e) => e.key === 'Enter' && handleClick(e)}
+        style={{ cursor: 'pointer', touchAction: 'manipulation' }}
       >
         <div className="bx-3d-card__glare" aria-hidden="true" />
         <div className="bx-3d-card__rim" aria-hidden="true" />
@@ -278,6 +286,61 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
           <h3 className="wit-ep-card__title ep-tile__title" title={title}>
             {title}
           </h3>
+          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.45rem' }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (item.episode && item.slug) {
+                  navigate(`/watch/${item.slug}/${item.episode}`);
+                } else if (item.slug) {
+                  navigate(`/show/${item.slug}`);
+                } else {
+                  navigate('/trending');
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '0.4rem 0.6rem',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #22d3ee, #06b6d4)',
+                color: '#030d1a',
+                border: 'none',
+                fontWeight: 900,
+                fontSize: '0.74rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.3rem'
+              }}
+            >
+              <span>▶</span> {lang === 'ar' ? 'مشاهدة الحلقة' : 'Watch'}
+            </button>
+            {item.slug && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/show/${item.slug}`);
+                }}
+                style={{
+                  padding: '0.4rem 0.65rem',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#e4e4e7',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  fontWeight: 800,
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+                title={lang === 'ar' ? 'صفحة الأنمي وتفاصيله' : 'Anime details'}
+              >
+                {lang === 'ar' ? 'الأنمي' : 'Show'}
+              </button>
+            )}
+          </div>
         </div>
       </article>
     </div>
