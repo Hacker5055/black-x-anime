@@ -1,71 +1,103 @@
 /**
- * Manga, Novel & Tracking Controller
- * Bridges AniList GraphQL, MangaLik (مانجا ليك - https://mangalik.net/), and Scraper Engine.
+ * Manga & Novel Controller — BLACK X Multi-Server Edition (BLACK X 1 / 2 / 3)
  */
 
-import { anilistService } from '../services/anilist.service.js';
+import axios from 'axios';
 import { mangalikService } from '../services/mangalik.service.js';
+import { anilistService } from '../services/anilist.service.js';
 import { scraperService } from '../services/scraper.service.js';
-import { getUserId } from '../lib/api.js';
-import { db } from '../db.js';
+import { getPrisma } from '../lib/prisma.js';
+
+function getUpstreamHeadersForImage(decodedUrl) {
+  let referer = 'https://olympustaff.com/';
+  try {
+    const u = new URL(decodedUrl);
+    const host = u.hostname.toLowerCase();
+    if (host.includes('olympustaff')) {
+      referer = 'https://olympustaff.com/';
+    } else if (host.includes('3asq')) {
+      referer = 'https://3asq.online/';
+    } else if (host.includes('planeptune') || host.includes('compsci88') || host.includes('weebcentral')) {
+      referer = 'https://weebcentral.com/';
+    } else if (host.includes('mangadex')) {
+      referer = 'https://mangadex.org/';
+    } else if (host.includes('azorafly') || host.includes('azoramoon')) {
+      referer = 'https://azorafly.com/';
+    } else if (host.includes('lekmanga') || host.includes('manga-leko')) {
+      referer = 'https://lekmanga.online/';
+    } else if (host.includes('starzmanga')) {
+      referer = 'https://starzmanga.com/';
+    } else {
+      referer = `${u.protocol}//${u.host}/`;
+    }
+  } catch (_) {}
+
+  return {
+    Referer: referer,
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+  };
+}
 
 export const mangaNovelController = {
   /**
-   * GET /api/search?query=...&type=manga|novel
+   * GET /api/search?query=solo&type=all|manga|novel&server=all|bx1|bx2|bx3
    */
   async search(req, res) {
     try {
-      const { query = '', type = 'manga' } = req.query;
-      const cleanQuery = query.trim();
-
-      if (!cleanQuery) {
-        // Return latest trending releases from MangaLik
-        const trending = await mangalikService.getLatestFromHome(15);
-        return res.json({ success: true, total: trending.length, results: trending });
+      const { query, type = 'all', server = 'all' } = req.query;
+      if (!query) {
+        return res.status(400).json({ error: 'Query parameter is required' });
       }
 
-      if (type === 'novel') {
-        // Search Light Novels in AniList & Scraper
-        const [aniListNovels, scrapedNovels] = await Promise.allSettled([
-          anilistService.search(cleanQuery, 'NOVEL'),
-          scraperService.searchArabicNovels(cleanQuery)
-        ]);
+      const results = {
+        manga: [],
+        novels: [],
+        metadata: []
+      };
 
-        const novels = [
-          ...(scrapedNovels.status === 'fulfilled' ? scrapedNovels.value : []),
-          ...(aniListNovels.status === 'fulfilled' ? aniListNovels.value : [])
-        ];
+      const promises = [];
 
-        return res.json({
-          success: true,
-          type: 'novel',
-          total: novels.length,
-          results: novels
-        });
+      if (type === 'all' || type === 'manga') {
+        promises.push(
+          mangalikService
+            .searchArabicManga(query, String(server || 'all').toLowerCase())
+            .then((data) => {
+              results.manga = data;
+            })
+            .catch(() => {})
+        );
       }
 
-      // Default: Search Manga / Manhwa via MangaLik (https://mangalik.net/), AniList, and Arabic Scraper
-      const [mangaLikResults, aniListManga, scrapedManga] = await Promise.allSettled([
-        mangalikService.searchManga(cleanQuery, 12),
-        anilistService.search(cleanQuery, 'MANGA'),
-        scraperService.searchArabicManga(cleanQuery)
-      ]);
+      if ((type === 'all' || type === 'novel') && typeof scraperService?.searchNovels === 'function') {
+        promises.push(
+          Promise.resolve(scraperService.searchNovels(query))
+            .then((data) => {
+              results.novels = data || [];
+            })
+            .catch(() => {})
+        );
+      }
 
-      const results = [
-        ...(mangaLikResults.status === 'fulfilled' ? mangaLikResults.value : []),
-        ...(aniListManga.status === 'fulfilled' ? aniListManga.value : []),
-        ...(scrapedManga.status === 'fulfilled' ? scrapedManga.value : [])
-      ];
+      if (typeof anilistService?.searchMedia === 'function') {
+        promises.push(
+          Promise.resolve(anilistService.searchMedia(query))
+            .then((data) => {
+              results.metadata = data || [];
+            })
+            .catch(() => {})
+        );
+      }
 
+      await Promise.allSettled(promises);
       return res.json({
-        success: true,
-        type: 'manga',
-        total: results.length,
-        results
+        ...results,
+        results: results.manga
       });
-    } catch (err) {
-      console.error('[Search API Error]', err);
-      res.status(500).json({ error: 'search_failed', message: err.message });
+    } catch (error) {
+      console.error('Search Controller Error:', error);
+      return res.status(500).json({ error: 'Failed to execute search' });
     }
   },
 
@@ -75,101 +107,141 @@ export const mangaNovelController = {
   async getMangaDetails(req, res) {
     try {
       const { id } = req.params;
-
-      // Check if numeric (AniList ID)
-      if (/^\d+$/.test(id)) {
-        const details = await anilistService.getDetails(id);
-        if (!details) {
-          return res.status(404).json({ error: 'not_found', message: 'Manga not found' });
-        }
-
-        // Locate corresponding MangaLik Arabic ID
-        let mangaLikMatch = null;
-        try {
-          const mlResults = await mangalikService.searchManga(details.title, 3);
-          if (mlResults.length > 0) {
-            mangaLikMatch = mlResults[0].slug || mlResults[0].id;
-          }
-        } catch (_) {}
-
-        return res.json({
-          success: true,
-          data: {
-            ...details,
-            mangalikSlug: mangaLikMatch,
-            mangaSlayerId: mangaLikMatch,
-            mangaDexId: mangaLikMatch
-          }
-        });
+      const meta = await mangalikService.getSeriesMetadata(id);
+      if (meta) {
+        return res.json(meta);
       }
-
-      // If id is MangaLik slug or ID, fetch directly
-      const mlDetails = await mangalikService.getMangaDetails(id);
-      if (mlDetails) {
-        return res.json({
-          success: true,
-          data: {
-            ...mlDetails,
-            mangalikSlug: mlDetails.slug || mlDetails.id,
-            mangaSlayerId: mlDetails.slug || mlDetails.id,
-            mangaDexId: mlDetails.slug || mlDetails.id
-          }
-        });
+      if (!Number.isNaN(Number(id))) {
+        const details = await anilistService.getMediaDetails(Number(id));
+        return res.json(details);
       }
-
-      res.status(404).json({ error: 'not_found', message: 'Manga not found' });
-    } catch (err) {
-      res.status(500).json({ error: 'manga_details_failed', message: err.message });
+      return res.json({ id, message: 'Use /chapters to get chapters for this BLACK X Manga ID' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch manga details' });
     }
   },
 
   /**
-   * GET /api/manga/:id/chapters (Arabic only from MangaLik)
+   * GET /api/manga/:id/chapters?server=bx1|bx2|bx3
    */
   async getMangaChapters(req, res) {
     try {
       const { id } = req.params;
-      let targetId = id;
+      const preferredServer = String(req.query.server || '').trim().toLowerCase();
 
-      // If id is numeric (AniList), resolve to MangaLik ID
-      if (/^\d+$/.test(id)) {
-        const details = await anilistService.getDetails(id);
-        if (details) {
-          const mlResults = await mangalikService.searchManga(details.title, 1);
-          if (mlResults.length > 0) {
-            targetId = mlResults[0].slug || mlResults[0].id;
-          }
-        }
+      const handles = await mangalikService.resolveSeriesHandles(id);
+      const availableServers = [];
+      if (handles.bx1) {
+        availableServers.push({
+          id: 'bx1',
+          name: 'سيرفر BLACK X 1 (مانهوا عربية)',
+          labelEn: 'BLACK X 1 (AR Manhwa)'
+        });
+      }
+      if (handles.bx2) {
+        availableServers.push({
+          id: 'bx2',
+          name: 'سيرفر BLACK X 2 (مانجا عربية)',
+          labelEn: 'BLACK X 2 (AR Manga)'
+        });
+      }
+      if (handles.bx3) {
+        availableServers.push({
+          id: 'bx3',
+          name: 'سيرفر BLACK X 3 (المكتبة العالمية الشاملة)',
+          labelEn: 'BLACK X 3 (Global HD)'
+        });
       }
 
-      // Fetch Arabic chapters from MangaLik
-      const chapters = await mangalikService.getArabicChapters(targetId);
+      const chapters = await mangalikService.getArabicChapters(id, preferredServer);
+      const activeServer = chapters[0]?.server || preferredServer || availableServers[0]?.id || 'bx1';
 
       return res.json({
-        success: true,
-        source: 'mangalik',
-        sourceUrl: `https://mangalik.net/manga/${targetId}/`,
-        mangaId: id,
-        mangalikSlug: targetId,
-        total: chapters.length,
-        language: 'ar',
-        chapters
+        chapters,
+        availableServers,
+        activeServer
       });
-    } catch (err) {
-      res.status(500).json({ error: 'chapters_fetch_failed', message: err.message });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch manga chapters', chapters: [] });
     }
   },
 
   /**
-   * GET /api/manga/chapter/:chapter_id/pages
+   * GET /api/manga/chapter/:chapter_id/pages?server=bx1|bx2|bx3
    */
   async getChapterPages(req, res) {
     try {
       const { chapter_id } = req.params;
-      const pageData = await mangalikService.getChapterPages(chapter_id);
-      return res.json({ success: true, ...pageData });
-    } catch (err) {
-      res.status(500).json({ error: 'pages_fetch_failed', message: err.message });
+      const preferredServer = String(req.query.server || '').trim().toLowerCase();
+      const pages = await mangalikService.getArabicChapterPages(chapter_id, preferredServer);
+      return res.json({ pages });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch chapter pages', pages: [] });
+    }
+  },
+
+  /**
+   * GET /api/manga/chapter/:chapter_id/download?title=...&chapter=...&server=bx1|bx2|bx3
+   * Generates a standalone offline-ready BLACK X Chapter Reader HTML file containing all chapter pages.
+   */
+  async downloadChapter(req, res) {
+    try {
+      const { chapter_id } = req.params;
+      const preferredServer = String(req.query.server || '').trim().toLowerCase();
+      const title = String(req.query.title || 'BLACK X Manga').trim();
+      const chapterNum = String(req.query.chapter || '1').trim();
+
+      const pages = await mangalikService.getArabicChapterPages(chapter_id, preferredServer);
+      if (!pages || pages.length === 0) {
+        return res.status(404).json({ error: 'No pages found for this chapter' });
+      }
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.get('host');
+      const baseUrl = `${protocol}://${host}`;
+
+      const safeFilename = `BLACK-X-${title.replace(/[^a-zA-Z0-9\u0600-\u06FF_-]+/g, '-')}-Ch-${chapterNum}.html`;
+
+      const imgTags = pages
+        .map((p, idx) => {
+          const proxied = `${baseUrl}/api/proxy/image?url=${encodeURIComponent(p.url)}`;
+          return `<div class="page"><img src="${proxied}" data-direct="${p.url}" onerror="if(this.src!==this.dataset.direct)this.src=this.dataset.direct" alt="Page ${idx + 1}" loading="eager" /><span class="num">${idx + 1} / ${pages.length}</span></div>`;
+        })
+        .join('\n');
+
+      const htmlDoc = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title} - الفصل ${chapterNum} | BLACK X</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: system-ui, -apple-system, sans-serif; text-align: center; }
+    header { position: sticky; top: 0; z-index: 10; background: rgba(5,5,8,0.92); backdrop-filter: blur(12px); padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.12); display: flex; justify-content: space-between; align-items: center; }
+    .brand { font-weight: 900; letter-spacing: 1px; color: #fff; }
+    .container { max-width: 820px; margin: 0 auto; }
+    .page { position: relative; line-height: 0; background: #050508; }
+    .page img { width: 100%; height: auto; display: block; }
+    .num { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 12px; line-height: 1.2; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">BLACK X MANGA</div>
+    <div>${title} — الفصل ${chapterNum} (${pages.length} صفحة)</div>
+  </header>
+  <div class="container">
+    ${imgTags}
+  </div>
+</body>
+</html>`;
+
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.set('Content-Disposition', `attachment; filename="BLACK-X-Chapter-${encodeURIComponent(chapterNum)}.html"`);
+      return res.send(htmlDoc);
+    } catch (error) {
+      console.error('Chapter download error:', error.message);
+      return res.status(500).json({ error: 'Failed to download chapter' });
     }
   },
 
@@ -179,10 +251,13 @@ export const mangaNovelController = {
   async getNovelDetails(req, res) {
     try {
       const { id } = req.params;
-      const details = await scraperService.getNovelDetails(id);
-      return res.json({ success: true, data: details });
-    } catch (err) {
-      res.status(500).json({ error: 'novel_details_failed', message: err.message });
+      if (!Number.isNaN(Number(id))) {
+        const details = await anilistService.getMediaDetails(Number(id));
+        return res.json(details);
+      }
+      return res.json({ slug: id, message: 'Use /chapters to get novel chapters' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch novel details' });
     }
   },
 
@@ -192,10 +267,10 @@ export const mangaNovelController = {
   async getNovelChapters(req, res) {
     try {
       const { id } = req.params;
-      const data = await scraperService.getNovelChapters(id);
-      return res.json({ success: true, ...data });
-    } catch (err) {
-      res.status(500).json({ error: 'novel_chapters_failed', message: err.message });
+      const chapters = await mangalikService.getNovelChapters(id);
+      return res.json({ chapters });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch novel chapters', chapters: [] });
     }
   },
 
@@ -205,262 +280,191 @@ export const mangaNovelController = {
   async getNovelChapter(req, res) {
     try {
       const { chapter_id } = req.params;
-      const data = await scraperService.getNovelChapterContent(chapter_id);
-      return res.json({ success: true, ...data });
-    } catch (err) {
-      res.status(500).json({ error: 'novel_content_failed', message: err.message });
+      const content = await mangalikService.getNovelChapterContent(chapter_id);
+      return res.json(content);
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch novel chapter text' });
     }
   },
 
   /**
-   * User Tracking: POST /api/tracking/bookmark
-   */
-  async toggleBookmark(req, res) {
-    try {
-      const userId = getUserId(req) || req.body?.userId || 'guest_user';
-      const { mediaId, type = 'manga', title, coverImage } = req.body;
-
-      if (!mediaId) {
-        return res.status(400).json({ error: 'missing_id', message: 'mediaId is required' });
-      }
-
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS user_bookmarks (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          media_id TEXT NOT NULL,
-          type TEXT NOT NULL,
-          title TEXT,
-          cover_image TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id, media_id, type)
-        )
-      `);
-
-      const existing = db.prepare('SELECT id FROM user_bookmarks WHERE user_id = ? AND media_id = ? AND type = ?').get(userId, mediaId, type);
-
-      if (existing) {
-        db.prepare('DELETE FROM user_bookmarks WHERE id = ?').run(existing.id);
-        return res.json({ success: true, bookmarked: false, message: 'Removed from bookmarks' });
-      }
-
-      const id = `bm_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      db.prepare(`
-        INSERT INTO user_bookmarks (id, user_id, media_id, type, title, cover_image)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(id, userId, mediaId, type, title || '', coverImage || '');
-
-      return res.json({ success: true, bookmarked: true, message: 'Added to bookmarks' });
-    } catch (err) {
-      res.status(500).json({ error: 'bookmark_failed', message: err.message });
-    }
-  },
-
-  /**
-   * User Tracking: GET /api/tracking/bookmarks
-   */
-  async getBookmarks(req, res) {
-    try {
-      const userId = getUserId(req) || req.query?.userId || 'guest_user';
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS user_bookmarks (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          media_id TEXT NOT NULL,
-          type TEXT NOT NULL,
-          title TEXT,
-          cover_image TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id, media_id, type)
-        )
-      `);
-
-      const rows = db.prepare('SELECT * FROM user_bookmarks WHERE user_id = ? ORDER BY created_at DESC').all(userId);
-      return res.json({ success: true, bookmarks: rows });
-    } catch (err) {
-      res.status(500).json({ error: 'fetch_bookmarks_failed', message: err.message });
-    }
-  },
-
-  /**
-   * User Tracking: POST /api/tracking/history
-   */
-  async updateReadingHistory(req, res) {
-    try {
-      const userId = getUserId(req) || req.body?.userId || 'guest_user';
-      const { mediaId, chapterId, chapterNumber, page = 1, type = 'manga', title, coverImage } = req.body;
-
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS reading_history (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          media_id TEXT NOT NULL,
-          chapter_id TEXT NOT NULL,
-          chapter_number TEXT NOT NULL,
-          page INTEGER DEFAULT 1,
-          type TEXT NOT NULL,
-          title TEXT,
-          cover_image TEXT,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id, media_id)
-        )
-      `);
-
-      const id = `hist_${userId}_${mediaId}`;
-      db.prepare(`
-        INSERT INTO reading_history (id, user_id, media_id, chapter_id, chapter_number, page, type, title, cover_image, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, media_id) DO UPDATE SET
-          chapter_id = excluded.chapter_id,
-          chapter_number = excluded.chapter_number,
-          page = excluded.page,
-          title = COALESCE(excluded.title, reading_history.title),
-          cover_image = COALESCE(excluded.cover_image, reading_history.cover_image),
-          updated_at = CURRENT_TIMESTAMP
-      `).run(id, userId, mediaId, chapterId, chapterNumber, page, type, title || '', coverImage || '');
-
-      res.json({ success: true, message: 'Reading progress recorded' });
-    } catch (err) {
-      res.status(500).json({ error: 'history_failed', message: err.message });
-    }
-  },
-
-  /**
-   * User Tracking: GET /api/tracking/history
-   */
-  async getReadingHistory(req, res) {
-    try {
-      const userId = getUserId(req) || req.query?.userId || 'guest_user';
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS reading_history (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          media_id TEXT NOT NULL,
-          chapter_id TEXT NOT NULL,
-          chapter_number TEXT NOT NULL,
-          page INTEGER DEFAULT 1,
-          type TEXT NOT NULL,
-          title TEXT,
-          cover_image TEXT,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id, media_id)
-        )
-      `);
-
-      const rows = db.prepare('SELECT * FROM reading_history WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
-      return res.json({ success: true, history: rows });
-    } catch (err) {
-      res.status(500).json({ error: 'fetch_history_failed', message: err.message });
-    }
-  },
-
-  /**
-   * User Notifications: GET /api/tracking/notifications
-   */
-  async getNotifications(req, res) {
-    try {
-      const userId = getUserId(req) || req.query?.userId || 'guest_user';
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS user_notifications (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          title TEXT NOT NULL,
-          message TEXT NOT NULL,
-          link TEXT,
-          read INTEGER DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-
-      let rows = db.prepare('SELECT * FROM user_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(userId);
-      
-      // If empty, seed initial friendly release notification
-      if (rows.length === 0) {
-        const seedId = `notif_${Date.now()}`;
-        db.prepare(`
-          INSERT INTO user_notifications (id, user_id, title, message, link, read)
-          VALUES (?, ?, ?, ?, ?, 0)
-        `).run(
-          seedId,
-          userId,
-          '🔥 فصل جديد متوفر!',
-          'صدر الفصل الجديد مترجماً باللغة العربية الآن على منصة BLACK X.',
-          '/browse?category=manga'
-        );
-        rows = db.prepare('SELECT * FROM user_notifications WHERE user_id = ? ORDER BY created_at DESC').all(userId);
-      }
-
-      return res.json({ success: true, notifications: rows });
-    } catch (err) {
-      res.status(500).json({ error: 'fetch_notifications_failed', message: err.message });
-    }
-  },
-
-  /**
-   * Image Streaming Proxy (Bypasses Hotlink Protection, Referer blocks & CORS)
-   * GET /api/proxy/image?url=...
+   * GET /api/proxy/image?url=...&download=1&filename=...
+   * Host-aware image proxy for BLACK X 1 (OlympusStaff), BLACK X 2 (3asq), and BLACK X 3 (WeebCentral / MangaDex).
    */
   async imageProxy(req, res) {
     try {
-      let { url } = req.query;
-      if (!url) return res.status(400).send('URL is required');
-
-      // Unwrap nested proxy requests if present
-      while (url.includes('/api/proxy/image?url=')) {
-        const parts = url.split('/api/proxy/image?url=');
-        url = decodeURIComponent(parts[parts.length - 1]);
+      const { url, download, filename } = req.query;
+      if (!url) {
+        return res.status(400).send('URL is required');
       }
 
-      // If relative URL or invalid format, convert to valid URL or fail gracefully
-      let target;
-      try {
-        target = new URL(url);
-      } catch (_) {
-        return res.status(400).send('Invalid URL format');
-      }
+      const decodedUrl = decodeURIComponent(String(url)).trim().replace(/ /g, '%20');
+      const headers = getUpstreamHeadersForImage(decodedUrl);
 
-      const isMangalik = target.origin.includes('mangalik') || target.origin.includes('tempsolo');
-
-      const upstream = await fetch(target.href, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
-          'Referer': isMangalik ? 'https://mangalik.net/' : (target.origin || 'https://mangalik.net/'),
-          'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-          'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
-        },
-        signal: AbortSignal.timeout(12000)
+      const response = await axios.get(decodedUrl, {
+        responseType: 'arraybuffer',
+        headers,
+        timeout: 20000
       });
 
-      if (!upstream.ok) {
-        // Fallback manga panel SVG to prevent broken image icon in browser
-        res.setHeader('Content-Type', 'image/svg+xml');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.send(`
-          <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
-            <rect width="800" height="1100" fill="#0b0f19"/>
-            <rect x="30" y="30" width="740" height="1040" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="8 6"/>
-            <text x="400" y="480" fill="#10b981" font-size="28" font-family="sans-serif" font-weight="bold" text-anchor="middle">📖 BLACK X Manga Reader</text>
-            <text x="400" y="530" fill="#94a3b8" font-size="20" font-family="sans-serif" text-anchor="middle">الصفحة قيد المعالجة من خادم BLACK X المباشر</text>
-            <text x="400" y="580" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري التوجيه إلى خادم CDN المباشر...</text>
-          </svg>
-        `);
+      const contentType = response.headers['content-type'] || 'image/jpeg';
+      res.set('Content-Type', contentType);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Access-Control-Allow-Origin', '*');
+
+      if (download === '1' || download === 'true') {
+        const ext = contentType.includes('png')
+          ? 'png'
+          : contentType.includes('webp')
+          ? 'webp'
+          : 'jpg';
+        const safeName = String(filename || `black-x-page.${ext}`).replace(/[^a-zA-Z0-9._-]+/g, '-');
+        res.set('Content-Disposition', `attachment; filename="${safeName}"`);
       }
 
-      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'public, max-age=604800, immutable'); // 7 days cache
-      res.send(Buffer.from(await upstream.arrayBuffer()));
-    } catch (err) {
-      console.warn('[Image Proxy Warning]', err.message);
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.send(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
-          <rect width="800" height="1100" fill="#090d16"/>
-          <text x="400" y="520" fill="#10b981" font-size="24" font-family="sans-serif" text-anchor="middle">⚡ BLACK X - تحميل صفحة المانجا</text>
-          <text x="400" y="560" fill="#64748b" font-size="16" font-family="sans-serif" text-anchor="middle">جاري الاتصال بسيرفر BLACK X...</text>
-        </svg>
-      `);
+      return res.send(Buffer.from(response.data));
+    } catch (error) {
+      console.error('Image Proxy Error:', error.message);
+      const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400">
+        <rect width="100%" height="100%" fill="#05070e"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#38bdf8" font-family="sans-serif" font-size="20">BLACK X CDN — اضغط لإعادة المحاولة أو بدّل السيرفر</text>
+      </svg>`;
+      res.set('Content-Type', 'image/svg+xml');
+      return res.status(200).send(fallbackSvg);
+    }
+  },
+
+  /* =========================================================================
+   * USER TRACKING, BOOKMARKS, HISTORY & NOTIFICATIONS
+   * ========================================================================= */
+  async toggleBookmark(req, res) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { contentId, status = 'READING' } = req.body;
+      const prisma = getPrisma();
+
+      const existing = await prisma.userBookmark.findUnique({
+        where: { user_id_content_id: { user_id: userId, content_id: contentId } }
+      });
+
+      if (existing) {
+        await prisma.userBookmark.delete({ where: { id: existing.id } });
+        return res.json({ bookmarked: false, message: 'Bookmark removed' });
+      } else {
+        const bookmark = await prisma.userBookmark.create({
+          data: { user_id: userId, content_id: contentId, status }
+        });
+        return res.json({ bookmarked: true, bookmark });
+      }
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to toggle bookmark' });
+    }
+  },
+
+  async getBookmarks(req, res) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const prisma = getPrisma();
+      const bookmarks = await prisma.userBookmark.findMany({
+        where: { user_id: userId },
+        include: { content: true },
+        orderBy: { created_at: 'desc' }
+      });
+
+      return res.json({ bookmarks });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch bookmarks', bookmarks: [] });
+    }
+  },
+
+  async updateReadingHistory(req, res) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { contentId, chapterId, number, title, lastPage = 1, scrollPos = 0 } = req.body;
+      const prisma = getPrisma();
+
+      let chapter = await prisma.episodeChapter.findUnique({ where: { id: chapterId } });
+      if (!chapter && contentId) {
+        chapter = await prisma.episodeChapter.upsert({
+          where: { content_id_number: { content_id: contentId, number: Number(number) || 1 } },
+          update: { title },
+          create: {
+            content_id: contentId,
+            number: Number(number) || 1,
+            title: title || `Chapter ${number}`,
+            source_url: chapterId
+          }
+        });
+      }
+
+      if (!chapter) {
+        return res.status(404).json({ error: 'Chapter could not be resolved' });
+      }
+
+      const history = await prisma.readingHistory.upsert({
+        where: { user_id_chapter_id: { user_id: userId, chapter_id: chapter.id } },
+        update: {
+          last_page: Number(lastPage),
+          scroll_position: Number(scrollPos)
+        },
+        create: {
+          user_id: userId,
+          chapter_id: chapter.id,
+          last_page: Number(lastPage),
+          scroll_position: Number(scrollPos)
+        }
+      });
+
+      return res.json({ history });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to update reading history' });
+    }
+  },
+
+  async getReadingHistory(req, res) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const prisma = getPrisma();
+      const history = await prisma.readingHistory.findMany({
+        where: { user_id: userId },
+        include: {
+          chapter: {
+            include: { content: true }
+          }
+        },
+        orderBy: { updated_at: 'desc' },
+        take: 30
+      });
+
+      return res.json({ history });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch reading history', history: [] });
+    }
+  },
+
+  async getNotifications(req, res) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const prisma = getPrisma();
+      const notifications = await prisma.notification.findMany({
+        where: { user_id: userId },
+        orderBy: { created_at: 'desc' },
+        take: 20
+      });
+
+      return res.json({ notifications });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to fetch notifications', notifications: [] });
     }
   }
 };

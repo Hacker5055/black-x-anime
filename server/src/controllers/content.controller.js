@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { db, social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
-import { mangalikService } from '../services/mangalik.service.js';
+import { mangalikService, FLAGSHIP_MANGA_MAP } from '../services/mangalik.service.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
 export async function rateContent(req, res) {
@@ -143,14 +143,78 @@ export async function getMyRating(req, res) {
 }
 
 /**
- * GET /api/content/library?type=ALL|MANGA|MANHWA|NOVEL|BOOK&q=
+ * GET /api/content/library?type=ALL|MANGA|MANHWA&q=&server=all|bx1|bx2|bx3
  */
 export async function getLibrary(req, res) {
   try {
     ensureSocialTables();
-    const type = String(req.query.type || 'ALL').trim();
+    const type = String(req.query.type || 'ALL').trim().toUpperCase();
     const q = String(req.query.q || '').trim();
-    const items = social.getLibraryItems(type, q);
+    const server = String(req.query.server || 'all').trim().toLowerCase();
+
+    // Base curated flagship library items
+    let items = social.getLibraryItems(type, q).map((it) => {
+      const f = FLAGSHIP_MANGA_MAP[it.id];
+      const availableServers = [];
+      if (f?.osSlug) availableServers.push('bx1');
+      if (f?.asqSlug) availableServers.push('bx2');
+      if (f?.wcSeriesId) availableServers.push('bx3');
+      if (availableServers.length === 0) availableServers.push('bx1', 'bx2', 'bx3');
+      return {
+        ...it,
+        source: availableServers.includes('bx1')
+          ? 'BLACK X 1'
+          : availableServers.includes('bx2')
+          ? 'BLACK X 2'
+          : 'BLACK X 3',
+        availableServers
+      };
+    });
+
+    if (server !== 'all') {
+      items = items.filter((it) => Array.isArray(it.availableServers) && it.availableServers.includes(server));
+    }
+
+    // Dynamically enrich with live catalogs from BLACK X 1 (OlympusStaff) & BLACK X 2 (3asq)
+    if (!q) {
+      const dynamicTasks = [];
+      if (server === 'all' || server === 'bx1') {
+        dynamicTasks.push(mangalikService.getOlympusCatalog(1));
+      }
+      if (server === 'all' || server === 'bx2') {
+        dynamicTasks.push(mangalikService.get3asqCatalog());
+      }
+      const settled = await Promise.allSettled(dynamicTasks);
+      const existingTitles = new Set(items.map((i) => String(i.title_en || '').toLowerCase().trim()));
+      const mappedOsSlugs = new Set(
+        Object.values(FLAGSHIP_MANGA_MAP)
+          .map((f) => f.osSlug)
+          .filter(Boolean)
+      );
+      const mappedAsqSlugs = new Set(
+        Object.values(FLAGSHIP_MANGA_MAP)
+          .map((f) => f.asqSlug)
+          .filter(Boolean)
+      );
+
+      for (const resTask of settled) {
+        if (resTask.status === 'fulfilled' && Array.isArray(resTask.value)) {
+          for (const dyn of resTask.value) {
+            if (type !== 'ALL' && dyn.type !== type) continue;
+            const rawSlug = dyn.id.replace(/^(os|asq|wc):/, '');
+            if (mappedOsSlugs.has(rawSlug) || mappedAsqSlugs.has(rawSlug)) continue;
+            const normTitle = String(dyn.title_en || '').toLowerCase().trim();
+            if (existingTitles.has(normTitle)) continue;
+            existingTitles.add(normTitle);
+            items.push({
+              ...dyn,
+              availableServers: [dyn.server || 'bx1']
+            });
+          }
+        }
+      }
+    }
+
     return res.json({ success: true, items });
   } catch (err) {
     console.error('getLibrary error:', err);
@@ -159,50 +223,61 @@ export async function getLibrary(req, res) {
 }
 
 /**
- * GET /api/content/library/:id
+ * GET /api/content/library/:id?server=bx1|bx2|bx3
  */
 export async function getLibraryItemDetail(req, res) {
   try {
     ensureSocialTables();
     const { id } = req.params;
-    const item = social.getLibraryItem(id);
+    const preferredServer = String(req.query.server || '').trim().toLowerCase();
+
+    let item = social.getLibraryItem(id);
+    if (!item) {
+      item = await mangalikService.getSeriesMetadata(id);
+    }
     if (!item) return res.status(404).json({ success: false, message: 'Item not found' });
-    
-    // Fetch genuine Arabic chapters from MangaLik
+
+    const handles = await mangalikService.resolveSeriesHandles(id);
+    const availableServers = [];
+    if (handles.bx1) {
+      availableServers.push({ id: 'bx1', name: 'سيرفر BLACK X 1 (مانهوا عربية)', labelEn: 'BLACK X 1 (AR Manhwa)' });
+    }
+    if (handles.bx2) {
+      availableServers.push({ id: 'bx2', name: 'سيرفر BLACK X 2 (مانجا عربية)', labelEn: 'BLACK X 2 (AR Manga)' });
+    }
+    if (handles.bx3) {
+      availableServers.push({ id: 'bx3', name: 'سيرفر BLACK X 3 (المكتبة العالمية الشاملة)', labelEn: 'BLACK X 3 (Global HD)' });
+    }
+
     let chapters = [];
+    let activeServer = preferredServer || (availableServers[0]?.id ?? 'bx1');
     try {
-      const liveChapters = await mangalikService.getArabicChapters(id);
+      const liveChapters = await mangalikService.getArabicChapters(id, preferredServer);
       if (liveChapters && liveChapters.length > 0) {
+        activeServer = liveChapters[0].server || activeServer;
         chapters = liveChapters.map((c) => ({
           number: c.chapterNumber || c.slug,
           chapterId: c.chapterId,
           title: c.title || `الفصل ${c.chapterNumber}`,
           url: c.url,
           slug: c.slug,
+          server: c.server || activeServer,
           releaseDate: c.releaseDate || '2026',
           scanlationGroup: c.scanlationGroup || 'سيرفرات BLACK X الرسمية'
         }));
       }
     } catch (_) {}
 
-    // Fallback if network fails
-    if (chapters.length === 0) {
-      const totalChapters = item.chapters_count || 25;
-      chapters = Array.from({ length: Math.min(totalChapters, 60) }, (_, i) => {
-        const num = totalChapters - i;
-        return {
-          number: String(num),
-          chapterId: `${id}:${num}`,
-          title: `الفصل ${num}`,
-          url: `/manga/${id}/${num}`,
-          slug: String(num),
-          releaseDate: '2026',
-          scanlationGroup: 'سيرفرات BLACK X الرسمية'
-        };
-      });
-    }
-
-    return res.json({ success: true, item: { ...item, chapters } });
+    return res.json({
+      success: true,
+      item: {
+        ...item,
+        chapters_count: chapters.length || item.chapters_count || 1,
+        availableServers,
+        activeServer,
+        chapters
+      }
+    });
   } catch (err) {
     console.error('getLibraryItemDetail error:', err);
     return res.status(500).json({ success: false, error: 'failed_to_fetch_item' });

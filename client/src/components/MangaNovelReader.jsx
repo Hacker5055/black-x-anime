@@ -10,10 +10,20 @@ import { LiquidLoader } from './Loading.jsx';
  * Features edge-to-edge vertical webtoon view, tap-to-toggle immersion,
  * auto-scroll hands-free reading, mobile bottom navigation dock, and chapter drawer.
  */
-export default function MangaNovelReader({ item, type = 'manga', onClose, onProgressUpdated }) {
+export default function MangaNovelReader({
+  item,
+  type = 'manga',
+  initialChapter = null,
+  initialChapterId = null,
+  initialServer = '',
+  onClose,
+  onProgressUpdated
+}) {
   const { lang } = useI18n();
   const [details, setDetails] = useState(null);
   const [chapters, setChapters] = useState([]);
+  const [availableServers, setAvailableServers] = useState([]);
+  const [activeServer, setActiveServer] = useState(initialServer || 'bx1');
   const [loadingDetails, setLoadingDetails] = useState(true);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState(null);
@@ -50,14 +60,54 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
   const readerRootRef = useRef(null);
   const autoScrollTimerRef = useRef(null);
 
-  const mediaId = item?.mangalikSlug || item?.slug || item?.mangaSlayerId || item?.mangaDexId || item?.id || 'solo-swordmaster';
+  const mediaId = item?.mangalikSlug || item?.slug || item?.mangaSlayerId || item?.mangaDexId || item?.id || 'solo-leveling';
   const isNovel = type === 'novel' || item?.type === 'NOVEL' || item?.format === 'NOVEL';
 
-  // Load Details & Chapters
+  // Load Details & Chapters (with server selection)
+  const fetchChaptersForServer = useCallback(
+    async (srv = initialServer, targetChapterNum = initialChapter, targetChapterId = initialChapterId) => {
+      setLoadingChapters(true);
+      try {
+        const mangaSlug = item?.mangalikSlug || item?.slug || item?.id || 'solo-leveling';
+        const qStr = srv ? `?server=${encodeURIComponent(srv)}` : '';
+        const chRes = await api.get(`/api/manga/${encodeURIComponent(mangaSlug)}/chapters${qStr}`);
+        const list = chRes?.chapters || [];
+        setChapters(list);
+        if (Array.isArray(chRes?.availableServers) && chRes.availableServers.length > 0) {
+          setAvailableServers(chRes.availableServers);
+        }
+        if (chRes?.activeServer) {
+          setActiveServer(chRes.activeServer);
+        }
+        if (list.length > 0) {
+          let match = null;
+          if (targetChapterId) {
+            match = list.find((c) => String(c.chapterId) === String(targetChapterId));
+          }
+          if (!match && targetChapterNum != null) {
+            match = list.find((c) => String(c.chapterNumber) === String(targetChapterNum));
+          }
+          // Default to Chapter 1 (last item in descending chapter list) when launching fresh
+          setSelectedChapter(match || list[list.length - 1] || list[0]);
+        }
+      } catch (err) {
+        console.error('[Reader Chapters Error]', err);
+      } finally {
+        setLoadingChapters(false);
+      }
+    },
+    [item, initialServer, initialChapter, initialChapterId]
+  );
+
+  const handleSwitchServer = (newSrv) => {
+    setActiveServer(newSrv);
+    const currentNum = selectedChapter?.chapterNumber || initialChapter;
+    fetchChaptersForServer(newSrv, currentNum, null);
+  };
+
   useEffect(() => {
     let alive = true;
     setLoadingDetails(true);
-    setLoadingChapters(true);
 
     const loadData = async () => {
       try {
@@ -83,34 +133,14 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
             }
           }
         } else {
-          // Manga / Manhwa details & chapters from MangaLik
-          const mangaSlug = item?.mangalikSlug || item?.slug || item?.id || item?.mangaSlayerId || 'solo-swordmaster';
-          const [detRes, chRes] = await Promise.allSettled([
-            api.get(`/api/manga/${mangaSlug}`),
-            api.get(`/api/manga/${mangaSlug}/chapters`)
-          ]);
-
-          if (alive) {
-            if (detRes.status === 'fulfilled' && detRes.value?.data) {
-              setDetails(detRes.value.data);
-            } else {
-              setDetails(item);
-            }
-
-            if (chRes.status === 'fulfilled' && chRes.value?.chapters) {
-              setChapters(chRes.value.chapters);
-              if (chRes.value.chapters.length > 0) {
-                setSelectedChapter(chRes.value.chapters[0]);
-              }
-            }
-          }
+          setDetails(item);
+          await fetchChaptersForServer(initialServer, initialChapter, initialChapterId);
         }
       } catch (err) {
         console.error('[Reader Load Error]', err);
       } finally {
         if (alive) {
           setLoadingDetails(false);
-          setLoadingChapters(false);
         }
       }
     };
@@ -128,7 +158,7 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
       .catch(() => {});
 
     return () => { alive = false; };
-  }, [mediaId, isNovel]);
+  }, [mediaId, isNovel, fetchChaptersForServer, initialServer, initialChapter, initialChapterId, item]);
 
   // When chapter changes, fetch its content
   useEffect(() => {
@@ -150,7 +180,8 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
       setLoadingPages(true);
       setCurrentPageIndex(0);
       setAutoScrollActive(false);
-      api.get(`/api/manga/chapter/${encodeURIComponent(selectedChapter.chapterId)}/pages`)
+      const srvParam = activeServer ? `?server=${encodeURIComponent(activeServer)}` : '';
+      api.get(`/api/manga/chapter/${encodeURIComponent(selectedChapter.chapterId)}/pages${srvParam}`)
         .then((res) => {
           if (alive && res?.pages) {
             setChapterPages(res.pages);
@@ -449,8 +480,59 @@ export default function MangaNovelReader({ item, type = 'manga', onClose, onProg
           </div>
         </div>
 
-        {/* Right: Quick Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+        {/* Right: Quick Actions & Server Switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap' }}>
+          {!isNovel && availableServers.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              {availableServers.map((srv) => (
+                <button
+                  key={srv.id}
+                  type="button"
+                  onClick={() => handleSwitchServer(srv.id)}
+                  style={{
+                    background: activeServer === srv.id ? '#fff' : 'rgba(255, 255, 255, 0.08)',
+                    border: activeServer === srv.id ? '1px solid #fff' : '1px solid rgba(255, 255, 255, 0.14)',
+                    color: activeServer === srv.id ? '#000' : '#cbd5e1',
+                    borderRadius: '16px',
+                    padding: '0.28rem 0.55rem',
+                    fontSize: '0.7rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {srv.id === 'bx1' ? 'BLACK X 1' : srv.id === 'bx2' ? 'BLACK X 2' : 'BLACK X 3'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!isNovel && selectedChapter && (
+            <a
+              href={`/api/manga/chapter/${encodeURIComponent(selectedChapter.chapterId)}/download?title=${encodeURIComponent(
+                displayTitle || 'Manga'
+              )}&chapter=${encodeURIComponent(selectedChapter.chapterNumber || '1')}&server=${encodeURIComponent(
+                activeServer || ''
+              )}`}
+              download
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#fff',
+                borderRadius: '20px',
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.74rem',
+                fontWeight: 800,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}
+              title="تحميل الفصل كاملاً"
+            >
+              ⬇ تحميل
+            </a>
+          )}
+
           <button
             type="button"
             onClick={handleToggleBookmark}

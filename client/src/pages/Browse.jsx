@@ -16,6 +16,7 @@ export default function Browse() {
   const initialFilter = searchParams.get('filter') || 'ALL';
 
   const [filter, setFilter] = useState(initialFilter); // ALL | MANHWA | MANGA | TOP_RATED | ONGOING | COMPLETED
+  const [serverFilter, setServerFilter] = useState('all'); // all | bx1 | bx2 | bx3
   const [query, setQuery] = useState(initialQ);
   const [libraryItems, setLibraryItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,10 +27,20 @@ export default function Browse() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [loadingItemDetails, setLoadingItemDetails] = useState(false);
   const [itemChapters, setItemChapters] = useState([]);
+  const [itemServers, setItemServers] = useState([]);
+  const [modalServer, setModalServer] = useState('bx1');
   const [loggingRead, setLoggingRead] = useState(false);
 
   // Active item and chapter for reading in MangaNovelReader
   const [readerItem, setReaderItem] = useState(null);
+
+  // Server tabs configuration (Exclusive BLACK X Branding)
+  const serverTabs = [
+    { id: 'all', labelAr: '🌐 جميع سيرفرات BLACK X', labelEn: '🌐 All BLACK X Servers' },
+    { id: 'bx1', labelAr: '⚡ سيرفر BLACK X 1 (مانهوا عربية)', labelEn: '⚡ BLACK X 1 (AR Manhwa)' },
+    { id: 'bx2', labelAr: '📖 سيرفر BLACK X 2 (مانجا عربية)', labelEn: '📖 BLACK X 2 (AR Manga)' },
+    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (المكتبة الشاملة)', labelEn: '👑 BLACK X 3 (Global HD)' }
+  ];
 
   // Filter chips configuration
   const filterChips = [
@@ -42,26 +53,27 @@ export default function Browse() {
   ];
 
   // Fetch trending items from server
-  const loadLibrary = useCallback(async () => {
+  const loadLibrary = useCallback(async (srv = serverFilter) => {
     setLoading(true);
     try {
-      const res = await api.get('/api/content/library?type=ALL');
+      const res = await api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(srv)}`);
       setLibraryItems(res.items || []);
     } catch {
       setLibraryItems([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [serverFilter]);
 
   useEffect(() => {
-    loadLibrary();
-  }, [loadLibrary]);
+    loadLibrary(serverFilter);
+  }, [loadLibrary, serverFilter]);
 
-  // Live search against MangaLik or local library
-  const handleSearch = async (e) => {
+  // Live search against BLACK X 1 / 2 / 3 engines
+  const handleSearch = async (e, srvOverride) => {
     e?.preventDefault?.();
     const q = query.trim();
+    const activeSrv = srvOverride || serverFilter;
     if (!q) {
       setLiveSearchResults(null);
       return;
@@ -69,24 +81,32 @@ export default function Browse() {
 
     setSearchingLive(true);
     try {
-      const res = await api.get(`/api/search?query=${encodeURIComponent(q)}&type=manga`);
-      if (res?.results && res.results.length > 0) {
-        const mapped = res.results.map((r, i) => ({
-          id: r.mangalikSlug || r.slug || `res_${i}`,
-          mangalikSlug: r.mangalikSlug || r.slug,
-          title_ar: r.arabicTitle || r.title || r.romajiTitle,
-          title_en: r.englishTitle || r.romajiTitle || r.title || 'Manga',
+      const res = await api.get(
+        `/api/search?query=${encodeURIComponent(q)}&type=manga&server=${encodeURIComponent(activeSrv)}`
+      );
+      const rawList = res?.manga || res?.results || [];
+      if (rawList.length > 0) {
+        const mapped = rawList.map((r, i) => ({
+          id: r.id || r.mangalikSlug || r.slug || `res_${i}`,
+          mangalikSlug: r.mangalikSlug || r.id || r.slug,
+          title_ar: r.title_ar || r.arabicTitle || r.title || r.romajiTitle,
+          title_en: r.title_en || r.englishTitle || r.romajiTitle || r.title || 'Manga',
           type: (r.type || 'MANHWA').toUpperCase(),
-          poster: r.coverUrl || r.poster || 'https://io.mangalik.net/wp-content/app/lekmanganet/512.png',
-          banner: r.coverUrl || r.banner,
-          author: r.author || 'سيرفرات BLACK X',
+          poster:
+            r.poster ||
+            r.coverImage ||
+            r.coverUrl ||
+            'https://olympustaff.com/images/manga/thumbnail_b05147568d52f22c663c084172fc0dac.png',
+          banner: r.banner || r.poster || r.coverImage || r.coverUrl,
+          author: r.author || r.source || 'سيرفرات BLACK X',
           rating: r.rating || (r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.8'),
-          description_ar: r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر BLACK X.',
-          description_en: r.description || 'Full Arabic translated chapters on BLACK X.',
-          chapters_count: r.chaptersCount || 25,
-          status: r.status || 'مستمرة',
-          genres: r.genres || ['أكشن', 'مترجم عربي'],
-          source: 'blackx'
+          description_ar: r.description_ar || r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر BLACK X.',
+          description_en: r.description_en || r.description || 'Full high-resolution chapters on BLACK X.',
+          chapters_count: r.chapters_count || r.chaptersCount || 100,
+          status: r.status || 'مستمر',
+          genres: r.genres || ['أكشن', 'فانتازيا'],
+          source: r.source || 'BLACK X',
+          server: r.server || 'bx1'
         }));
         setLiveSearchResults(mapped);
       } else {
@@ -142,20 +162,27 @@ export default function Browse() {
     );
   }, [libraryItems]);
 
-  // Open chapter list details modal
-  const openItemDetails = async (item) => {
+  // Open chapter list details modal (supports switching servers)
+  const openItemDetails = async (item, preferredSrv = '') => {
     setSelectedItem(item);
     setLoadingItemDetails(true);
     setItemChapters([]);
 
+    const itemId = item.id || item.mangalikSlug;
+    const srvParam = preferredSrv || (serverFilter !== 'all' ? serverFilter : item.server || '');
+
     try {
-      const res = await api.get(`/api/content/library/${encodeURIComponent(item.id || item.mangalikSlug)}`);
-      if (res?.item?.chapters) {
-        setItemChapters(res.item.chapters);
+      const qStr = srvParam ? `?server=${encodeURIComponent(srvParam)}` : '';
+      const res = await api.get(`/api/content/library/${encodeURIComponent(itemId)}${qStr}`);
+      if (res?.item) {
+        setItemChapters(res.item.chapters || []);
+        setItemServers(res.item.availableServers || []);
+        setModalServer(res.item.activeServer || srvParam || 'bx1');
       } else {
-        // Fallback to manga chapters route
-        const chRes = await api.get(`/api/manga/${encodeURIComponent(item.id || item.mangalikSlug)}/chapters`);
+        const chRes = await api.get(`/api/manga/${encodeURIComponent(itemId)}/chapters${qStr}`);
         setItemChapters(chRes.chapters || []);
+        setItemServers(chRes.availableServers || []);
+        setModalServer(chRes.activeServer || srvParam || 'bx1');
       }
     } catch {
       setItemChapters([]);
@@ -165,13 +192,15 @@ export default function Browse() {
   };
 
   // Launch reader directly
-  const launchReader = (item, chapterNum = null) => {
+  const launchReader = (item, chapterNum = null, chapterId = null, srv = null) => {
     setReaderItem({
       ...item,
       mangalikSlug: item.mangalikSlug || item.id,
       slug: item.mangalikSlug || item.id,
       title: item.title_ar || item.title_en,
-      initialChapterNumber: chapterNum
+      initialChapterNumber: chapterNum,
+      initialChapterId: chapterId,
+      initialServer: srv || modalServer || item.server || (serverFilter !== 'all' ? serverFilter : '')
     });
     setSelectedItem(null);
   };
@@ -449,6 +478,51 @@ export default function Browse() {
         >
           ⚡ {lang === 'ar' ? 'قراءة مباشرة عالية الدقة' : 'Direct High-Res Arabic Reader'}
         </span>
+      </div>
+
+      {/* Multi-Server Switcher Bar (BLACK X 1 / 2 / 3) */}
+      <div
+        className="reveal"
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          flexWrap: 'wrap',
+          marginBottom: '1rem',
+          alignItems: 'center',
+          padding: '0.75rem 1rem',
+          borderRadius: '14px',
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)'
+        }}
+      >
+        <span style={{ fontSize: '0.84rem', color: 'var(--ink-dim)', marginInlineEnd: '0.35rem', fontWeight: 800 }}>
+          {lang === 'ar' ? 'سيرفر القراءة:' : 'Server:'}
+        </span>
+        {serverTabs.map((srv) => (
+          <button
+            key={srv.id}
+            type="button"
+            onClick={() => {
+              setServerFilter(srv.id);
+              if (liveSearchResults !== null && query.trim()) {
+                handleSearch(null, srv.id);
+              }
+            }}
+            style={{
+              padding: '0.42rem 0.9rem',
+              borderRadius: '99px',
+              fontSize: '0.82rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              border: serverFilter === srv.id ? '1px solid #fff' : '1px solid rgba(255, 255, 255, 0.12)',
+              background: serverFilter === srv.id ? '#fff' : 'rgba(255, 255, 255, 0.04)',
+              color: serverFilter === srv.id ? '#000' : '#e2e8f0'
+            }}
+          >
+            {lang === 'ar' ? srv.labelAr : srv.labelEn}
+          </button>
+        ))}
       </div>
 
       {/* Filter Chips Pills */}
@@ -818,6 +892,46 @@ export default function Browse() {
                 </button>
               </div>
 
+              {/* Server Switcher inside Details Modal */}
+              {itemServers.length > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.45rem',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    marginBottom: '1rem',
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                >
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--ink-dim)' }}>
+                    {lang === 'ar' ? 'اختر السيرفر:' : 'Select Server:'}
+                  </span>
+                  {itemServers.map((srv) => (
+                    <button
+                      key={srv.id}
+                      type="button"
+                      onClick={() => openItemDetails(selectedItem, srv.id)}
+                      style={{
+                        padding: '0.32rem 0.75rem',
+                        borderRadius: '99px',
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        border: modalServer === srv.id ? '1px solid #fff' : '1px solid rgba(255,255,255,0.15)',
+                        background: modalServer === srv.id ? '#fff' : 'rgba(255,255,255,0.06)',
+                        color: modalServer === srv.id ? '#000' : '#f1f5f9'
+                      }}
+                    >
+                      {lang === 'ar' ? srv.name : srv.labelEn}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Chapters list */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>
@@ -859,38 +973,58 @@ export default function Browse() {
                     paddingInlineEnd: '0.4rem'
                   }}
                 >
-                  {itemChapters.map((ch, idx) => (
-                    <div
-                      key={ch.chapterId || ch.slug || ch.number || idx}
-                      onClick={() => launchReader(selectedItem, ch.number || ch.slug)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.6rem 0.85rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        border: '1px solid rgba(255, 255, 255, 0.06)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(34, 211, 238, 0.15)';
-                        e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
-                      }}
-                    >
-                      <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#f8fafc' }}>
-                        {ch.title || `الفصل ${ch.number || ch.slug}`}
-                      </span>
-                      <span style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 600 }}>
-                        اقرأ 📖
-                      </span>
-                    </div>
-                  ))}
+                  {itemChapters.map((ch, idx) => {
+                    const chNum = ch.number || ch.slug;
+                    const chId = ch.chapterId || `${selectedItem.id}:${chNum}`;
+                    const dlUrl = `/api/manga/chapter/${encodeURIComponent(chId)}/download?title=${encodeURIComponent(
+                      selectedItem.title_ar || selectedItem.title_en || 'Manga'
+                    )}&chapter=${encodeURIComponent(chNum)}&server=${encodeURIComponent(modalServer || '')}`;
+                    return (
+                      <div
+                        key={chId || idx}
+                        onClick={() => launchReader(selectedItem, chNum, chId, modalServer)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.6rem 0.85rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255, 255, 255, 0.04)',
+                          border: '1px solid rgba(255, 255, 255, 0.06)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          gap: '0.5rem'
+                        }}
+                      >
+                        <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#f8fafc' }}>
+                          {ch.title || `الفصل ${chNum}`}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <a
+                            href={dlUrl}
+                            onClick={(e) => e.stopPropagation()}
+                            download
+                            style={{
+                              fontSize: '0.74rem',
+                              color: '#e2e8f0',
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              border: '1px solid rgba(255, 255, 255, 0.16)',
+                              padding: '0.22rem 0.55rem',
+                              borderRadius: '6px',
+                              textDecoration: 'none',
+                              fontWeight: 700
+                            }}
+                            title={lang === 'ar' ? 'تحميل الفصل للقراءة بدون إنترنت' : 'Download Chapter'}
+                          >
+                            ⬇ {lang === 'ar' ? 'تحميل' : 'DL'}
+                          </a>
+                          <span style={{ fontSize: '0.78rem', color: '#fff', fontWeight: 700 }}>
+                            {lang === 'ar' ? 'اقرأ 📖' : 'Read 📖'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -904,6 +1038,8 @@ export default function Browse() {
           item={readerItem}
           type="manga"
           initialChapter={readerItem.initialChapterNumber}
+          initialChapterId={readerItem.initialChapterId}
+          initialServer={readerItem.initialServer}
           onClose={() => setReaderItem(null)}
         />
       )}
