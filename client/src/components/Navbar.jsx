@@ -167,47 +167,54 @@ export default function Navbar({ onOpenAuth }) {
                   </div>
                 </button>
                 {menuOpen && (
-                  <div className="user-menu" style={{ insetInlineEnd: 0, top: 'calc(100% + 10px)' }}>
-                    <div className="user-menu__header">
-                      <div className="user-menu__name">{user.displayName}</div>
-                      <div className="user-menu__role">
-                        {isDev ? '👑 مطور BLACK X' : `@${user.username || 'user'}`}
+                  <>
+                    <div
+                      className="mobile-dropdown-backdrop"
+                      onClick={() => setMenuOpen(false)}
+                      aria-hidden="true"
+                    />
+                    <div className="user-menu bx-user-menu">
+                      <div className="user-menu__header">
+                        <div className="user-menu__name">{user.displayName}</div>
+                        <div className="user-menu__role">
+                          {isDev ? '👑 مطور BLACK X' : `@${user.username || 'user'}`}
+                        </div>
+                        <UserBadges badges={user.badges} size="sm" />
                       </div>
-                      <UserBadges badges={user.badges} size="sm" />
-                    </div>
-                    <div className="user-menu__divider" />
-                    <button
-                      type="button"
-                      className="user-menu__item"
-                      onClick={() => { setMenuOpen(false); navigate('/profile'); }}
-                    >
-                      <span>👤</span> {t('nav.profile')}
-                    </button>
-                    {(user.role === 'developer' || user.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user.isDeveloper) && (
+                      <div className="user-menu__divider" />
                       <button
                         type="button"
                         className="user-menu__item"
-                        style={{ color: '#f472b6', fontWeight: 700 }}
-                        onClick={() => { setMenuOpen(false); navigate('/profile?tab=developer'); }}
+                        onClick={() => { setMenuOpen(false); navigate('/profile'); }}
                       >
-                        <span>👑</span> {t('nav.devConsole')}
+                        <span>👤</span> {t('nav.profile')}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="user-menu__item"
-                      onClick={() => { setMenuOpen(false); navigate('/mylist'); }}
-                    >
-                      <span>♥</span> {t('nav.mylist')}
-                    </button>
-                    <button
-                      type="button"
-                      className="user-menu__item user-menu__item--danger"
-                      onClick={async () => { setMenuOpen(false); await logout(); navigate('/'); }}
-                    >
-                      <span>⏻</span> {t('nav.logout')}
-                    </button>
-                  </div>
+                      {(user.role === 'developer' || user.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user.isDeveloper) && (
+                        <button
+                          type="button"
+                          className="user-menu__item"
+                          style={{ color: '#f472b6', fontWeight: 700 }}
+                          onClick={() => { setMenuOpen(false); navigate('/profile?tab=developer'); }}
+                        >
+                          <span>👑</span> {t('nav.devConsole')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="user-menu__item"
+                        onClick={() => { setMenuOpen(false); navigate('/mylist'); }}
+                      >
+                        <span>♥</span> {t('nav.mylist')}
+                      </button>
+                      <button
+                        type="button"
+                        className="user-menu__item user-menu__item--danger"
+                        onClick={async () => { setMenuOpen(false); await logout(); navigate('/'); }}
+                      >
+                        <span>⏻</span> {t('nav.logout')}
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             )}

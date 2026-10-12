@@ -38,7 +38,7 @@ animeScraperRouter.get('/get-episodes/:s_id', async (req, res) => {
 });
 
 // GET /get-episode-dl/:s_id and /get-episode-dl/:s_id/:ep
-animeScraperRouter.get('/get-episode-dl/:s_id/:ep?', async (req, res) => {
+animeScraperRouter.get(['/get-episode-dl/:s_id', '/get-episode-dl/:s_id/:ep'], async (req, res) => {
   try {
     const ep = req.params.ep || req.query.ep || 1;
     const results = await scraperGetEpisodeDl(req.params.s_id, ep);

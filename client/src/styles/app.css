@@ -587,16 +587,17 @@ html[lang='ar'] .user-chip {
 
 .user-menu {
   position: absolute;
-  top: calc(var(--nav-h) - 8px);
-  inset-inline-end: max(1rem, calc((100vw - 1240px) / 2));
-  width: 230px;
+  top: calc(100% + 10px);
+  inset-inline-end: 0;
+  width: 240px;
   padding: 0.55rem;
-  z-index: 70;
+  z-index: 120;
   border-radius: var(--radius-md);
-  background: rgba(13, 17, 30, 0.92);
+  background: rgba(13, 17, 30, 0.96);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.85);
   animation: menuIn 0.28s var(--ease-spring);
 }
 
@@ -5735,6 +5736,7 @@ body {
   opacity: 0;
   transition: opacity 0.25s ease;
   z-index: 4;
+  pointer-events: none !important;
 }
 
 .bx-3d-card:hover .wit-anime-card__hover {
@@ -5758,6 +5760,7 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
   transform: scale(0.82);
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none !important;
 }
 
 .bx-3d-card:hover .bx-3d-orb {
@@ -6501,6 +6504,121 @@ body {
     display: none;
   }
 }
+
+/* ============================================================================
+   COMPREHENSIVE MOBILE RESPONSIVENESS: NOTIFICATIONS & PROFILE FIXES
+   ============================================================================ */
+
+/* Mobile backdrop for dropdowns */
+.mobile-dropdown-backdrop {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .mobile-dropdown-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1000;
+  }
+}
+
+/* Notification Dropdown Positioning */
+.bx-notif-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  inset-inline-end: 0;
+  width: min(360px, 90vw);
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(8, 11, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+  z-index: 120;
+}
+
+@media (max-width: 768px) {
+  .bx-notif-dropdown {
+    position: fixed !important;
+    top: 72px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: 440px !important;
+    margin: 0 auto !important;
+    max-height: calc(85vh - 72px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    z-index: 1050 !important;
+    border-radius: 20px !important;
+    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .user-menu,
+  .bx-user-menu {
+    position: fixed !important;
+    top: 72px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: 320px !important;
+    margin-inline-start: 0 !important;
+    margin-inline-end: auto !important;
+    max-height: calc(85vh - 72px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    z-index: 1050 !important;
+    border-radius: 18px !important;
+    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .wit-prof-card {
+    padding: 1.25rem 1rem 1.15rem !important;
+  }
+  .wit-prof-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+}
+
+/* Ensure anime cards tap smoothly on mobile without lag or decoration lock */
+.wit-ep-card,
+.wit-anime-card,
+.wit-ranked-card,
+article.glass {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: none), (max-width: 768px) {
+  .bx-3d-stage {
+    perspective: none !important;
+  }
+  .bx-3d-card {
+    transform: none !important;
+  }
+  .bx-3d-float-z2,
+  .bx-3d-float-z3 {
+    transform: none !important;
+  }
+  .bx-3d-card__glare,
+  .bx-3d-card__rim,
+  .bx-3d-card__vignette,
+  .wit-badge,
+  .wit-badge--status,
+  .wit-badge--type,
+  .wit-ep-card__vip,
+  .wit-badge--ep,
+  .wit-ep-card__num,
+  .wit-anime-card__hover {
+    pointer-events: none !important;
+  }
+}
+
 
 
 
