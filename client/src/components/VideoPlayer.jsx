@@ -284,8 +284,9 @@ export default function VideoPlayer({
             title={title}
             allow="autoplay *; encrypted-media *; picture-in-picture *; fullscreen *"
             allowFullScreen
+            frameBorder="0"
+            scrolling="no"
             referrerPolicy="no-referrer"
-            sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-orientation-lock"
           />
         ) : (
           <video
