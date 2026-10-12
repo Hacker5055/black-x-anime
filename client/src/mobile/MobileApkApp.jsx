@@ -40,16 +40,17 @@ const GENRE_CHIPS = [
 ];
 
 const SERVER_LABELS = {
-  PD: { nameAr: '👑 PixelDrain Ultra', nameEn: '👑 PixelDrain Ultra', badge: 'أسرع سيرفر • مباشر', fast: true },
-  SF: { nameAr: '⚡ FireStream CDN', nameEn: '⚡ FireStream CDN', badge: 'بث سحابي فائق', fast: true },
+  PD_DEV: { nameAr: '👑 PixelDrain Ultra', nameEn: '👑 PixelDrain Ultra', badge: 'أسرع سيرفر • مضاد للحجب', fast: true },
+  PD_NET: { nameAr: '⚡ PixelDrain Mirror', nameEn: '⚡ PixelDrain Mirror', badge: 'سيرفر بديل فائق السرعة', fast: true },
+  SF: { nameAr: '🔥 FireStream CDN', nameEn: '🔥 FireStream CDN', badge: 'بث سحابي مباشر MP4', fast: true },
+  AA: { nameAr: '⚡ BLACK X Cloud', nameEn: '⚡ BLACK X Cloud', badge: 'سيرفر عالمي مباشر', fast: true },
+  PD: { nameAr: '🌐 PixelDrain Global', nameEn: '🌐 PixelDrain Global', badge: 'مباشر • MP4', fast: true },
   MF2: { nameAr: '🚀 MediaFire Pro', nameEn: '🚀 MediaFire Pro', badge: 'مباشر • MP4', fast: true },
   MF: { nameAr: '🚀 MediaFire Cloud', nameEn: '🚀 MediaFire Cloud', badge: 'مباشر • MP4', fast: true },
-  ST: { nameAr: '🎬 StreamTape HD', nameEn: '🎬 StreamTape HD', badge: 'احتياطي HD', fast: false },
-  KF: { nameAr: '🔥 KrakenFiles', nameEn: '🔥 KrakenFiles', badge: 'مباشر', fast: false },
-  US: { nameAr: '🌐 UpStream', nameEn: '🌐 UpStream', badge: 'مباشر', fast: false }
+  ST: { nameAr: '🎬 StreamTape HD', nameEn: '🎬 StreamTape HD', badge: 'احتياطي HD', fast: false }
 };
 
-const SERVER_PRIORITY = { PD: 1, SF: 2, MF2: 3, MF: 4, KF: 5, US: 6, ST: 7 };
+const SERVER_PRIORITY = { PD_DEV: 1, SF: 2, PD_NET: 3, AA: 4, MF2: 5, MF: 6, PD: 7, ST: 8 };
 
 async function sha256Browser(text) {
   const data = new TextEncoder().encode(String(text || ''));
@@ -122,46 +123,169 @@ function formatAnimeHit(hit) {
 }
 
 /**
- * Resolve intermediate server link (PD, SF, MF, MF2, ST) directly inside the Android APK
- * Works natively on-device via CapacitorHttp or via backend proxy fallback
+ * Fetch HTML from non-CORS hosts using Capacitor's native CapacitorHttp.get plugin
+ * without patching window.fetch, falling back to standard fetch
+ */
+async function nativeGetHtml(url) {
+  try {
+    const capHttp = window.Capacitor?.Plugins?.CapacitorHttp;
+    if (capHttp?.get) {
+      const res = await capHttp.get({
+        url,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+      });
+      if (res?.data && typeof res.data === 'string') return res.data;
+    }
+  } catch (_) {}
+  const r = await fetch(url);
+  return r.text();
+}
+
+function decodeAllAnimeHex(hexStr) {
+  const s = String(hexStr || '').replace(/^--/, '');
+  let out = '';
+  for (let i = 0; i < s.length; i += 2) {
+    const byte = parseInt(s.slice(i, i + 2), 16);
+    if (!Number.isNaN(byte)) out += String.fromCharCode(byte ^ 56);
+  }
+  return out;
+}
+
+async function fetchAllAnimeDirectServers(animeTitle, epNum) {
+  try {
+    const gqlSearch = `query($search: SearchInput, $limit: Int) { shows(search: $search, limit: $limit) { edges { _id name englishName } } }`;
+    const searchUrl = `https://api.allanime.day/api?variables=${encodeURIComponent(
+      JSON.stringify({ search: { query: animeTitle, allowAdult: false, allowUnknown: false }, limit: 5 })
+    )}&query=${encodeURIComponent(gqlSearch)}`;
+
+    const capHttp = window.Capacitor?.Plugins?.CapacitorHttp;
+    let searchData = null;
+    if (capHttp?.get) {
+      const r = await capHttp.get({
+        url: searchUrl,
+        headers: { Referer: 'https://allmanga.to', 'User-Agent': 'Mozilla/5.0' }
+      });
+      searchData = typeof r?.data === 'string' ? JSON.parse(r.data) : r?.data;
+    } else {
+      searchData = await fetch(searchUrl).then((r) => r.json());
+    }
+    const showId = searchData?.data?.shows?.edges?.[0]?._id;
+    if (!showId) return [];
+
+    const gqlEp = `query($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) { episode(showId: $showId, translationType: $translationType, episodeString: $episodeString) { sourceUrls } }`;
+    const epUrl = `https://api.allanime.day/api?variables=${encodeURIComponent(
+      JSON.stringify({ showId, translationType: 'sub', episodeString: String(epNum) })
+    )}&query=${encodeURIComponent(gqlEp)}`;
+
+    let epData = null;
+    if (capHttp?.get) {
+      const r = await capHttp.get({
+        url: epUrl,
+        headers: { Referer: 'https://allmanga.to', 'User-Agent': 'Mozilla/5.0' }
+      });
+      epData = typeof r?.data === 'string' ? JSON.parse(r.data) : r?.data;
+    } else {
+      epData = await fetch(epUrl).then((r) => r.json());
+    }
+
+    const sources = epData?.data?.episode?.sourceUrls || [];
+    const results = [];
+    for (const src of sources) {
+      if (!src?.sourceUrl?.startsWith('--')) continue;
+      const decoded = decodeAllAnimeHex(src.sourceUrl);
+      if (decoded.startsWith('http') && decoded.includes('.mp4')) {
+        results.push({ name: 'AA', quality: '1080p', link: decoded, directResolved: true, visible: true });
+      } else if (decoded.startsWith('/apivtwo/clock')) {
+        const clockId = decoded.split('id=')[1];
+        if (!clockId) continue;
+        const clockUrl = `https://allanime.day/apivtwo/clock.json?id=${encodeURIComponent(clockId)}`;
+        let clockJson = null;
+        if (capHttp?.get) {
+          const cr = await capHttp.get({
+            url: clockUrl,
+            headers: { Referer: 'https://allmanga.to', 'User-Agent': 'Mozilla/5.0' }
+          });
+          clockJson = typeof cr?.data === 'string' ? JSON.parse(cr.data) : cr?.data;
+        }
+        for (const l of clockJson?.links || []) {
+          if (l?.link && l.mp4) {
+            results.push({
+              name: 'AA',
+              quality: l.resolutionStr || '1080p',
+              link: l.link,
+              directResolved: true,
+              visible: true
+            });
+          }
+        }
+      }
+    }
+    return results.slice(0, 2);
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Resolve intermediate server link (PD_DEV, PD_NET, PD, SF, MF, MF2, ST, AA) directly inside the Android APK
  */
 async function resolveMobileVideoUrl(code, rawLink) {
   const c = String(code || '').toUpperCase().trim();
   const link = String(rawLink || '').trim();
   if (!link) return null;
 
-  // 1. PixelDrain (PD) — Instant 0ms direct video API
-  if (c === 'PD' || link.includes('pixeldrain.com')) {
-    const m = link.match(/pixeldrain\.com\/(?:u|api\/file)\/([A-Za-z0-9_-]+)/i);
-    if (m?.[1]) return `https://pixeldrain.com/api/file/${m[1]}`;
+  // Already a direct resolved link (e.g. pixeldrain.dev/api/file/..., downloadXXXX.mediafire.com, firestream encodings, etc.)
+  if (
+    link.includes('/api/file/') ||
+    link.includes('encodings/') ||
+    link.includes('fast4speed.rsvp') ||
+    /https?:\/\/download\d*\.mediafire\.com\//i.test(link)
+  ) {
+    return link;
+  }
+
+  // 1. PixelDrain (PD_DEV / PD_NET / PD) — Multi-Domain Anti-Block Direct MP4 API
+  if (c.startsWith('PD') || link.includes('pixeldrain.')) {
+    const m = link.match(/pixeldrain\.[a-z]+\/(?:u|api\/file)\/([A-Za-z0-9_-]+)/i);
+    if (m?.[1]) {
+      if (c === 'PD_NET') return `https://pixeldrain.net/api/file/${m[1]}`;
+      if (c === 'PD') return `https://pixeldrain.com/api/file/${m[1]}`;
+      return `https://pixeldrain.dev/api/file/${m[1]}`;
+    }
   }
 
   // 2. FireStream (SF)
   if (c === 'SF' || link.includes('firestream.to')) {
     try {
-      const html = await fetch(link).then((r) => r.text());
+      const html = await nativeGetHtml(link);
       const m = html.match(/"downloadUrl"\s*:\s*"([^"]+)"/);
       if (m?.[1]) return m[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
     } catch (_) {}
+    return null;
   }
 
   // 3. MediaFire (MF / MF2)
   if (c === 'MF' || c === 'MF2' || link.includes('mediafire.com')) {
     try {
-      const html = await fetch(link).then((r) => r.text());
+      const html = await nativeGetHtml(link);
       const direct =
-        html.match(/href="(https?:\/\/download\d+\.mediafire\.com\/[^"]+)"/i)?.[1] ||
-        html.match(/aria-label="Download file"\s+href="(https?:\/\/[^"]+)"/i)?.[1];
+        html.match(/href="(https?:\/\/download\d*\.mediafire\.com\/[^"]+)"/i)?.[1] ||
+        html.match(/aria-label="Download file"[^>]*href="(https?:\/\/[^"]+)"/i)?.[1];
       if (direct) return direct;
       const scrambled = html.match(/data-scrambled-url="([^"]+)"/i)?.[1];
       if (scrambled) return atob(scrambled);
     } catch (_) {}
+    return null;
   }
 
   // 4. StreamTape (ST)
   if (c === 'ST' || link.includes('streamtape.com')) {
     try {
-      const html = await fetch(link).then((r) => r.text());
+      const html = await nativeGetHtml(link);
       const w1 = "document.getElementById('norobotlink').innerHTML = '";
       const i1 = html.indexOf(w1);
       if (i1 !== -1) {
@@ -174,9 +298,10 @@ async function resolveMobileVideoUrl(code, rawLink) {
         }
       }
     } catch (_) {}
+    return null;
   }
 
-  return link;
+  return link.endsWith('.mp4') ? link : null;
 }
 
 export default function MobileApkApp() {
@@ -260,6 +385,10 @@ export default function MobileApkApp() {
   const [authPassword, setAuthPassword] = useState('');
   const [authDisplayName, setAuthDisplayName] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
+  const [googleSheetOpen, setGoogleSheetOpen] = useState(false);
+  const [googleEmailInput, setGoogleEmailInput] = useState('');
+  const [googleNameInput, setGoogleNameInput] = useState('');
+  const [syncedGoogleAccounts, setSyncedGoogleAccounts] = useState([]);
   const [toastMsg, setToastMsg] = useState('');
 
   const showToast = useCallback((msg) => {
@@ -471,27 +600,216 @@ export default function MobileApkApp() {
     []
   );
 
-  // Pull latest cloud state when user is logged in
+  // Pull latest cloud state when user is logged in (and keep syncing every 8 seconds with Website)
+  const pullCloudUserState = useCallback(async (activeUser) => {
+    if (!activeUser?.username && !activeUser?.email) return;
+    const keyToTry = activeUser.email
+      ? cleanCloudKey('email', activeUser.email)
+      : cleanCloudKey('user', activeUser.username);
+    try {
+      let res = await fetch(`${BX_SETTINGS_BASE}/${keyToTry}?key=${BX_KEY}`);
+      if (!res.ok && activeUser.username) {
+        res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('user', activeUser.username)}?key=${BX_KEY}`);
+      }
+      if (!res.ok) return;
+      const doc = await res.json();
+      const raw = doc?.fields?.json?.stringValue;
+      if (!raw) return;
+      const cloud = JSON.parse(raw);
+
+      if (cloud.displayName || cloud.photoUrl) {
+        setUser((prev) => {
+          if (!prev) return prev;
+          const updated = {
+            ...prev,
+            displayName: cloud.displayName || prev.displayName,
+            photoUrl: cloud.photoUrl || prev.photoUrl,
+            role: cloud.role || prev.role
+          };
+          localStorage.setItem('bx_mob_user', JSON.stringify(updated));
+          return updated;
+        });
+      }
+
+      if (Array.isArray(cloud.favorites) && cloud.favorites.length > 0) {
+        setFavorites((prev) => {
+          const mergedMap = new Map();
+          for (const item of [...cloud.favorites, ...prev]) {
+            const k = item.objectID || item.slug;
+            if (k && !mergedMap.has(k)) mergedMap.set(k, item);
+          }
+          const merged = Array.from(mergedMap.values());
+          localStorage.setItem('bx_mob_favorites', JSON.stringify(merged));
+          return merged;
+        });
+      }
+
+      if (Array.isArray(cloud.progress) && cloud.progress.length > 0) {
+        setWatchHistory((prev) => {
+          const mergedMap = new Map();
+          for (const item of [...cloud.progress, ...prev]) {
+            const k = item.objectID || item.slug;
+            if (k && !mergedMap.has(k)) mergedMap.set(k, item);
+          }
+          const merged = Array.from(mergedMap.values()).slice(0, 60);
+          localStorage.setItem('bx_mob_history', JSON.stringify(merged));
+          return merged;
+        });
+      }
+    } catch (_) {}
+  }, []);
+
   useEffect(() => {
-    if (!user?.username) return;
-    const uKey = cleanCloudKey('user', user.username);
-    fetch(`${BX_SETTINGS_BASE}/${uKey}?key=${BX_KEY}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((doc) => {
-        const raw = doc?.fields?.json?.stringValue;
-        if (!raw) return;
-        const cloud = JSON.parse(raw);
-        if (Array.isArray(cloud.favorites) && cloud.favorites.length > 0 && favorites.length === 0) {
-          setFavorites(cloud.favorites);
-          localStorage.setItem('bx_mob_favorites', JSON.stringify(cloud.favorites));
+    if (!user) return;
+    pullCloudUserState(user);
+    const interval = setInterval(() => pullCloudUserState(user), 8000);
+    return () => clearInterval(interval);
+  }, [user?.username, user?.email, pullCloudUserState]);
+
+  // Load synced Google accounts from Website Cloud Index
+  const loadSyncedGoogleAccounts = useCallback(async () => {
+    try {
+      const [idxRes, devRes] = await Promise.all([
+        fetch(`${BX_SETTINGS_BASE}/google_accounts_index?key=${BX_KEY}`).catch(() => null),
+        fetch(`${BX_SETTINGS_BASE}/developer_profile?key=${BX_KEY}`).catch(() => null)
+      ]);
+      let accounts = [];
+      if (idxRes && idxRes.ok) {
+        const d = await idxRes.json();
+        const raw = d?.fields?.json?.stringValue;
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) accounts = parsed;
         }
-        if (Array.isArray(cloud.progress) && cloud.progress.length > 0 && watchHistory.length === 0) {
-          setWatchHistory(cloud.progress);
-          localStorage.setItem('bx_mob_history', JSON.stringify(cloud.progress));
+      }
+      let devName = 'Developer MZ';
+      let devPhoto = '';
+      if (devRes && devRes.ok) {
+        const dd = await devRes.json();
+        devName = dd?.fields?.displayName?.stringValue || devName;
+        devPhoto = dd?.fields?.photoUrl?.stringValue || dd?.fields?.photoURL?.stringValue || '';
+      }
+      if (!accounts.some((a) => a.email?.toLowerCase() === 'mz0970mmz@gmail.com')) {
+        accounts.unshift({
+          email: 'mz0970mmz@gmail.com',
+          username: 'developer',
+          displayName: devName,
+          photoUrl: devPhoto,
+          role: 'developer'
+        });
+      }
+      setSyncedGoogleAccounts(accounts);
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    loadSyncedGoogleAccounts();
+  }, [loadSyncedGoogleAccounts]);
+
+  // Sign in with Google Account & Sync 100% with Website Database
+  const handleGoogleAccountSync = useCallback(
+    async (emailAddr, customDisplayName = '') => {
+      const cleanEmail = String(emailAddr || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        showToast(lang === 'ar' ? 'يرجى إدخال بريد Google صحيح (@gmail.com)' : 'Please enter a valid Google email');
+        return;
+      }
+      setAuthBusy(true);
+      try {
+        const eKey = cleanCloudKey('email', cleanEmail);
+        const isDev = cleanEmail === 'mz0970mmz@gmail.com';
+        let cloudUser = null;
+
+        const res = await fetch(`${BX_SETTINGS_BASE}/${eKey}?key=${BX_KEY}`);
+        if (res.ok) {
+          const doc = await res.json();
+          const raw = doc?.fields?.json?.stringValue;
+          if (raw) cloudUser = JSON.parse(raw);
         }
-      })
-      .catch(() => {});
-  }, [user?.username]);
+
+        if (!cloudUser && isDev) {
+          const uRes = await fetch(`${BX_SETTINGS_BASE}/user_developer?key=${BX_KEY}`);
+          if (uRes.ok) {
+            const uDoc = await uRes.json();
+            const uRaw = uDoc?.fields?.json?.stringValue;
+            if (uRaw) cloudUser = JSON.parse(uRaw);
+          }
+        }
+
+        const baseUsername = (cloudUser?.username || (isDev ? 'developer' : cleanEmail.split('@')[0]))
+          .toLowerCase()
+          .replace(/[^a-z0-9_.-]/g, '');
+
+        const mergedFavs = Array.isArray(cloudUser?.favorites) && cloudUser.favorites.length
+          ? [...cloudUser.favorites, ...favorites.filter((f) => !cloudUser.favorites.some((cf) => (cf.objectID || cf.slug) === (f.objectID || f.slug)))]
+          : favorites;
+
+        const mergedHist = Array.isArray(cloudUser?.progress) && cloudUser.progress.length
+          ? [...cloudUser.progress, ...watchHistory.filter((h) => !cloudUser.progress.some((ch) => (ch.objectID || ch.slug) === (h.objectID || h.slug)))]
+          : watchHistory;
+
+        const loggedUser = {
+          id: cloudUser?.id || `google_${Date.now()}`,
+          username: baseUsername,
+          email: cleanEmail,
+          displayName:
+            customDisplayName.trim() ||
+            cloudUser?.displayName ||
+            (isDev ? 'Developer MZ' : cleanEmail.split('@')[0]),
+          photoUrl: cloudUser?.photoUrl || '',
+          avatarColor: cloudUser?.avatarColor || '#ffffff',
+          role: isDev || cloudUser?.role === 'developer' ? 'developer' : 'user',
+          vipStatus: 'VIP Monarch',
+          isGoogleAccount: true
+        };
+
+        setUser(loggedUser);
+        localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
+        setFavorites(mergedFavs);
+        localStorage.setItem('bx_mob_favorites', JSON.stringify(mergedFavs));
+        setWatchHistory(mergedHist);
+        localStorage.setItem('bx_mob_history', JSON.stringify(mergedHist));
+
+        await syncUserStateToCloud(loggedUser, mergedFavs, mergedHist);
+
+        // Also update google_accounts_index on cloud
+        const updatedAccounts = [
+          {
+            email: loggedUser.email,
+            username: loggedUser.username,
+            displayName: loggedUser.displayName,
+            photoUrl: loggedUser.photoUrl,
+            role: loggedUser.role,
+            updatedAt: new Date().toISOString()
+          },
+          ...syncedGoogleAccounts.filter((x) => x.email?.toLowerCase() !== loggedUser.email)
+        ].slice(0, 50);
+        setSyncedGoogleAccounts(updatedAccounts);
+        fetch(`${BX_SETTINGS_BASE}/google_accounts_index?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(updatedAccounts) },
+              updatedAt: { stringValue: new Date().toISOString() }
+            }
+          })
+        }).catch(() => {});
+
+        setGoogleSheetOpen(false);
+        showToast(
+          lang === 'ar'
+            ? `✓ تم تسجيل الدخول بحساب Google (${loggedUser.displayName}) ومزامنته مع الموقع!`
+            : `✓ Signed in with Google (${loggedUser.displayName}) & synced with Website!`
+        );
+      } catch (_) {
+        showToast(lang === 'ar' ? 'تعذر الاتصال بسحابة Google' : 'Google Cloud sync error');
+      } finally {
+        setAuthBusy(false);
+      }
+    },
+    [favorites, watchHistory, syncedGoogleAccounts, syncUserStateToCloud, showToast, lang]
+  );
 
   // Open an Anime Detail Sheet & fetch its episodes from Firestore
   const handleOpenAnime = useCallback(async (anime) => {
@@ -535,22 +853,64 @@ export default function MobileApkApp() {
     }
   }, []);
 
-  // Select and play a specific server
-  const handleSelectServer = useCallback(async (srv) => {
+  // Select and play a specific server (with automatic fallback to next working server if null)
+  const handleSelectServer = useCallback(async (srv, allCandidateServers = []) => {
     if (!srv) return;
     setSelectedServer(srv);
     setResolvingVideo(true);
     try {
       const directMp4 = await resolveMobileVideoUrl(srv.name, srv.link);
-      setPlayingVideoUrl(directMp4 || srv.link);
+      if (directMp4) {
+        setPlayingVideoUrl(directMp4);
+        setResolvingVideo(false);
+        return;
+      }
+      // If this server link failed to resolve (e.g. dead MediaFire file), auto-try next server
+      if (allCandidateServers.length > 0) {
+        const curIdx = allCandidateServers.indexOf(srv);
+        for (let i = curIdx + 1; i < allCandidateServers.length; i++) {
+          const nextSrv = allCandidateServers[i];
+          const nextMp4 = await resolveMobileVideoUrl(nextSrv.name, nextSrv.link);
+          if (nextMp4) {
+            setSelectedServer(nextSrv);
+            setPlayingVideoUrl(nextMp4);
+            setResolvingVideo(false);
+            return;
+          }
+        }
+      }
+      setPlayingVideoUrl('');
     } catch (_) {
-      setPlayingVideoUrl(srv.link);
+      setPlayingVideoUrl('');
     } finally {
       setResolvingVideo(false);
     }
   }, []);
 
-  // Open an Episode and fetch all its multi-quality servers from Firestore
+  // Auto-failover if <video> encounters a network/codec error on the current URL
+  const handleVideoElementError = useCallback(() => {
+    if (!playingVideoUrl) return;
+    // 1. If pixeldrain.dev failed, try pixeldrain.net, then pixeldrain.com
+    if (playingVideoUrl.includes('pixeldrain.dev/api/file/')) {
+      setPlayingVideoUrl(playingVideoUrl.replace('pixeldrain.dev', 'pixeldrain.net'));
+      return;
+    }
+    if (playingVideoUrl.includes('pixeldrain.net/api/file/')) {
+      setPlayingVideoUrl(playingVideoUrl.replace('pixeldrain.net', 'pixeldrain.com'));
+      return;
+    }
+    // 2. Otherwise hop to next server in episodeServers
+    if (episodeServers.length > 1 && selectedServer) {
+      const idx = episodeServers.findIndex(
+        (s) => s.name === selectedServer.name && s.quality === selectedServer.quality && s.link === selectedServer.link
+      );
+      if (idx !== -1 && idx + 1 < episodeServers.length) {
+        handleSelectServer(episodeServers[idx + 1], episodeServers);
+      }
+    }
+  }, [playingVideoUrl, episodeServers, selectedServer, handleSelectServer]);
+
+  // Open an Episode and fetch all its multi-quality servers from BOTH Firestore collections + AllAnime Cloud
   const handlePlayEpisode = useCallback(
     async (anime, epObj) => {
       if (!anime || !epObj) return;
@@ -578,54 +938,117 @@ export default function MobileApkApp() {
       });
 
       const encId = encodeURIComponent(anime.objectID);
-      const encEp = encodeURIComponent(epObj.docId);
+      const docIdsToTry = Array.from(
+        new Set([
+          String(epObj.docId || '001'),
+          String(epObj.number || 1).padStart(3, '0'),
+          String(epObj.number || 1).padStart(4, '0'),
+          String(epObj.number || 1)
+        ])
+      );
 
       try {
-        let rawList = [];
-        const r2 = await fetch(`${AW_FS_BASE}/anime_list/${encId}/episodes/${encEp}/servers2/all_servers?key=${AW_FS_KEY}`);
-        if (r2.ok) {
-          const d2 = await r2.json();
-          const vals = d2?.fields?.servers?.arrayValue?.values || [];
-          rawList = vals.map((v) => {
-            const f = v?.mapValue?.fields || {};
-            return {
-              name: (f.name?.stringValue || 'PD').toUpperCase(),
-              quality: f.quality?.stringValue || '1080p',
-              link: f.link?.stringValue || '',
-              visible: f.visible?.booleanValue !== false
-            };
-          });
-        }
-        if (!rawList.length) {
-          const r1 = await fetch(`${AW_FS_BASE}/anime_list/${encId}/episodes/${encEp}/servers?key=${AW_FS_KEY}`);
-          if (r1.ok) {
-            const d1 = await r1.json();
-            rawList = (d1.documents || []).map((doc) => {
-              const f = doc.fields || {};
-              return {
-                name: (f.name?.stringValue || 'PD').toUpperCase(),
-                quality: f.quality?.stringValue || '1080p',
-                link: f.link?.stringValue || '',
-                visible: f.visible?.booleanValue !== false
-              };
-            });
+        let combinedRaw = [];
+
+        for (const candidateDocId of docIdsToTry) {
+          const encEp = encodeURIComponent(candidateDocId);
+          const [r2, r1] = await Promise.all([
+            fetch(`${AW_FS_BASE}/anime_list/${encId}/episodes/${encEp}/servers2/all_servers?key=${AW_FS_KEY}`).catch(() => null),
+            fetch(`${AW_FS_BASE}/anime_list/${encId}/episodes/${encEp}/servers?key=${AW_FS_KEY}`).catch(() => null)
+          ]);
+
+          if (r2 && r2.ok) {
+            const d2 = await r2.json();
+            const vals = d2?.fields?.servers?.arrayValue?.values || [];
+            for (const v of vals) {
+              const f = v?.mapValue?.fields || {};
+              if (f.link?.stringValue && f.name?.stringValue) {
+                combinedRaw.push({
+                  name: f.name.stringValue.toUpperCase().trim(),
+                  quality: f.quality?.stringValue || '1080p',
+                  link: f.link.stringValue.trim(),
+                  visible: f.visible?.booleanValue !== false
+                });
+              }
+            }
           }
+
+          if (r1 && r1.ok) {
+            const d1 = await r1.json();
+            for (const doc of d1.documents || []) {
+              const f = doc.fields || {};
+              if (f.link?.stringValue && f.name?.stringValue) {
+                combinedRaw.push({
+                  name: f.name.stringValue.toUpperCase().trim(),
+                  quality: f.quality?.stringValue || '1080p',
+                  link: f.link.stringValue.trim(),
+                  visible: f.visible?.booleanValue !== false
+                });
+              }
+            }
+          }
+
+          if (combinedRaw.length > 0) break;
         }
 
-        const usable = rawList
-          .filter((s) => s.link && s.visible !== false && s.name !== 'MG')
-          .sort((a, b) => {
-            const pA = SERVER_PRIORITY[a.name] || 99;
-            const pB = SERVER_PRIORITY[b.name] || 99;
-            if (pA !== pB) return pA - pB;
-            const qA = parseInt(a.quality, 10) || 720;
-            const qB = parseInt(b.quality, 10) || 720;
-            return qB - qA;
-          });
+        // Expand PixelDrain (PD) into Anti-Block Mirrors (PD_DEV, PD_NET, PD) + keep SF, MF2, MF, ST
+        const expanded = [];
+        const seen = new Set();
+
+        for (const s of combinedRaw) {
+          if (!s.link || s.visible === false || s.name === 'MG' || s.name === 'KF' || s.name === 'US' || s.name === 'XS') {
+            continue;
+          }
+          const key = `${s.name}|${s.quality}|${s.link}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          if (s.name === 'PD' || s.link.includes('pixeldrain.')) {
+            const m = s.link.match(/pixeldrain\.[a-z]+\/(?:u|api\/file)\/([A-Za-z0-9_-]+)/i);
+            if (m?.[1]) {
+              const fid = m[1];
+              expanded.push({
+                name: 'PD_DEV',
+                quality: s.quality || '1080p',
+                link: `https://pixeldrain.dev/api/file/${fid}`,
+                visible: true
+              });
+              expanded.push({
+                name: 'PD_NET',
+                quality: s.quality || '1080p',
+                link: `https://pixeldrain.net/api/file/${fid}`,
+                visible: true
+              });
+              expanded.push({
+                name: 'PD',
+                quality: s.quality || '1080p',
+                link: `https://pixeldrain.com/api/file/${fid}`,
+                visible: true
+              });
+              continue;
+            }
+          }
+          expanded.push(s);
+        }
+
+        // Also fetch AllAnime Direct MP4 server in parallel as a universal fallback
+        const aaServers = await fetchAllAnimeDirectServers(anime.titleRomaji || anime.titleEn, epObj.number).catch(() => []);
+        for (const a of aaServers) {
+          expanded.push(a);
+        }
+
+        const usable = expanded.sort((a, b) => {
+          const pA = SERVER_PRIORITY[a.name] || 99;
+          const pB = SERVER_PRIORITY[b.name] || 99;
+          if (pA !== pB) return pA - pB;
+          const qA = parseInt(a.quality, 10) || 720;
+          const qB = parseInt(b.quality, 10) || 720;
+          return qB - qA;
+        });
 
         setEpisodeServers(usable);
         if (usable.length > 0) {
-          await handleSelectServer(usable[0]);
+          await handleSelectServer(usable[0], usable);
         } else {
           setResolvingVideo(false);
         }
@@ -2167,9 +2590,196 @@ export default function MobileApkApp() {
               </h2>
               <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
                 {isRtl
-                  ? 'سجّل دخولك بنفس حسابك في موقع BLACK X أو أنشئ حساباً جديداً ليتم ربط مفضلتك وسجل مشاهداتك تلقائياً بين الهاتف والموقع.'
-                  : 'Sign in with your BLACK X Website account or create a new one for automatic cross-device sync.'}
+                  ? 'سجّل دخولك بحساب Google أو بحسابك في موقع BLACK X ليتم ربط مفضلتك وسجل مشاهداتك تلقائياً بين الهاتف والموقع.'
+                  : 'Sign in with Google or your BLACK X Website account for automatic cross-device sync.'}
               </p>
+
+              {/* Prominent Google Sign-In & Website Sync Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  loadSyncedGoogleAccounts();
+                  setGoogleSheetOpen(true);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.65rem',
+                  padding: '0.82rem 1rem',
+                  borderRadius: '13px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: '1.5px solid #ffffff',
+                  fontWeight: 900,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 20px rgba(255,255,255,0.16)'
+                }}
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>{isRtl ? 'تسجيل الدخول باستخدام Google (مزامنة مع الموقع)' : 'Continue with Google (Synced with Website)'}</span>
+              </button>
+
+              {googleSheetOpen && (
+                <div
+                  style={{
+                    padding: '1rem',
+                    borderRadius: '14px',
+                    background: '#050508',
+                    border: '1px solid rgba(255,255,255,0.24)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.65rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 900, fontSize: '0.84rem' }}>
+                      {isRtl ? 'اختر حساب Google المتزامن مع الموقع أو أدخل بريدك:' : 'Select Synced Google Account or Enter Gmail:'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setGoogleSheetOpen(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* 1-Tap Synced Google Accounts from Website */}
+                  {syncedGoogleAccounts.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      {syncedGoogleAccounts.map((acc) => (
+                        <button
+                          key={acc.email}
+                          type="button"
+                          onClick={() => handleGoogleAccountSync(acc.email, acc.displayName)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.65rem',
+                            padding: '0.6rem 0.75rem',
+                            borderRadius: '11px',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.18)',
+                            color: '#fff',
+                            textAlign: 'start',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {acc.photoUrl ? (
+                            <img
+                              src={acc.photoUrl}
+                              alt={acc.displayName}
+                              style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <span
+                              style={{
+                                width: '34px',
+                                height: '34px',
+                                borderRadius: '50%',
+                                background: '#ffffff',
+                                color: '#000000',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 900,
+                                fontSize: '0.86rem'
+                              }}
+                            >
+                              {(acc.displayName?.[0] || acc.email?.[0] || 'G').toUpperCase()}
+                            </span>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{acc.displayName || acc.username}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)' }}>{acc.email}</div>
+                          </div>
+                          <span
+                            style={{
+                              padding: '0.24rem 0.55rem',
+                              borderRadius: '7px',
+                              background: '#ffffff',
+                              color: '#000000',
+                              fontWeight: 900,
+                              fontSize: '0.68rem'
+                            }}
+                          >
+                            {isRtl ? 'دخول فوري' : '1-Tap'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Or enter any Gmail address */}
+                  <input
+                    type="email"
+                    value={googleEmailInput}
+                    onChange={(e) => setGoogleEmailInput(e.target.value)}
+                    placeholder={isRtl ? 'أدخل بريد Google الخاص بك (مثال: name@gmail.com)' : 'Enter your Google email (name@gmail.com)'}
+                    style={{
+                      padding: '0.68rem 0.85rem',
+                      borderRadius: '10px',
+                      background: '#000000',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      color: '#fff',
+                      fontSize: '0.82rem'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={googleNameInput}
+                    onChange={(e) => setGoogleNameInput(e.target.value)}
+                    placeholder={isRtl ? 'الاسم المعروض (اختياري)' : 'Display Name (optional)'}
+                    style={{
+                      padding: '0.68rem 0.85rem',
+                      borderRadius: '10px',
+                      background: '#000000',
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      color: '#fff',
+                      fontSize: '0.82rem'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={authBusy}
+                    onClick={() => handleGoogleAccountSync(googleEmailInput, googleNameInput)}
+                    style={{
+                      padding: '0.72rem',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontWeight: 900,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isRtl ? '✓ ربط ومزامنة حساب Google مع الموقع الآن' : '✓ Sync Google Account with Website Now'}
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.15rem 0' }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />
+                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.45)', fontWeight: 800 }}>
+                  {isRtl ? 'أو عبر اسم المستخدم وكلمة المرور' : 'OR USERNAME & PASSWORD'}
+                </span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />
+              </div>
 
               <div style={{ display: 'flex', gap: '0.45rem' }}>
                 <button
@@ -2420,6 +3030,8 @@ export default function MobileApkApp() {
                       controls
                       autoPlay
                       playsInline
+                      referrerPolicy="no-referrer"
+                      onError={handleVideoElementError}
                       style={{ width: '100%', height: '100%', background: '#000' }}
                     />
                     {/* Left/Right Double-Tap ±10s Zones */}
@@ -2529,7 +3141,7 @@ export default function MobileApkApp() {
                       <button
                         key={`${srv.name}-${srv.quality}-${idx}`}
                         type="button"
-                        onClick={() => handleSelectServer(srv)}
+                        onClick={() => handleSelectServer(srv, episodeServers)}
                         style={{
                           padding: '0.45rem 0.8rem',
                           borderRadius: '11px',

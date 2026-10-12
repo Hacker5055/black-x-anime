@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { requireAuth } from '../auth.js';
+import { syncUserToCloud, mergeCloudLibraryToLocal } from '../services/cloudSync.service.js';
 
 const router = Router();
 
 /* ============================ favorites ============================ */
 
-router.get('/favorites', requireAuth, (req, res) => {
+router.get('/favorites', requireAuth, async (req, res) => {
+  await mergeCloudLibraryToLocal(req.user).catch(() => {});
   const rows = db.prepare('SELECT * FROM favorites WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
   res.json({
     favorites: rows.map((r) => ({
@@ -43,11 +45,13 @@ router.put('/favorites/:slug', requireAuth, (req, res) => {
     poster ?? null, banner ?? null,
     episodes ?? null
   );
+  syncUserToCloud(req.user).catch(() => {});
   res.json({ ok: true, favorite: true });
 });
 
 router.delete('/favorites/:slug', requireAuth, (req, res) => {
   db.prepare('DELETE FROM favorites WHERE user_id = ? AND slug = ?').run(req.user.id, String(req.params.slug));
+  syncUserToCloud(req.user).catch(() => {});
   res.json({ ok: true, favorite: false });
 });
 
@@ -132,6 +136,7 @@ router.put('/progress/:slug/:ep', requireAuth, (req, res) => {
       updated_at = datetime('now')
   `).run(req.user.id, slug, episode, pos, dur, done, titleEn ?? null, titleAr ?? null, poster ?? null);
 
+  syncUserToCloud(req.user).catch(() => {});
   res.json({ ok: true, completed: Boolean(done) });
 });
 

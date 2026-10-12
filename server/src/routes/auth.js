@@ -172,10 +172,11 @@ router.post('/dev-login', (req, res) => {
   }
   const token = signToken(user);
   setAuthCookie(res, token);
+  syncUserToCloud(user).catch(() => {});
   res.json({ user: publicUser(user), token });
 });
 
-router.post('/google', (req, res) => {
+router.post('/google', async (req, res) => {
   const { email, displayName, uid, photoURL, username: customUsername, bio, avatarColor } = req.body || {};
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'invalid_email', message: 'Valid email is required' });
@@ -228,6 +229,7 @@ router.post('/google', (req, res) => {
 
   const token = signToken(user);
   setAuthCookie(res, token);
+  syncUserToCloud(user).catch(() => {});
   res.json({ user: publicUser(user), token });
 });
 
@@ -263,6 +265,7 @@ router.put('/profile', requireAuth, (req, res) => {
   const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(current.id);
   const token = signToken(updated);
   setAuthCookie(res, token);
+  syncUserToCloud(updated).catch(() => {});
   res.json({ user: publicUser(updated), token });
 });
 

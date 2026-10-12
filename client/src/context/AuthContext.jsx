@@ -13,6 +13,108 @@ import { signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth';
 
 const AuthContext = createContext(null);
 
+const BX_CLOUD_SETTINGS =
+  'https://firestore.googleapis.com/v1/projects/spry-oxide-1h7sp/databases/ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c/documents/settings';
+const BX_CLOUD_KEY = 'AIzaSyD4yG_ljN1S8TfwC33E4Z0o499MYC71eUE';
+
+function cleanCloudId(prefix, val) {
+  const safe = String(val || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_-]/g, '_');
+  return `${prefix}_${safe}`.slice(0, 120);
+}
+
+async function syncWebsiteUserToSharedCloud(u) {
+  if (!u || (!u.email && !u.username)) return;
+  try {
+    const uKey = u.username ? cleanCloudId('user', u.username) : null;
+    const eKey = u.email ? cleanCloudId('email', u.email) : null;
+
+    // Preserve existing cloud favorites/progress if any
+    let existing = null;
+    if (eKey) {
+      const r = await fetch(`${BX_CLOUD_SETTINGS}/${eKey}?key=${BX_CLOUD_KEY}`).catch(() => null);
+      if (r && r.ok) {
+        const d = await r.json();
+        if (d?.fields?.json?.stringValue) existing = JSON.parse(d.fields.json.stringValue);
+      }
+    }
+
+    const payload = {
+      ...(existing || {}),
+      id: String(u.id || u.firebaseUid || existing?.id || `u_${Date.now()}`),
+      username: String(u.username || u.email?.split('@')[0] || 'user').toLowerCase(),
+      email: String(u.email || existing?.email || '').toLowerCase(),
+      displayName: u.displayName || existing?.displayName || u.username || 'BLACK X User',
+      photoUrl: u.photoUrl || u.photoURL || existing?.photoUrl || '',
+      avatarColor: u.avatarColor || existing?.avatarColor || '#ffffff',
+      bio: u.bio !== undefined ? u.bio : existing?.bio || '',
+      role: u.role || existing?.role || 'user',
+      vipStatus: u.vipStatus || existing?.vipStatus || 'VIP Monarch',
+      isGoogleAccount: true,
+      favorites: Array.isArray(existing?.favorites) ? existing.favorites : [],
+      progress: Array.isArray(existing?.progress) ? existing.progress : [],
+      updatedAt: new Date().toISOString()
+    };
+
+    const docBody = {
+      fields: {
+        json: { stringValue: JSON.stringify(payload) },
+        username: { stringValue: payload.username },
+        email: { stringValue: payload.email },
+        updatedAt: { stringValue: payload.updatedAt }
+      }
+    };
+
+    if (uKey) {
+      await fetch(`${BX_CLOUD_SETTINGS}/${uKey}?key=${BX_CLOUD_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(docBody)
+      }).catch(() => {});
+    }
+    if (eKey) {
+      await fetch(`${BX_CLOUD_SETTINGS}/${eKey}?key=${BX_CLOUD_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(docBody)
+      }).catch(() => {});
+    }
+
+    if (payload.email) {
+      const idxRes = await fetch(`${BX_CLOUD_SETTINGS}/google_accounts_index?key=${BX_CLOUD_KEY}`).catch(() => null);
+      let list = [];
+      if (idxRes && idxRes.ok) {
+        const idxDoc = await idxRes.json();
+        if (idxDoc?.fields?.json?.stringValue) {
+          const parsed = JSON.parse(idxDoc.fields.json.stringValue);
+          if (Array.isArray(parsed)) list = parsed;
+        }
+      }
+      const entry = {
+        email: payload.email,
+        username: payload.username,
+        displayName: payload.displayName,
+        photoUrl: payload.photoUrl,
+        role: payload.role,
+        updatedAt: payload.updatedAt
+      };
+      const nextList = [entry, ...list.filter((x) => x.email?.toLowerCase() !== payload.email)].slice(0, 50);
+      await fetch(`${BX_CLOUD_SETTINGS}/google_accounts_index?key=${BX_CLOUD_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            json: { stringValue: JSON.stringify(nextList) },
+            updatedAt: { stringValue: payload.updatedAt }
+          }
+        })
+      }).catch(() => {});
+    }
+  } catch (_) {}
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
@@ -134,6 +236,13 @@ export function AuthProvider({ children }) {
   }, [user?.role, user?.email, applyRealtimeProfileUpdate]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Automatically sync active Website user to Shared Cloud Firestore so Mobile APK stays 100% in sync
+  useEffect(() => {
+    if (user && (user.email || user.username)) {
+      syncWebsiteUserToSharedCloud(user);
+    }
+  }, [user?.email, user?.username, user?.displayName, user?.photoUrl]);
 
   const login = useCallback(async (username, password) => {
     const data = await api.post('/api/auth/login', { username, password });
