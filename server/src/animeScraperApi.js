@@ -458,6 +458,21 @@ const RANDOM_SEARCH_SEEDS = [
 ];
 
 export async function scraperRandomAnime(count = 24) {
+  try {
+    const { fetchWitcherRandomAnime } = await import('./services/animeWitcher.service.js');
+    const witcherPicks = await fetchWitcherRandomAnime(count);
+    if (Array.isArray(witcherPicks) && witcherPicks.length > 0) {
+      return witcherPicks.map((item) => ({
+        ...item,
+        name: item.titleEn || item.title,
+        img: item.poster,
+        src: item.poster,
+        url: `/show/${item.slug}`,
+        story: item.synopsis || ''
+      }));
+    }
+  } catch (_) {}
+
   const randomPage1 = Math.floor(Math.random() * 45) + 1;
   const randomPage2 = Math.floor(Math.random() * 45) + 46;
 

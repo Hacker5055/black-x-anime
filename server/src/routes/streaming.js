@@ -2,6 +2,15 @@ import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, resolveDownloadEntry, scrapeHealth, scrapeDiagnostics, fetchBrowseAnimeList, isTitleMatch } from '../witanime.js';
 import { scraperGetEpisodeDl, scraperSearchAnime } from '../animeScraperApi.js';
+import {
+  fetchWitcherCatalog,
+  fetchWitcherLatest,
+  searchWitcherShows,
+  fetchWitcherShow,
+  fetchWitcherEpisode,
+  resolveWitcherEntry,
+  resolveWitcherDownloadEntry
+} from '../services/animeWitcher.service.js';
 import { anime3rbService } from '../services/anime3rb.service.js';
 import { okanimeService } from '../services/okanime.service.js';
 import { animeblkomService } from '../services/animeblkom.service.js';
@@ -48,30 +57,50 @@ router.get('/sources', (req, res) => {
   });
 });
 
-/** GET /api/stream/catalog — complete catalog of anime across all BLACK X servers */
+/** GET /api/stream/catalog — complete catalog of anime across all BLACK X servers (6,973+ on BLACK X 1) */
 router.get('/catalog', async (req, res) => {
   const source = (req.query.source || 'all').toLowerCase();
   const page = Math.max(1, Number(req.query.page) || 1);
+  const sort = String(req.query.sort || 'popular').toLowerCase();
+  const genre = String(req.query.genre || '').trim();
+
   try {
     let items = [];
+    let totalCount = 0;
+    let totalPages = 1;
+    let hasNext = false;
 
     const tasks = [];
     if (source === 'all' || source === 'witanime') {
       tasks.push(
-        fetchBrowseAnimeList(page)
-          .then((witaBrowse) =>
-            (witaBrowse?.items || []).map((a) => ({
+        fetchWitcherCatalog({ page, hitsPerPage: 60, sort, genre })
+          .then((awCatalog) => {
+            totalCount = Math.max(totalCount, Number(awCatalog?.totalCount) || 0);
+            totalPages = Math.max(totalPages, Number(awCatalog?.totalPages) || 1);
+            hasNext = Boolean(awCatalog?.hasNext);
+            return (awCatalog?.items || []).map((a) => ({
               ...a,
               source: 'witanime',
               sourceName: 'سيرفر BLACK X 1',
               sourceLabel: 'سيرفر BLACK X 1'
-            }))
+            }));
+          })
+          .catch(() =>
+            fetchBrowseAnimeList(page)
+              .then((witaBrowse) =>
+                (witaBrowse?.items || []).map((a) => ({
+                  ...a,
+                  source: 'witanime',
+                  sourceName: 'سيرفر BLACK X 1',
+                  sourceLabel: 'سيرفر BLACK X 1'
+                }))
+              )
+              .catch(() => [])
           )
-          .catch(() => [])
       );
     }
 
-    if (source === 'all' || source === 'anime3rb') {
+    if ((source === 'all' || source === 'anime3rb') && (!genre || genre === 'all')) {
       tasks.push(
         anime3rbService
           .getLatestEpisodes(page)
@@ -87,7 +116,7 @@ router.get('/catalog', async (req, res) => {
       );
     }
 
-    if (source === 'all' || source === 'english') {
+    if ((source === 'all' || source === 'english') && (!genre || genre === 'all')) {
       tasks.push(
         englishAnimeService
           .getLatestEpisodes(page)
@@ -108,7 +137,14 @@ router.get('/catalog', async (req, res) => {
       items = items.concat(group);
     }
 
-    res.json({ items, count: items.length, page });
+    res.json({
+      items,
+      count: items.length,
+      totalCount: totalCount || items.length,
+      totalPages,
+      hasNext,
+      page
+    });
   } catch (err) {
     res.status(500).json({ error: 'catalog_error', items: [] });
   }
@@ -131,6 +167,7 @@ router.get('/diagnostics', async (req, res) => {
 /** GET /api/stream/latest — latest episodes grid across BLACK X Server 1, 2 & 3 */
 router.get('/latest', async (req, res) => {
   const source = (req.query.source || 'all').toLowerCase();
+  const page = Math.max(1, Number(req.query.page) || 1);
   try {
     let witaItems = [];
     let a3rbItems = [];
@@ -139,13 +176,23 @@ router.get('/latest', async (req, res) => {
     const tasks = [];
     if (source === 'all' || source === 'witanime') {
       tasks.push(
-        fetchLatest()
-          .then((w) => {
-            witaItems = (w || []).map((it) => ({
-              ...it,
-              source: 'witanime',
-              sourceLabel: 'سيرفر BLACK X 1'
-            }));
+        Promise.all([
+          fetchWitcherLatest(page, 48).catch(() => []),
+          page === 1 ? fetchLatest().catch(() => []) : Promise.resolve([])
+        ])
+          .then(([awList, wList]) => {
+            const seen = new Set();
+            const mergedWita = [];
+            for (const it of [...(awList || []), ...(wList || [])]) {
+              if (!it?.slug || seen.has(it.slug)) continue;
+              seen.add(it.slug);
+              mergedWita.push({
+                ...it,
+                source: 'witanime',
+                sourceLabel: 'سيرفر BLACK X 1'
+              });
+            }
+            witaItems = mergedWita;
           })
           .catch(() => {})
       );
@@ -239,9 +286,15 @@ router.get('/search', async (req, res) => {
     if (source === 'all' || source === 'witanime') {
       tasks.push(
         Promise.all([
+          searchWitcherShows(q, 40).catch(() => []),
           searchShows(q).catch(() => []),
           scraperSearchAnime(q).catch(() => [])
-        ]).then(([w, sList]) => {
+        ]).then(([awList, w, sList]) => {
+          const fromAw = (awList || []).map((it) => ({
+            ...it,
+            source: 'witanime',
+            sourceLabel: 'سيرفر BLACK X 1'
+          }));
           const fromW = (w || [])
             .filter((it) => isTitleMatch(q, it.titleEn || it.titleAr, it.slug))
             .map((it) => ({
@@ -261,7 +314,7 @@ router.get('/search', async (req, res) => {
               source: 'witanime',
               sourceLabel: 'سيرفر BLACK X 1'
             }));
-          witaResults = [...fromW, ...fromS];
+          witaResults = [...fromAw, ...fromW, ...fromS];
         })
       );
     }
@@ -326,22 +379,38 @@ router.get('/show/:slug', async (req, res) => {
 
     if (source === 'english' || slug.startsWith('en-') || slug.startsWith('mal-') || slug.startsWith('en_anime:')) {
       show = await englishAnimeService.getShow(slug);
+      if (!show) {
+        show = await fetchWitcherShow(slug).catch(() => null);
+      }
     } else if (source === 'anime3rb' || slug.startsWith('a3rb-') || source === 'okanime' || slug.startsWith('ok-') || source === 'animeblkom' || slug.startsWith('blkom-')) {
       show = await anime3rbService.getShow(slug.replace(/^(a3rb-|ok-|blkom-)/, ''));
+      if (!show) {
+        show = await fetchWitcherShow(slug).catch(() => null);
+      }
     } else {
-      // 1) Primary source: BLACK X Server 1 direct slug lookup
+      // 1) Primary source: BLACK X Server 1 (Anime Witcher 6,973-anime Cloud Engine)
       try {
-        show = await fetchShow(slug);
+        show = await fetchWitcherShow(slug);
         if (show) {
           show.source = 'witanime';
           show.sourceName = 'سيرفر BLACK X 1';
         }
       } catch (_) {}
 
-      // 2) If direct slug didn't match on BLACK X 1, search BLACK X 1 with strict title verification
+      // 2) Secondary BLACK X 1 lookup via WitAnime direct slug or search
       if (!show) {
         try {
-          const queryWords = slug.replace(/^(ok-|blkom-|a3rb-|ani-|en-|mal-)/, '').replace(/-/g, ' ').trim();
+          show = await fetchShow(slug);
+          if (show) {
+            show.source = 'witanime';
+            show.sourceName = 'سيرفر BLACK X 1';
+          }
+        } catch (_) {}
+      }
+
+      if (!show) {
+        try {
+          const queryWords = slug.replace(/^(aw-|ok-|blkom-|a3rb-|ani-|en-|mal-)/, '').replace(/-/g, ' ').trim();
           const candidates = await searchShows(queryWords);
           const verified = (candidates || []).find((c) => isTitleMatch(queryWords, c.titleEn || c.titleAr, c.slug));
           if (verified?.slug) {
@@ -392,46 +461,76 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
 
     if (sourceParam === 'english' || req.params.slug.startsWith('en-') || req.params.slug.startsWith('mal-') || req.params.slug.startsWith('en_anime:')) {
       data = await englishAnimeService.getEpisode(req.params.slug, episode);
-    } else if (sourceParam === 'anime3rb' || req.params.slug.startsWith('a3rb-') || sourceParam === 'okanime' || req.params.slug.startsWith('ok-') || sourceParam === 'animeblkom' || req.params.slug.startsWith('blkom-')) {
-      data = await anime3rbService.getEpisode(cleanSlug, episode);
-      // Cross-enrich with BLACK X Server 1 if title matches
+      // Cross-enrich with BLACK X 1 (Anime Witcher) Arabic 1080p MP4 servers if available
       if (data) {
         try {
-          const searchTitle = cleanSlug.replace(/^x/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
-          const witaCand = await searchShows(searchTitle).catch(() => []);
-          const verified = (witaCand || []).find((c) => isTitleMatch(searchTitle, c.titleEn, c.slug));
-          if (verified?.slug) {
-            const witaEp = await fetchEpisode(verified.slug, episode).catch(() => null);
-            if (witaEp?.entries?.length) {
-              for (const we of witaEp.entries) {
-                data.entries.push({ ...we, witaSlug: verified.slug });
-              }
-              Object.assign(data.resolved, witaEp.resolved || {});
-              for (const wd of witaEp.downloads || []) {
-                data.downloads.push({ ...wd, witaSlug: verified.slug });
-              }
-              Object.assign(data.resolvedDownloads, witaEp.resolvedDownloads || {});
+          const awEp = await fetchWitcherEpisode(req.params.slug, episode).catch(() => null);
+          if (awEp?.entries?.length) {
+            for (const ae of awEp.entries) {
+              data.entries.push({ ...ae, awSlug: awEp.slug });
             }
+            Object.assign(data.resolved, awEp.resolved || {});
+            for (const ad of awEp.downloads || []) {
+              data.downloads.push({ ...ad, awSlug: awEp.slug });
+            }
+            Object.assign(data.resolvedDownloads, awEp.resolvedDownloads || {});
           }
         } catch (_) {}
       }
+    } else if (sourceParam === 'anime3rb' || req.params.slug.startsWith('a3rb-') || sourceParam === 'okanime' || req.params.slug.startsWith('ok-') || sourceParam === 'animeblkom' || req.params.slug.startsWith('blkom-')) {
+      data = await anime3rbService.getEpisode(cleanSlug, episode);
+      // Cross-enrich with BLACK X Server 1 (Anime Witcher + WitAnime) if title matches
+      if (data) {
+        try {
+          const searchTitle = cleanSlug.replace(/^x/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+          const awEp = await fetchWitcherEpisode(searchTitle, episode).catch(() => null);
+          if (awEp?.entries?.length) {
+            for (const ae of awEp.entries) {
+              data.entries.push({ ...ae, awSlug: awEp.slug });
+            }
+            Object.assign(data.resolved, awEp.resolved || {});
+            for (const ad of awEp.downloads || []) {
+              data.downloads.push({ ...ad, awSlug: awEp.slug });
+            }
+            Object.assign(data.resolvedDownloads, awEp.resolvedDownloads || {});
+          }
+        } catch (_) {}
+      } else {
+        data = await fetchWitcherEpisode(cleanSlug, episode).catch(() => null);
+      }
     } else {
-      // 1) Primary source: BLACK X Server 1 + cross-linked BLACK X Server 2 direct MP4 servers
-      const [witaEp, bx2Ep] = await Promise.all([
-        fetchEpisode(cleanSlug, episode).catch(() => null),
-        anime3rbService.getEpisode(cleanSlug, episode).catch(() => null)
+      // 1) Primary source: BLACK X Server 1 (Anime Witcher 1080p/720p/480p Direct MP4 + WitAnime) + cross-linked BLACK X Server 2
+      const [awEp, witaEp, bx2Ep] = await Promise.all([
+        fetchWitcherEpisode(cleanSlug, episode).catch(() => null),
+        !cleanSlug.startsWith('aw-') ? fetchEpisode(cleanSlug, episode).catch(() => null) : Promise.resolve(null),
+        anime3rbService.getEpisode(cleanSlug.replace(/^aw-/, ''), episode).catch(() => null)
       ]);
 
-      if (witaEp && witaEp.entries?.length) {
+      const baseEp = awEp || witaEp || bx2Ep;
+      if (baseEp) {
         data = {
-          ...witaEp,
-          entries: [...(bx2Ep?.entries || []), ...witaEp.entries],
-          downloads: [...(bx2Ep?.downloads || []), ...(witaEp.downloads || [])],
-          resolved: { ...(bx2Ep?.resolved || {}), ...(witaEp.resolved || {}) },
-          resolvedDownloads: { ...(bx2Ep?.resolvedDownloads || {}), ...(witaEp.resolvedDownloads || {}) }
+          ...baseEp,
+          entries: [
+            ...(awEp?.entries || []),
+            ...(bx2Ep?.entries || []),
+            ...(witaEp?.entries || [])
+          ],
+          downloads: [
+            ...(awEp?.downloads || []),
+            ...(bx2Ep?.downloads || []),
+            ...(witaEp?.downloads || [])
+          ],
+          resolved: {
+            ...(witaEp?.resolved || {}),
+            ...(bx2Ep?.resolved || {}),
+            ...(awEp?.resolved || {})
+          },
+          resolvedDownloads: {
+            ...(witaEp?.resolvedDownloads || {}),
+            ...(bx2Ep?.resolvedDownloads || {}),
+            ...(awEp?.resolvedDownloads || {})
+          }
         };
-      } else if (bx2Ep && bx2Ep.entries?.length) {
-        data = bx2Ep;
       }
 
       // 2) Fallback to BLACK X Server 3 if not on Server 1 or 2
@@ -559,6 +658,16 @@ router.post('/resolve', async (req, res) => {
     } catch (_) {}
   }
 
+  // If this is an Anime Witcher (BLACK X 1) entry, resolve via resolveWitcherEntry
+  if (String(entryId).startsWith('aw-')) {
+    try {
+      const awSource = await resolveWitcherEntry(String(slug), ep, String(entryId));
+      if (awSource) {
+        return res.json({ source: awSource });
+      }
+    } catch (_) {}
+  }
+
   // If this is an English Anime entry or slug, resolve via englishAnimeService / witaSlug
   if (String(entryId).startsWith('en-') || String(slug).startsWith('en-') || String(slug).startsWith('mal-')) {
     try {
@@ -613,6 +722,16 @@ router.post('/resolve-download', async (req, res) => {
   const ep = Number(episode);
   if (!slug || !Number.isInteger(ep) || ep < 1 || !entryId) {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
+  }
+
+  // If this is an Anime Witcher (BLACK X 1) download entry
+  if (String(entryId).startsWith('dl-aw-')) {
+    try {
+      const awDl = await resolveWitcherDownloadEntry(String(slug), ep, String(entryId));
+      if (awDl) {
+        return res.json({ source: awDl });
+      }
+    } catch (_) {}
   }
 
   // If this is an Anime3rb download entry
@@ -688,7 +807,34 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
     const cloudHosts = [];
     const seenUrls = new Set();
 
-    // 1) Check BLACK X Server 2 direct MP4 download sources first
+    // 0) Check BLACK X Server 1 (Anime Witcher 1080p/720p/480p Direct MP4 downloads) first
+    try {
+      const awData = await fetchWitcherEpisode(slug, ep);
+      if (awData?.downloads?.length) {
+        for (const dl of awData.downloads) {
+          let resolved = awData.resolvedDownloads?.[dl.id] || null;
+          if (!resolved && dl.id) {
+            try {
+              resolved = await resolveWitcherDownloadEntry(slug, ep, dl.id);
+            } catch (_) {}
+          }
+          const finalUrl = resolved?.downloadUrl || dl.downloadUrl || dl.rawLink || null;
+          if (finalUrl && !seenUrls.has(finalUrl)) {
+            seenUrls.add(finalUrl);
+            cloudHosts.push({
+              id: dl.id,
+              server: dl.server || '📥 سيرفر تحميل BLACK X 1 المباشر',
+              quality: dl.quality || 'FHD 1080p',
+              url: finalUrl,
+              directUrl: finalUrl,
+              type: 'blackx_direct_download'
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 1) Check BLACK X Server 2 direct MP4 download sources
     try {
       const a3rbData = await anime3rbService.getEpisode(slug, ep);
       if (a3rbData?.downloads?.length) {
@@ -706,9 +852,9 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
       }
     } catch (_) {}
 
-    // 2) Check BLACK X Server 1 downloads
+    // 2) Check BLACK X Server 1 WitAnime downloads
     try {
-      const payload = await fetchEpisode(slug, ep);
+      const payload = !slug.startsWith('aw-') ? await fetchEpisode(slug, ep).catch(() => null) : null;
       const rawDownloads = payload?.downloads || [];
       for (const dl of rawDownloads) {
         let resolved = payload.resolvedDownloads?.[dl.id] || null;
@@ -731,7 +877,7 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
     } catch (_) {}
 
     // 3) Merge multi-quality download links
-    const scraperQualities = await scraperGetEpisodeDl(slug, ep).catch(() => ({}));
+    const scraperQualities = !slug.startsWith('aw-') ? await scraperGetEpisodeDl(slug, ep).catch(() => ({})) : {};
     for (const [qualityGroup, links] of Object.entries(scraperQualities || {})) {
       if (qualityGroup.endsWith('_servers') || !Array.isArray(links)) continue;
       const qCode =
@@ -771,6 +917,15 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
 
 /* ------------------------- video stream proxy ------------------------- */
 const ALLOWED_HOSTS = [
+  'pixeldrain.com',
+  'firestream.to',
+  'streamtape.com',
+  'tapecontent.net',
+  'b-cdn.net',
+  'vidtube.one',
+  'upstreams.to',
+  'mangatek.com',
+  'firebasestorage.googleapis.com',
   'mp4upload.com',
   '4shared.com',
   'videa.hu',

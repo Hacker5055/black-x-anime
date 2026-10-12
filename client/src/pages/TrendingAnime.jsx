@@ -14,12 +14,17 @@ import {
 } from '../utils/deviceNotifications.js';
 
 const ANIME_GENRES = [
-  { id: 'all', ar: '🌟 جميع التصنيفات', en: '🌟 All Genres' },
+  { id: 'all', ar: '🌟 جميع التصنيفات (6,973)', en: '🌟 All Genres (6,973)' },
   { id: 'Action', ar: '⚔️ أكشن وقتال', en: '⚔️ Action' },
   { id: 'Fantasy', ar: '🔮 خيال وسحر', en: '🔮 Fantasy' },
   { id: 'Adventure', ar: '🧭 مغامرات', en: '🧭 Adventure' },
+  { id: 'Comedy', ar: '😂 كوميديا', en: '😂 Comedy' },
+  { id: 'Romance', ar: '❤️ رومانسي', en: '❤️ Romance' },
   { id: 'Supernatural', ar: '👁️ خارق للطبيعة', en: '👁️ Supernatural' },
-  { id: 'Drama', ar: '🎭 دراما وغموض', en: '🎭 Drama' }
+  { id: 'Drama', ar: '🎭 دراما وغموض', en: '🎭 Drama' },
+  { id: 'Sci-Fi', ar: '🚀 خيال علمي', en: '🚀 Sci-Fi' },
+  { id: 'Mystery', ar: '🕵️ تحقيق وغموض', en: '🕵️ Mystery' },
+  { id: 'Sports', ar: '⚽ رياضي', en: '⚽ Sports' }
 ];
 
 export default function TrendingAnime() {
@@ -33,13 +38,17 @@ export default function TrendingAnime() {
 
   const initialQ = searchParams.get('q') || '';
   const [query, setQuery] = useState(initialQ);
-  const [selectedSource, setSelectedSource] = useState('all'); // 'all' | 'witanime' | 'anime3rb'
-  const [activeFilter, setActiveFilter] = useState('trending'); // 'trending' | 'latest' | 'top' | 'alerts'
+  const [selectedSource, setSelectedSource] = useState('all'); // 'all' | 'witanime' | 'anime3rb' | 'english'
+  const [activeFilter, setActiveFilter] = useState('trending'); // 'trending' | 'latest' | 'top' | 'alerts' | 'random'
   const [selectedGenre, setSelectedGenre] = useState('all');
 
   const [trendingList, setTrendingList] = useState([]);
   const [latestStreamList, setLatestStreamList] = useState([]);
   const [catalogList, setCatalogList] = useState([]);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [totalCatalogCount, setTotalCatalogCount] = useState(6973);
+  const [hasNextCatalogPage, setHasNextCatalogPage] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [randomScraperList, setRandomScraperList] = useState([]);
   const [shufflingRandom, setShufflingRandom] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
@@ -92,18 +101,22 @@ export default function TrendingAnime() {
     }
   }, []);
 
-  // Load initial trending + streaming + random scraper anime for the selected source
+  // Load initial trending + streaming + random scraper anime for the selected source, sort & genre
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setCatalogPage(1);
+
+    const sortMode = activeFilter === 'top' ? 'top' : activeFilter === 'latest' ? 'latest' : 'popular';
+    const genreParam = selectedGenre && selectedGenre !== 'all' ? `&genre=${encodeURIComponent(selectedGenre)}` : '';
 
     const promises = [
       api.get(`/api/stream/latest?source=${selectedSource}`).catch(() => ({ items: [] })),
-      api.get(`/api/stream/catalog?source=${selectedSource}`).catch(() => ({ items: [] })),
+      api.get(`/api/stream/catalog?source=${selectedSource}&page=1&sort=${sortMode}${genreParam}`).catch(() => ({ items: [] })),
       api.get('/api/anime-scraper/random-anime?count=24').catch(() => ({ items: [] }))
     ];
 
-    if (selectedSource === 'all' || selectedSource === 'witanime') {
+    if ((selectedSource === 'all' || selectedSource === 'witanime') && (!selectedGenre || selectedGenre === 'all')) {
       promises.push(api.get('/api/anime/trending').catch(() => ({ anime: [] })));
     } else {
       promises.push(Promise.resolve({ anime: [] }));
@@ -113,6 +126,8 @@ export default function TrendingAnime() {
       if (!alive) return;
       setLatestStreamList(latestData?.items || []);
       setCatalogList(catalogData?.items || []);
+      setTotalCatalogCount(Number(catalogData?.totalCount) || (catalogData?.items?.length || 6973));
+      setHasNextCatalogPage(catalogData?.hasNext !== false);
       setRandomScraperList(randomData?.items || []);
       setTrendingList(trendData?.anime || []);
       setLoading(false);
@@ -121,7 +136,32 @@ export default function TrendingAnime() {
     return () => {
       alive = false;
     };
-  }, [selectedSource]);
+  }, [selectedSource, selectedGenre, activeFilter]);
+
+  const handleLoadMoreCatalog = useCallback(async () => {
+    if (loadingMore || !hasNextCatalogPage) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = catalogPage + 1;
+      const sortMode = activeFilter === 'top' ? 'top' : activeFilter === 'latest' ? 'latest' : 'popular';
+      const genreParam = selectedGenre && selectedGenre !== 'all' ? `&genre=${encodeURIComponent(selectedGenre)}` : '';
+      const data = await api.get(
+        `/api/stream/catalog?source=${selectedSource}&page=${nextPage}&sort=${sortMode}${genreParam}`
+      );
+      const newItems = Array.isArray(data?.items) ? data.items : [];
+      if (newItems.length > 0) {
+        setCatalogList((prev) => [...prev, ...newItems]);
+        setCatalogPage(nextPage);
+        setHasNextCatalogPage(Boolean(data?.hasNext));
+      } else {
+        setHasNextCatalogPage(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasNextCatalogPage, catalogPage, activeFilter, selectedGenre, selectedSource]);
 
   // Live Anime Search Engine handler across selected source(s)
   const runSearch = useCallback(
@@ -1031,6 +1071,46 @@ export default function TrendingAnime() {
               </article>
             );
           })}
+        </div>
+      )}
+
+      {/* Load More / Full 6,973 Anime Catalog Pagination */}
+      {!loading && !searching && searchResults === null && activeFilter !== 'alerts' && hasNextCatalogPage && (
+        <div
+          className="glass"
+          style={{
+            marginTop: '1.5rem',
+            padding: '1.25rem',
+            borderRadius: '18px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '0.75rem',
+            border: '1px solid rgba(255, 255, 255, 0.14)',
+            background: '#000000'
+          }}
+        >
+          <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.78)' }}>
+            {lang === 'ar'
+              ? `📚 يتم عرض ${formatNumber(unifiedAnime.length)} أنمي من أصل ${formatNumber(totalCatalogCount)} أنمي متوفر للبث المباشر على سيرفر BLACK X 1`
+              : `📚 Showing ${formatNumber(unifiedAnime.length)} of ${formatNumber(totalCatalogCount)} anime available on BLACK X Server 1`}
+          </div>
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={loadingMore}
+            onClick={handleLoadMoreCatalog}
+            style={{
+              padding: '0.75rem 2.2rem',
+              borderRadius: '14px',
+              fontWeight: 900,
+              fontSize: '0.92rem'
+            }}
+          >
+            {loadingMore
+              ? (lang === 'ar' ? '⏳ جاري تحميل المزيد من الأنميات...' : '⏳ Loading More Anime...')
+              : (lang === 'ar' ? '➕ عرض المزيد من الأنميات (تصفح المكتبة الكاملة)' : '➕ Load More Anime (Full Catalog)')}
+          </button>
         </div>
       )}
     </div>
