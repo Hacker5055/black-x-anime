@@ -191,7 +191,7 @@ export function parseSubtitles(rawText) {
 export async function translateLinesToArabic(lines) {
   if (!Array.isArray(lines) || lines.length === 0) return [];
 
-  const BATCH_SIZE = 45;
+  const BATCH_SIZE = 75;
   const batches = [];
   for (let i = 0; i < lines.length; i += BATCH_SIZE) {
     batches.push(lines.slice(i, i + BATCH_SIZE));
@@ -199,6 +199,28 @@ export async function translateLinesToArabic(lines) {
 
   const translateBatch = async (batch) => {
     const joined = batch.map((l) => l.replace(/\n+/g, ' ').trim()).join('\n');
+    // Primary: clients5.google.com POST endpoint (fast, supports large payloads, avoids GET 429)
+    try {
+      const res = await fetch('https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=en&tl=ar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+        },
+        body: new URLSearchParams({ q: joined }).toString(),
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const rawOut = Array.isArray(data) ? (typeof data[0] === 'string' ? data[0] : data.map((x) => (Array.isArray(x) ? x[0] : x)).join('')) : '';
+        if (rawOut) {
+          const splitLines = rawOut.split('\n').map((s) => s.trim());
+          return batch.map((orig, idx) => splitLines[idx] || orig);
+        }
+      }
+    } catch {}
+
+    // Fallback: translate.googleapis.com GET
     try {
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(joined)}`;
       const res = await fetch(url, {
@@ -267,16 +289,26 @@ export function buildSrtFromCues(cues, langKey = 'textAr') {
  * Download and decompress a subtitle file from OpenSubtitles (.gz) or direct (.vtt/.srt/.ass) URL
  */
 async function downloadRawSubtitle(url) {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'TemporaryUserAgent',
-      'X-User-Agent': 'TemporaryUserAgent'
-    },
+  const u = String(url || '');
+  const isOpenSub = u.includes('opensubtitles.org');
+  const headers = isOpenSub
+    ? {
+        'User-Agent': 'TemporaryUserAgent',
+        'X-User-Agent': 'TemporaryUserAgent'
+      }
+    : {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Referer: u.includes('dramahot') || u.includes('zokoanime') ? 'https://zokoanime.video/' : new URL(u).origin + '/'
+      };
+
+  const res = await fetch(u, {
+    headers,
     signal: AbortSignal.timeout(12000)
   });
   if (!res.ok) throw new Error(`Subtitle download failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  if (url.endsWith('.gz') || (buf[0] === 0x1f && buf[1] === 0x8b)) {
+  if (u.endsWith('.gz') || (buf[0] === 0x1f && buf[1] === 0x8b)) {
     return zlib.gunzipSync(buf).toString('utf8');
   }
   return buf.toString('utf8');
@@ -336,7 +368,7 @@ export async function getTranslatedEpisodeSubtitles({ query, episode = 1, direct
   const searchQueries = buildSubtitleSearchQueries(query);
   const primaryQuery = searchQueries[0] || 'anime';
   const ep = Math.max(1, Number(episode) || 1);
-  const cacheKey = `sub:ep:v2:${primaryQuery}:${ep}:${directSubUrl || 'os'}`;
+  const cacheKey = `sub:ep:v3:${primaryQuery}:${ep}:${directSubUrl || 'os'}`;
   const cached = streamGet(cacheKey);
   if (cached) return cached;
 
@@ -344,7 +376,7 @@ export async function getTranslatedEpisodeSubtitles({ query, episode = 1, direct
   let sourceLang = 'en';
   let fileName = `${primaryQuery} - E${ep}`;
 
-  // 1) If a direct .vtt / .srt / .ass URL was provided, fetch it directly
+  // 1) If a direct .vtt / .srt / .ass URL was provided (e.g. ZokoAnime official VTT), fetch it directly
   if (directSubUrl) {
     try {
       rawSubText = await downloadRawSubtitle(directSubUrl);
@@ -353,7 +385,32 @@ export async function getTranslatedEpisodeSubtitles({ query, episode = 1, direct
     }
   }
 
-  // 2) Try each normalized query (full title -> first 2 words -> first main keyword)
+  // 2) Try native Arabic subtitles on OpenSubtitles first if no directSubUrl
+  if (!rawSubText && searchQueries.length > 0) {
+    for (const q of searchQueries) {
+      const araList = await searchOpenSubtitles(q, ep, 'ara');
+      const validAra = araList.filter(
+        (item) =>
+          item?.SubDownloadLink &&
+          ['srt', 'vtt', 'ass', 'ssa'].includes(String(item.SubFormat || '').toLowerCase())
+      );
+      for (const candidate of validAra.slice(0, 2)) {
+        try {
+          const downloaded = await downloadRawSubtitle(candidate.SubDownloadLink);
+          const parsedCheck = parseSubtitles(downloaded);
+          if (parsedCheck.length >= 10) {
+            rawSubText = downloaded;
+            sourceLang = 'ar';
+            fileName = candidate.SubFileName || fileName;
+            break;
+          }
+        } catch {}
+      }
+      if (rawSubText) break;
+    }
+  }
+
+  // 3) Try English OpenSubtitles and translate to Arabic
   if (!rawSubText && searchQueries.length > 0) {
     for (const q of searchQueries) {
       const engList = await searchOpenSubtitles(q, ep, 'eng');

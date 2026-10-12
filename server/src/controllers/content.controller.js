@@ -281,7 +281,7 @@ const ANILIST_VALID_GENRES = new Set([
 const CURATED_ANIME_SEED = [
   {
     id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    slug: 'en_anime:113415:jujutsu-kaisen',
+    slug: 'en-40748-jujutsu-kaisen',
     title: 'Jujutsu Kaisen',
     title_ar: 'جوجوتسو كايسن',
     cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg',
@@ -545,6 +545,7 @@ async function fetchLiveAniListByGenres(canonicalGenres = []) {
             tag_in: $tags
           ) {
             id
+            idMal
             title { english romaji native }
             description(asHtml: false)
             coverImage { extraLarge large }
@@ -589,7 +590,9 @@ async function fetchLiveAniListByGenres(canonicalGenres = []) {
         .replace(/\s+/g, ' ')
         .trim();
 
-      const slug = `en_anime:${m.id}:${slugifyTitle(m.title?.romaji || title)}`;
+      const slug = m.idMal
+        ? `en-${m.idMal}-${slugifyTitle(m.title?.romaji || title)}`
+        : `en-${slugifyTitle(m.title?.romaji || title)}`;
       return {
         id: toDeterministicUuid(slug),
         slug,

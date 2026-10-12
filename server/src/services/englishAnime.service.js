@@ -33,11 +33,18 @@ function parseEnglishSlug(rawSlug) {
       query: (m[2] || '').replace(/-/g, ' ').trim()
     };
   }
+  const m2 = clean.match(/^en_anime:(\d+):(.+)$/i);
+  if (m2) {
+    return {
+      malId: null,
+      query: (m2[2] || '').replace(/-/g, ' ').trim()
+    };
+  }
   return {
     malId: null,
     query: clean
-      .replace(/^(en-|mal-|ani-|ok-|blkom-|a3rb-)/i, '')
-      .replace(/-/g, ' ')
+      .replace(/^(en_anime:|en-|mal-|ani-|ok-|blkom-|a3rb-)/i, '')
+      .replace(/[:_-]+/g, ' ')
       .trim()
   };
 }
@@ -297,6 +304,227 @@ class EnglishAnimeService {
   }
 
   /**
+   * Deobfuscate ZokoAnime / HiAnime embed payload: base64(json XOR "otaku-embed-v1")
+   */
+  deobfuscateZokoBlob(b64) {
+    try {
+      const raw = Buffer.from(String(b64 || ''), 'base64');
+      const key = Buffer.from('otaku-embed-v1');
+      const out = Buffer.alloc(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        out[i] = raw[i] ^ key[i % key.length];
+      }
+      return JSON.parse(out.toString('utf8'));
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetch ZokoAnime / HiAnime 1080p/720p/360p HLS (.m3u8) + official .vtt subtitle track via MAL ID
+   * (with fallback to hianime.at search when needed)
+   */
+  async fetchZokoMalStreams(malId, titleEn, titleRomaji, episode) {
+    const ua =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+    const result = {
+      sub: null,
+      dub: null
+    };
+
+    const resolveEmbedPage = async (embedUrl) => {
+      try {
+        const res = await fetch(embedUrl, {
+          headers: { 'User-Agent': ua, Referer: 'https://hianime.at/' },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!res.ok) return null;
+        const html = await res.text();
+        const m = html.match(/window\.__P="([^"]+)"/);
+        if (!m) return null;
+        const data = this.deobfuscateZokoBlob(m[1]);
+        if (!data?.src || !data.src.includes('.m3u8')) return null;
+
+        const masterUrl = data.src;
+        const defaultSub =
+          (data.subtitles || []).find((s) => s.default && s.src) ||
+          (data.subtitles || []).find((s) => /en/i.test(s.lang || s.label || '') && s.src) ||
+          (data.subtitles || [])[0] ||
+          null;
+
+        const variants = {};
+        try {
+          const mRes = await fetch(masterUrl, {
+            headers: { 'User-Agent': ua, Referer: 'https://zokoanime.video/' },
+            signal: AbortSignal.timeout(6000)
+          });
+          if (mRes.ok) {
+            const mText = await mRes.text();
+            const lines = mText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].startsWith('#EXT-X-STREAM-INF')) {
+                const resMatch = lines[i].match(/RESOLUTION=\d+x(\d+)/i);
+                const nextLine = lines[i + 1];
+                if (resMatch && nextLine && !nextLine.startsWith('#')) {
+                  const q = `${resMatch[1]}p`;
+                  variants[q] = new URL(nextLine, masterUrl).href;
+                }
+              }
+            }
+          }
+        } catch {}
+
+        return {
+          masterUrl,
+          variants,
+          subtitleUrl: defaultSub?.src || null
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    if (malId) {
+      const [subStream, dubStream] = await Promise.all([
+        resolveEmbedPage(`https://zokoanime.video/stream/mal/${malId}/${episode}/sub`),
+        resolveEmbedPage(`https://zokoanime.video/stream/mal/${malId}/${episode}/dub`)
+      ]);
+      result.sub = subStream;
+      result.dub = dubStream;
+    }
+
+    // Fallback via hianime.at search with strict title verification if direct MAL lookup returned nothing
+    if (!result.sub && (titleEn || titleRomaji)) {
+      const queries = [titleEn, titleRomaji].filter(Boolean);
+      for (const q of [...new Set(queries)]) {
+        try {
+          const sRes = await fetch(`https://hianime.at/search?keyword=${encodeURIComponent(q)}`, {
+            headers: { 'User-Agent': ua },
+            signal: AbortSignal.timeout(7000)
+          });
+          if (!sRes.ok) continue;
+          const sHtml = await sRes.text();
+          const mainPart = sHtml.split('id="main-sidebar"')[0] || sHtml;
+          const items = [
+            ...mainPart.matchAll(/<h3 class="film-name">\s*<a href="[^"]*\/([^"/?]+)"\s*title="([^"]*)"/gi)
+          ];
+          const verified = items.find((m) => {
+            const candTitle = decodeHtmlEntities(m[2]).trim();
+            return (
+              isTitleMatch(titleEn, candTitle) ||
+              (titleRomaji && isTitleMatch(titleRomaji, candTitle))
+            );
+          });
+          if (!verified) continue;
+
+          const showId = verified[1].split('-').pop();
+          const epRes = await fetch(`https://hianime.at/api/theme/episode/list/${showId}`, {
+            headers: { 'User-Agent': ua },
+            signal: AbortSignal.timeout(7000)
+          });
+          if (!epRes.ok) continue;
+          const epText = (await epRes.text()).replace(/\\/g, '');
+          const epMatch = epText.match(
+            new RegExp(`data-number="${episode}"[^>]*data-id="(\\d+)"`, 'i')
+          );
+          if (!epMatch?.[1]) continue;
+
+          const srvRes = await fetch(
+            `https://hianime.at/api/theme/episode/servers?episodeId=${epMatch[1]}`,
+            {
+              headers: { 'User-Agent': ua },
+              signal: AbortSignal.timeout(7000)
+            }
+          );
+          if (!srvRes.ok) continue;
+          const srvClean = (await srvRes.text()).replace(/\\"/g, '"');
+          const hashMatch = srvClean.match(
+            /data-type="sub"[^>]*data-server-name="ZokoAnime"[^>]*data-hash="([^"]+)"/i
+          );
+          if (hashMatch?.[1]) {
+            const embedUrl = Buffer.from(hashMatch[1], 'base64').toString('utf8');
+            result.sub = await resolveEmbedPage(embedUrl);
+            if (result.sub) break;
+          }
+        } catch {}
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Fetch AllAnime / AllManga POST GraphQL streams with strict title verification
+   */
+  async fetchAllAnimePostStreams(titleEn, titleRomaji, episode) {
+    const ua =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    const gqlPost = async (query) => {
+      const r = await fetch('https://api.allanime.day/api', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://allmanga.to',
+          Referer: 'https://allmanga.to/',
+          'User-Agent': ua,
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*'
+        },
+        body: JSON.stringify({ query }),
+        signal: AbortSignal.timeout(7000)
+      });
+      if (!r.ok) return null;
+      return r.json();
+    };
+
+    try {
+      const searchQ = String(titleEn || titleRomaji || '')
+        .replace(/"/g, ' ')
+        .trim();
+      if (!searchQ) return [];
+
+      const sData = await gqlPost(
+        `{shows(search:{sortBy:Trending,query:"${searchQ}"},limit:8,page:1){edges{_id name englishName nativeName}}}`
+      );
+      const edges = sData?.data?.shows?.edges || [];
+      const matchedShow = edges.find(
+        (e) =>
+          isTitleMatch(titleEn, e.englishName || e.name) ||
+          (titleRomaji && isTitleMatch(titleRomaji, e.name || e.englishName))
+      );
+      if (!matchedShow?._id) return [];
+
+      const epData = await gqlPost(
+        `{episodeInfos(showId:"${matchedShow._id}",episodeNumStart:${episode},episodeNumEnd:${episode}){_id episodeIdNum vidInforssub vidInforsdub}}`
+      );
+      const epInfo = (epData?.data?.episodeInfos || []).find(
+        (x) => Number(x.episodeIdNum) === Number(episode)
+      );
+      if (!epInfo) return [];
+
+      const out = [];
+      for (const [mode, field] of [
+        ['sub', 'vidInforssub'],
+        ['dub', 'vidInforsdub']
+      ]) {
+        const info = epInfo[field];
+        if (info?.vidPath) {
+          const url = info.vidPath.startsWith('http')
+            ? info.vidPath
+            : `https://allanimenews.com/${info.vidPath.replace(/^\/+/, '')}`;
+          out.push({
+            mode,
+            quality: `${info.vidResolution || 720}p`,
+            url
+          });
+        }
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Fetch direct MP4 streams with strict title verification so it never plays a wrong anime
    */
   async fetchAnimeHeavenStreams(titleEn, titleRomaji, episode) {
@@ -393,7 +621,7 @@ class EnglishAnimeService {
     if (!show) return null;
 
     const { malId, aniId, titleEn, titleRomaji, slug } = show;
-    const cacheKey = `en_anime:ep:v5:${malId}:${episode}`;
+    const cacheKey = `en_anime:ep:v6:${malId}:${episode}`;
     const cached = streamGet(cacheKey);
     if (cached) return cached;
 
@@ -402,8 +630,118 @@ class EnglishAnimeService {
     const resolved = {};
     const resolvedDownloads = {};
 
-    const subVttUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.vtt?title=${encodeURIComponent(titleEn)}`;
-    const subSrtUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.srt?title=${encodeURIComponent(titleEn)}`;
+    // 0) Fetch ZokoAnime / HiAnime MAL-ID 1080p/720p/360p HLS + official .VTT subtitle track first
+    let zokoData = { sub: null, dub: null };
+    try {
+      zokoData = await this.fetchZokoMalStreams(malId, titleEn, titleRomaji, episode);
+    } catch (_) {}
+
+    const officialVttUrl = zokoData?.sub?.subtitleUrl || '';
+    const subQueryExtra = officialVttUrl ? `&url=${encodeURIComponent(officialVttUrl)}` : '';
+    const subVttUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.vtt?title=${encodeURIComponent(titleEn)}${subQueryExtra}`;
+    const subSrtUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.srt?title=${encodeURIComponent(titleEn)}${subQueryExtra}`;
+
+    // Add ZokoAnime / HiAnime 1080p / 720p / 360p HLS + Arabic AI Subtitle servers
+    if (zokoData?.sub?.masterUrl) {
+      const subMaster = zokoData.sub.masterUrl;
+      const variants = zokoData.sub.variants || {};
+      const enSubParam = officialVttUrl ? `&sub_en=${encodeURIComponent(officialVttUrl)}` : '';
+
+      // Primary 1080p FHD / Auto HLS Server
+      const fhdUrl = variants['1080p'] || subMaster;
+      const idZokoFhd = `en-zoko-fhd-${malId}-${episode}`;
+      const embedZokoFhd = `/api/stream/hls-player?url=${encodeURIComponent(fhdUrl)}&sub=${encodeURIComponent(subVttUrl)}${enSubParam}`;
+      entries.push({
+        id: idZokoFhd,
+        token: idZokoFhd,
+        server: '👑 BLACK X Ultra 1080p FHD (مترجم عربي AI)',
+        quality: '1080p FHD',
+        version: 'sub',
+        lang: 'en->ar',
+        embedUrl: embedZokoFhd,
+        directUrl: null,
+        isFastCdn: true,
+        hasAutoArabicSub: true,
+        source: 'english'
+      });
+      resolved[idZokoFhd] = { embedUrl: embedZokoFhd, directUrl: null };
+
+      // Multi-Quality Auto HLS Server
+      const idZokoAuto = `en-zoko-auto-${malId}-${episode}`;
+      const embedZokoAuto = `/api/stream/hls-player?url=${encodeURIComponent(subMaster)}&sub=${encodeURIComponent(subVttUrl)}${enSubParam}`;
+      entries.push({
+        id: idZokoAuto,
+        token: idZokoAuto,
+        server: '⚡ BLACK X Master HLS (تلقائي 1080p/720p/360p — مترجم)',
+        quality: '1080p / 720p',
+        version: 'sub',
+        lang: 'en->ar',
+        embedUrl: embedZokoAuto,
+        directUrl: null,
+        isFastCdn: true,
+        hasAutoArabicSub: true,
+        source: 'english'
+      });
+      resolved[idZokoAuto] = { embedUrl: embedZokoAuto, directUrl: null };
+
+      if (variants['720p']) {
+        const idZokoHd = `en-zoko-hd-${malId}-${episode}`;
+        const embedZokoHd = `/api/stream/hls-player?url=${encodeURIComponent(variants['720p'])}&sub=${encodeURIComponent(subVttUrl)}${enSubParam}`;
+        entries.push({
+          id: idZokoHd,
+          token: idZokoHd,
+          server: '🎬 BLACK X Stream 720p HD (مترجم عربي AI)',
+          quality: '720p HD',
+          version: 'sub',
+          lang: 'en->ar',
+          embedUrl: embedZokoHd,
+          directUrl: null,
+          isFastCdn: true,
+          hasAutoArabicSub: true,
+          source: 'english'
+        });
+        resolved[idZokoHd] = { embedUrl: embedZokoHd, directUrl: null };
+      }
+
+      if (variants['360p']) {
+        const idZokoSd = `en-zoko-sd-${malId}-${episode}`;
+        const embedZokoSd = `/api/stream/hls-player?url=${encodeURIComponent(variants['360p'])}&sub=${encodeURIComponent(subVttUrl)}${enSubParam}`;
+        entries.push({
+          id: idZokoSd,
+          token: idZokoSd,
+          server: '📱 BLACK X Eco 360p SD (سريع للباقات — مترجم)',
+          quality: '360p SD',
+          version: 'sub',
+          lang: 'en->ar',
+          embedUrl: embedZokoSd,
+          directUrl: null,
+          isFastCdn: true,
+          hasAutoArabicSub: true,
+          source: 'english'
+        });
+        resolved[idZokoSd] = { embedUrl: embedZokoSd, directUrl: null };
+      }
+    }
+
+    if (zokoData?.dub?.masterUrl) {
+      const dubUrl = zokoData.dub.variants?.['1080p'] || zokoData.dub.masterUrl;
+      const idZokoDub = `en-zoko-dub-${malId}-${episode}`;
+      const embedZokoDub = `/api/stream/hls-player?url=${encodeURIComponent(dubUrl)}&sub=${encodeURIComponent(subVttUrl)}`;
+      entries.push({
+        id: idZokoDub,
+        token: idZokoDub,
+        server: '🎙️ BLACK X Dub 1080p (مدبلج إنجليزي + ترجمة عربية)',
+        quality: '1080p FHD',
+        version: 'dub',
+        lang: 'en->ar',
+        embedUrl: embedZokoDub,
+        directUrl: null,
+        isFastCdn: true,
+        hasAutoArabicSub: true,
+        source: 'english'
+      });
+      resolved[idZokoDub] = { embedUrl: embedZokoDub, directUrl: null };
+    }
 
     // 1) Cross-link BLACK X Server 2 (Arabic-subtitled direct MP4 1080p/720p/480p + OK.ru + Sendvid) with strict title check
     try {
@@ -423,7 +761,7 @@ class EnglishAnimeService {
       }
     } catch (_) {}
 
-    // 2) Fetch Direct MP4 streams from BLACK X Server 3 engine (plays in native <video> + AI Arabic Subtitles)
+    // 2) Fetch Direct MP4 streams from BLACK X Server 3 AnimeHeaven engine (plays in native <video> + AI Arabic Subtitles)
     try {
       const ahSources = await this.fetchAnimeHeavenStreams(titleEn, titleRomaji, episode);
       if (ahSources.length > 0) {
@@ -434,7 +772,7 @@ class EnglishAnimeService {
         entries.push({
           id: idNativeHd,
           token: idNativeHd,
-          server: '⚡ BLACK X Direct HD (مترجم عربي AI)',
+          server: '⚡ BLACK X Direct MP4 HD (مترجم عربي AI)',
           quality: '720p HD',
           version: 'sub',
           lang: 'en->ar',
@@ -453,7 +791,7 @@ class EnglishAnimeService {
         entries.push({
           id: idEmbedClean,
           token: idEmbedClean,
-          server: '🌐 BLACK X Cinema HD (مشغل مدمج بالترجمة)',
+          server: '🌐 BLACK X Cinema MP4 (مشغل مدمج بالترجمة)',
           quality: '720p HD',
           version: 'sub',
           lang: 'en->ar',
@@ -466,25 +804,6 @@ class EnglishAnimeService {
         resolved[idEmbedClean] = {
           embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(backupMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
           directUrl: null
-        };
-
-        const idNativeFhd = `en-ah-native-fhd-${malId}-${episode}`;
-        entries.push({
-          id: idNativeFhd,
-          token: idNativeFhd,
-          server: '👑 BLACK X Direct 1080p FHD (مترجم عربي AI)',
-          quality: '1080p FHD',
-          version: 'sub',
-          lang: 'en->ar',
-          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(primaryMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
-          directUrl: primaryMp4,
-          isFastCdn: true,
-          hasAutoArabicSub: true,
-          source: 'english'
-        });
-        resolved[idNativeFhd] = {
-          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(primaryMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
-          directUrl: primaryMp4
         };
 
         ahSources.slice(0, 2).forEach((mp4Url, idx) => {
@@ -505,6 +824,29 @@ class EnglishAnimeService {
           };
         });
       }
+    } catch (_) {}
+
+    // 2.5) Fetch AllAnime POST GraphQL direct MP4 streams
+    try {
+      const allStreams = await this.fetchAllAnimePostStreams(titleEn, titleRomaji, episode);
+      allStreams.forEach((st, idx) => {
+        const idAll = `en-all-mp4-${malId}-${episode}-${idx + 1}`;
+        const embedAll = `/api/stream/mp4-player?url=${encodeURIComponent(st.url)}&sub=${encodeURIComponent(subVttUrl)}`;
+        entries.push({
+          id: idAll,
+          token: idAll,
+          server: `🚀 BLACK X Archive ${st.quality} (${st.mode === 'dub' ? 'مدبلج' : 'مترجم عربي AI'})`,
+          quality: st.quality,
+          version: st.mode,
+          lang: 'en->ar',
+          embedUrl: embedAll,
+          directUrl: null,
+          isFastCdn: true,
+          hasAutoArabicSub: true,
+          source: 'english'
+        });
+        resolved[idAll] = { embedUrl: embedAll, directUrl: null };
+      });
     } catch (_) {}
 
     // 3) Cross-link BLACK X Server 1 (witanime) with strict title verification

@@ -324,7 +324,7 @@ router.get('/show/:slug', async (req, res) => {
   try {
     let show = null;
 
-    if (source === 'english' || slug.startsWith('en-') || slug.startsWith('mal-')) {
+    if (source === 'english' || slug.startsWith('en-') || slug.startsWith('mal-') || slug.startsWith('en_anime:')) {
       show = await englishAnimeService.getShow(slug);
     } else if (source === 'anime3rb' || slug.startsWith('a3rb-') || source === 'okanime' || slug.startsWith('ok-') || source === 'animeblkom' || slug.startsWith('blkom-')) {
       show = await anime3rbService.getShow(slug.replace(/^(a3rb-|ok-|blkom-)/, ''));
@@ -390,7 +390,7 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   try {
     let data = null;
 
-    if (sourceParam === 'english' || req.params.slug.startsWith('en-') || req.params.slug.startsWith('mal-')) {
+    if (sourceParam === 'english' || req.params.slug.startsWith('en-') || req.params.slug.startsWith('mal-') || req.params.slug.startsWith('en_anime:')) {
       data = await englishAnimeService.getEpisode(req.params.slug, episode);
     } else if (sourceParam === 'anime3rb' || req.params.slug.startsWith('a3rb-') || sourceParam === 'okanime' || req.params.slug.startsWith('ok-') || sourceParam === 'animeblkom' || req.params.slug.startsWith('blkom-')) {
       data = await anime3rbService.getEpisode(cleanSlug, episode);
@@ -817,7 +817,11 @@ const ALLOWED_HOSTS = [
   'premilkyway.com',
   'sunrisegroveproduction.cfd',
   'vibuxer.com',
-  'huntrexus.com'
+  'huntrexus.com',
+  'dramahot.top',
+  'zokoanime.video',
+  'hianime.at',
+  'allanimenews.com'
 ];
 
 function hostAllowed(hostname) {
@@ -1024,12 +1028,19 @@ router.get('/hls-proxy', async (req, res) => {
     return res.status(400).send('Invalid url');
   }
   try {
+    const isZoko =
+      target.hostname.includes('drama') ||
+      target.hostname.includes('zokoanime') ||
+      target.hostname.endsWith('.cfd') ||
+      target.hostname.endsWith('.top');
+    const referer = isZoko ? 'https://zokoanime.video/' : 'https://vibuxer.com/';
+    const origin = isZoko ? 'https://zokoanime.video' : 'https://vibuxer.com';
     const upstream = await fetch(target.href, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
         Accept: '*/*',
-        Referer: 'https://vibuxer.com/',
-        Origin: 'https://vibuxer.com'
+        Referer: referer,
+        Origin: origin
       },
       redirect: 'follow',
       signal: AbortSignal.timeout(25000)
@@ -1097,8 +1108,10 @@ router.get('/hls-proxy', async (req, res) => {
 router.get('/hls-player', (req, res) => {
   const rawUrl = String(req.query.url || '');
   const subUrl = String(req.query.sub || '');
+  const subEnUrl = String(req.query.sub_en || '');
   if (!rawUrl) return res.status(400).send('Missing url');
   const proxiedM3u8 = `/api/stream/hls-proxy?url=${encodeURIComponent(rawUrl)}`;
+  const proxiedSubEn = subEnUrl ? `/api/stream/hls-proxy?url=${encodeURIComponent(subEnUrl)}` : '';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -1115,16 +1128,28 @@ router.get('/hls-player', (req, res) => {
 </head>
 <body>
 <video id="v" controls autoplay playsinline crossorigin="anonymous">
-  ${subUrl ? `<track kind="subtitles" srclang="ar" label="العربية (AI)" src="${subUrl.replace(/"/g, '&quot;')}" default />` : ''}
+  ${subUrl ? `<track kind="subtitles" srclang="ar" label="العربية (BLACK X AI)" src="${subUrl.replace(/"/g, '&quot;')}" default />` : ''}
+  ${proxiedSubEn ? `<track kind="subtitles" srclang="en" label="English" src="${proxiedSubEn.replace(/"/g, '&quot;')}" />` : ''}
 </video>
 <script>
   const video = document.getElementById('v');
   const src = ${JSON.stringify(proxiedM3u8)};
+  const enableArabicTrack = () => {
+    if (video.textTracks && video.textTracks.length > 0) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = i === 0 ? 'showing' : 'disabled';
+      }
+    }
+  };
+  video.addEventListener('loadedmetadata', enableArabicTrack);
   if (window.Hls && Hls.isSupported()) {
     const hls = new Hls({ maxBufferLength: 30 });
     hls.loadSource(src);
     hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      enableArabicTrack();
+      video.play().catch(() => {});
+    });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     video.src = src;
     video.addEventListener('loadedmetadata', () => { video.play().catch(() => {}); });
