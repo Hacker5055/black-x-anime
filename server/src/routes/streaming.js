@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { fetchLatest, searchShows, fetchShow, fetchEpisode, resolveEntry, resolveDownloadEntry, scrapeHealth, scrapeDiagnostics, fetchBrowseAnimeList } from '../witanime.js';
-import { scraperGetEpisodeDl } from '../animeScraperApi.js';
+import { scraperGetEpisodeDl, scraperSearchAnime } from '../animeScraperApi.js';
 import { anime3rbService, ANIME3RB_CATALOG } from '../services/anime3rb.service.js';
 import { okanimeService, OKANIME_CATALOG } from '../services/okanime.service.js';
 import { animeblkomService, ANIMEBLKOM_CATALOG } from '../services/animeblkom.service.js';
@@ -235,7 +235,7 @@ router.get('/latest', async (req, res) => {
 router.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   const source = (req.query.source || 'all').toLowerCase();
-  if (!q) return res.json({ items: [] });
+  if (!q) return res.json({ items: [], results: [] });
   try {
     let witaResults = [];
     let a3rbResults = [];
@@ -244,12 +244,28 @@ router.get('/search', async (req, res) => {
 
     if (source === 'all' || source === 'witanime') {
       try {
-        const w = await searchShows(q);
-        witaResults = (w || []).map((it) => ({
+        const [w, sList] = await Promise.all([
+          searchShows(q).catch(() => []),
+          scraperSearchAnime(q).catch(() => [])
+        ]);
+        const fromW = (w || []).map((it) => ({
           ...it,
           source: 'witanime',
           sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
         }));
+        const fromS = (sList || [])
+          .filter((s) => s.slug)
+          .map((s) => ({
+            slug: s.slug,
+            kind: s.type === 'Movie' ? 'movie' : 'anime',
+            titleEn: s.name || s.slug,
+            titleAr: s.name || s.slug,
+            poster: s.img || '',
+            url: `/anime/${s.slug}`,
+            source: 'witanime',
+            sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
+          }));
+        witaResults = [...fromW, ...fromS];
       } catch (_) {}
     }
 
@@ -288,7 +304,8 @@ router.get('/search', async (req, res) => {
 
     const seen = new Set();
     const merged = [];
-    for (const item of [...okResults, ...a3rbResults, ...witaResults, ...blkomResults]) {
+    // Prioritize WitAnime results FIRST so real WitAnime slugs match accurately
+    for (const item of [...witaResults, ...okResults, ...a3rbResults, ...blkomResults]) {
       const key = `${item.source || 'src'}:${item.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -296,10 +313,10 @@ router.get('/search', async (req, res) => {
       }
     }
 
-    res.json({ items: merged, totalCount: merged.length });
+    res.json({ items: merged, results: merged, totalCount: merged.length });
   } catch (err) {
     console.error('[stream/search]', err.message);
-    res.status(502).json({ error: 'upstream', message: 'Streaming source unreachable', items: [] });
+    res.status(502).json({ error: 'upstream', message: 'Streaming source unreachable', items: [], results: [] });
   }
 });
 
@@ -318,31 +335,40 @@ router.get('/show/:slug', async (req, res) => {
     } else if (source === 'anime3rb' || slug.startsWith('a3rb-')) {
       show = await anime3rbService.getShow(slug.replace(/^a3rb-/, ''));
     } else {
-      // Automatic fallback sequence: OkAnime -> WitAnime -> Anime3rb -> AnimeBlkom
+      // 1) Primary source: WitAnime direct slug lookup
       try {
-        show = await okanimeService.getShow(slug);
+        show = await fetchShow(slug);
+        if (show) {
+          show.source = 'witanime';
+          show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
+        }
       } catch (_) {}
 
+      // 2) If direct slug didn't match on WitAnime, try searching WitAnime by title words
       if (!show) {
         try {
-          show = await fetchShow(slug);
-          if (show) {
-            show.source = 'witanime';
-            show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
+          const queryWords = slug.replace(/^(ok-|blkom-|a3rb-|ani-)/, '').replace(/-/g, ' ').trim();
+          const candidates = await searchShows(queryWords);
+          if (candidates && candidates.length > 0 && candidates[0].slug) {
+            show = await fetchShow(candidates[0].slug);
+            if (show) {
+              show.source = 'witanime';
+              show.sourceName = 'سيرفر BLACK X 1 (WitAnime)';
+            }
           }
         } catch (_) {}
       }
 
+      // 3) Check secondary catalogs ONLY if the slug actually exists in their catalog
       if (!show) {
-        try {
-          show = await anime3rbService.getShow(slug);
-        } catch (_) {}
-      }
-
-      if (!show) {
-        try {
-          show = await animeblkomService.getShow(slug);
-        } catch (_) {}
+        const clean = slug.replace(/^(ok-|blkom-|a3rb-)/, '').toLowerCase();
+        if (OKANIME_CATALOG.some((a) => a.slug === clean)) {
+          show = await okanimeService.getShow(clean).catch(() => null);
+        } else if (ANIME3RB_CATALOG.some((a) => a.slug === clean)) {
+          show = await anime3rbService.getShow(clean).catch(() => null);
+        } else if (ANIMEBLKOM_CATALOG.some((a) => a.slug === clean)) {
+          show = await animeblkomService.getShow(clean).catch(() => null);
+        }
       }
     }
 
@@ -374,44 +400,31 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
     } else if (sourceParam === 'anime3rb' || req.params.slug.startsWith('a3rb-')) {
       data = await anime3rbService.getEpisode(cleanSlug, episode);
     } else {
-      // First try OkAnime for immediate high-speed servers
+      // 1) Primary source: WitAnime real episode manifest & servers
       try {
-        data = await okanimeService.getEpisode(cleanSlug, episode);
-      } catch (_) {}
-
-      // If OkAnime didn't have live sources, try WitAnime
-      if (!data || !data.entries?.length) {
-        try {
-          data = await fetchEpisode(cleanSlug, episode);
-        } catch (err) {
-          console.warn('witanime fetchEpisode failed, trying anime3rb fallback:', err.message);
-        }
+        data = await fetchEpisode(cleanSlug, episode);
+      } catch (err) {
+        console.warn('witanime fetchEpisode note:', err.message);
       }
 
-      // If WitAnime didn't have it or failed, try Anime3rb
+      // 2) Fallback to secondary sources ONLY if WitAnime did not return entries
+      if (!data || !data.entries?.length) {
+        try {
+          data = await okanimeService.getEpisode(cleanSlug, episode);
+        } catch (_) {}
+      }
+
       if (!data || !data.entries?.length) {
         try {
           data = await anime3rbService.getEpisode(cleanSlug, episode);
         } catch (_) {}
       }
 
-      // If still missing, try AnimeBlkom
       if (!data || !data.entries?.length) {
         try {
           data = await animeblkomService.getEpisode(cleanSlug, episode);
         } catch (_) {}
       }
-
-      // Enrich with backup servers from other sources
-      try {
-        const altA3rb = await anime3rbService.getEpisode(cleanSlug, episode);
-        if (altA3rb?.entries?.length && data?.entries) {
-          data.entries = [...data.entries, ...altA3rb.entries];
-          data.downloads = [...(data.downloads || []), ...(altA3rb.downloads || [])];
-          data.resolved = { ...(data.resolved || {}), ...(altA3rb.resolved || {}) };
-          data.resolvedDownloads = { ...(data.resolvedDownloads || {}), ...(altA3rb.resolvedDownloads || {}) };
-        }
-      } catch (_) {}
     }
 
     if (!data) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });

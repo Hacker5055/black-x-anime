@@ -46,9 +46,33 @@ export default function TrendingAnime() {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [resolvingSlugId, setResolvingSlugId] = useState(null);
+  const [unmatchedMalIds, setUnmatchedMalIds] = useState(() => new Set());
   const [subscribedSlugs, setSubscribedSlugs] = useState(() =>
     new Set(getSubscribedAnimeList().map((a) => a.slug))
   );
+
+  // Helper to verify that a streaming search candidate actually matches the requested anime title
+  const isMatchingAnimeTitle = useCallback((targetTitle, candidate) => {
+    if (!targetTitle || !candidate) return false;
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\u0600-\u06FF\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const tNorm = norm(targetTitle);
+    const cEn = norm(candidate.titleEn || '');
+    const cAr = norm(candidate.titleAr || '');
+    const cSlug = norm((candidate.slug || '').replace(/-/g, ' '));
+    if (!tNorm) return false;
+    if (cEn === tNorm || cAr === tNorm || cSlug === tNorm) return true;
+    if (cEn.includes(tNorm) || tNorm.includes(cEn)) return cEn.length >= 3;
+    if (cSlug.includes(tNorm) || tNorm.includes(cSlug)) return cSlug.length >= 3;
+    const words = tNorm.split(' ').filter((w) => w.length > 2);
+    if (!words.length) return false;
+    const matchedWords = words.filter((w) => cEn.includes(w) || cSlug.includes(w) || cAr.includes(w));
+    return matchedWords.length >= Math.ceil(words.length * 0.6);
+  }, []);
 
   const refreshSubs = useCallback(() => {
     setSubscribedSlugs(new Set(getSubscribedAnimeList().map((a) => a.slug)));
@@ -115,11 +139,12 @@ export default function TrendingAnime() {
           : Promise.resolve({ anime: [] });
 
         const [streamRes, aniRes] = await Promise.all([streamPromise, aniPromise]);
+        const streamItems = streamRes?.items || streamRes?.results || [];
 
         const combined = [];
         const seen = new Set();
 
-        for (const s of streamRes?.items || streamRes?.results || []) {
+        for (const s of streamItems) {
           const key = `${s.source || 'src'}:${s.slug}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -133,13 +158,21 @@ export default function TrendingAnime() {
             score: s.score || 94,
             genres: s.genres || ['Action', 'Fantasy'],
             isDirectStream: true,
+            isMalOnly: false,
             source: s.source || (String(s.slug).startsWith('a3rb-') ? 'anime3rb' : 'witanime'),
             sourceLabel: s.sourceLabel || (s.source === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' : 'سيرفر BLACK X 1 (WitAnime)')
           });
         }
 
         for (const a of aniRes?.anime || []) {
-          const key = `ani:${(a.titleEnglish || a.titleRomaji || '').toLowerCase()}`;
+          const titleEnOrRom = a.titleEnglish || a.titleRomaji || '';
+          // Check if this AniList/MyAnimeList anime is already in streamItems
+          const matchedStream = streamItems.find(
+            (st) => isMatchingAnimeTitle(a.titleEnglish, st) || isMatchingAnimeTitle(a.titleRomaji, st)
+          );
+          if (matchedStream) continue; // Already added above with a real streaming slug!
+
+          const key = `ani:${titleEnOrRom.toLowerCase()}`;
           if (seen.has(key)) continue;
           seen.add(key);
           combined.push({
@@ -155,8 +188,9 @@ export default function TrendingAnime() {
             score: a.score || 89,
             genres: a.genres || ['Action'],
             isDirectStream: false,
-            source: 'witanime',
-            sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
+            isMalOnly: true,
+            source: 'myanimelist',
+            sourceLabel: '📋 فهرس MyAnimeList / AniList (غير متوفر للبث)'
           });
         }
 
@@ -165,7 +199,7 @@ export default function TrendingAnime() {
         setSearching(false);
       }
     },
-    [selectedSource]
+    [selectedSource, isMatchingAnimeTitle]
   );
 
   useEffect(() => {
@@ -290,8 +324,9 @@ export default function TrendingAnime() {
           score: a.score || 90,
           genres: Array.isArray(a.genres) ? a.genres : ['Action', 'Fantasy'],
           isDirectStream: Boolean(matchedStream?.slug),
-          source: 'witanime',
-          sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
+          isMalOnly: !matchedStream?.slug,
+          source: matchedStream?.slug ? 'witanime' : 'myanimelist',
+          sourceLabel: matchedStream?.slug ? 'سيرفر BLACK X 1 (WitAnime)' : '📋 فهرس MyAnimeList / AniList'
         });
       }
 
@@ -311,6 +346,7 @@ export default function TrendingAnime() {
           score: 93,
           genres: ['Action', 'Adventure', 'Fantasy'],
           isDirectStream: Boolean(rnd.slug),
+          isMalOnly: false,
           isRandomPick: true,
           source: 'witanime',
           sourceLabel: '🎲 أنمي مقترح (WitAnime API)'
@@ -336,24 +372,61 @@ export default function TrendingAnime() {
   }, [searchResults, activeFilter, selectedSource, catalogList, latestStreamList, trendingList, randomScraperList, selectedGenre, subscribedSlugs]);
 
   const handleOpenAnime = async (item) => {
-    const srcQuery = item.source && item.source !== 'all' ? `?source=${item.source}` : '';
+    const srcQuery =
+      item.source && item.source !== 'all' && item.source !== 'myanimelist'
+        ? `?source=${item.source}`
+        : '';
     if (item.slug && !String(item.slug).startsWith('ani-')) {
       navigate(`/show/${item.slug}${srcQuery}`);
       return;
     }
-    // Resolve streaming slug via /api/stream/search
+
+    // Resolve streaming slug via /api/stream/search (checking both items and results)
     setResolvingSlugId(item.id);
     try {
       const q = item.searchTitle || item.titleEn || '';
       const res = await api.get(`/api/stream/search?q=${encodeURIComponent(q)}`);
-      const first = res?.results?.[0];
-      if (first?.slug) {
-        navigate(`/show/${first.slug}`);
-      } else if (latestStreamList[0]?.slug) {
-        navigate(`/show/${latestStreamList[0].slug}`);
+      const candidates = res?.items || res?.results || [];
+      const matched =
+        candidates.find(
+          (c) =>
+            isMatchingAnimeTitle(item.titleEn, c) ||
+            isMatchingAnimeTitle(item.searchTitle, c)
+        ) || null;
+
+      if (matched?.slug) {
+        const matchedSrc =
+          matched.source && matched.source !== 'witanime' && matched.source !== 'all'
+            ? `?source=${matched.source}`
+            : '';
+        navigate(`/show/${matched.slug}${matchedSrc}`);
+        return;
       }
+
+      // Not found on streaming servers -> mark as MyAnimeList-only / Unavailable (NEVER open a random different anime!)
+      setUnmatchedMalIds((prev) => {
+        const next = new Set(prev);
+        next.add(item.id);
+        return next;
+      });
+      pushToast(
+        lang === 'ar'
+          ? `📋 الأنمي "${item.titleAr || item.titleEn}" تابع لـ MyAnimeList / AniList وغير متوفر له حلقات بث مباشر حالياً على السيرفرات.`
+          : `📋 "${item.titleEn}" is from MyAnimeList / AniList and is not currently available on streaming servers.`,
+        'info'
+      );
     } catch {
-      if (latestStreamList[0]?.slug) navigate(`/show/${latestStreamList[0].slug}`);
+      setUnmatchedMalIds((prev) => {
+        const next = new Set(prev);
+        next.add(item.id);
+        return next;
+      });
+      pushToast(
+        lang === 'ar'
+          ? `📋 الأنمي "${item.titleAr || item.titleEn}" غير متوفر حالياً في سيرفرات المشاهدة (تابع لـ MyAnimeList).`
+          : `📋 "${item.titleEn}" is not currently available on streaming servers (MyAnimeList).`,
+        'info'
+      );
     } finally {
       setResolvingSlugId(null);
     }
@@ -736,6 +809,8 @@ export default function TrendingAnime() {
             const targetSlug = item.slug || String(item.titleEn || 'anime').toLowerCase().replace(/[^a-z0-9]+/g, '-');
             const isSub = subscribedSlugs.has(targetSlug) || isAnimeEpisodeAlertEnabled(targetSlug);
             const isResolving = resolvingSlugId === item.id;
+            const isMalOnly = Boolean(item.isMalOnly);
+            const isVerifiedUnavailable = unmatchedMalIds.has(item.id);
 
             return (
               <article
@@ -748,7 +823,11 @@ export default function TrendingAnime() {
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  border: isVerifiedUnavailable
+                    ? '1px solid rgba(239, 68, 68, 0.45)'
+                    : isMalOnly
+                    ? '1px solid rgba(168, 85, 247, 0.4)'
+                    : '1px solid rgba(255, 255, 255, 0.1)',
                   transition: 'transform 0.22s ease, border-color 0.22s ease'
                 }}
               >
@@ -766,30 +845,68 @@ export default function TrendingAnime() {
 
                   {/* Top Badges */}
                   <div style={{ position: 'absolute', top: '8px', insetInlineStart: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span
-                      style={{
-                        padding: '0.2rem 0.55rem',
-                        borderRadius: '8px',
-                        background: 'rgba(0, 0, 0, 0.82)',
-                        border: '1px solid rgba(234, 179, 8, 0.6)',
-                        color: '#fde047',
-                        fontSize: '0.68rem',
-                        fontWeight: 900
-                      }}
-                    >
-                      👑 FHD 1080p VIP
-                    </span>
+                    {isVerifiedUnavailable ? (
+                      <span
+                        style={{
+                          padding: '0.22rem 0.58rem',
+                          borderRadius: '8px',
+                          background: 'rgba(127, 29, 29, 0.92)',
+                          border: '1px solid rgba(248, 113, 113, 0.7)',
+                          color: '#fecaca',
+                          fontSize: '0.68rem',
+                          fontWeight: 900
+                        }}
+                      >
+                        🚫 {lang === 'ar' ? 'غير متوفر • MyAnimeList' : 'Unavailable • MyAnimeList'}
+                      </span>
+                    ) : isMalOnly ? (
+                      <span
+                        style={{
+                          padding: '0.22rem 0.58rem',
+                          borderRadius: '8px',
+                          background: 'rgba(46, 16, 101, 0.92)',
+                          border: '1px solid rgba(192, 132, 252, 0.7)',
+                          color: '#e9d5ff',
+                          fontSize: '0.68rem',
+                          fontWeight: 900
+                        }}
+                      >
+                        📋 {lang === 'ar' ? 'تابع لـ MyAnimeList' : 'MyAnimeList Index'}
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '8px',
+                          background: 'rgba(0, 0, 0, 0.82)',
+                          border: '1px solid rgba(234, 179, 8, 0.6)',
+                          color: '#fde047',
+                          fontSize: '0.68rem',
+                          fontWeight: 900
+                        }}
+                      >
+                        👑 FHD 1080p VIP
+                      </span>
+                    )}
                     <span
                       style={{
                         padding: '0.18rem 0.5rem',
                         borderRadius: '8px',
-                        background: isVip ? 'rgba(16, 185, 129, 0.88)' : 'rgba(15, 23, 42, 0.88)',
+                        background: isMalOnly
+                          ? 'rgba(15, 23, 42, 0.9)'
+                          : isVip
+                          ? 'rgba(16, 185, 129, 0.88)'
+                          : 'rgba(15, 23, 42, 0.88)',
                         color: '#fff',
                         fontSize: '0.65rem',
                         fontWeight: 800
                       }}
                     >
-                      {isVip
+                      {isVerifiedUnavailable
+                        ? (lang === 'ar' ? '📋 غير مدرج بالسيرفرات' : '📋 Not on Servers')
+                        : isMalOnly
+                        ? (lang === 'ar' ? '🔍 اضغط لفحص توفره' : '🔍 Tap to Check Stream')
+                        : isVip
                         ? (lang === 'ar' ? '⚡ يعرض فور نزوله' : '⚡ Same-Day VIP')
                         : (lang === 'ar' ? '⏳ +24س للمجاني' : '⏳ 24h Free Delay')}
                     </span>
@@ -845,12 +962,36 @@ export default function TrendingAnime() {
                           fontWeight: 900,
                           padding: '0.15rem 0.5rem',
                           borderRadius: '6px',
-                          background: item.source === 'anime3rb' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(34, 211, 238, 0.22)',
-                          color: item.source === 'anime3rb' ? '#fde047' : '#38bdf8',
-                          border: item.source === 'anime3rb' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(34, 211, 238, 0.5)'
+                          background: isVerifiedUnavailable
+                            ? 'rgba(239, 68, 68, 0.22)'
+                            : isMalOnly
+                            ? 'rgba(168, 85, 247, 0.22)'
+                            : item.source === 'anime3rb'
+                            ? 'rgba(245, 158, 11, 0.22)'
+                            : 'rgba(34, 211, 238, 0.22)',
+                          color: isVerifiedUnavailable
+                            ? '#fca5a5'
+                            : isMalOnly
+                            ? '#d8b4fe'
+                            : item.source === 'anime3rb'
+                            ? '#fde047'
+                            : '#38bdf8',
+                          border: isVerifiedUnavailable
+                            ? '1px solid rgba(239, 68, 68, 0.5)'
+                            : isMalOnly
+                            ? '1px solid rgba(168, 85, 247, 0.5)'
+                            : item.source === 'anime3rb'
+                            ? '1px solid rgba(245, 158, 11, 0.5)'
+                            : '1px solid rgba(34, 211, 238, 0.5)'
                         }}
                       >
-                        {item.source === 'anime3rb' ? '⚡ سيرفر Anime3rb' : '👑 سيرفر WitAnime'}
+                        {isVerifiedUnavailable
+                          ? (lang === 'ar' ? '🚫 غير متوفر (MyAnimeList)' : '🚫 Unavailable (MAL)')
+                          : isMalOnly
+                          ? (lang === 'ar' ? '📋 تابع لـ MyAnimeList' : '📋 MyAnimeList')
+                          : item.source === 'anime3rb'
+                          ? '⚡ سيرفر Anime3rb'
+                          : '👑 سيرفر WitAnime'}
                       </span>
                       {item.episodes && (
                         <span style={{ fontSize: '0.72rem', color: 'var(--ink-dim)', fontWeight: 800 }}>
@@ -866,11 +1007,15 @@ export default function TrendingAnime() {
 
                   <button
                     type="button"
-                    className="btn btn--primary btn--sm"
+                    className={`btn ${isVerifiedUnavailable ? 'btn--ghost' : 'btn--primary'} btn--sm`}
                     style={{ width: '100%', justifyContent: 'center', fontWeight: 800, fontSize: '0.78rem' }}
                   >
                     {isResolving
-                      ? (lang === 'ar' ? '⏳ جارٍ الفتح...' : '⏳ Opening...')
+                      ? (lang === 'ar' ? '⏳ جارٍ فحص السيرفرات...' : '⏳ Checking Servers...')
+                      : isVerifiedUnavailable
+                      ? (lang === 'ar' ? '🚫 غير متوفر • تابع لـ MyAnimeList' : '🚫 Unavailable • MyAnimeList')
+                      : isMalOnly
+                      ? (lang === 'ar' ? '🔍 فحص التوفر (MyAnimeList)' : '🔍 Check Stream (MAL)')
                       : (lang === 'ar' ? '▶ مشاهدة الحلقات' : '▶ Watch Episodes')}
                   </button>
                 </div>
