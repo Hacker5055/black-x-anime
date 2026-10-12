@@ -8,6 +8,7 @@
  */
 import { apiGet, apiSet, streamGet, streamSet } from '../db.js';
 import { translateTextToArabic, getTranslatedEpisodeSubtitles } from '../subtitleTranslator.js';
+import { searchShows, fetchEpisode, resolveEntry } from '../witanime.js';
 
 const ANILIST_URL = 'https://graphql.anilist.co';
 
@@ -227,6 +228,7 @@ class EnglishAnimeService {
     if (!m || !m.idMal) return null;
 
     const titleEn = m.title?.english || m.title?.romaji || query || `Anime ${m.idMal}`;
+    const titleRomaji = m.title?.romaji || titleEn;
     const epCount = m.nextAiringEpisode?.episode
       ? Math.max(1, m.nextAiringEpisode.episode - 1)
       : m.episodes || 12;
@@ -249,6 +251,7 @@ class EnglishAnimeService {
       aniId: m.id,
       kind: 'anime',
       titleEn,
+      titleRomaji,
       titleAr: `${titleEn} (مترجم للعربية AI 🌐)`,
       poster: m.coverImage?.extraLarge || m.coverImage?.large || '',
       banner: m.bannerImage || m.coverImage?.extraLarge || '',
@@ -275,17 +278,74 @@ class EnglishAnimeService {
     const show = await this.getShow(rawSlug);
     if (!show) return null;
 
-    const { malId, titleEn, slug } = show;
-    const cacheKey = `en_anime:ep:${malId}:${episode}`;
+    const { malId, aniId, titleEn, titleRomaji, slug } = show;
+    const cacheKey = `en_anime:ep:v2:${malId}:${episode}`;
     const cached = streamGet(cacheKey);
     if (cached) return cached;
 
-    const cleanNameSlug = titleEn
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    const entries = [];
+    const downloads = [];
+    const resolved = {};
+    const resolvedDownloads = {};
 
-    const entries = [
+    // 1) Try resolving real WitAnime servers for this anime first (Arabic-subtitled fast servers)
+    try {
+      let witaCandidates = await searchShows(titleEn).catch(() => []);
+      if (!witaCandidates.length && titleRomaji && titleRomaji !== titleEn) {
+        witaCandidates = await searchShows(titleRomaji).catch(() => []);
+      }
+      const witaSlug = witaCandidates?.[0]?.slug;
+      if (witaSlug) {
+        const witaEp = await fetchEpisode(witaSlug, episode).catch(() => null);
+        if (witaEp && Array.isArray(witaEp.entries) && witaEp.entries.length > 0) {
+          // Eagerly resolve the first WitAnime server so playback starts immediately
+          const firstEntry = witaEp.entries[0];
+          try {
+            const firstResolved = await resolveEntry(witaSlug, episode, firstEntry.id);
+            if (firstResolved) {
+              resolved[firstEntry.id] = firstResolved;
+            }
+          } catch (_) {}
+
+          for (const we of witaEp.entries) {
+            entries.push({
+              ...we,
+              witaSlug,
+              server: `👑 ${we.server} (مترجم عربي)`
+            });
+            if (witaEp.resolved?.[we.id]) {
+              resolved[we.id] = witaEp.resolved[we.id];
+            }
+          }
+
+          for (const wd of witaEp.downloads || []) {
+            downloads.push({
+              ...wd,
+              witaSlug
+            });
+            if (witaEp.resolvedDownloads?.[wd.id]) {
+              resolvedDownloads[wd.id] = witaEp.resolvedDownloads[wd.id];
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 2) Add Global English Streaming Servers (Videasy Pro + VidLink Pro Sub & Dub)
+    const englishServers = [
+      {
+        id: `en-videasy-sub-${malId}-${episode}`,
+        token: `en-ve-sub-${malId}-${episode}`,
+        server: '🌐 Videasy Pro (Sub EN + ترجمة عربية فورية AI)',
+        quality: '1080p FHD',
+        version: 'sub',
+        lang: 'en->ar',
+        embedUrl: `https://player.videasy.net/anime/${aniId || malId}/${episode}`,
+        directUrl: null,
+        isFastCdn: true,
+        hasAutoArabicSub: true,
+        source: 'english'
+      },
       {
         id: `en-vidlink-sub-${malId}-${episode}`,
         token: `en-vl-sub-${malId}-${episode}`,
@@ -294,6 +354,19 @@ class EnglishAnimeService {
         version: 'sub',
         lang: 'en->ar',
         embedUrl: `https://vidlink.pro/anime/${malId}/${episode}/sub`,
+        directUrl: null,
+        isFastCdn: true,
+        hasAutoArabicSub: true,
+        source: 'english'
+      },
+      {
+        id: `en-videasy-dub-${malId}-${episode}`,
+        token: `en-ve-dub-${malId}-${episode}`,
+        server: '🎙️ Videasy Pro (Dub EN + ترجمة عربية فورية AI)',
+        quality: '1080p FHD',
+        version: 'dub',
+        lang: 'en->ar',
+        embedUrl: `https://player.videasy.net/anime/${aniId || malId}/${episode}?dub=true`,
         directUrl: null,
         isFastCdn: true,
         hasAutoArabicSub: true,
@@ -311,26 +384,21 @@ class EnglishAnimeService {
         isFastCdn: true,
         hasAutoArabicSub: true,
         source: 'english'
-      },
-      {
-        id: `en-nontongo-${malId}-${episode}`,
-        token: `en-ng-${malId}-${episode}`,
-        server: '🌍 NontonGo Global (HD + ترجمة عربية فورية AI)',
-        quality: '720p HD',
-        version: 'sub',
-        lang: 'en->ar',
-        embedUrl: `https://www.NontonGo.win/embed/anime/${cleanNameSlug}-episode-${episode}`,
-        directUrl: null,
-        isFastCdn: false,
-        hasAutoArabicSub: true,
-        source: 'english'
       }
     ];
+
+    for (const e of englishServers) {
+      entries.push(e);
+      resolved[e.id] = {
+        embedUrl: e.embedUrl,
+        directUrl: null
+      };
+    }
 
     const subVttUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.vtt?title=${encodeURIComponent(titleEn)}`;
     const subSrtUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.srt?title=${encodeURIComponent(titleEn)}`;
 
-    const downloads = [
+    const subDownloads = [
       {
         id: `dl-sub-ar-srt-${malId}-${episode}`,
         token: `dl-sub-srt`,
@@ -351,16 +419,8 @@ class EnglishAnimeService {
       }
     ];
 
-    const resolved = {};
-    for (const e of entries) {
-      resolved[e.id] = {
-        embedUrl: e.embedUrl,
-        directUrl: null
-      };
-    }
-
-    const resolvedDownloads = {};
-    for (const d of downloads) {
+    for (const d of subDownloads) {
+      downloads.push(d);
       resolvedDownloads[d.id] = {
         downloadUrl: d.downloadUrl,
         directUrl: d.downloadUrl

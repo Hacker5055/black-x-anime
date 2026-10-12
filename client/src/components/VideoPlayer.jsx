@@ -286,7 +286,6 @@ export default function VideoPlayer({
             allowFullScreen
             frameBorder="0"
             scrolling="no"
-            referrerPolicy="no-referrer"
           />
         ) : (
           <video

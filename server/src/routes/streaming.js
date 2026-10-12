@@ -576,18 +576,24 @@ router.post('/resolve', async (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
   }
 
-  // If this is an English Anime entry, resolve immediately
-  if (String(entryId).startsWith('en-')) {
+  // If this is an English Anime entry or slug, resolve via englishAnimeService / witaSlug
+  if (String(entryId).startsWith('en-') || String(slug).startsWith('en-') || String(slug).startsWith('mal-')) {
     try {
       const enData = await englishAnimeService.getEpisode(String(slug), ep);
       const match = enData?.entries?.find((e) => e.id === entryId);
       if (match) {
-        return res.json({
-          source: {
-            embedUrl: match.embedUrl,
-            directUrl: match.directUrl || null
-          }
-        });
+        if (match.embedUrl) {
+          return res.json({
+            source: {
+              embedUrl: match.embedUrl,
+              directUrl: match.directUrl || null
+            }
+          });
+        }
+        if (match.witaSlug) {
+          const witaSource = await resolveEntry(match.witaSlug, ep, String(entryId));
+          if (witaSource) return res.json({ source: witaSource });
+        }
       }
     } catch (_) {}
   }

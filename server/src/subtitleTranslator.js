@@ -1,13 +1,12 @@
 /**
  * Real-Time Anime Subtitle Fetcher & English -> Arabic Translator
  * ---------------------------------------------------------------
- * Inspired by open-source GitHub subtitle translators (rockbenben/subtitle-translator,
- * machinewrapped/llm-subtrans, manucabral/fast-subtitles-translator).
+ * Supports .SRT, .VTT, and .ASS/.SSA (SubStation Alpha anime fansubs).
  *
  * Capabilities:
- * 1. Fetches official English (or Arabic) .srt/.vtt subtitles for any anime episode via OpenSubtitles REST API
- *    or any direct .vtt / .srt URL.
- * 2. Parses timecodes locally so timestamps are NEVER corrupted during translation.
+ * 1. Cleans anime titles (stripping Arabic suffixes, punctuation, season tags) and queries OpenSubtitles REST API
+ *    using strictly lowercase queries (avoiding 301 redirect header loss) with automatic short-keyword fallback.
+ * 2. Parses .srt, .vtt, AND .ass/.ssa ("Dialogue:" lines) locally so timestamps are NEVER corrupted.
  * 3. Translates all English dialogue cues into natural Arabic in parallel batches (~1-2 seconds per episode).
  * 4. Exports WebVTT (.vtt), SubRip (.srt), and JSON cue arrays for HTML5 <track> and custom player overlays.
  */
@@ -17,7 +16,7 @@ import { streamGet, streamSet } from './db.js';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Convert timestamp "00:01:23,450" or "00:01:23.450" -> seconds (float)
+ * Convert timestamp "00:01:23,450" or "0:01:23.45" -> seconds (float)
  */
 export function timeToSeconds(ts) {
   const clean = String(ts || '').trim().replace(',', '.');
@@ -32,13 +31,19 @@ export function timeToSeconds(ts) {
 }
 
 /**
- * Convert timestamp to WebVTT format "HH:MM:SS.mmm"
+ * Convert seconds (float) or timestamp string to WebVTT format "HH:MM:SS.mmm"
  */
 export function toVttTimestamp(ts) {
-  const clean = String(ts || '').trim().replace(',', '.');
-  const parts = clean.split(':');
-  if (parts.length === 2) return `00:${parts[0].padStart(2, '0')}:${parts[1]}`;
-  return clean;
+  if (typeof ts === 'number' && Number.isFinite(ts)) {
+    const totalMs = Math.max(0, Math.round(ts * 1000));
+    const h = Math.floor(totalMs / 3600000);
+    const m = Math.floor((totalMs % 3600000) / 60000);
+    const s = Math.floor((totalMs % 60000) / 1000);
+    const ms = totalMs % 1000;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+  }
+  const sec = timeToSeconds(ts);
+  return toVttTimestamp(sec);
 }
 
 /**
@@ -48,9 +53,70 @@ export function toSrtTimestamp(ts) {
   return toVttTimestamp(ts).replace('.', ',');
 }
 
+function isWatermarkLine(dialogue) {
+  return /opensubtitles|osdb\.link|advertise your product|subtitles by|synced and corrected|addic7ed|subscene/i.test(
+    dialogue
+  );
+}
+
 /**
- * Parse .srt or .vtt content into structured cues:
- * [{ index, start, end, startSec, endSec, text }]
+ * Parse .ass / .ssa (SubStation Alpha) anime subtitle files
+ * Format: Dialogue: 0,0:00:16.35,0:00:18.14,Default,,0,0,0,,Captain, we should support them too.
+ */
+export function parseAssSubtitles(rawText) {
+  const lines = rawText.split(/\r?\n/);
+  const cues = [];
+
+  for (const line of lines) {
+    if (!line.startsWith('Dialogue:')) continue;
+    // Split first 9 commas: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+    const parts = line.slice('Dialogue:'.length).trim().split(',');
+    if (parts.length < 10) continue;
+
+    const rawStart = parts[1].trim();
+    const rawEnd = parts[2].trim();
+    const styleName = (parts[3] || '').toLowerCase();
+    // Skip sign/typesetting/karaoke tracks if marked
+    if (/sign|op|ed|karaoke|title|logo|credit/i.test(styleName)) continue;
+
+    const rawDialogue = parts.slice(9).join(',');
+    const cleaned = rawDialogue
+      .replace(/\{[^}]*\}/g, '') // strip ASS override tags like {\pos(120,200)\fad(100,100)}
+      .replace(/\\[Nn]/g, ' ') // convert \N and \n linebreaks to space
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleaned || cleaned.length < 2) continue;
+    if (isWatermarkLine(cleaned)) continue;
+
+    const startSec = timeToSeconds(rawStart);
+    const endSec = timeToSeconds(rawEnd);
+    if (endSec <= startSec) continue;
+
+    // Deduplicate identical consecutive or overlapping cues
+    const prev = cues[cues.length - 1];
+    if (prev && prev.textEn === cleaned && Math.abs(prev.startSec - startSec) < 2) {
+      continue;
+    }
+
+    cues.push({
+      index: cues.length + 1,
+      start: toVttTimestamp(startSec),
+      end: toVttTimestamp(endSec),
+      startSec,
+      endSec,
+      textEn: cleaned,
+      textAr: cleaned
+    });
+  }
+
+  return cues.sort((a, b) => a.startSec - b.startSec).map((c, i) => ({ ...c, index: i + 1 }));
+}
+
+/**
+ * Parse .srt, .vtt, or .ass/.ssa content into structured cues:
+ * [{ index, start, end, startSec, endSec, textEn, textAr }]
  */
 export function parseSubtitles(rawText) {
   if (!rawText || typeof rawText !== 'string') return [];
@@ -58,6 +124,12 @@ export function parseSubtitles(rawText) {
     .replace(/^\uFEFF/, '')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n');
+
+  // Check if it is an ASS / SSA file
+  if (/\[Events\]/i.test(text) || /^Dialogue:\s*\d+,/m.test(text)) {
+    const assCues = parseAssSubtitles(text);
+    if (assCues.length > 0) return assCues;
+  }
 
   const blocks = text.split(/\n\s*\n/);
   const cues = [];
@@ -75,19 +147,21 @@ export function parseSubtitles(rawText) {
     if (timeIdx === -1) continue;
 
     const timeLine = lines[timeIdx];
-    const m = timeLine.match(/(\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3})/);
+    const m = timeLine.match(
+      /(\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3})/
+    );
     if (!m) continue;
 
-    const start = toVttTimestamp(m[1]);
-    const end = toVttTimestamp(m[2]);
-    const startSec = timeToSeconds(start);
-    const endSec = timeToSeconds(end);
+    const startSec = timeToSeconds(m[1]);
+    const endSec = timeToSeconds(m[2]);
+    const start = toVttTimestamp(startSec);
+    const end = toVttTimestamp(endSec);
 
     const dialogueLines = lines
       .slice(timeIdx + 1)
       .map((l) =>
         l
-          .replace(/\{\\[^}]*\}/g, '') // strip ASS tags like {\an8}
+          .replace(/\{[^}]*\}/g, '') // strip ASS tags like {\an8}
           .replace(/<[^>]+>/g, '') // strip HTML tags
           .trim()
       )
@@ -95,11 +169,7 @@ export function parseSubtitles(rawText) {
 
     const dialogue = dialogueLines.join(' ').trim();
     if (!dialogue) continue;
-
-    // Skip watermark / ad cues from OpenSubtitles
-    if (/opensubtitles|osdb\.link|advertise your product|subtitles by|synced and corrected/i.test(dialogue)) {
-      continue;
-    }
+    if (isWatermarkLine(dialogue)) continue;
 
     cues.push({
       index: cues.length + 1,
@@ -128,7 +198,6 @@ export async function translateLinesToArabic(lines) {
   }
 
   const translateBatch = async (batch) => {
-    // Join with newline; Google GTX preserves newlines accurately
     const joined = batch.map((l) => l.replace(/\n+/g, ' ').trim()).join('\n');
     try {
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(joined)}`;
@@ -195,7 +264,7 @@ export function buildSrtFromCues(cues, langKey = 'textAr') {
 }
 
 /**
- * Download and decompress a subtitle file from OpenSubtitles (.gz) or direct (.vtt/.srt) URL
+ * Download and decompress a subtitle file from OpenSubtitles (.gz) or direct (.vtt/.srt/.ass) URL
  */
 async function downloadRawSubtitle(url) {
   const res = await fetch(url, {
@@ -214,24 +283,68 @@ async function downloadRawSubtitle(url) {
 }
 
 /**
+ * Normalize an anime title into clean lowercase English search queries for OpenSubtitles
+ */
+export function buildSubtitleSearchQueries(rawQuery) {
+  const asciiOnly = String(rawQuery || '')
+    .replace(/[\u0600-\u06FF]+/g, ' ') // strip Arabic text like (مترجم للعربية)
+    .replace(/^(en|mal)-\d+-/i, ' ')
+    .replace(/^(ok|blkom|a3rb|ani)-/i, ' ')
+    .replace(/['’`":!?.()[\]/\\_-]+/g, ' ')
+    .replace(/\b(2nd|3rd|4th|5th|season|part|cour|tv|movie|ova|ai|sub|dub)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (!asciiOnly) return [];
+  const words = asciiOnly.split(' ').filter((w) => w.length >= 2);
+  const queries = [asciiOnly];
+  if (words.length > 2) {
+    queries.push(words.slice(0, 2).join(' '));
+  }
+  if (words.length > 1 && words[0].length >= 4) {
+    queries.push(words[0]);
+  }
+  return [...new Set(queries)];
+}
+
+async function searchOpenSubtitles(queryLower, ep, langId = 'eng') {
+  // MUST be strictly lowercase so rest.opensubtitles.org does not issue a 301 redirect
+  const q = String(queryLower || '').toLowerCase().trim();
+  if (!q) return [];
+  const url = `https://rest.opensubtitles.org/search/episode-${ep}/query-${encodeURIComponent(q)}/sublanguageid-${langId}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'TemporaryUserAgent',
+        'X-User-Agent': 'TemporaryUserAgent'
+      },
+      signal: AbortSignal.timeout(9000)
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json) ? json : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Search OpenSubtitles for an anime episode and return translated Arabic cues + VTT
  */
 export async function getTranslatedEpisodeSubtitles({ query, episode = 1, directSubUrl = null }) {
-  const cleanQuery = String(query || '')
-    .replace(/[-_]+/g, ' ')
-    .replace(/\b(2nd|3rd|4th|season|part|tv)\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const searchQueries = buildSubtitleSearchQueries(query);
+  const primaryQuery = searchQueries[0] || 'anime';
   const ep = Math.max(1, Number(episode) || 1);
-  const cacheKey = `sub:ep:${cleanQuery.toLowerCase()}:${ep}:${directSubUrl || 'os'}`;
+  const cacheKey = `sub:ep:v2:${primaryQuery}:${ep}:${directSubUrl || 'os'}`;
   const cached = streamGet(cacheKey);
   if (cached) return cached;
 
   let rawSubText = null;
   let sourceLang = 'en';
-  let fileName = `${cleanQuery} - E${ep}`;
+  let fileName = `${primaryQuery} - E${ep}`;
 
-  // 1) If a direct .vtt / .srt URL was provided, fetch it directly
+  // 1) If a direct .vtt / .srt / .ass URL was provided, fetch it directly
   if (directSubUrl) {
     try {
       rawSubText = await downloadRawSubtitle(directSubUrl);
@@ -240,42 +353,37 @@ export async function getTranslatedEpisodeSubtitles({ query, episode = 1, direct
     }
   }
 
-  // 2) Otherwise search OpenSubtitles (first check if native Arabic exists, else English -> translate to Arabic)
-  if (!rawSubText && cleanQuery) {
-    try {
-      const araSearchUrl = `https://rest.opensubtitles.org/search/episode-${ep}/query-${encodeURIComponent(cleanQuery)}/sublanguageid-ara`;
-      const engSearchUrl = `https://rest.opensubtitles.org/search/episode-${ep}/query-${encodeURIComponent(cleanQuery)}/sublanguageid-eng`;
-
-      const [araRes, engRes] = await Promise.all([
-        fetch(araSearchUrl, {
-          headers: { 'User-Agent': 'TemporaryUserAgent', 'X-User-Agent': 'TemporaryUserAgent' },
-          signal: AbortSignal.timeout(9000)
-        }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
-        fetch(engSearchUrl, {
-          headers: { 'User-Agent': 'TemporaryUserAgent', 'X-User-Agent': 'TemporaryUserAgent' },
-          signal: AbortSignal.timeout(9000)
-        }).then((r) => (r.ok ? r.json() : [])).catch(() => [])
-      ]);
-
-      // Prefer English SRT/VTT to translate cleanly (or native Arabic if English isn't found)
-      const engCandidate = (Array.isArray(engRes) ? engRes : []).find(
-        (item) => item?.SubDownloadLink && (item.SubFormat === 'srt' || item.SubFormat === 'vtt')
+  // 2) Try each normalized query (full title -> first 2 words -> first main keyword)
+  if (!rawSubText && searchQueries.length > 0) {
+    for (const q of searchQueries) {
+      const engList = await searchOpenSubtitles(q, ep, 'eng');
+      // Prefer .srt / .vtt first, then .ass / .ssa
+      const validList = engList.filter(
+        (item) =>
+          item?.SubDownloadLink &&
+          ['srt', 'vtt', 'ass', 'ssa'].includes(String(item.SubFormat || '').toLowerCase())
       );
-      const araCandidate = (Array.isArray(araRes) ? araRes : []).find(
-        (item) => item?.SubDownloadLink && (item.SubFormat === 'srt' || item.SubFormat === 'vtt')
-      );
+      validList.sort((a, b) => {
+        const fa = ['srt', 'vtt'].includes(String(a.SubFormat).toLowerCase()) ? 0 : 1;
+        const fb = ['srt', 'vtt'].includes(String(b.SubFormat).toLowerCase()) ? 0 : 1;
+        return fa - fb;
+      });
 
-      if (engCandidate?.SubDownloadLink) {
-        rawSubText = await downloadRawSubtitle(engCandidate.SubDownloadLink);
-        sourceLang = 'en';
-        fileName = engCandidate.SubFileName || fileName;
-      } else if (araCandidate?.SubDownloadLink) {
-        rawSubText = await downloadRawSubtitle(araCandidate.SubDownloadLink);
-        sourceLang = 'ar';
-        fileName = araCandidate.SubFileName || fileName;
+      for (const candidate of validList.slice(0, 3)) {
+        try {
+          const downloaded = await downloadRawSubtitle(candidate.SubDownloadLink);
+          const parsedCheck = parseSubtitles(downloaded);
+          if (parsedCheck.length >= 5) {
+            rawSubText = downloaded;
+            sourceLang = 'en';
+            fileName = candidate.SubFileName || fileName;
+            break;
+          }
+        } catch {
+          // try next candidate
+        }
       }
-    } catch {
-      rawSubText = null;
+      if (rawSubText) break;
     }
   }
 
@@ -286,26 +394,29 @@ export async function getTranslatedEpisodeSubtitles({ query, episode = 1, direct
   const cues = parseSubtitles(rawSubText);
   if (!cues.length) return null;
 
+  // Cap at 600 cues to keep translation fast (<2.5s)
+  const limitedCues = cues.slice(0, 600);
+
   if (sourceLang === 'en') {
-    const englishLines = cues.map((c) => c.textEn);
+    const englishLines = limitedCues.map((c) => c.textEn);
     const arabicLines = await translateLinesToArabic(englishLines);
-    cues.forEach((c, idx) => {
+    limitedCues.forEach((c, idx) => {
       c.textAr = arabicLines[idx] || c.textEn;
     });
   }
 
-  const vttAr = buildVttFromCues(cues, 'textAr');
-  const vttEn = buildVttFromCues(cues, 'textEn');
-  const srtAr = buildSrtFromCues(cues, 'textAr');
+  const vttAr = buildVttFromCues(limitedCues, 'textAr');
+  const vttEn = buildVttFromCues(limitedCues, 'textEn');
+  const srtAr = buildSrtFromCues(limitedCues, 'textAr');
 
   const payload = {
-    query: cleanQuery,
+    query: primaryQuery,
     episode: ep,
     fileName,
     sourceLang,
     translatedTo: 'ar',
-    cueCount: cues.length,
-    cues,
+    cueCount: limitedCues.length,
+    cues: limitedCues,
     vttAr,
     vttEn,
     srtAr
