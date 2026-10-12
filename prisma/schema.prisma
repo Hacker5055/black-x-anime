@@ -85,6 +85,7 @@ model Content {
   type        ContentType
   description String?
   cover_url   String?
+  genres      String[]    @default([])
   created_at  DateTime    @default(now())
   updated_at  DateTime    @updatedAt
 

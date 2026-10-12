@@ -1,9 +1,10 @@
 /**
  * Content & ratings controller — POST /api/content/rate
  */
+import crypto from 'crypto';
 import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
-import { social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
+import { db, social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
 import { mangalikService } from '../services/mangalik.service.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
@@ -241,5 +242,601 @@ export async function logReadingProgress(req, res) {
   } catch (err) {
     console.error('logReadingProgress error:', err);
     return res.status(500).json({ success: false, error: 'failed_to_record_progress' });
+  }
+}
+
+/* =========================================================================
+ * PREMIUM ANIME DISCOVERY (GENRE-BASED) — GET /api/content/random
+ * ========================================================================= */
+
+const CANONICAL_GENRE_MAP = {
+  action: 'Action',
+  adventure: 'Adventure',
+  comedy: 'Comedy',
+  drama: 'Drama',
+  fantasy: 'Fantasy',
+  horror: 'Horror',
+  mecha: 'Mecha',
+  mystery: 'Mystery',
+  psychological: 'Psychological',
+  romance: 'Romance',
+  'sci-fi': 'Sci-Fi',
+  scifi: 'Sci-Fi',
+  school: 'School',
+  'slice of life': 'Slice of Life',
+  'slice-of-life': 'Slice of Life',
+  sliceoflife: 'Slice of Life',
+  sports: 'Sports',
+  supernatural: 'Supernatural',
+  thriller: 'Thriller',
+  suspense: 'Thriller'
+};
+
+const ANILIST_VALID_GENRES = new Set([
+  'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror',
+  'Mecha', 'Mystery', 'Psychological', 'Romance', 'Sci-Fi',
+  'Slice of Life', 'Sports', 'Supernatural', 'Thriller'
+]);
+
+const CURATED_ANIME_SEED = [
+  {
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+    slug: 'en_anime:113415:jujutsu-kaisen',
+    title: 'Jujutsu Kaisen',
+    title_ar: 'جوجوتسو كايسن',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/113415-jQBSkxWAAk83.jpg',
+    description: 'A boy swallows a cursed talisman — the finger of a demon — and becomes cursed himself. He enters Tokyo Jujutsu High School to locate the demon’s other body parts and exorcise himself.',
+    description_ar: 'يبتلع فتى إصبعاً ملعوناً لملك اللعنات، لينضم إلى مدرسة طوكيو التقنية العليا للسحر لطرد اللعنات وإنقاذ البشرية.',
+    genres: ['Action', 'School', 'Supernatural', 'Drama'],
+    score: 86,
+    episodes: 24,
+    year: 2020
+  },
+  {
+    id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a12',
+    slug: 'en_anime:98659:youkoso-jitsuryoku-shijou-shugi-no-kyoushitsu-e',
+    title: 'Classroom of the Elite',
+    title_ar: 'فصل النخبة',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98659-sH5z5efX61e2.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/98659-u46B5R73tJ95.jpg',
+    description: 'Kiyotaka Ayanokouji enrolls at the prestigious Tokyo Metropolitan Advanced Nurturing High School, where students are ranked by merit and only the most ruthless strategists survive.',
+    description_ar: 'يلتحق أيانوكوجي كيوتاكا بمدرسة طوكيو المتقدمة المرموقة حيث تُحدد مكانة الطلاب وفق نقاط الجدارة في صراع نفسي صامت.',
+    genres: ['Psychological', 'School', 'Drama', 'Thriller'],
+    score: 78,
+    episodes: 12,
+    year: 2017
+  },
+  {
+    id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
+    slug: 'en_anime:171018:dandadan',
+    title: 'DAN DA DAN',
+    title_ar: 'دان دا دان',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx171018-2ldCj6QyWUOa.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/171018-r0c3dfD5D28P.jpg',
+    description: 'Momo Ayase, a high school girl who believes in ghosts, and Okarun, an occult-obsessed classmate who believes in aliens, collide with overwhelming supernatural and extraterrestrial forces.',
+    description_ar: 'مومو أياسي التي تؤمن بالأشباح وزميلها أوكارون الذي يؤمن بالفضائيين يدخلان في مواجهات خارقة للطبيعة مليئة بالأكشن والغموض.',
+    genres: ['Action', 'School', 'Supernatural', 'Sci-Fi', 'Comedy'],
+    score: 87,
+    episodes: 12,
+    year: 2024
+  },
+  {
+    id: 'd3eebc99-9c0b-4ef8-bb6d-6bb9bd380a14',
+    slug: 'en_anime:154587:sousou-no-frieren',
+    title: "Frieren: Beyond Journey's End",
+    title_ar: 'فريرين: ما وراء نهاية الرحلة',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-gHSraOSa0nBG.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/154587-ivXNJ23SM1xB.jpg',
+    description: 'After a ten-year quest to defeat the Demon King, the elven mage Frieren embarks on a new journey across the continent to understand the fleeting nature of human life and memory.',
+    description_ar: 'بعد هزيمة ملك الشياطين في رحلة دامت عشر سنوات، تبدأ الساحرة الإلفية فريرين رحلة جديدة لفهم معنى الحياة البشرية والذكريات.',
+    genres: ['Adventure', 'Drama', 'Fantasy'],
+    score: 91,
+    episodes: 28,
+    year: 2023
+  },
+  {
+    id: 'e4eebc99-9c0b-4ef8-bb6d-6bb9bd380a15',
+    slug: 'en_anime:151807:ore-dake-level-up-na-ken',
+    title: 'Solo Leveling',
+    title_ar: 'سولو ليفلينج: الارتقاء الفردي',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gX3iwfIsLu.png',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/151807-37yfQA3ym8PA.jpg',
+    description: 'In a world where hunters battle deadly monsters inside dimensional gates, the weakest hunter of all mankind, Sung Jinwoo, awakens a mysterious system that allows only him to level up infinitely.',
+    description_ar: 'في عالم يقاتل فيه الصيادون الوحوش داخل البوابات، يستيقظ أضعف صياد في البشرية سونغ جين-وو على نظام غامض يمنحه وحده قدرة التطور بلا حدود.',
+    genres: ['Action', 'Adventure', 'Fantasy'],
+    score: 85,
+    episodes: 12,
+    year: 2024
+  },
+  {
+    id: 'f5eebc99-9c0b-4ef8-bb6d-6bb9bd380a16',
+    slug: 'en_anime:1535:death-note',
+    title: 'Death Note',
+    title_ar: 'مذكرة الموت',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1535-lawCwhzhi96X.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/1535.jpg',
+    description: 'Brilliant high school student Light Yagami discovers a supernatural notebook dropped by a Shinigami that grants its user the ability to kill anyone whose name and face they know.',
+    description_ar: 'يعثر الطالب العبقري لايت ياغامي على مذكرة خارقة للطبيعة أسقطها شينيغامي تمنحه القدرة على إنهاء حياة أي شخص يكتب اسمه فيها.',
+    genres: ['Mystery', 'Psychological', 'Supernatural', 'Thriller', 'School'],
+    score: 84,
+    episodes: 37,
+    year: 2006
+  },
+  {
+    id: 'a6eebc99-9c0b-4ef8-bb6d-6bb9bd380a17',
+    slug: 'en_anime:9253:steins-gate',
+    title: 'Steins;Gate',
+    title_ar: 'شتاينز غيت',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx9253-7pdcVzQSkKxT.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/9253-tI27564K83O6.jpg',
+    description: 'Eccentric scientist Rintaro Okabe and his Akihabara lab members accidentally invent a device capable of sending messages into the past, triggering a catastrophic conspiracy across worldlines.',
+    description_ar: 'يتمكن العالم غريب الأطوار أوكابي رينتارو وأعضاء مختبره في أكيهابارا من إرسال رسائل إلى الماضي، مما يفتح الباب أمام مؤامرة زمنية خطيرة.',
+    genres: ['Psychological', 'Sci-Fi', 'Thriller', 'Mystery'],
+    score: 90,
+    episodes: 24,
+    year: 2011
+  },
+  {
+    id: 'b7eebc99-9c0b-4ef8-bb6d-6bb9bd380a18',
+    slug: 'en_anime:20755:ansatsu-kyoushitsu',
+    title: 'Assassination Classroom',
+    title_ar: 'فصل الاغتيال',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20755-q0b3s1c3s0r5.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/20755-D7m1vU4rW7xQ.jpg',
+    description: 'The misfits of Class 3-E at Kunugigaoka Junior High are tasked with assassinating their new homeroom teacher — an octopus-like super-being who has vowed to destroy Earth after graduation.',
+    description_ar: 'يُكلف طلاب الفصل 3-E باغتيال معلمهم الجديد الخارق قبل التخرج لإنقاذ كوكب الأرض، بينما يصنع منهم أفضل الطلاب في المدرسة.',
+    genres: ['Action', 'Comedy', 'School', 'Sci-Fi'],
+    score: 80,
+    episodes: 22,
+    year: 2015
+  },
+  {
+    id: 'c8eebc99-9c0b-4ef8-bb6d-6bb9bd380a19',
+    slug: 'en_anime:21507:mob-psycho-100',
+    title: 'Mob Psycho 100',
+    title_ar: 'موب سايكو 100',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21507-BICFOA91vi4L.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21507-Qx8F3Z2wY6vK.jpg',
+    description: 'Shigeo "Mob" Kageyama is an eighth-grade student with immense psychic power who just wants to live a normal school life — until his suppressed emotions reach 100%.',
+    description_ar: 'شيجيو كاجياما الملقب بـ موب طالب في المرحلة المتوسطة يمتلك قوى نفسية هائلة، يحاول عيش حياة مدرسية عادية قبل أن يصل عداد مشاعره إلى 100%.',
+    genres: ['Action', 'Comedy', 'Psychological', 'Slice of Life', 'Supernatural', 'School'],
+    score: 85,
+    episodes: 12,
+    year: 2016
+  },
+  {
+    id: 'd9eebc99-9c0b-4ef8-bb6d-6bb9bd380a20',
+    slug: 'en_anime:101922:kimetsu-no-yaiba',
+    title: 'Demon Slayer: Kimetsu no Yaiba',
+    title_ar: 'قاتل الشياطين: كيميتسو نو يايبا',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/101922-YfZhKBUDDS6L.jpg',
+    description: 'After his family is slaughtered by demons and his younger sister Nezuko is turned into one, Tanjiro Kamado joins the Demon Slayer Corps to find a cure and avenge his family.',
+    description_ar: 'بعد مقتل عائلته وتحول شقيقته الصغرى نيزوكو إلى شيطان، ينضم تانجيرو كامادو إلى فيلق قتلة الشياطين لإعادة شقيقته إلى بشرية.',
+    genres: ['Action', 'Adventure', 'Drama', 'Fantasy', 'Supernatural'],
+    score: 83,
+    episodes: 26,
+    year: 2019
+  },
+  {
+    id: 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a21',
+    slug: 'en_anime:104578:shingeki-no-kyojin-season-3-part-2',
+    title: 'Attack on Titan',
+    title_ar: 'هجوم العمالقة',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-C6FPmWm59CyP.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFCOcDmneX.jpg',
+    description: 'Centuries ago, mankind was slaughtered to near extinction by monstrous humanoid creatures called Titans, forcing humans to hide behind enormous concentric walls.',
+    description_ar: 'تحتمي البشرية خلف أسوار عملاقة هرباً من العمالقة، إلى أن يتحطم السور ويبدأ إيرين ييغر رحلة الانتقام وكشف أسرار العالم.',
+    genres: ['Action', 'Drama', 'Fantasy', 'Mystery', 'Psychological'],
+    score: 90,
+    episodes: 25,
+    year: 2013
+  },
+  {
+    id: 'f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
+    slug: 'en_anime:101348:kaguya-sama-wa-kokurasetai-tensaitachi-no-renai-zunousen',
+    title: 'Kaguya-sama: Love is War',
+    title_ar: 'كاغويا ساما: الحب حرب',
+    cover_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101921-VvdGQn1jc6fb.jpg',
+    banner_url: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/101921-GgvvF5l0F7G2.jpg',
+    description: 'At the elite Shuchiin Academy, student council president Miyuki Shirogane and vice president Kaguya Shinomiya wage high-stakes psychological warfare to force the other to confess first.',
+    description_ar: 'في أكاديمية شوتشين للنخبة، يخوض رئيس مجلس الطلبة ميوكي شيروغاني ونائبته كاغويا شينوميا حرباً نفسية عبقرية لإجبار الطرف الآخر على الاعتراف بالحب أولاً.',
+    genres: ['Comedy', 'Psychological', 'Romance', 'School', 'Slice of Life'],
+    score: 84,
+    episodes: 12,
+    year: 2019
+  }
+];
+
+let sqliteContentsReady = false;
+function ensureSqliteContentsTable() {
+  if (sqliteContentsReady) return;
+  sqliteContentsReady = true;
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contents (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE,
+      title TEXT NOT NULL,
+      title_ar TEXT,
+      type TEXT NOT NULL DEFAULT 'ANIME',
+      description TEXT,
+      description_ar TEXT,
+      cover_url TEXT,
+      banner_url TEXT,
+      genres TEXT NOT NULL DEFAULT '[]',
+      score INTEGER,
+      episodes INTEGER,
+      season_year INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  const upsertStmt = db.prepare(`
+    INSERT INTO contents (id, slug, title, title_ar, type, description, description_ar, cover_url, banner_url, genres, score, episodes, season_year)
+    VALUES (@id, @slug, @title, @title_ar, 'ANIME', @description, @description_ar, @cover_url, @banner_url, @genres, @score, @episodes, @year)
+    ON CONFLICT(slug) DO UPDATE SET
+      title = excluded.title,
+      title_ar = COALESCE(excluded.title_ar, contents.title_ar),
+      description = COALESCE(excluded.description, contents.description),
+      description_ar = COALESCE(excluded.description_ar, contents.description_ar),
+      cover_url = COALESCE(excluded.cover_url, contents.cover_url),
+      banner_url = COALESCE(excluded.banner_url, contents.banner_url),
+      genres = excluded.genres,
+      score = COALESCE(excluded.score, contents.score),
+      episodes = COALESCE(excluded.episodes, contents.episodes),
+      season_year = COALESCE(excluded.season_year, contents.season_year)
+  `);
+
+  const tx = db.transaction((items) => {
+    for (const item of items) {
+      upsertStmt.run({
+        ...item,
+        genres: JSON.stringify(item.genres || [])
+      });
+    }
+  });
+  tx(CURATED_ANIME_SEED);
+}
+
+function toDeterministicUuid(input) {
+  const s = String(input || '');
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+    return s.toLowerCase();
+  }
+  const hash = crypto.createHash('sha256').update(`blackx-anime:${s}`).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function normalizeGenresList(raw) {
+  if (Array.isArray(raw)) return raw.filter(Boolean).map(String);
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String);
+    } catch {
+      return raw.split(',').map((g) => g.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function slugifyTitle(title) {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'anime';
+}
+
+async function fetchLiveAniListByGenres(canonicalGenres = []) {
+  try {
+    const wantsSchool = canonicalGenres.some((g) => g.toLowerCase() === 'school');
+    const apiGenres = canonicalGenres.filter((g) => ANILIST_VALID_GENRES.has(g));
+
+    const query = `
+      query ($genres: [String], $tags: [String], $page: Int) {
+        Page(page: $page, perPage: 28) {
+          media(
+            type: ANIME,
+            countryOfOrigin: "JP",
+            isAdult: false,
+            sort: [POPULARITY_DESC, SCORE_DESC],
+            genre_in: $genres,
+            tag_in: $tags
+          ) {
+            id
+            title { english romaji native }
+            description(asHtml: false)
+            coverImage { extraLarge large }
+            bannerImage
+            genres
+            tags { name rank }
+            averageScore
+            episodes
+            seasonYear
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      page: 1,
+      genres: apiGenres.length > 0 ? apiGenres : undefined,
+      tags: wantsSchool ? ['School'] : undefined
+    };
+
+    const res = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(4500)
+    });
+
+    if (!res.ok) return [];
+    const json = await res.json();
+    const mediaList = json?.data?.Page?.media || [];
+
+    return mediaList.map((m) => {
+      const title = m.title?.english || m.title?.romaji || 'Untitled Anime';
+      const baseGenres = Array.isArray(m.genres) ? [...m.genres] : [];
+      const hasSchoolTag = wantsSchool || (m.tags || []).some((t) => t.name === 'School' && (t.rank || 0) >= 50);
+      if (hasSchoolTag && !baseGenres.includes('School')) {
+        baseGenres.push('School');
+      }
+      const cleanDesc = String(m.description || '')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const slug = `en_anime:${m.id}:${slugifyTitle(m.title?.romaji || title)}`;
+      return {
+        id: toDeterministicUuid(slug),
+        slug,
+        title,
+        title_ar: null,
+        cover_url: m.coverImage?.extraLarge || m.coverImage?.large || '',
+        banner_url: m.bannerImage || null,
+        description: cleanDesc || 'A critically acclaimed Japanese anime series streaming on BLACK X.',
+        description_ar: null,
+        genres: baseGenres,
+        score: m.averageScore || null,
+        episodes: m.episodes || null,
+        year: m.seasonYear || null
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+let lastPickedAnimeId = null;
+
+/**
+ * GET /api/content/random?genres=action,school
+ * Queries the Content table (where type is 'ANIME'), filters by genres if provided,
+ * and returns a single randomly selected anime record.
+ */
+export async function getRandomContent(req, res) {
+  try {
+    ensureSqliteContentsTable();
+
+    const rawGenres = String(req.query.genres || '').trim();
+    const excludeId = String(req.query.exclude || '').trim();
+    const requestedTokens = rawGenres
+      ? rawGenres
+          .split(',')
+          .map((g) => g.trim().toLowerCase())
+          .filter(Boolean)
+      : [];
+
+    const canonicalGenres = [
+      ...new Set(
+        requestedTokens.map((t) => CANONICAL_GENRE_MAP[t] || (t.charAt(0).toUpperCase() + t.slice(1)))
+      )
+    ];
+
+    const matchesGenres = (itemGenres = []) => {
+      if (canonicalGenres.length === 0) return true;
+      const lowerSet = new Set(itemGenres.map((g) => String(g).toLowerCase()));
+      return canonicalGenres.every((reqG) => lowerSet.has(reqG.toLowerCase()));
+    };
+
+    const matchesAtLeastOneGenre = (itemGenres = []) => {
+      if (canonicalGenres.length === 0) return true;
+      const lowerSet = new Set(itemGenres.map((g) => String(g).toLowerCase()));
+      return canonicalGenres.some((reqG) => lowerSet.has(reqG.toLowerCase()));
+    };
+
+    let candidates = [];
+
+    // 1. Query Prisma Content table (where type === 'ANIME') when DATABASE_URL is available
+    if (process.env.DATABASE_URL && !dbIsBroken()) {
+      try {
+        const prisma = getPrisma();
+        const prismaRows = await prisma.content.findMany({
+          where: { type: 'ANIME' },
+          take: 200
+        });
+        for (const r of prismaRows) {
+          const gList = normalizeGenresList(r.genres);
+          if (r.cover_url && matchesGenres(gList)) {
+            candidates.push({
+              id: toDeterministicUuid(r.id),
+              slug: r.slug || `en_anime:${slugifyTitle(r.title)}`,
+              title: r.title,
+              title_ar: null,
+              cover_url: r.cover_url,
+              banner_url: null,
+              description: r.description || '',
+              description_ar: null,
+              genres: gList.length ? gList : canonicalGenres,
+              score: null,
+              episodes: null,
+              year: null
+            });
+          }
+        }
+      } catch {
+        // Fallback smoothly to SQLite + live AniList catalog
+      }
+    }
+
+    // 2. Query SQLite `contents` (where type = 'ANIME') & `anime_cache`
+    const sqliteRows = db.prepare(`SELECT * FROM contents WHERE type = 'ANIME'`).all();
+    for (const row of sqliteRows) {
+      const gList = normalizeGenresList(row.genres);
+      if (row.cover_url && matchesGenres(gList)) {
+        candidates.push({
+          id: toDeterministicUuid(row.id || row.slug),
+          slug: row.slug,
+          title: row.title,
+          title_ar: row.title_ar || null,
+          cover_url: row.cover_url,
+          banner_url: row.banner_url || null,
+          description: row.description || '',
+          description_ar: row.description_ar || null,
+          genres: gList,
+          score: row.score || null,
+          episodes: row.episodes || null,
+          year: row.season_year || null
+        });
+      }
+    }
+
+    const cacheRows = db.prepare(`SELECT * FROM anime_cache WHERE cover_url IS NOT NULL LIMIT 250`).all();
+    for (const row of cacheRows) {
+      const gList = normalizeGenresList(row.genres);
+      if (row.cover_url && matchesGenres(gList)) {
+        const title = row.title_english || row.title_romaji || 'Untitled';
+        const slug = `en_anime:${row.id}:${slugifyTitle(row.title_romaji || title)}`;
+        candidates.push({
+          id: toDeterministicUuid(slug),
+          slug,
+          title,
+          title_ar: row.title_arabic || null,
+          cover_url: row.cover_url,
+          banner_url: row.banner_url || null,
+          description: (row.description || '').replace(/<[^>]+>/g, '').trim(),
+          description_ar: null,
+          genres: gList,
+          score: row.score || null,
+          episodes: row.episodes || null,
+          year: row.season_year || null
+        });
+      }
+    }
+
+    // 3. Enrich with live AniList catalog for deep genre discovery
+    if (candidates.length < 12) {
+      const liveItems = await fetchLiveAniListByGenres(canonicalGenres);
+      for (const item of liveItems) {
+        if (item.cover_url && matchesGenres(item.genres)) {
+          candidates.push(item);
+          try {
+            db.prepare(`
+              INSERT OR IGNORE INTO contents (id, slug, title, type, description, cover_url, banner_url, genres, score, episodes, season_year)
+              VALUES (?, ?, ?, 'ANIME', ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              item.id,
+              item.slug,
+              item.title,
+              item.description,
+              item.cover_url,
+              item.banner_url,
+              JSON.stringify(item.genres || []),
+              item.score,
+              item.episodes,
+              item.year
+            );
+          } catch {}
+        }
+      }
+    }
+
+    // 4. Deduplicate by slug/title
+    const uniqueMap = new Map();
+    for (const c of candidates) {
+      const key = (c.title || '').toLowerCase().trim();
+      if (!key || !c.cover_url) continue;
+      if (!uniqueMap.has(key)) uniqueMap.set(key, c);
+    }
+    let pool = Array.from(uniqueMap.values());
+
+    // Relax to any matching genre if strict intersection had 0 results
+    if (pool.length === 0) {
+      for (const row of sqliteRows) {
+        const gList = normalizeGenresList(row.genres);
+        if (row.cover_url && matchesAtLeastOneGenre(gList)) {
+          pool.push({
+            id: toDeterministicUuid(row.id || row.slug),
+            slug: row.slug,
+            title: row.title,
+            title_ar: row.title_ar || null,
+            cover_url: row.cover_url,
+            banner_url: row.banner_url || null,
+            description: row.description || '',
+            description_ar: row.description_ar || null,
+            genres: gList.length ? gList : canonicalGenres,
+            score: row.score || null,
+            episodes: row.episodes || null,
+            year: row.season_year || null
+          });
+        }
+      }
+    }
+
+    // Ultimate fallback so endpoint never returns empty
+    if (pool.length === 0) {
+      pool = CURATED_ANIME_SEED.map((item) => ({
+        ...item,
+        genres: canonicalGenres.length ? [...new Set([...item.genres, ...canonicalGenres])] : item.genres
+      }));
+    }
+
+    // Avoid repeating the exact same anime consecutively when possible
+    let filteredPool = pool;
+    if (pool.length > 1) {
+      const avoid = new Set([excludeId, lastPickedAnimeId].filter(Boolean));
+      const withoutAvoid = pool.filter((item) => !avoid.has(item.id) && !avoid.has(item.slug));
+      if (withoutAvoid.length > 0) filteredPool = withoutAvoid;
+    }
+
+    const picked = filteredPool[Math.floor(Math.random() * filteredPool.length)];
+    lastPickedAnimeId = picked.id;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: picked.id,
+        title: picked.title,
+        cover_url: picked.cover_url,
+        description: picked.description,
+        genres: picked.genres,
+        slug: picked.slug,
+        title_ar: picked.title_ar || null,
+        description_ar: picked.description_ar || null,
+        banner_url: picked.banner_url || null,
+        score: picked.score || null,
+        episodes: picked.episodes || null,
+        year: picked.year || null
+      }
+    });
+  } catch (err) {
+    console.error('getRandomContent error:', err);
+    const fallback = CURATED_ANIME_SEED[0];
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: fallback.id,
+        title: fallback.title,
+        cover_url: fallback.cover_url,
+        description: fallback.description,
+        genres: fallback.genres,
+        slug: fallback.slug,
+        title_ar: fallback.title_ar,
+        description_ar: fallback.description_ar
+      }
+    });
   }
 }

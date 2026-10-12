@@ -7,6 +7,7 @@ import { useAsync } from '../hooks/hooks.js';
 import ShowCard, { EpisodeTile, ContinueCard } from '../components/ShowCard.jsx';
 import { SkeletonGrid, EmptyState } from '../components/Loading.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
+import AnimeDiscover from '../components/AnimeDiscover.jsx';
 
 const WEEK_DAYS = [
   { id: 6, ar: 'السبت', en: 'Saturday' },
@@ -618,6 +619,9 @@ export default function Dashboard({ onOpenAuth }) {
 
       {/* 2. Latest Added Episodes (أحدث الحلقات المضافة) */}
       <LatestSection items={latest || []} loading={!latest} error={error} onRetry={loadLatest} />
+
+      {/* 2.5. Luxury Liquid Glass Anime Discovery Oracle */}
+      <AnimeDiscover compact />
 
       {/* 3. Weekly Airing Schedule (مواعيد الحلقات) */}
       <WeeklyScheduleSection items={pinnedItems} />

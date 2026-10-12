@@ -14,6 +14,7 @@ import MyList from './pages/MyList.jsx';
 import ProfileDashboard from './pages/ProfileDashboard.jsx';
 import Rankings from './pages/Rankings.jsx';
 import Community from './pages/Community.jsx';
+import AnimeDiscover from './components/AnimeDiscover.jsx';
 import { api } from './api.js';
 
 function ScrollToTop() {
@@ -85,6 +86,7 @@ export default function App() {
           <div className="container">
             <Routes>
               <Route path="/" element={<Dashboard onOpenAuth={openAuth} />} />
+              <Route path="/discover" element={<AnimeDiscover />} />
               <Route path="/trending" element={<TrendingAnime />} />
               <Route path="/browse" element={<Browse />} />
               <Route path="/community" element={<Community onOpenAuth={openAuth} />} />

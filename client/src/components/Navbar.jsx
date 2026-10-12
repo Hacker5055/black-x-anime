@@ -69,6 +69,7 @@ export default function Navbar({ onOpenAuth }) {
 
   const links = [
     { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home', icon: '🏠' },
+    { to: '/discover', label: lang === 'ar' ? 'اكتشف' : 'Discover', icon: '✦' },
     { to: '/trending', label: lang === 'ar' ? 'قائمة الأنمي' : 'Anime List', icon: '🔥' },
     { to: '/trending?type=movie', label: lang === 'ar' ? 'أفلام' : 'Movies', icon: '🎬' },
     { to: '/#schedule-section', label: lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule', icon: '📅', isHash: true },
@@ -401,9 +402,9 @@ export default function Navbar({ onOpenAuth }) {
       <nav className="nav-mobile-tabs" aria-label="Mobile">
         {[
           { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home', icon: '🏠' },
+          { to: '/discover', label: lang === 'ar' ? 'اكتشف' : 'Discover', icon: '✦' },
           { to: '/trending', label: lang === 'ar' ? 'الأنميات' : 'Anime', icon: '🔥' },
           { to: '/browse', label: lang === 'ar' ? 'المانجا' : 'Manga', icon: '📖' },
-          { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community', icon: '💬' },
           { to: '/profile', label: lang === 'ar' ? 'حسابي' : 'Profile', icon: '👤' }
         ].map((l) => (
           <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')} end={l.to === '/'}>

@@ -3,12 +3,13 @@
  */
 import { Router } from 'express';
 import { attachUser } from '../lib/api.js';
-import { rateContent, getMyRating, getLibrary, getLibraryItemDetail, logReadingProgress } from '../controllers/content.controller.js';
+import { rateContent, getMyRating, getLibrary, getLibraryItemDetail, logReadingProgress, getRandomContent } from '../controllers/content.controller.js';
 
 const router = Router();
 
 router.use(attachUser);
 
+router.get('/random', getRandomContent);
 router.post('/rate', rateContent);
 router.get('/rating', getMyRating);
 router.get('/library', getLibrary);
