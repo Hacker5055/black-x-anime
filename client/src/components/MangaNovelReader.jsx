@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { api } from '../api.js';
+import { api, resolveApiUrl } from '../api.js';
 import { pushToast, imgFallback } from '../hooks/hooks.js';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { LiquidLoader } from './Loading.jsx';
@@ -333,8 +333,8 @@ export default function MangaNovelReader({
       }
       return url;
     }
-    if (url.startsWith('/api/proxy/image')) return url;
-    return `/api/proxy/image?url=${encodeURIComponent(url)}`;
+    if (url.startsWith('/api/proxy/image')) return resolveApiUrl(url);
+    return resolveApiUrl(`/api/proxy/image?url=${encodeURIComponent(url)}`);
   };
 
   const displayTitle = typeof details?.title === 'object'
@@ -508,11 +508,13 @@ export default function MangaNovelReader({
 
           {!isNovel && selectedChapter && (
             <a
-              href={`/api/manga/chapter/${encodeURIComponent(selectedChapter.chapterId)}/download?title=${encodeURIComponent(
-                displayTitle || 'Manga'
-              )}&chapter=${encodeURIComponent(selectedChapter.chapterNumber || '1')}&server=${encodeURIComponent(
-                activeServer || ''
-              )}`}
+              href={resolveApiUrl(
+                `/api/manga/chapter/${encodeURIComponent(selectedChapter.chapterId)}/download?title=${encodeURIComponent(
+                  displayTitle || 'Manga'
+                )}&chapter=${encodeURIComponent(selectedChapter.chapterNumber || '1')}&server=${encodeURIComponent(
+                  activeServer || ''
+                )}`
+              )}
               download
               style={{
                 background: 'rgba(255, 255, 255, 0.1)',

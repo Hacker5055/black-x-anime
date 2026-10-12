@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useI18n } from '../i18n/I18nProvider.jsx';
-import { api } from '../api.js';
+import { api, resolveApiUrl } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 
 export function isFhdQuality(q) {
@@ -18,7 +18,7 @@ const fmt = (s) => {
     : `${m}:${String(sec).padStart(2, '0')}`;
 };
 
-const proxied = (url) => (url ? `/api/stream/proxy?url=${encodeURIComponent(url)}` : url);
+const proxied = (url) => (url ? resolveApiUrl(`/api/stream/proxy?url=${encodeURIComponent(url)}`) : url);
 
 /**
  * BLACK X custom player — liquid glass chrome over an HTML5 <video>,
@@ -275,7 +275,7 @@ export default function VideoPlayer({
           <iframe
             key={active.id}
             className="player-embed"
-            src={activeSource.embedUrl}
+            src={resolveApiUrl(activeSource.embedUrl)}
             title={title}
             allow="autoplay *; encrypted-media *; picture-in-picture *; fullscreen *"
             allowFullScreen

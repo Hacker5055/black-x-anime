@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { api } from '../api.js';
+import { api, resolveApiUrl } from '../api.js';
 import { Modal } from '../components/Modals.jsx';
 import { SkeletonGrid, EmptyState, LiquidLoader } from '../components/Loading.jsx';
 import { pushToast, imgFallback } from '../hooks/hooks.js';
@@ -976,9 +976,11 @@ export default function Browse() {
                   {itemChapters.map((ch, idx) => {
                     const chNum = ch.number || ch.slug;
                     const chId = ch.chapterId || `${selectedItem.id}:${chNum}`;
-                    const dlUrl = `/api/manga/chapter/${encodeURIComponent(chId)}/download?title=${encodeURIComponent(
-                      selectedItem.title_ar || selectedItem.title_en || 'Manga'
-                    )}&chapter=${encodeURIComponent(chNum)}&server=${encodeURIComponent(modalServer || '')}`;
+                    const dlUrl = resolveApiUrl(
+                      `/api/manga/chapter/${encodeURIComponent(chId)}/download?title=${encodeURIComponent(
+                        selectedItem.title_ar || selectedItem.title_en || 'Manga'
+                      )}&chapter=${encodeURIComponent(chNum)}&server=${encodeURIComponent(modalServer || '')}`
+                    );
                     return (
                       <div
                         key={chId || idx}

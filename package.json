@@ -11,6 +11,8 @@
     "seed": "node server/src/seed.js",
     "build": "vite build client",
     "start": "vite build client && node server/src/index.js",
+    "cap:sync": "vite build client && cap sync android",
+    "apk:debug": "vite build client && cap sync android && cd android && ./gradlew assembleDebug",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -18,6 +20,8 @@
     "check:ornaments": "node tools/ornament-node-smoke.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
     "@prisma/client": "6.19.2",
     "@vitejs/plugin-react": "^5.0.4",
     "aniwatch": "^2.27.9",
@@ -40,6 +44,7 @@
     "vite": "^7.1.9"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.2",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
     "prisma": "6.19.2",

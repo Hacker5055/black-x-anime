@@ -1,0 +1,17 @@
+{
+  "appId": "app.blackx.anime",
+  "appName": "BLACK X",
+  "webDir": "client/dist",
+  "backgroundColor": "#000000",
+  "android": {
+    "backgroundColor": "#000000",
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true,
+    "allowNavigation": ["*"]
+  }
+}

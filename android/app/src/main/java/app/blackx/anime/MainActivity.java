@@ -1,0 +1,5 @@
+package app.blackx.anime;
+
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {}
