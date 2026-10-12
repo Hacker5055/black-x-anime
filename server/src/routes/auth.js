@@ -2,8 +2,14 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth } from '../auth.js';
 import { social } from '../lib/socialDb.js';
+import { syncUserToCloud, fetchUserFromCloud, sha256Hex, syncAllLocalUsersToCloud } from '../services/cloudSync.service.js';
 
 const router = Router();
+
+// Background sync existing Website users to shared Cloud Firestore so APK can log in immediately
+setTimeout(() => {
+  syncAllLocalUsersToCloud().catch(() => {});
+}, 1500);
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 
@@ -71,10 +77,11 @@ router.post('/register', (req, res) => {
 
   const token = signToken(user);
   setAuthCookie(res, token);
+  syncUserToCloud(user, password).catch(() => {});
   res.status(201).json({ user: publicUser(user), token });
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username, email, password } = req.body || {};
   const identifier = (username || email || '').trim().toLowerCase();
   if (!identifier || !password) {
@@ -89,6 +96,30 @@ router.post('/login', (req, res) => {
       'INSERT INTO users (username, email, password_hash, display_name, avatar_color, role) VALUES (?, ?, ?, ?, ?, ?)'
     ).run('developer', 'mz0970mmz@gmail.com', hashPassword(password), 'Developer MZ', '#ec4899', 'developer');
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+  }
+
+  // If user registered on the Android APK, pull their account from shared Cloud Firestore
+  if (!user) {
+    try {
+      const cloudUser = await fetchUserFromCloud(identifier);
+      if (cloudUser && (!cloudUser.passSha256 || cloudUser.passSha256 === sha256Hex(password))) {
+        const uname = (cloudUser.username || identifier.split('@')[0] || 'user').toLowerCase();
+        const uemail = (cloudUser.email || `${uname}@blackx.app`).toLowerCase();
+        const info = db.prepare(
+          'INSERT INTO users (username, email, password_hash, display_name, avatar_color, photo_url, bio, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(
+          uname,
+          uemail,
+          hashPassword(password),
+          cloudUser.displayName || uname,
+          cloudUser.avatarColor || '#22d3ee',
+          cloudUser.photoUrl || '',
+          cloudUser.bio || '',
+          cloudUser.role || 'user'
+        );
+        user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+      }
+    } catch (_) {}
   }
 
   if (!user) {
@@ -113,6 +144,7 @@ router.post('/login', (req, res) => {
 
   const token = signToken(user);
   setAuthCookie(res, token);
+  syncUserToCloud(user, password).catch(() => {});
   res.json({ user: publicUser(user), token });
 });
 

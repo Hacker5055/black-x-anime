@@ -15,7 +15,8 @@ import ProfileDashboard from './pages/ProfileDashboard.jsx';
 import Rankings from './pages/Rankings.jsx';
 import Community from './pages/Community.jsx';
 import AnimeDiscover from './components/AnimeDiscover.jsx';
-import { api } from './api.js';
+import MobileApkApp from './mobile/MobileApkApp.jsx';
+import { api, isNativeApk } from './api.js';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -64,6 +65,10 @@ function Footer() {
 export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const openAuth = (mode = 'login') => setAuthModal(mode);
+  const isApkRuntime =
+    isNativeApk() ||
+    import.meta.env.VITE_BUILD_TARGET === 'apk' ||
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('apk_ui') === '1');
 
   useEffect(() => {
     try {
@@ -74,6 +79,10 @@ export default function App() {
       }
     } catch {}
   }, []);
+
+  if (isApkRuntime) {
+    return <MobileApkApp />;
+  }
 
   return (
     <>
