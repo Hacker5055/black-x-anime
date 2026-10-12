@@ -462,26 +462,6 @@ export default function Watch({ onOpenAuth }) {
               )}
             </div>
 
-            {/* Provider source switcher */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.74rem', color: 'var(--ink-dim)', fontWeight: 800 }}>
-                {lang === 'ar' ? 'سيرفر البث:' : 'Server:'}
-              </span>
-              <span
-                style={{
-                  padding: '0.25rem 0.65rem',
-                  borderRadius: '8px',
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #22d3ee, #06b6d4)',
-                  color: '#030d1a',
-                  border: '1px solid transparent'
-                }}
-              >
-                👑 BLACK X
-              </span>
-            </div>
-
             {vipTier === 'free' && (
               <button
                 type="button"
@@ -501,7 +481,7 @@ export default function Watch({ onOpenAuth }) {
                 <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
                 <span style={{ fontSize: '0.72rem', padding: '0.12rem 0.55rem', borderRadius: '8px', background: 'rgba(34, 211, 238, 0.14)', border: '1px solid rgba(34, 211, 238, 0.35)', color: '#22d3ee', fontWeight: 800 }}>
-                  👑 BLACK X
+                  {show?.sourceName || (sourceParam === 'okanime' ? '🔥 OkAnime' : sourceParam === 'animeblkom' ? '💎 AnimeBlkom' : sourceParam === 'anime3rb' ? '⚡ Anime3rb' : '👑 WitAnime')}
                 </span>
               </div>
               <h1 className="watch-meta__title">
@@ -619,7 +599,7 @@ export default function Watch({ onOpenAuth }) {
                   <div className="wit-sec-header__right">
                     <span className="wit-sec-header__bar" />
                     <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
-                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (سيرفر BLACK X)' : 'Direct Episode Download Table (BLACK X Server)'}
+                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (WitAnime API)' : 'Direct Episode Download Table'}
                     </h3>
                   </div>
                   <button

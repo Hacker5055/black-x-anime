@@ -812,10 +812,12 @@ export default function ProfileDashboard({ onOpenAuth }) {
 
         {/* 4 Stat Boxes Grid inside Profile Card */}
         <div
-          className="wit-prof-stats-grid"
           style={{
             position: 'relative',
             zIndex: 2,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: '0.75rem',
             marginTop: '1.65rem'
           }}
         >

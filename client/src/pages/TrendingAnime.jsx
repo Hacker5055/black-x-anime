@@ -22,14 +22,6 @@ const ANIME_GENRES = [
   { id: 'Drama', ar: '🎭 دراما وغموض', en: '🎭 Drama' }
 ];
 
-const GENRE_KEYWORDS = {
-  Action: ['action', 'أكشن', 'قتال', 'حركة', 'قتالية', 'مغامرات', 'مغامرة', 'قتالي'],
-  Fantasy: ['fantasy', 'خيال', 'فانتازيا', 'سحر', 'خيالي', 'خوارق', 'فانتازي'],
-  Adventure: ['adventure', 'مغامرات', 'مغامرة', 'رحلة', 'استكشاف'],
-  Supernatural: ['supernatural', 'خارق للطبيعة', 'خوارق', 'شياطين', 'قوى خارقة', 'شيطان', 'ما وراء الطبيعة'],
-  Drama: ['drama', 'دراما', 'غموض', 'رومانسي', 'مأساة', 'حياة يومية', 'تشويق']
-};
-
 export default function TrendingAnime() {
   const { lang, formatNumber } = useI18n();
   const { user } = useAuth();
@@ -40,11 +32,9 @@ export default function TrendingAnime() {
   const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
 
   const initialQ = searchParams.get('q') || '';
-  const initialSource = searchParams.get('source') || 'all';
-  const initialFilter = searchParams.get('filter') || 'trending';
   const [query, setQuery] = useState(initialQ);
-  const [selectedSource, setSelectedSource] = useState(initialSource);
-  const [activeFilter, setActiveFilter] = useState(initialFilter);
+  const [selectedSource, setSelectedSource] = useState('all'); // 'all' | 'witanime' | 'anime3rb'
+  const [activeFilter, setActiveFilter] = useState('trending'); // 'trending' | 'latest' | 'top' | 'alerts'
   const [selectedGenre, setSelectedGenre] = useState('all');
 
   const [trendingList, setTrendingList] = useState([]);
@@ -143,8 +133,8 @@ export default function TrendingAnime() {
             score: s.score || 94,
             genres: s.genres || ['Action', 'Fantasy'],
             isDirectStream: true,
-            source: 'witanime',
-            sourceLabel: 'سيرفر BLACK X'
+            source: s.source || (String(s.slug).startsWith('a3rb-') ? 'anime3rb' : 'witanime'),
+            sourceLabel: s.sourceLabel || (s.source === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' : 'سيرفر BLACK X 1 (WitAnime)')
           });
         }
 
@@ -166,7 +156,7 @@ export default function TrendingAnime() {
             genres: a.genres || ['Action'],
             isDirectStream: false,
             source: 'witanime',
-            sourceLabel: 'سيرفر BLACK X'
+            sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
           });
         }
 
@@ -207,20 +197,28 @@ export default function TrendingAnime() {
         genres: ['Action', 'Fantasy'],
         isDirectStream: true,
         source: 'witanime',
-        sourceLabel: 'سيرفر BLACK X'
+        sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
       }));
     }
 
     const list = [];
     const seen = new Set();
 
-    // 1. Add catalog items for WitAnime
+    // 1. Add catalog items for all sources (WitAnime, Anime3rb, OkAnime, AnimeBlkom)
     for (const cat of catalogList) {
-      const key = `wita:${cat.slug}`;
+      const catSource = cat.source || (cat.okanimeId ? 'okanime' : cat.blkomId ? 'animeblkom' : cat.anime3rbId ? 'anime3rb' : 'witanime');
+      if (selectedSource !== 'all' && selectedSource !== catSource) continue;
+      const key = `${catSource}:${cat.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
+        const sourceLabel = cat.sourceLabel || (
+          catSource === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
+          catSource === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
+          catSource === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
+          'سيرفر BLACK X 1 (WitAnime)'
+        );
         list.push({
-          id: `cat-wita-${cat.slug}`,
+          id: `cat-${catSource}-${cat.slug}`,
           slug: cat.slug,
           titleEn: cat.titleEn || cat.title || cat.slug,
           titleAr: cat.titleAr || cat.title || cat.titleEn || cat.slug,
@@ -230,21 +228,28 @@ export default function TrendingAnime() {
           score: Math.round((cat.rating || cat.score || 9.8) > 10 ? (cat.rating || cat.score || 9.8) : (cat.rating || cat.score || 9.8) * 10),
           genres: cat.genres || ['أكشن', 'فانتازيا'],
           isDirectStream: true,
-          source: 'witanime',
-          sourceLabel: 'سيرفر BLACK X'
+          source: catSource,
+          sourceLabel
         });
       }
     }
 
     // 2. Add latest streaming episodes
     for (const item of latestStreamList) {
-      const key = `wita:${item.slug}`;
+      const itemSrc = item.source || 'witanime';
+      if (selectedSource !== 'all' && selectedSource !== itemSrc) continue;
+      const key = `${itemSrc}:${item.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
+        const sourceLabel = item.sourceLabel || (
+          itemSrc === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
+          itemSrc === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
+          itemSrc === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
+          'سيرفر BLACK X 1 (WitAnime)'
+        );
         list.push({
-          id: `lat-wita-${item.slug}`,
+          id: `lat-${itemSrc}-${item.slug}`,
           slug: item.slug,
-          episode: item.episode || 1,
           titleEn: item.titleEn || item.slug,
           titleAr: item.titleAr || item.titleEn || item.slug,
           poster: item.poster,
@@ -252,8 +257,8 @@ export default function TrendingAnime() {
           score: 92,
           genres: ['Action', 'Adventure'],
           isDirectStream: true,
-          source: 'witanime',
-          sourceLabel: 'سيرفر BLACK X'
+          source: itemSrc,
+          sourceLabel
         });
       }
     }
@@ -286,7 +291,7 @@ export default function TrendingAnime() {
           genres: Array.isArray(a.genres) ? a.genres : ['Action', 'Fantasy'],
           isDirectStream: Boolean(matchedStream?.slug),
           source: 'witanime',
-          sourceLabel: 'سيرفر BLACK X'
+          sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
         });
       }
 
@@ -308,29 +313,19 @@ export default function TrendingAnime() {
           isDirectStream: Boolean(rnd.slug),
           isRandomPick: true,
           source: 'witanime',
-          sourceLabel: '🎲 أنمي مقترح (BLACK X)'
+          sourceLabel: '🎲 أنمي مقترح (WitAnime API)'
         });
       }
     }
 
     let filtered = list;
     if (selectedGenre !== 'all') {
-      const targetKeywords = GENRE_KEYWORDS[selectedGenre] || [selectedGenre.toLowerCase()];
       filtered = list.filter((it) =>
-        (it.genres || []).some((g) => {
-          const gLower = String(g).toLowerCase();
-          return targetKeywords.some((k) => gLower.includes(k.toLowerCase()) || k.toLowerCase().includes(gLower));
-        })
+        (it.genres || []).some((g) => String(g).toLowerCase() === selectedGenre.toLowerCase())
       );
     }
 
-    if (activeFilter === 'latest') {
-      filtered = [...filtered].sort((a, b) => {
-        const aIsLat = a.id?.startsWith('lat-') ? 1 : 0;
-        const bIsLat = b.id?.startsWith('lat-') ? 1 : 0;
-        return bIsLat - aIsLat;
-      });
-    } else if (activeFilter === 'top') {
+    if (activeFilter === 'top') {
       filtered = [...filtered].sort((a, b) => (b.score || 0) - (a.score || 0));
     } else if (activeFilter === 'random') {
       const randomOnly = filtered.filter((it) => it.isRandomPick);
@@ -341,35 +336,24 @@ export default function TrendingAnime() {
   }, [searchResults, activeFilter, selectedSource, catalogList, latestStreamList, trendingList, randomScraperList, selectedGenre, subscribedSlugs]);
 
   const handleOpenAnime = async (item) => {
-    if (!item) return;
-    const directSlug = item.slug || (item.id && item.id.startsWith('lat-wita-') ? item.id.replace('lat-wita-', '') : null) || (item.id && item.id.startsWith('cat-wita-') ? item.id.replace('cat-wita-', '') : null);
-    if (directSlug && !String(directSlug).startsWith('ani-')) {
-      navigate(`/show/${directSlug}`);
+    const srcQuery = item.source && item.source !== 'all' ? `?source=${item.source}` : '';
+    if (item.slug && !String(item.slug).startsWith('ani-')) {
+      navigate(`/show/${item.slug}${srcQuery}`);
       return;
     }
     // Resolve streaming slug via /api/stream/search
     setResolvingSlugId(item.id);
     try {
-      const q = item.searchTitle || item.titleEn || item.titleAr || '';
-      if (q) {
-        const res = await api.get(`/api/stream/search?q=${encodeURIComponent(q)}`);
-        const first = res?.items?.[0] || res?.results?.[0];
-        if (first?.slug) {
-          navigate(`/show/${first.slug}`);
-          return;
-        }
-      }
-      if (latestStreamList?.[0]?.slug) {
+      const q = item.searchTitle || item.titleEn || '';
+      const res = await api.get(`/api/stream/search?q=${encodeURIComponent(q)}`);
+      const first = res?.results?.[0];
+      if (first?.slug) {
+        navigate(`/show/${first.slug}`);
+      } else if (latestStreamList[0]?.slug) {
         navigate(`/show/${latestStreamList[0].slug}`);
-      } else {
-        navigate('/show/one-piece');
       }
     } catch {
-      if (latestStreamList?.[0]?.slug) {
-        navigate(`/show/${latestStreamList[0].slug}`);
-      } else {
-        navigate('/show/one-piece');
-      }
+      if (latestStreamList[0]?.slug) navigate(`/show/${latestStreamList[0].slug}`);
     } finally {
       setResolvingSlugId(null);
     }
@@ -575,7 +559,7 @@ export default function TrendingAnime() {
         </div>
       </section>
 
-      {/* Official BLACK X Anime Source Engine Selector (WitAnime) */}
+      {/* Official BLACK X Anime Source Engine Selector (WitAnime + Anime3rb) */}
       <div
         className="glass"
         style={{
@@ -594,20 +578,23 @@ export default function TrendingAnime() {
           <span style={{ fontSize: '1.35rem' }}>🌐</span>
           <div>
             <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#fff' }}>
-              {lang === 'ar' ? 'سيرفر BLACK X للبث والتحميل:' : 'Official BLACK X Server:'}
+              {lang === 'ar' ? 'سيرفرات ومصادر الأنمي الرسمية (BLACK X Anime Sources):' : 'Official BLACK X Anime Sources:'}
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--ink-dim)' }}>
               {lang === 'ar'
-                ? 'سيرفر منصة BLACK X الرسمي الحصري فائق السرعة بدقة FHD 1080p ومجاني بالكامل'
-                : 'Official ultra-fast BLACK X server with FHD 1080p quality'}
+                ? 'اختر سيرفر المصدر لتصفح جميع الأنميات المتواجدة داخله مباشرة تحت اسم BLACK X'
+                : 'Select source to view all anime and episodes available under BLACK X'}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
           {[
-            { id: 'all', icon: '🌟', labelAr: 'جميع أعمال BLACK X', labelEn: 'All Titles' },
-            { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X', labelEn: 'BLACK X Server', sub: 'black-x.live' }
+            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (WitAnime + Anime3rb + OkAnime + Blkom)', labelEn: 'All Sources' },
+            { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1 (WitAnime)', labelEn: 'Server 1 (WitAnime)', sub: 'witanime.site' },
+            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2 (Anime3rb)', labelEn: 'Server 2 (Anime3rb)', sub: 'anime3rb.com' },
+            { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 3 (OkAnime)', labelEn: 'Server 3 (OkAnime)', sub: 'ww3.okanime.xyz' },
+            { id: 'animeblkom', icon: '💎', labelAr: 'سيرفر BLACK X 4 (AnimeBlkom)', labelEn: 'Server 4 (AnimeBlkom)', sub: 'animeblkom.com' }
           ].map((src) => {
             const active = selectedSource === src.id;
             return (
@@ -618,10 +605,6 @@ export default function TrendingAnime() {
                   setSelectedSource(src.id);
                   setQuery('');
                   setSearchResults(null);
-                  const p = new URLSearchParams(searchParams);
-                  if (src.id === 'all') p.delete('source');
-                  else p.set('source', src.id);
-                  setSearchParams(p, { replace: true });
                 }}
                 style={{
                   display: 'flex',
@@ -634,7 +617,15 @@ export default function TrendingAnime() {
                   cursor: 'pointer',
                   transition: 'all 0.22s ease',
                   background: active
-                    ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)'
+                    ? src.id === 'okanime'
+                      ? 'linear-gradient(135deg, #f97316, #e11d48)'
+                      : src.id === 'animeblkom'
+                      ? 'linear-gradient(135deg, #a855f7, #3b82f6)'
+                      : src.id === 'anime3rb'
+                      ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
+                      : src.id === 'witanime'
+                      ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)'
+                      : 'linear-gradient(135deg, #22d3ee, #10b981)'
                     : 'rgba(255, 255, 255, 0.05)',
                   color: active ? '#040d1a' : '#cbd5e1',
                   border: active ? '1px solid transparent' : '1px solid rgba(255, 255, 255, 0.14)',
@@ -854,12 +845,12 @@ export default function TrendingAnime() {
                           fontWeight: 900,
                           padding: '0.15rem 0.5rem',
                           borderRadius: '6px',
-                          background: 'rgba(34, 211, 238, 0.22)',
-                          color: '#38bdf8',
-                          border: '1px solid rgba(34, 211, 238, 0.5)'
+                          background: item.source === 'anime3rb' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(34, 211, 238, 0.22)',
+                          color: item.source === 'anime3rb' ? '#fde047' : '#38bdf8',
+                          border: item.source === 'anime3rb' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(34, 211, 238, 0.5)'
                         }}
                       >
-                        👑 سيرفر BLACK X
+                        {item.source === 'anime3rb' ? '⚡ سيرفر Anime3rb' : '👑 سيرفر WitAnime'}
                       </span>
                       {item.episodes && (
                         <span style={{ fontSize: '0.72rem', color: 'var(--ink-dim)', fontWeight: 800 }}>
@@ -873,49 +864,15 @@ export default function TrendingAnime() {
                     </h3>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.2rem' }}>
-                    {item.episode ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/watch/${targetSlug}/${item.episode}`);
-                          }}
-                          className="btn btn--primary btn--sm"
-                          style={{ flex: 1, justifyContent: 'center', fontWeight: 800, fontSize: '0.74rem', padding: '0.45rem 0.6rem' }}
-                        >
-                          ▶ {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `EP ${formatNumber(item.episode)}`}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenAnime(item);
-                          }}
-                          className="btn btn--ghost btn--sm"
-                          style={{ padding: '0.45rem 0.65rem', fontWeight: 800, fontSize: '0.74rem' }}
-                          title={lang === 'ar' ? 'صفحة الأنمي وتفاصيله' : 'Anime details'}
-                        >
-                          {lang === 'ar' ? 'الأنمي' : 'Show'}
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenAnime(item);
-                        }}
-                        className="btn btn--primary btn--sm"
-                        style={{ width: '100%', justifyContent: 'center', fontWeight: 800, fontSize: '0.78rem' }}
-                      >
-                        {isResolving
-                          ? (lang === 'ar' ? '⏳ جارٍ الفتح...' : '⏳ Opening...')
-                          : (lang === 'ar' ? '▶ مشاهدة الحلقات' : '▶ Watch Episodes')}
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--sm"
+                    style={{ width: '100%', justifyContent: 'center', fontWeight: 800, fontSize: '0.78rem' }}
+                  >
+                    {isResolving
+                      ? (lang === 'ar' ? '⏳ جارٍ الفتح...' : '⏳ Opening...')
+                      : (lang === 'ar' ? '▶ مشاهدة الحلقات' : '▶ Watch Episodes')}
+                  </button>
                 </div>
               </article>
             );

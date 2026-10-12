@@ -184,15 +184,21 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <>
-          <div
-            className="mobile-dropdown-backdrop"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
-          />
-          <div
-            className="glass bx-notif-dropdown"
-          >
+        <div
+          className="glass"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 10px)',
+            insetInlineEnd: 0,
+            width: 'min(360px, 90vw)',
+            borderRadius: '20px',
+            padding: '1rem',
+            background: 'rgba(8, 11, 22, 0.96)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.85)',
+            zIndex: 120
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
             <strong style={{ fontSize: '0.96rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span>🔔</span>
@@ -329,8 +335,7 @@ export default function NotificationBell() {
             ))}
           </div>
         </div>
-      </>
-    )}
+      )}
     </div>
   );
 }

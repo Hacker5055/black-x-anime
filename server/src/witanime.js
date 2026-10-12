@@ -232,7 +232,7 @@ export async function fetchBrowseAnimeList(page = 1) {
       score,
       url: `/show/${slug}?source=witanime`,
       source: 'witanime',
-      sourceLabel: 'سيرفر BLACK X'
+      sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
     });
   });
 
