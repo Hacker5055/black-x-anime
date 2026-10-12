@@ -74,7 +74,7 @@ export default function SearchBar({
         if (titleKey && !seenTitles.has(titleKey)) {
           seenTitles.add(titleKey);
           merged.push({
-            id: item.slug,
+            id: `${item.source || 'st'}-${item.slug}`,
             slug: item.slug,
             titleEn: item.titleEn,
             titleAr: item.titleAr,
@@ -82,6 +82,7 @@ export default function SearchBar({
             episode: item.episode,
             type: item.type || 'Series',
             source: 'streaming',
+            streamSource: item.source || 'witanime',
             playable: true
           });
         }
@@ -165,7 +166,8 @@ export default function SearchBar({
       return;
     }
     if (item.playable && item.slug) {
-      navigate(`/show/${item.slug}`);
+      const srcQ = item.streamSource && item.streamSource !== 'witanime' ? `?source=${item.streamSource}` : '';
+      navigate(`/show/${item.slug}${srcQ}`);
     } else if (item.searchQuery) {
       navigate(`/browse?q=${encodeURIComponent(item.searchQuery)}`);
     } else {

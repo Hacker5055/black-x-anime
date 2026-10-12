@@ -130,7 +130,7 @@ export default function ShowDetail({ onOpenAuth }) {
           <div>
             <div className="hero__badge">
               <span className="hero__badge-dot" />
-              {show.sourceName || (sourceParam === 'okanime' ? '🔥 سيرفر BLACK X 3 (OkAnime)' : sourceParam === 'animeblkom' ? '💎 سيرفر BLACK X 4 (AnimeBlkom)' : sourceParam === 'anime3rb' ? '⚡ سيرفر BLACK X 2 (Anime3rb)' : t('browse.sourceNote'))}
+              {show.sourceName || (sourceParam === 'english' ? '🌐 سيرفر BLACK X 3' : sourceParam === 'anime3rb' ? '⚡ سيرفر BLACK X 2' : '👑 سيرفر BLACK X 1')}
             </div>
             <h1 style={{ fontSize: 'clamp(1.75rem, 3.6vw, 2.65rem)', margin: '0.35rem 0 0' }}>{title}</h1>
             {otherTitle && <p className="detail-title-ar">{otherTitle}</p>}

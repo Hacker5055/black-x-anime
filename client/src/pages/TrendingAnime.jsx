@@ -160,17 +160,16 @@ export default function TrendingAnime() {
             isDirectStream: true,
             isMalOnly: false,
             source: s.source || (String(s.slug).startsWith('a3rb-') ? 'anime3rb' : 'witanime'),
-            sourceLabel: s.sourceLabel || (s.source === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' : 'سيرفر BLACK X 1 (WitAnime)')
+            sourceLabel: s.sourceLabel || (s.source === 'anime3rb' ? 'سيرفر BLACK X 2' : s.source === 'english' ? 'سيرفر BLACK X 3' : 'سيرفر BLACK X 1')
           });
         }
 
         for (const a of aniRes?.anime || []) {
           const titleEnOrRom = a.titleEnglish || a.titleRomaji || '';
-          // Check if this AniList/MyAnimeList anime is already in streamItems
           const matchedStream = streamItems.find(
             (st) => isMatchingAnimeTitle(a.titleEnglish, st) || isMatchingAnimeTitle(a.titleRomaji, st)
           );
-          if (matchedStream) continue; // Already added above with a real streaming slug!
+          if (matchedStream) continue;
 
           const key = `ani:${titleEnOrRom.toLowerCase()}`;
           if (seen.has(key)) continue;
@@ -189,8 +188,8 @@ export default function TrendingAnime() {
             genres: a.genres || ['Action'],
             isDirectStream: false,
             isMalOnly: true,
-            source: 'myanimelist',
-            sourceLabel: '📋 فهرس MyAnimeList / AniList (غير متوفر للبث)'
+            source: 'blackx-index',
+            sourceLabel: '📋 فهرس BLACK X'
           });
         }
 
@@ -231,25 +230,24 @@ export default function TrendingAnime() {
         genres: ['Action', 'Fantasy'],
         isDirectStream: true,
         source: 'witanime',
-        sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
+        sourceLabel: 'سيرفر BLACK X 1'
       }));
     }
 
     const list = [];
     const seen = new Set();
 
-    // 1. Add catalog items for all sources (WitAnime, Anime3rb, OkAnime, AnimeBlkom)
+    // 1. Add catalog items for all BLACK X servers
     for (const cat of catalogList) {
-      const catSource = cat.source || (cat.okanimeId ? 'okanime' : cat.blkomId ? 'animeblkom' : cat.anime3rbId ? 'anime3rb' : 'witanime');
+      const catSource = cat.source || (cat.anime3rbId ? 'anime3rb' : 'witanime');
       if (selectedSource !== 'all' && selectedSource !== catSource) continue;
       const key = `${catSource}:${cat.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
         const sourceLabel = cat.sourceLabel || (
-          catSource === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
-          catSource === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
-          catSource === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
-          'سيرفر BLACK X 1 (WitAnime)'
+          catSource === 'english' ? 'سيرفر BLACK X 3' :
+          catSource === 'anime3rb' ? 'سيرفر BLACK X 2' :
+          'سيرفر BLACK X 1'
         );
         list.push({
           id: `cat-${catSource}-${cat.slug}`,
@@ -259,7 +257,7 @@ export default function TrendingAnime() {
           poster: cat.poster,
           banner: cat.banner,
           episodes: cat.episodeCount || cat.episodes || 24,
-          score: Math.round((cat.rating || cat.score || 9.8) > 10 ? (cat.rating || cat.score || 9.8) : (cat.rating || cat.score || 9.8) * 10),
+          score: Math.round((cat.rating || cat.score || 9.2) > 10 ? (cat.rating || cat.score || 92) : (cat.rating || cat.score || 9.2) * 10),
           genres: cat.genres || ['أكشن', 'فانتازيا'],
           isDirectStream: true,
           source: catSource,
@@ -276,10 +274,9 @@ export default function TrendingAnime() {
       if (!seen.has(key)) {
         seen.add(key);
         const sourceLabel = item.sourceLabel || (
-          itemSrc === 'okanime' ? 'سيرفر BLACK X 3 (OkAnime)' :
-          itemSrc === 'animeblkom' ? 'سيرفر BLACK X 4 (AnimeBlkom)' :
-          itemSrc === 'anime3rb' ? 'سيرفر BLACK X 2 (Anime3rb)' :
-          'سيرفر BLACK X 1 (WitAnime)'
+          itemSrc === 'english' ? 'سيرفر BLACK X 3' :
+          itemSrc === 'anime3rb' ? 'سيرفر BLACK X 2' :
+          'سيرفر BLACK X 1'
         );
         list.push({
           id: `lat-${itemSrc}-${item.slug}`,
@@ -287,7 +284,7 @@ export default function TrendingAnime() {
           titleEn: item.titleEn || item.slug,
           titleAr: item.titleAr || item.titleEn || item.slug,
           poster: item.poster,
-          episodes: item.episode || 1,
+          episodes: item.episode || item.episodes || 1,
           score: 92,
           genres: ['Action', 'Adventure'],
           isDirectStream: true,
@@ -297,7 +294,7 @@ export default function TrendingAnime() {
       }
     }
 
-    // 3. Add trending AniList / WitAnime if witanime or all is selected
+    // 3. Add trending items
     if (selectedSource === 'all' || selectedSource === 'witanime') {
       for (const a of trendingList) {
         const titleRom = (a.titleRomaji || '').toLowerCase();
@@ -325,12 +322,12 @@ export default function TrendingAnime() {
           genres: Array.isArray(a.genres) ? a.genres : ['Action', 'Fantasy'],
           isDirectStream: Boolean(matchedStream?.slug),
           isMalOnly: !matchedStream?.slug,
-          source: matchedStream?.slug ? 'witanime' : 'myanimelist',
-          sourceLabel: matchedStream?.slug ? 'سيرفر BLACK X 1 (WitAnime)' : '📋 فهرس MyAnimeList / AniList'
+          source: matchedStream?.slug ? 'witanime' : 'blackx-index',
+          sourceLabel: matchedStream?.slug ? 'سيرفر BLACK X 1' : '📋 فهرس BLACK X'
         });
       }
 
-      // 4. Add random & seasonal anime from 3v1ltw1n0x01/anime_scraper API
+      // 4. Add random & seasonal anime
       for (const rnd of randomScraperList) {
         const slugKey = `wita:${rnd.slug || rnd.name}`;
         if (seen.has(slugKey)) continue;
@@ -349,7 +346,7 @@ export default function TrendingAnime() {
           isMalOnly: false,
           isRandomPick: true,
           source: 'witanime',
-          sourceLabel: '🎲 أنمي مقترح (WitAnime API)'
+          sourceLabel: '🎲 أنمي مقترح BLACK X'
         });
       }
     }
@@ -373,7 +370,7 @@ export default function TrendingAnime() {
 
   const handleOpenAnime = async (item) => {
     const srcQuery =
-      item.source && item.source !== 'all' && item.source !== 'myanimelist'
+      item.source && item.source !== 'all' && item.source !== 'blackx-index' && item.source !== 'myanimelist'
         ? `?source=${item.source}`
         : '';
     if (item.slug && !String(item.slug).startsWith('ani-')) {
@@ -398,8 +395,8 @@ export default function TrendingAnime() {
         if (matched.source === 'english') {
           pushToast(
             lang === 'ar'
-              ? `🌐 جاري فتح "${item.titleAr || item.titleEn}" عبر السيرفر العالمي مع الترجمة العربية الفورية AI!`
-              : `🌐 Opening "${item.titleEn}" via Global Server with Instant Arabic AI Subtitles!`,
+              ? `🌐 جاري فتح "${item.titleAr || item.titleEn}" عبر سيرفر BLACK X 3 مع الترجمة العربية الفورية AI!`
+              : `🌐 Opening "${item.titleEn}" via BLACK X Server 3 with Instant Arabic AI Subtitles!`,
             'success'
           );
         }
@@ -411,7 +408,6 @@ export default function TrendingAnime() {
         return;
       }
 
-      // Not found on streaming servers -> mark as MyAnimeList-only / Unavailable (NEVER open a random different anime!)
       setUnmatchedMalIds((prev) => {
         const next = new Set(prev);
         next.add(item.id);
@@ -419,8 +415,8 @@ export default function TrendingAnime() {
       });
       pushToast(
         lang === 'ar'
-          ? `📋 الأنمي "${item.titleAr || item.titleEn}" تابع لـ MyAnimeList / AniList وغير متوفر له حلقات بث مباشر حالياً على السيرفرات.`
-          : `📋 "${item.titleEn}" is from MyAnimeList / AniList and is not currently available on streaming servers.`,
+          ? `📋 الأنمي "${item.titleAr || item.titleEn}" غير متوفر له حلقات بث مباشر حالياً على سيرفرات BLACK X.`
+          : `📋 "${item.titleEn}" is not currently available on BLACK X streaming servers.`,
         'info'
       );
     } catch {
@@ -431,8 +427,8 @@ export default function TrendingAnime() {
       });
       pushToast(
         lang === 'ar'
-          ? `📋 الأنمي "${item.titleAr || item.titleEn}" غير متوفر حالياً في سيرفرات المشاهدة (تابع لـ MyAnimeList).`
-          : `📋 "${item.titleEn}" is not currently available on streaming servers (MyAnimeList).`,
+          ? `📋 الأنمي "${item.titleAr || item.titleEn}" غير متوفر حالياً في سيرفرات المشاهدة.`
+          : `📋 "${item.titleEn}" is not currently available on streaming servers.`,
         'info'
       );
     } finally {
@@ -640,7 +636,7 @@ export default function TrendingAnime() {
         </div>
       </section>
 
-      {/* Official BLACK X Anime Source Engine Selector (WitAnime + Anime3rb) */}
+      {/* Official BLACK X Anime Server Engine Selector */}
       <div
         className="glass"
         style={{
@@ -659,24 +655,22 @@ export default function TrendingAnime() {
           <span style={{ fontSize: '1.35rem' }}>🌐</span>
           <div>
             <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#fff' }}>
-              {lang === 'ar' ? 'سيرفرات ومصادر الأنمي الرسمية (BLACK X Anime Sources):' : 'Official BLACK X Anime Sources:'}
+              {lang === 'ar' ? 'سيرفرات الأنمي الرسمية (BLACK X Servers):' : 'Official BLACK X Anime Servers:'}
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--ink-dim)' }}>
               {lang === 'ar'
-                ? 'اختر سيرفر المصدر لتصفح جميع الأنميات المتواجدة داخله مباشرة تحت اسم BLACK X'
-                : 'Select source to view all anime and episodes available under BLACK X'}
+                ? 'اختر سيرفر المشاهدة لتصفح جميع الأنميات اليابانية المتواجدة داخله مباشرة عبر BLACK X'
+                : 'Select a BLACK X server to browse all Japanese anime and episodes'}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
           {[
-            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (الكل + المترجم الفوري AI)', labelEn: 'All Sources + AI Sub' },
-            { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1 (WitAnime)', labelEn: 'Server 1 (WitAnime)', sub: 'witanime.site' },
-            { id: 'english', icon: '🌐', labelAr: 'سيرفر عالمي (English + ترجمة عربية AI)', labelEn: 'Global EN + Arabic AI Sub', sub: 'vidlink.pro' },
-            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2 (Anime3rb)', labelEn: 'Server 2 (Anime3rb)', sub: 'anime3rb.com' },
-            { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 3 (OkAnime)', labelEn: 'Server 3 (OkAnime)', sub: 'ww3.okanime.xyz' },
-            { id: 'animeblkom', icon: '💎', labelAr: 'سيرفر BLACK X 4 (AnimeBlkom)', labelEn: 'Server 4 (AnimeBlkom)', sub: 'animeblkom.com' }
+            { id: 'all', icon: '🌟', labelAr: 'جميع سيرفرات BLACK X (الكل)', labelEn: 'All BLACK X Servers' },
+            { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1', labelEn: 'BLACK X Server 1' },
+            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2', labelEn: 'BLACK X Server 2' },
+            { id: 'english', icon: '🌐', labelAr: 'سيرفر BLACK X 3', labelEn: 'BLACK X Server 3' }
           ].map((src) => {
             const active = selectedSource === src.id;
             return (
@@ -699,11 +693,7 @@ export default function TrendingAnime() {
                   cursor: 'pointer',
                   transition: 'all 0.22s ease',
                   background: active
-                    ? src.id === 'okanime'
-                      ? 'linear-gradient(135deg, #f97316, #e11d48)'
-                      : src.id === 'animeblkom'
-                      ? 'linear-gradient(135deg, #a855f7, #3b82f6)'
-                      : src.id === 'anime3rb'
+                    ? src.id === 'anime3rb'
                       ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
                       : src.id === 'witanime'
                       ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)'
@@ -866,7 +856,7 @@ export default function TrendingAnime() {
                           fontWeight: 900
                         }}
                       >
-                        🚫 {lang === 'ar' ? 'غير متوفر • MyAnimeList' : 'Unavailable • MyAnimeList'}
+                        🚫 {lang === 'ar' ? 'غير متوفر • BLACK X' : 'Unavailable • BLACK X'}
                       </span>
                     ) : isMalOnly ? (
                       <span
@@ -880,7 +870,7 @@ export default function TrendingAnime() {
                           fontWeight: 900
                         }}
                       >
-                        📋 {lang === 'ar' ? 'تابع لـ MyAnimeList' : 'MyAnimeList Index'}
+                        📋 {lang === 'ar' ? 'فهرس BLACK X' : 'BLACK X Index'}
                       </span>
                     ) : (
                       <span
@@ -977,6 +967,8 @@ export default function TrendingAnime() {
                             ? 'rgba(168, 85, 247, 0.22)'
                             : item.source === 'anime3rb'
                             ? 'rgba(245, 158, 11, 0.22)'
+                            : item.source === 'english'
+                            ? 'rgba(16, 185, 129, 0.22)'
                             : 'rgba(34, 211, 238, 0.22)',
                           color: isVerifiedUnavailable
                             ? '#fca5a5'
@@ -984,6 +976,8 @@ export default function TrendingAnime() {
                             ? '#d8b4fe'
                             : item.source === 'anime3rb'
                             ? '#fde047'
+                            : item.source === 'english'
+                            ? '#6ee7b7'
                             : '#38bdf8',
                           border: isVerifiedUnavailable
                             ? '1px solid rgba(239, 68, 68, 0.5)'
@@ -991,16 +985,20 @@ export default function TrendingAnime() {
                             ? '1px solid rgba(168, 85, 247, 0.5)'
                             : item.source === 'anime3rb'
                             ? '1px solid rgba(245, 158, 11, 0.5)'
+                            : item.source === 'english'
+                            ? '1px solid rgba(16, 185, 129, 0.5)'
                             : '1px solid rgba(34, 211, 238, 0.5)'
                         }}
                       >
                         {isVerifiedUnavailable
-                          ? (lang === 'ar' ? '🚫 غير متوفر (MyAnimeList)' : '🚫 Unavailable (MAL)')
+                          ? (lang === 'ar' ? '🚫 غير متوفر (BLACK X)' : '🚫 Unavailable (BLACK X)')
                           : isMalOnly
-                          ? (lang === 'ar' ? '📋 تابع لـ MyAnimeList' : '📋 MyAnimeList')
+                          ? (lang === 'ar' ? '📋 فهرس BLACK X' : '📋 BLACK X Index')
                           : item.source === 'anime3rb'
-                          ? '⚡ سيرفر Anime3rb'
-                          : '👑 سيرفر WitAnime'}
+                          ? '⚡ سيرفر BLACK X 2'
+                          : item.source === 'english'
+                          ? '🌐 سيرفر BLACK X 3'
+                          : '👑 سيرفر BLACK X 1'}
                       </span>
                       {item.episodes && (
                         <span style={{ fontSize: '0.72rem', color: 'var(--ink-dim)', fontWeight: 800 }}>
@@ -1022,9 +1020,9 @@ export default function TrendingAnime() {
                     {isResolving
                       ? (lang === 'ar' ? '⏳ جارٍ فحص السيرفرات...' : '⏳ Checking Servers...')
                       : isVerifiedUnavailable
-                      ? (lang === 'ar' ? '🚫 غير متوفر • تابع لـ MyAnimeList' : '🚫 Unavailable • MyAnimeList')
+                      ? (lang === 'ar' ? '🚫 غير متوفر • فهرس BLACK X' : '🚫 Unavailable • BLACK X')
                       : isMalOnly
-                      ? (lang === 'ar' ? '🔍 فحص التوفر (MyAnimeList)' : '🔍 Check Stream (MAL)')
+                      ? (lang === 'ar' ? '🔍 فحص التوفر (BLACK X)' : '🔍 Check Stream (BLACK X)')
                       : (lang === 'ar' ? '▶ مشاهدة الحلقات' : '▶ Watch Episodes')}
                   </button>
                 </div>

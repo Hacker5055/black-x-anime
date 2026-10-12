@@ -492,7 +492,7 @@ export default function Watch({ onOpenAuth }) {
                 <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
                 <span style={{ fontSize: '0.72rem', padding: '0.12rem 0.55rem', borderRadius: '8px', background: 'rgba(34, 211, 238, 0.14)', border: '1px solid rgba(34, 211, 238, 0.35)', color: '#22d3ee', fontWeight: 800 }}>
-                  {show?.sourceName || (sourceParam === 'okanime' ? '🔥 OkAnime' : sourceParam === 'animeblkom' ? '💎 AnimeBlkom' : sourceParam === 'anime3rb' ? '⚡ Anime3rb' : '👑 WitAnime')}
+                  {show?.sourceName || (sourceParam === 'english' ? '🌐 سيرفر BLACK X 3' : sourceParam === 'anime3rb' ? '⚡ سيرفر BLACK X 2' : '👑 سيرفر BLACK X 1')}
                 </span>
               </div>
               <h1 className="watch-meta__title">
@@ -610,7 +610,7 @@ export default function Watch({ onOpenAuth }) {
                   <div className="wit-sec-header__right">
                     <span className="wit-sec-header__bar" />
                     <h3 className="wit-sec-header__title" style={{ fontSize: '1rem' }}>
-                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (WitAnime API)' : 'Direct Episode Download Table'}
+                      <span>📥</span> {lang === 'ar' ? 'جدول تحميل الحلقة المباشر (BLACK X)' : 'Direct Episode Download Table (BLACK X)'}
                     </h3>
                   </div>
                   <button

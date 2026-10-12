@@ -14,7 +14,8 @@ import {
   fetchShow,
   fetchEpisode,
   resolveDownloadEntry,
-  fetchBrowseAnimeList
+  fetchBrowseAnimeList,
+  isTitleMatch
 } from './witanime.js';
 import { apiGet, apiSet } from './db.js';
 
@@ -240,16 +241,14 @@ export async function scraperLatestEpisodes() {
 export async function scraperSearchAnime(name) {
   const q = String(name || '').trim();
   if (!q) return [];
-  const cacheKey = `scraper:search:${q.toLowerCase()}`;
+  const cacheKey = `scraper:search:v3:${q.toLowerCase()}`;
   const cached = apiGet(cacheKey);
   if (cached) return cached;
 
-  const { $ } = await getSoup(`?search_param=animes&s=${encodeURIComponent(q)}`);
-  let shows = extractResults($, $('.anime-card-container'));
-
-  if (!shows.length) {
-    const fallbackItems = await searchShows(q).catch(() => []);
-    shows = fallbackItems.map((it) => ({
+  const fallbackItems = await searchShows(q).catch(() => []);
+  const shows = fallbackItems
+    .filter((it) => isTitleMatch(q, it.titleEn || it.titleAr, it.slug))
+    .map((it) => ({
       name: it.titleEn || it.titleAr || it.slug,
       slug: it.slug,
       url: `${WITA_BASE}${it.url || `/anime/${it.slug}`}`,
@@ -258,7 +257,6 @@ export async function scraperSearchAnime(name) {
       status: 'يعرض الان',
       story: ''
     }));
-  }
 
   apiSet(cacheKey, shows, 20 * 60 * 1000);
   return shows;
@@ -460,17 +458,15 @@ const RANDOM_SEARCH_SEEDS = [
 ];
 
 export async function scraperRandomAnime(count = 24) {
-  const seed = RANDOM_SEARCH_SEEDS[Math.floor(Math.random() * RANDOM_SEARCH_SEEDS.length)];
-  const randomPage = Math.floor(Math.random() * 8) + 1;
+  const randomPage1 = Math.floor(Math.random() * 45) + 1;
+  const randomPage2 = Math.floor(Math.random() * 45) + 46;
 
-  const [pageSoup, seasonalList, browseList, seedResults] = await Promise.all([
-    getSoup(`قائمة-الانمي/page/${randomPage}/`).catch(() => ({ $: cheerio.load('') })),
-    scraperFetchSeasonals().catch(() => []),
-    typeof fetchBrowseAnimeList === 'function' ? fetchBrowseAnimeList().catch(() => []) : Promise.resolve([]),
-    scraperSearchAnime(seed).catch(() => [])
+  const [browseRes1, browseRes2, latestList] = await Promise.all([
+    fetchBrowseAnimeList(randomPage1).catch(() => ({ items: [] })),
+    fetchBrowseAnimeList(randomPage2).catch(() => ({ items: [] })),
+    fetchLatest().catch(() => [])
   ]);
 
-  const pageItems = extractResults(pageSoup.$, pageSoup.$('.anime-card-container'));
   const combined = [];
   const seen = new Set();
 
@@ -498,11 +494,11 @@ export async function scraperRandomAnime(count = 24) {
       status: raw.status || 'يعرض الان',
       story: raw.story || '',
       source: 'witanime',
-      sourceLabel: 'سيرفر BLACK X 1 (WitAnime API)'
+      sourceLabel: 'سيرفر BLACK X 1'
     });
   };
 
-  [...pageItems, ...seedResults, ...seasonalList, ...browseList].forEach(pushItem);
+  [...(browseRes1?.items || []), ...(browseRes2?.items || []), ...(latestList || [])].forEach(pushItem);
 
   // Fisher-Yates shuffle for true randomness
   for (let i = combined.length - 1; i > 0; i -= 1) {

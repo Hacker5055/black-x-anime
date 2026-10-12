@@ -239,7 +239,7 @@ export function DownloadModal({
                 📥 {t('watch.downloadTitle', { n: formatNumber(episode) })}
               </h2>
               <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: 'var(--ink-dim)' }}>
-                {lang === 'ar' ? 'روابط التحميل الرسمية المقدمة من مصدر الأنمي (WitAnime) مباشرة' : 'Official download servers provided directly by WitAnime'}
+                {lang === 'ar' ? 'روابط التحميل الرسمية المقدمة من سيرفرات BLACK X مباشرة' : 'Official download servers provided directly by BLACK X'}
               </p>
             </div>
           </div>
@@ -261,7 +261,7 @@ export function DownloadModal({
             <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
               <div style={{ fontSize: '1.75rem', marginBottom: '0.75rem' }}>📡</div>
               <strong style={{ fontSize: '1rem', display: 'block', color: 'var(--cyan)' }}>
-                {lang === 'ar' ? 'جارٍ جلب روابط التحميل من مصدر الأنمي…' : 'Fetching download links from anime source…'}
+                {lang === 'ar' ? 'جارٍ جلب روابط التحميل من سيرفرات BLACK X…' : 'Fetching download links from BLACK X servers…'}
               </strong>
               <span style={{ fontSize: '0.82rem', color: 'var(--ink-dim)' }}>
                 {lang === 'ar' ? 'يتم فحص وتحضير سيرفرات التحميل المتاحة' : 'Verifying available download servers'}
@@ -274,7 +274,7 @@ export function DownloadModal({
             <div>
               <div style={{ marginBottom: '0.85rem' }}>
                 <strong style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span>🌐</span> {lang === 'ar' ? 'سيرفرات التحميل الرسمية المتاحة (WitAnime)' : 'Official Download Servers (WitAnime)'}
+                  <span>🌐</span> {lang === 'ar' ? 'سيرفرات التحميل الرسمية المتاحة (BLACK X)' : 'Official Download Servers (BLACK X)'}
                 </strong>
                 <span style={{ fontSize: '0.78rem', color: 'var(--ink-dim)' }}>
                   {lang === 'ar' ? 'اختر السيرفر المفضل للتحميل بجودة عالية وبشكل مباشر' : 'Choose your preferred server to download in full quality'}

@@ -204,8 +204,9 @@ export async function fetchBrowseAnimeList(page = 1) {
 
   if (!html) return { items: [], page: p, hasNext: false, totalPages: 112 };
 
+  const mainHtml = html.split('قد يعجبك أيضًا')[0];
   const cheerio = await import('cheerio');
-  const $ = cheerio.load(html);
+  const $ = cheerio.load(mainHtml);
   const items = [];
   const seen = new Set();
 
@@ -233,7 +234,7 @@ export async function fetchBrowseAnimeList(page = 1) {
       score,
       url: `/show/${slug}?source=witanime`,
       source: 'witanime',
-      sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
+      sourceLabel: 'سيرفر BLACK X 1'
     });
   });
 
@@ -243,16 +244,46 @@ export async function fetchBrowseAnimeList(page = 1) {
   return result;
 }
 
+export function isTitleMatch(query, candidateTitle = '', candidateSlug = '') {
+  const qNorm = String(query || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06FF\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!qNorm) return false;
+  // If query is purely Arabic, trust the search engine result after stripping sidebar
+  if (/[\u0600-\u06FF]/.test(qNorm) && !/[a-z]{3,}/i.test(qNorm)) return true;
+
+  const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'season', 'part', 'movie', 'ova', 'ona', 'tv', 'anime', 'no', 'ni', 'wa', 'ga', 'wo', 'to']);
+  const qWords = qNorm
+    .replace(/[\u0600-\u06FF]+/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !stopWords.has(w));
+  if (!qWords.length) return true;
+
+  const target = `${candidateTitle} ${String(candidateSlug || '').replace(/-/g, ' ')}`
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ');
+  const targetTokens = new Set(target.split(/\s+/).filter(Boolean));
+  const matched = qWords.filter((w) => targetTokens.has(w) || target.includes(w));
+
+  if (qWords.length === 1) {
+    return matched.length === 1;
+  }
+  if (qWords.length === 2) {
+    return matched.length === 2;
+  }
+  return matched.length >= Math.ceil(qWords.length * 0.66);
+}
+
 /** Search witanime for shows. */
 export async function searchShows(q) {
-  const key = `wita:search:${q.toLowerCase().trim()}`;
+  const key = `wita:search:v3:${q.toLowerCase().trim()}`;
   const cached = apiGet(key);
   if (cached) return cached;
 
   let items = await searchOnce(q);
   if (!items.length && q.trim().split(/\s+/).length > 3) {
-    // AniList titles are long ("STEEL BALL RUN JoJo's … 2nd - 3rd STAGE") —
-    // witanime search matches better on short keyword sets
     const short = q.replace(/[''`]/g, '').split(/[\s\-(]+/).filter((w) => w.length > 2).slice(0, 3).join(' ');
     if (short && short !== q) items = await searchOnce(short);
   }
@@ -262,20 +293,31 @@ export async function searchShows(q) {
 
 async function searchOnce(q) {
   const { html } = await session(`/search?q=${encodeURIComponent(q)}`);
+  if (!html) return [];
+  // Crucial: Strip out the "قد يعجبك أيضًا" (You might also like) sidebar widget
+  // which always lists sousou-no-frieren first even when search results are 0!
+  const mainHtml = html.split('قد يعجبك أيضًا')[0];
+  if (mainHtml.includes('عدد النتائج: 0') || mainHtml.includes('لا توجد نتائج')) {
+    return [];
+  }
   const items = [];
   const seen = new Set();
   const re = /<a[^>]+href="https:\/\/witanime\.site\/(anime|movie)\/([^"\/]+)"[^>]*>[\s\S]{0,1800}?<img[^>]+src="(https:\/\/images\.witanime\.site\/[^"]+)"[^>]+alt="([^"]*)"/g;
-  for (const m of html.matchAll(re)) {
+  for (const m of mainHtml.matchAll(re)) {
     const [, kind, slug, poster, alt] = m;
     if (seen.has(slug)) continue;
+    const titleEn = decodeEntities(alt) || slug;
+    if (!isTitleMatch(q, titleEn, slug)) continue;
     seen.add(slug);
     items.push({
       slug,
       kind,
-      titleEn: decodeEntities(alt) || slug,
-      titleAr: null,
+      titleEn,
+      titleAr: titleEn,
       poster,
-      url: `/${kind}/${slug}`
+      url: `/${kind}/${slug}`,
+      source: 'witanime',
+      sourceLabel: 'سيرفر BLACK X 1'
     });
     if (items.length >= 24) break;
   }
@@ -345,10 +387,23 @@ function manifestEntryId(slug, episode, e, idx) {
   return `${slug}-${episode}-${(e.label || e.server || 'srv')}-${e.quality || ''}-${idx}`;
 }
 
+function formatBlackXServerName(rawLabel, quality, idx) {
+  const s = String(rawLabel || '').toLowerCase();
+  const q = quality ? ` (${quality})` : '';
+  if (s.includes('videa')) return `🎬 BLACK X Stream ${idx}${q}`;
+  if (s.includes('mp4upload')) return `⚡ BLACK X Direct ${idx}${q}`;
+  if (s.includes('yonaplay')) return `☁️ BLACK X Cloud ${idx}${q}`;
+  if (s.includes('hgcloud')) return `🚀 BLACK X HLS ${idx}${q}`;
+  if (s.includes('4shared')) return `🌐 BLACK X Server ${idx}${q}`;
+  return `🌐 BLACK X Server ${idx}${q}`;
+}
+
 function orderEntries(entries) {
   return [...entries].sort((a, b) => {
-    const pa = DIRECT_HOST_LABELS.indexOf(a.server) === -1 ? 99 : DIRECT_HOST_LABELS.indexOf(a.server);
-    const pb = DIRECT_HOST_LABELS.indexOf(b.server) === -1 ? 99 : DIRECT_HOST_LABELS.indexOf(b.server);
+    const rawA = a.rawServer || a.server;
+    const rawB = b.rawServer || b.server;
+    const pa = DIRECT_HOST_LABELS.indexOf(rawA) === -1 ? 99 : DIRECT_HOST_LABELS.indexOf(rawA);
+    const pb = DIRECT_HOST_LABELS.indexOf(rawB) === -1 ? 99 : DIRECT_HOST_LABELS.indexOf(rawB);
     return pa - pb;
   });
 }
@@ -358,7 +413,7 @@ function orderEntries(entries) {
  *   { entries, resolved: { [id]: {embedUrl, directUrl} }, _session: {cookies, csrf} }
  */
 export async function fetchEpisode(slug, episode, { fresh = false } = {}) {
-  const key = `wita:episode:v2:${slug}:${episode}`;
+  const key = `wita:episode:v3:${slug}:${episode}`;
   const entry = fresh ? null : streamGet(key);
   if (entry && Array.isArray(entry.entries) && entry.entries.length) return entry;
 
@@ -384,7 +439,8 @@ export async function fetchEpisode(slug, episode, { fresh = false } = {}) {
       entries.push({
         id: manifestEntryId(slug, episode, item, idx),
         token: item.token,
-        server: item.label || `server-${idx}`,
+        rawServer: item.label || `server-${idx}`,
+        server: formatBlackXServerName(item.label, quality, idx),
         quality: quality || null,
         version: item.version || 'sub',
         lang: item.lang || 'jp'
@@ -400,7 +456,8 @@ export async function fetchEpisode(slug, episode, { fresh = false } = {}) {
       downloads.push({
         id: `dl-${slug}-${episode}-${(item.label || 'srv')}-${quality || ''}-${dIdx}`,
         token: item.token,
-        server: item.label || `download-${dIdx}`,
+        rawServer: item.label || `download-${dIdx}`,
+        server: `📥 سيرفر تحميل BLACK X ${dIdx}${quality ? ` (${quality})` : ''}`,
         quality: quality || null,
         version: item.version || 'sub',
         lang: item.lang || 'jp'
@@ -443,7 +500,7 @@ export async function resolveDownloadEntry(slug, episode, entryId) {
     try {
       const source = await resolveDownloadTokenWithSession(entry.token, payload._session);
       payload.resolvedDownloads = { ...(payload.resolvedDownloads || {}), [entryId]: source };
-      streamSet(`wita:episode:v2:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
+      streamSet(`wita:episode:v3:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
       return source;
     } catch (err) {
       if (err.code === 'rate_limited') throw err;
@@ -506,7 +563,7 @@ export async function resolveEntry(slug, episode, entryId) {
     try {
       const source = await resolveTokenWithSession(entry.token, payload._session);
       payload.resolved = { ...(payload.resolved || {}), [entryId]: source };
-      streamSet(`wita:episode:v2:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
+      streamSet(`wita:episode:v3:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
       return source;
     } catch (err) {
       if (err.code === 'rate_limited') throw err;

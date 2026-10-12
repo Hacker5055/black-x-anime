@@ -80,6 +80,7 @@ app.get('/api/proxy-image', async (req, res) => {
       url.hostname === 'images.witanime.site' ||
       url.hostname === 'anime3rb.com' ||
       url.hostname.endsWith('.anime3rb.com') ||
+      url.hostname.includes('animeify.net') ||
       url.hostname.includes('mangalik.net');
     if (!ok) {
       return res.status(400).json({ error: 'bad_host', message: 'Host not allowed' });

@@ -1,28 +1,31 @@
 /**
- * Global English Anime Source + AI Arabic Subtitle Translation Service
- * --------------------------------------------------------------------
- * Provides global anime coverage (every anime on MyAnimeList / AniList) using:
- *  - AniList GraphQL + Jikan (MyAnimeList) metadata & episode counts
- *  - Multi-server English streaming embeds (VidLink Pro Sub, VidLink Pro Dub, NontonGo Global)
- *  - Automatic English -> Arabic subtitle translation (.srt / .vtt) via subtitleTranslator.js
+ * BLACK X Server 3 — Complete Japanese Anime Library + AI Arabic Translation Engine
+ * ---------------------------------------------------------------------------------
+ * Provides complete coverage of Japanese anime released in Japan:
+ *  - Complete Japanese Anime Catalog (countryOfOrigin: JP, status: FINISHED / RELEASING)
+ *  - Direct 1080p/720p MP4 streaming & downloading (Zero Iframe Sandbox)
+ *  - Cross-linked Arabic-subtitled streams from BLACK X 1 & BLACK X 2 (with strict title verification)
+ *  - Real-time English -> Arabic AI subtitle translation (.srt / .ass / .vtt)
+ *  - 100% pure BLACK X branding with zero mention of upstream sources
  */
 import { apiGet, apiSet, streamGet, streamSet } from '../db.js';
 import { translateTextToArabic, getTranslatedEpisodeSubtitles } from '../subtitleTranslator.js';
-import { searchShows, fetchEpisode, resolveEntry } from '../witanime.js';
+import { searchShows, fetchEpisode, resolveEntry, isTitleMatch } from '../witanime.js';
+import { anime3rbService } from './anime3rb.service.js';
 
 const ANILIST_URL = 'https://graphql.anilist.co';
 
 function slugifyTitle(title, malId) {
-  const base = String(title || 'anime')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'anime';
+  const base =
+    String(title || 'anime')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'anime';
   return malId ? `en-${malId}-${base}` : `en-${base}`;
 }
 
 function parseEnglishSlug(rawSlug) {
   const clean = String(rawSlug || '').trim();
-  // Match en-{malId}-{rest} or ani-{id}
   const m = clean.match(/^(?:en|mal)-(\d+)(?:-(.+))?$/i);
   if (m) {
     return {
@@ -32,7 +35,10 @@ function parseEnglishSlug(rawSlug) {
   }
   return {
     malId: null,
-    query: clean.replace(/^(en-|mal-|ani-|ok-|blkom-|a3rb-)/i, '').replace(/-/g, ' ').trim()
+    query: clean
+      .replace(/^(en-|mal-|ani-|ok-|blkom-|a3rb-)/i, '')
+      .replace(/-/g, ' ')
+      .trim()
   };
 }
 
@@ -48,19 +54,29 @@ async function queryAniList(query, variables = {}) {
   return json?.data || null;
 }
 
+function decodeHtmlEntities(str) {
+  return String(str || '')
+    .replace(/&#039;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
 class EnglishAnimeService {
   /**
-   * Fetch trending / airing English anime with automatic Arabic subtitle support
+   * Fetch trending / airing Japanese anime
    */
-  async getLatestEpisodes() {
-    const cacheKey = 'en_anime:latest';
+  async getLatestEpisodes(page = 1) {
+    const p = Math.max(1, Number(page) || 1);
+    const cacheKey = `en_anime:latest:v3:${p}`;
     const cached = apiGet(cacheKey);
     if (cached) return cached;
 
     const gql = `
-      query {
-        Page(page: 1, perPage: 20) {
-          media(type: ANIME, sort: [TRENDING_DESC, POPULARITY_DESC], isAdult: false) {
+      query ($page: Int) {
+        Page(page: $page, perPage: 24) {
+          media(type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], sort: [TRENDING_DESC, POPULARITY_DESC], isAdult: false) {
             id
             idMal
             episodes
@@ -77,7 +93,7 @@ class EnglishAnimeService {
       }
     `;
 
-    const data = await queryAniList(gql).catch(() => null);
+    const data = await queryAniList(gql, { page: p }).catch(() => null);
     const mediaList = data?.Page?.media || [];
 
     const items = mediaList
@@ -94,16 +110,17 @@ class EnglishAnimeService {
           aniId: m.id,
           episode: latestEp,
           episodes: latestEp,
+          episodeCount: latestEp,
           titleEn,
-          titleAr: `${titleEn} (مترجم للعربية AI 🌐)`,
+          titleAr: titleEn,
           poster: m.coverImage?.extraLarge || m.coverImage?.large || '',
           banner: m.bannerImage || m.coverImage?.extraLarge || '',
-          score: m.averageScore || 92,
+          score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : 8.9,
           genres: m.genres || ['Action', 'Fantasy'],
-          url: `/watch/${slug}/${latestEp}?source=english`,
+          url: `/show/${slug}?source=english`,
           source: 'english',
           hasAutoArabicSub: true,
-          sourceLabel: '🌐 سيرفر عالمي + ترجمة عربية فورية AI'
+          sourceLabel: 'سيرفر BLACK X 3'
         };
       });
 
@@ -114,25 +131,27 @@ class EnglishAnimeService {
   }
 
   /**
-   * Search any English / MyAnimeList / AniList anime
+   * Search any anime (Japanese catalog + direct title match)
    */
   async search(q) {
     const clean = String(q || '').trim();
-    if (!clean) return [];
-    const cacheKey = `en_anime:search:${clean.toLowerCase()}`;
+    if (!clean) return this.getLatestEpisodes(1);
+    const cacheKey = `en_anime:search:v4:${clean.toLowerCase()}`;
     const cached = apiGet(cacheKey);
     if (cached) return cached;
 
     const gql = `
       query ($search: String) {
-        Page(page: 1, perPage: 18) {
-          media(search: $search, type: ANIME, sort: [POPULARITY_DESC], isAdult: false) {
+        Page(page: 1, perPage: 20) {
+          media(search: $search, type: ANIME, status_in: [FINISHED, RELEASING], sort: [POPULARITY_DESC], isAdult: false) {
             id
             idMal
+            countryOfOrigin
             episodes
             status
             averageScore
             genres
+            synonyms
             description(asHtml: false)
             nextAiringEpisode { episode }
             title { english romaji native }
@@ -149,27 +168,28 @@ class EnglishAnimeService {
     const items = mediaList
       .filter((m) => m.idMal)
       .map((m) => {
-        const titleEn = m.title?.english || m.title?.romaji || clean;
+        const titleEn = m.title?.english || m.synonyms?.[0] || m.title?.romaji || clean;
         const epCount = m.nextAiringEpisode?.episode
           ? Math.max(1, m.nextAiringEpisode.episode - 1)
           : m.episodes || 12;
-        const slug = slugifyTitle(titleEn, m.idMal);
+        const slug = slugifyTitle(m.title?.romaji || titleEn, m.idMal);
         return {
           slug,
           malId: m.idMal,
           aniId: m.id,
           titleEn,
-          titleAr: `${titleEn} (مترجم تلقائياً 🌐)`,
+          titleRomaji: m.title?.romaji || titleEn,
+          titleAr: titleEn,
           poster: m.coverImage?.extraLarge || m.coverImage?.large || '',
           banner: m.bannerImage || m.coverImage?.extraLarge || '',
           episodes: epCount,
           episodeCount: epCount,
-          score: m.averageScore || 90,
+          score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : 8.8,
           genres: m.genres || ['Action'],
           url: `/show/${slug}?source=english`,
           source: 'english',
           hasAutoArabicSub: true,
-          sourceLabel: '🌐 مصدر إنجليزي + ترجمة عربية فورية AI'
+          sourceLabel: 'سيرفر BLACK X 3'
         };
       });
 
@@ -178,11 +198,11 @@ class EnglishAnimeService {
   }
 
   /**
-   * Resolve full anime details & episode list for any English / MAL anime
+   * Resolve full anime details & episode list
    */
   async getShow(rawSlug) {
     const { malId, query } = parseEnglishSlug(rawSlug);
-    const cacheKey = `en_anime:show:${malId || query.toLowerCase()}`;
+    const cacheKey = `en_anime:show:v4:${malId || query.toLowerCase()}`;
     const cached = apiGet(cacheKey);
     if (cached) return cached;
 
@@ -196,6 +216,7 @@ class EnglishAnimeService {
             status
             averageScore
             genres
+            synonyms
             description(asHtml: false)
             nextAiringEpisode { episode }
             title { english romaji native }
@@ -206,13 +227,14 @@ class EnglishAnimeService {
       `
       : `
         query ($search: String) {
-          Media(search: $search, type: ANIME, sort: [POPULARITY_DESC]) {
+          Media(search: $search, type: ANIME, status_in: [FINISHED, RELEASING], sort: [POPULARITY_DESC]) {
             id
             idMal
             episodes
             status
             averageScore
             genres
+            synonyms
             description(asHtml: false)
             nextAiringEpisode { episode }
             title { english romaji native }
@@ -227,8 +249,10 @@ class EnglishAnimeService {
     const m = data?.Media;
     if (!m || !m.idMal) return null;
 
-    const titleEn = m.title?.english || m.title?.romaji || query || `Anime ${m.idMal}`;
+    const titleEn = m.title?.english || m.synonyms?.find((s) => /^[a-zA-Z0-9\s:'-]+$/.test(s)) || m.title?.romaji || query || `Anime ${m.idMal}`;
     const titleRomaji = m.title?.romaji || titleEn;
+    const titleNative = m.title?.native || '';
+    const synonyms = Array.isArray(m.synonyms) ? m.synonyms : [];
     const epCount = m.nextAiringEpisode?.episode
       ? Math.max(1, m.nextAiringEpisode.episode - 1)
       : m.episodes || 12;
@@ -236,11 +260,11 @@ class EnglishAnimeService {
     const cleanDesc = (m.description || '').replace(/<[^>]+>/g, '').trim();
     const descAr = cleanDesc ? await translateTextToArabic(cleanDesc).catch(() => cleanDesc) : '';
 
-    const canonicalSlug = slugifyTitle(titleEn, m.idMal);
+    const canonicalSlug = slugifyTitle(titleRomaji || titleEn, m.idMal);
     const episodes = Array.from({ length: Math.min(epCount, 1200) }, (_, i) => ({
       episode: i + 1,
       number: i + 1,
-      title: `الحلقة ${i + 1} (مترجمة للعربية AI 🌐)`,
+      title: `الحلقة ${i + 1}`,
       slug: canonicalSlug,
       url: `/watch/${canonicalSlug}/${i + 1}?source=english`
     }));
@@ -252,10 +276,12 @@ class EnglishAnimeService {
       kind: 'anime',
       titleEn,
       titleRomaji,
-      titleAr: `${titleEn} (مترجم للعربية AI 🌐)`,
+      titleNative,
+      synonyms,
+      titleAr: titleEn,
       poster: m.coverImage?.extraLarge || m.coverImage?.large || '',
       banner: m.bannerImage || m.coverImage?.extraLarge || '',
-      score: m.averageScore ? (m.averageScore / 10).toFixed(1) : 9.2,
+      score: m.averageScore ? (m.averageScore / 10).toFixed(1) : 9.0,
       status: m.status === 'FINISHED' ? 'مكتمل' : 'يعرض الان',
       genres: m.genres || ['Action', 'Fantasy'],
       description: descAr || cleanDesc,
@@ -263,7 +289,7 @@ class EnglishAnimeService {
       episodes,
       hasAutoArabicSub: true,
       source: 'english',
-      sourceName: '🌐 سيرفر BLACK X العالمي (English + ترجمة عربية فورية AI)'
+      sourceName: 'سيرفر BLACK X 3'
     };
 
     apiSet(cacheKey, show, 30 * 60 * 1000);
@@ -271,7 +297,7 @@ class EnglishAnimeService {
   }
 
   /**
-   * Fetch direct MP4 streams from AnimeHeaven.me (Zero Cloudflare, Zero Iframe Sandbox)
+   * Fetch direct MP4 streams with strict title verification so it never plays a wrong anime
    */
   async fetchAnimeHeavenStreams(titleEn, titleRomaji, episode) {
     const ua =
@@ -292,7 +318,7 @@ class EnglishAnimeService {
     if (cRo && cRo.toLowerCase() !== cEn.toLowerCase()) queries.push(cRo);
     const words = cEn.split(' ').filter((w) => w.length >= 3);
     if (words.length >= 2) queries.push(words.slice(0, 2).join(' '));
-    if (words.length >= 1 && words[0].length >= 4) queries.push(words[0]);
+    if (words.length === 1 && words[0].length >= 4) queries.push(words[0]);
 
     for (const q of [...new Set(queries)]) {
       try {
@@ -305,7 +331,14 @@ class EnglishAnimeService {
         const matches = [...sHtml.matchAll(/href=['"](anime\.php\?[^'"]+)['"][^>]*>([^<]+)<\/a>/gi)];
         if (!matches.length) continue;
 
-        const bestHref = matches[0][1];
+        // Strict title verification: only accept a match whose title matches titleEn or titleRomaji
+        const verified = matches.find((m) => {
+          const candTitle = decodeHtmlEntities(m[2]).trim();
+          return isTitleMatch(cEn, candTitle) || (cRo && isTitleMatch(cRo, candTitle));
+        });
+        if (!verified) continue;
+
+        const bestHref = verified[1];
         const showRes = await fetch(`https://animeheaven.me/${bestHref}`, {
           headers: { 'User-Agent': ua },
           signal: AbortSignal.timeout(8000)
@@ -319,8 +352,7 @@ class EnglishAnimeService {
         ];
         if (!eps.length) continue;
 
-        const targetEp =
-          eps.find((m) => Number(m[2]) === Number(episode)) || eps[eps.length - 1];
+        const targetEp = eps.find((m) => Number(m[2]) === Number(episode));
         if (!targetEp) continue;
 
         const epKey = targetEp[1];
@@ -361,7 +393,7 @@ class EnglishAnimeService {
     if (!show) return null;
 
     const { malId, aniId, titleEn, titleRomaji, slug } = show;
-    const cacheKey = `en_anime:ep:v3:${malId}:${episode}`;
+    const cacheKey = `en_anime:ep:v5:${malId}:${episode}`;
     const cached = streamGet(cacheKey);
     if (cached) return cached;
 
@@ -373,19 +405,36 @@ class EnglishAnimeService {
     const subVttUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.vtt?title=${encodeURIComponent(titleEn)}`;
     const subSrtUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.srt?title=${encodeURIComponent(titleEn)}`;
 
-    // 1) Fetch direct MP4 streams from AnimeHeaven (plays in native <video> with ZERO iframe sandbox!)
+    // 1) Cross-link BLACK X Server 2 (Arabic-subtitled direct MP4 1080p/720p/480p + OK.ru + Sendvid) with strict title check
+    try {
+      let bx2Ep = await anime3rbService.getEpisode(titleRomaji || titleEn, episode).catch(() => null);
+      if (!bx2Ep && titleEn && titleEn !== titleRomaji) {
+        bx2Ep = await anime3rbService.getEpisode(titleEn, episode).catch(() => null);
+      }
+      if (bx2Ep && Array.isArray(bx2Ep.entries)) {
+        for (const e of bx2Ep.entries) {
+          entries.push(e);
+        }
+        Object.assign(resolved, bx2Ep.resolved || {});
+        for (const d of bx2Ep.downloads || []) {
+          downloads.push(d);
+        }
+        Object.assign(resolvedDownloads, bx2Ep.resolvedDownloads || {});
+      }
+    } catch (_) {}
+
+    // 2) Fetch Direct MP4 streams from BLACK X Server 3 engine (plays in native <video> + AI Arabic Subtitles)
     try {
       const ahSources = await this.fetchAnimeHeavenStreams(titleEn, titleRomaji, episode);
       if (ahSources.length > 0) {
         const primaryMp4 = ahSources[0];
         const backupMp4 = ahSources[1] || ahSources[0];
 
-        // Server 1: Native <video> HD (Free & VIP compatible — zero iframe, zero sandbox error)
         const idNativeHd = `en-ah-native-hd-${malId}-${episode}`;
         entries.push({
           id: idNativeHd,
           token: idNativeHd,
-          server: '⚡ BLACK X Direct Player (مشغل مباشر بدون Sandbox + ترجمة عربية AI)',
+          server: '⚡ BLACK X Direct HD (مترجم عربي AI)',
           quality: '720p HD',
           version: 'sub',
           lang: 'en->ar',
@@ -400,12 +449,11 @@ class EnglishAnimeService {
           directUrl: primaryMp4
         };
 
-        // Server 2: Self-Hosted Clean HTML5 Player with built-in Arabic Subtitles
         const idEmbedClean = `en-ah-embed-hd-${malId}-${episode}`;
         entries.push({
           id: idEmbedClean,
           token: idEmbedClean,
-          server: '🌐 BLACK X Cinema Player (مترجم عربي مدمج داخل المشغل)',
+          server: '🌐 BLACK X Cinema HD (مشغل مدمج بالترجمة)',
           quality: '720p HD',
           version: 'sub',
           lang: 'en->ar',
@@ -420,12 +468,11 @@ class EnglishAnimeService {
           directUrl: null
         };
 
-        // Server 3: Native 1080p FHD Mirror
         const idNativeFhd = `en-ah-native-fhd-${malId}-${episode}`;
         entries.push({
           id: idNativeFhd,
           token: idNativeFhd,
-          server: '👑 BLACK X Direct 1080p FHD (سيرفر فائق السرعة)',
+          server: '👑 BLACK X Direct 1080p FHD (مترجم عربي AI)',
           quality: '1080p FHD',
           version: 'sub',
           lang: 'en->ar',
@@ -440,14 +487,13 @@ class EnglishAnimeService {
           directUrl: primaryMp4
         };
 
-        // Also add direct MP4 download links
         ahSources.slice(0, 2).forEach((mp4Url, idx) => {
           const dlId = `dl-en-mp4-${malId}-${episode}-${idx + 1}`;
           const proxiedDl = `/api/stream/download?url=${encodeURIComponent(mp4Url)}&filename=${encodeURIComponent(`${titleEn}-EP${episode}.mp4`)}`;
           downloads.push({
             id: dlId,
             token: dlId,
-            server: `📥 تحميل الحلقة MP4 مباشر (سيرفر ${idx + 1})`,
+            server: `📥 سيرفر تحميل BLACK X المباشر (${idx === 0 ? '1080p FHD' : '720p HD'})`,
             quality: idx === 0 ? '1080p FHD' : '720p HD',
             version: 'sub',
             lang: 'en',
@@ -461,13 +507,18 @@ class EnglishAnimeService {
       }
     } catch (_) {}
 
-    // 2) Also resolve real WitAnime servers (videa, Google Drive via yonaplay, unwrapped hgcloud HLS)
+    // 3) Cross-link BLACK X Server 1 (witanime) with strict title verification
     try {
       let witaCandidates = await searchShows(titleEn).catch(() => []);
       if (!witaCandidates.length && titleRomaji && titleRomaji !== titleEn) {
         witaCandidates = await searchShows(titleRomaji).catch(() => []);
       }
-      const witaSlug = witaCandidates?.[0]?.slug;
+      const verifiedWita = witaCandidates.find(
+        (c) =>
+          isTitleMatch(titleEn, c.titleEn, c.slug) ||
+          (titleRomaji && isTitleMatch(titleRomaji, c.titleEn, c.slug))
+      );
+      const witaSlug = verifiedWita?.slug;
       if (witaSlug) {
         const witaEp = await fetchEpisode(witaSlug, episode).catch(() => null);
         if (witaEp && Array.isArray(witaEp.entries) && witaEp.entries.length > 0) {
@@ -482,8 +533,7 @@ class EnglishAnimeService {
           for (const we of witaEp.entries) {
             entries.push({
               ...we,
-              witaSlug,
-              server: `👑 ${we.server} (مترجم عربي)`
+              witaSlug
             });
             if (witaEp.resolved?.[we.id]) {
               resolved[we.id] = witaEp.resolved[we.id];
@@ -503,59 +553,125 @@ class EnglishAnimeService {
       }
     } catch (_) {}
 
-    const subDownloads = [
+    // 4) Fallback for rare ONAs/shorts (e.g. Horangi Deureowayo / Tiger Coming In) via verified YouTube Episode Stream
+    if (!entries.length) {
+      try {
+        const ytCandidates = [titleEn, ...(show.synonyms || []), titleRomaji, show.titleNative].filter(Boolean);
+        for (const baseTitle of [...new Set(ytCandidates)]) {
+          const ytQuery = `${baseTitle} Episode ${episode} English Sub`;
+          const ytRes = await fetch(
+            `https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`,
+            {
+              headers: {
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+              },
+              signal: AbortSignal.timeout(7000)
+            }
+          );
+          if (!ytRes.ok) continue;
+          const ytHtml = await ytRes.text();
+          const m = ytHtml.match(/var ytInitialData = (\{.*?\});<\/script>/);
+          if (!m) continue;
+          const ytData = JSON.parse(m[1]);
+          const contents =
+            ytData?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+              ?.contents?.[0]?.itemSectionRenderer?.contents || [];
+          const videos = [];
+          for (const item of contents) {
+            const v = item.videoRenderer;
+            if (!v?.videoId) continue;
+            const vTitle = v.title?.runs?.[0]?.text || '';
+            const matchesAnyTitle = ytCandidates.some(
+              (cand) =>
+                cand &&
+                (vTitle.toLowerCase().includes(String(cand).toLowerCase()) ||
+                  isTitleMatch(String(cand), vTitle))
+            );
+            if (matchesAnyTitle) {
+              videos.push({ id: v.videoId, title: vTitle });
+            }
+          }
+          if (videos.length > 0) {
+            videos.slice(0, 2).forEach((vid, idx) => {
+              const entryId = `en-yt-${malId}-${episode}-${idx + 1}`;
+              const embedUrl = `https://www.youtube-nocookie.com/embed/${vid.id}?autoplay=1&rel=0&cc_load_policy=1&cc_lang_pref=ar`;
+              entries.push({
+                id: entryId,
+                token: entryId,
+                server: idx === 0 ? '🎬 BLACK X Stream HD (مترجم)' : '🌐 BLACK X Cinema HD (احتياطي)',
+                quality: '1080p FHD',
+                version: 'sub',
+                lang: 'ar',
+                embedUrl,
+                directUrl: null,
+                isFastCdn: true,
+                source: 'english'
+              });
+              resolved[entryId] = { embedUrl, directUrl: null };
+            });
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!entries.length) return null;
+
+    downloads.push(
       {
-        id: `dl-sub-ar-srt-${malId}-${episode}`,
-        token: `dl-sub-srt`,
-        server: '📄 تحميل ملف الترجمة العربية الفورية (.SRT)',
-        quality: 'HD',
+        id: `dl-en-sub-srt-${malId}-${episode}`,
+        token: `dl-en-srt-${malId}-${episode}`,
+        server: '📥 تحميل ملف الترجمة العربية (.SRT) — BLACK X AI',
+        quality: 'SRT',
         version: 'sub',
         lang: 'ar',
         downloadUrl: subSrtUrl
       },
       {
-        id: `dl-sub-ar-vtt-${malId}-${episode}`,
-        token: `dl-sub-vtt`,
-        server: '📄 تحميل ملف الترجمة العربية للويب (.VTT)',
-        quality: 'HD',
+        id: `dl-en-sub-vtt-${malId}-${episode}`,
+        token: `dl-en-vtt-${malId}-${episode}`,
+        server: '📥 تحميل ملف الترجمة العربية (.VTT) — BLACK X AI',
+        quality: 'VTT',
         version: 'sub',
         lang: 'ar',
         downloadUrl: subVttUrl
       }
-    ];
-
-    for (const d of subDownloads) {
-      downloads.push(d);
-      resolvedDownloads[d.id] = {
-        downloadUrl: d.downloadUrl,
-        directUrl: d.downloadUrl
-      };
-    }
-
-    // Warm up the subtitle translation cache in background
-    getTranslatedEpisodeSubtitles({ query: titleEn, episode }).catch(() => {});
+    );
+    resolvedDownloads[`dl-en-sub-srt-${malId}-${episode}`] = { url: subSrtUrl, directUrl: subSrtUrl };
+    resolvedDownloads[`dl-en-sub-vtt-${malId}-${episode}`] = { url: subVttUrl, directUrl: subVttUrl };
 
     const payload = {
       entries,
       downloads,
       resolved,
       resolvedDownloads,
-      subtitleTracks: [
+      subtitles: [
         {
           lang: 'ar',
-          label: 'العربية (ترجمة فورية بالذكاء الاصطناعي 🌐)',
+          label: 'العربية (ترجمة فورية BLACK X AI)',
           vttUrl: subVttUrl,
           srtUrl: subSrtUrl,
-          cuesUrl: `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}?title=${encodeURIComponent(titleEn)}`,
           default: true
         }
       ],
+      hasAutoArabicSub: true,
+      titleEn,
+      malId,
+      aniId,
+      episode,
       source: 'english',
-      sourceName: '🌐 سيرفر BLACK X العالمي (English + ترجمة عربية فورية AI)'
+      sourceName: 'سيرفر BLACK X 3'
     };
 
-    streamSet(cacheKey, payload, 60 * 60 * 1000);
+    streamSet(cacheKey, payload, 2 * 60 * 60 * 1000);
     return payload;
+  }
+
+  async getArabicSubtitles(rawSlug, epNumber) {
+    const show = await this.getShow(rawSlug);
+    const titleEn = show?.titleEn || parseEnglishSlug(rawSlug).query;
+    return getTranslatedEpisodeSubtitles(titleEn, epNumber);
   }
 }
 

@@ -97,11 +97,11 @@ async function cachedQuery(cacheKey, ttl, query, variables, mapper) {
 
 export async function fetchTrending() {
   return cachedQuery(
-    'anilist:trending',
+    'anilist:trending:v3',
     20 * 60 * 1000,
     `query ($page: Int) {
-      Page(page: $page, perPage: 12) {
-        media(sort: TRENDING_DESC, type: ANIME, isAdult: false) { ${MEDIA_FRAGMENT} }
+      Page(page: $page, perPage: 16) {
+        media(sort: TRENDING_DESC, type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], isAdult: false) { ${MEDIA_FRAGMENT} }
       }
     }`,
     { page: 1 },
@@ -111,11 +111,11 @@ export async function fetchTrending() {
 
 export async function fetchTopRanked(perPage = 15) {
   return cachedQuery(
-    `anilist:rankings:top:${perPage}`,
+    `anilist:rankings:top:v3:${perPage}`,
     30 * 60 * 1000,
     `query ($page: Int) {
       Page(page: $page, perPage: ${perPage}) {
-        media(sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, isAdult: false) { ${MEDIA_FRAGMENT} }
+        media(sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], isAdult: false) { ${MEDIA_FRAGMENT} }
       }
     }`,
     { page: 1 },
