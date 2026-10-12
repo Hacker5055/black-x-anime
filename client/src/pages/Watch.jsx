@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { useAsync, applyLiveColor, useDominantColor, pushToast } from '../hooks/hooks.js';
 import VideoPlayer from '../components/VideoPlayer.jsx';
+import LiveArabicSubtitlesPanel from '../components/LiveArabicSubtitlesPanel.jsx';
 import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import {
@@ -371,6 +372,16 @@ export default function Watch({ onOpenAuth }) {
                 onPrev={prevEp ? () => navigate(`/watch/${slug}/${prevEp.episode}${srcSuffix}`) : null}
                 onNext={nextEp ? () => navigate(`/watch/${slug}/${nextEp.episode}${srcSuffix}`) : null}
                 nextLabel={nextEp ? t('watch.episodePicker', { n: formatNumber(nextEp.episode) }) : null}
+              />
+
+              {/* ---------- Live English -> Arabic AI Subtitle Translator Bar ---------- */}
+              <LiveArabicSubtitlesPanel
+                slug={slug}
+                episode={episode}
+                titleEn={show?.titleEn || title}
+                lang={lang}
+                autoEnable={sourceParam === 'english' || String(slug).startsWith('en-') || String(slug).startsWith('mal-')}
+                currentPosRef={lastPos}
               />
             </div>
           )}

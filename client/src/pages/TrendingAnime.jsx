@@ -395,6 +395,14 @@ export default function TrendingAnime() {
         ) || null;
 
       if (matched?.slug) {
+        if (matched.source === 'english') {
+          pushToast(
+            lang === 'ar'
+              ? `🌐 جاري فتح "${item.titleAr || item.titleEn}" عبر السيرفر العالمي مع الترجمة العربية الفورية AI!`
+              : `🌐 Opening "${item.titleEn}" via Global Server with Instant Arabic AI Subtitles!`,
+            'success'
+          );
+        }
         const matchedSrc =
           matched.source && matched.source !== 'witanime' && matched.source !== 'all'
             ? `?source=${matched.source}`
@@ -663,8 +671,9 @@ export default function TrendingAnime() {
 
         <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
           {[
-            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (WitAnime + Anime3rb + OkAnime + Blkom)', labelEn: 'All Sources' },
+            { id: 'all', icon: '🌟', labelAr: 'جميع المصادر (الكل + المترجم الفوري AI)', labelEn: 'All Sources + AI Sub' },
             { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1 (WitAnime)', labelEn: 'Server 1 (WitAnime)', sub: 'witanime.site' },
+            { id: 'english', icon: '🌐', labelAr: 'سيرفر عالمي (English + ترجمة عربية AI)', labelEn: 'Global EN + Arabic AI Sub', sub: 'vidlink.pro' },
             { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2 (Anime3rb)', labelEn: 'Server 2 (Anime3rb)', sub: 'anime3rb.com' },
             { id: 'okanime', icon: '🔥', labelAr: 'سيرفر BLACK X 3 (OkAnime)', labelEn: 'Server 3 (OkAnime)', sub: 'ww3.okanime.xyz' },
             { id: 'animeblkom', icon: '💎', labelAr: 'سيرفر BLACK X 4 (AnimeBlkom)', labelEn: 'Server 4 (AnimeBlkom)', sub: 'animeblkom.com' }

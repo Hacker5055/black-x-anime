@@ -5,6 +5,14 @@ import { scraperGetEpisodeDl, scraperSearchAnime } from '../animeScraperApi.js';
 import { anime3rbService, ANIME3RB_CATALOG } from '../services/anime3rb.service.js';
 import { okanimeService, OKANIME_CATALOG } from '../services/okanime.service.js';
 import { animeblkomService, ANIMEBLKOM_CATALOG } from '../services/animeblkom.service.js';
+import { englishAnimeService } from '../services/englishAnime.service.js';
+import {
+  getTranslatedEpisodeSubtitles,
+  parseSubtitles,
+  translateLinesToArabic,
+  buildVttFromCues,
+  buildSrtFromCues
+} from '../subtitleTranslator.js';
 
 const router = Router();
 
@@ -24,6 +32,13 @@ router.get('/sources', (req, res) => {
         nameEn: 'BLACK X Server 1 (WitAnime)',
         site: 'https://witanime.site/',
         badge: 'WitAnime'
+      },
+      {
+        id: 'english',
+        nameAr: '🌐 سيرفر BLACK X العالمي (English + ترجمة عربية فورية AI)',
+        nameEn: 'BLACK X Global (English + Instant Arabic AI Subtitles)',
+        site: 'https://vidlink.pro/',
+        badge: 'EN ➔ AR AI'
       },
       {
         id: 'anime3rb',
@@ -98,6 +113,17 @@ router.get('/catalog', async (req, res) => {
       }
     }
 
+    if (source === 'all' || source === 'english') {
+      try {
+        const enLatest = await englishAnimeService.getLatestEpisodes();
+        if (enLatest?.length) {
+          items = items.concat(enLatest);
+        }
+      } catch (err) {
+        console.warn('englishAnimeService catalog note:', err.message);
+      }
+    }
+
     res.json({ items, count: items.length, page });
   } catch (err) {
     res.status(500).json({ error: 'catalog_error', items: [] });
@@ -126,6 +152,7 @@ router.get('/latest', async (req, res) => {
     let a3rbItems = [];
     let okItems = [];
     let blkomItems = [];
+    let enItems = [];
 
     if (source === 'all' || source === 'witanime') {
       try {
@@ -137,6 +164,19 @@ router.get('/latest', async (req, res) => {
         }));
       } catch (e) {
         console.warn('witanime fetch latest note:', e.message);
+      }
+    }
+
+    if (source === 'all' || source === 'english') {
+      try {
+        const en = await englishAnimeService.getLatestEpisodes();
+        enItems = (en || []).map((it) => ({
+          ...it,
+          source: 'english',
+          sourceLabel: '🌐 سيرفر عالمي + ترجمة عربية AI'
+        }));
+      } catch (e) {
+        console.warn('englishAnimeService fetch latest note:', e.message);
       }
     }
 
@@ -188,11 +228,27 @@ router.get('/latest', async (req, res) => {
       combined = blkomItems;
     } else if (source === 'witanime') {
       combined = witaItems;
+    } else if (source === 'english') {
+      combined = enItems;
     } else {
-      // Interleave all 4 sources evenly
-      const maxLen = Math.max(witaItems.length, a3rbItems.length, okItems.length, blkomItems.length);
+      // Interleave all sources evenly
+      const maxLen = Math.max(witaItems.length, enItems.length, a3rbItems.length, okItems.length, blkomItems.length);
       const seen = new Set();
       for (let i = 0; i < maxLen; i++) {
+        if (i < witaItems.length) {
+          const k = `wita:${witaItems[i].slug}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            combined.push(witaItems[i]);
+          }
+        }
+        if (i < enItems.length) {
+          const k = `en:${enItems[i].slug}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            combined.push(enItems[i]);
+          }
+        }
         if (i < okItems.length) {
           const k = `ok:${okItems[i].slug}`;
           if (!seen.has(k)) {
@@ -205,13 +261,6 @@ router.get('/latest', async (req, res) => {
           if (!seen.has(k)) {
             seen.add(k);
             combined.push(a3rbItems[i]);
-          }
-        }
-        if (i < witaItems.length) {
-          const k = `wita:${witaItems[i].slug}`;
-          if (!seen.has(k)) {
-            seen.add(k);
-            combined.push(witaItems[i]);
           }
         }
         if (i < blkomItems.length) {
@@ -238,6 +287,7 @@ router.get('/search', async (req, res) => {
   if (!q) return res.json({ items: [], results: [] });
   try {
     let witaResults = [];
+    let enResults = [];
     let a3rbResults = [];
     let okResults = [];
     let blkomResults = [];
@@ -266,6 +316,18 @@ router.get('/search', async (req, res) => {
             sourceLabel: 'سيرفر BLACK X 1 (WitAnime)'
           }));
         witaResults = [...fromW, ...fromS];
+      } catch (_) {}
+    }
+
+    if (source === 'all' || source === 'english') {
+      try {
+        const en = await englishAnimeService.search(q);
+        enResults = (en || []).map((it) => ({
+          ...it,
+          source: 'english',
+          hasAutoArabicSub: true,
+          sourceLabel: '🌐 مصدر إنجليزي + ترجمة عربية فورية AI'
+        }));
       } catch (_) {}
     }
 
@@ -304,8 +366,8 @@ router.get('/search', async (req, res) => {
 
     const seen = new Set();
     const merged = [];
-    // Prioritize WitAnime results FIRST so real WitAnime slugs match accurately
-    for (const item of [...witaResults, ...okResults, ...a3rbResults, ...blkomResults]) {
+    // Prioritize WitAnime results FIRST, then English+Auto-Arabic AI Sub, then secondary sources
+    for (const item of [...witaResults, ...enResults, ...okResults, ...a3rbResults, ...blkomResults]) {
       const key = `${item.source || 'src'}:${item.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -328,7 +390,9 @@ router.get('/show/:slug', async (req, res) => {
   try {
     let show = null;
 
-    if (source === 'okanime' || slug.startsWith('ok-')) {
+    if (source === 'english' || slug.startsWith('en-') || slug.startsWith('mal-')) {
+      show = await englishAnimeService.getShow(slug);
+    } else if (source === 'okanime' || slug.startsWith('ok-')) {
       show = await okanimeService.getShow(slug.replace(/^ok-/, ''));
     } else if (source === 'animeblkom' || slug.startsWith('blkom-')) {
       show = await animeblkomService.getShow(slug.replace(/^blkom-/, ''));
@@ -347,7 +411,7 @@ router.get('/show/:slug', async (req, res) => {
       // 2) If direct slug didn't match on WitAnime, try searching WitAnime by title words
       if (!show) {
         try {
-          const queryWords = slug.replace(/^(ok-|blkom-|a3rb-|ani-)/, '').replace(/-/g, ' ').trim();
+          const queryWords = slug.replace(/^(ok-|blkom-|a3rb-|ani-|en-|mal-)/, '').replace(/-/g, ' ').trim();
           const candidates = await searchShows(queryWords);
           if (candidates && candidates.length > 0 && candidates[0].slug) {
             show = await fetchShow(candidates[0].slug);
@@ -359,7 +423,14 @@ router.get('/show/:slug', async (req, res) => {
         } catch (_) {}
       }
 
-      // 3) Check secondary catalogs ONLY if the slug actually exists in their catalog
+      // 3) Fallback to Global English Anime + Auto-Arabic AI Translation Service (covers all MAL/AniList anime!)
+      if (!show) {
+        try {
+          show = await englishAnimeService.getShow(slug);
+        } catch (_) {}
+      }
+
+      // 4) Check secondary catalogs ONLY if the slug actually exists in their catalog
       if (!show) {
         const clean = slug.replace(/^(ok-|blkom-|a3rb-)/, '').toLowerCase();
         if (OKANIME_CATALOG.some((a) => a.slug === clean)) {
@@ -393,7 +464,9 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   try {
     let data = null;
 
-    if (sourceParam === 'okanime' || req.params.slug.startsWith('ok-')) {
+    if (sourceParam === 'english' || req.params.slug.startsWith('en-') || req.params.slug.startsWith('mal-')) {
+      data = await englishAnimeService.getEpisode(req.params.slug, episode);
+    } else if (sourceParam === 'okanime' || req.params.slug.startsWith('ok-')) {
       data = await okanimeService.getEpisode(cleanSlug, episode);
     } else if (sourceParam === 'animeblkom' || req.params.slug.startsWith('blkom-')) {
       data = await animeblkomService.getEpisode(cleanSlug, episode);
@@ -407,7 +480,14 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
         console.warn('witanime fetchEpisode note:', err.message);
       }
 
-      // 2) Fallback to secondary sources ONLY if WitAnime did not return entries
+      // 2) Fallback to Global English Anime + Auto-Arabic AI Translation Service
+      if (!data || !data.entries?.length) {
+        try {
+          data = await englishAnimeService.getEpisode(cleanSlug, episode);
+        } catch (_) {}
+      }
+
+      // 3) Fallback to secondary sources ONLY if still empty
       if (!data || !data.entries?.length) {
         try {
           data = await okanimeService.getEpisode(cleanSlug, episode);
@@ -494,6 +574,22 @@ router.post('/resolve', async (req, res) => {
   const ep = Number(episode);
   if (!slug || !Number.isInteger(ep) || ep < 1 || !entryId) {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
+  }
+
+  // If this is an English Anime entry, resolve immediately
+  if (String(entryId).startsWith('en-')) {
+    try {
+      const enData = await englishAnimeService.getEpisode(String(slug), ep);
+      const match = enData?.entries?.find((e) => e.id === entryId);
+      if (match) {
+        return res.json({
+          source: {
+            embedUrl: match.embedUrl,
+            directUrl: match.directUrl || null
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   // If this is an Anime3rb entry, resolve immediately
@@ -939,6 +1035,140 @@ router.get('/proxy', optionalAuth, async (req, res) => {
     if (res.headersSent || res.destroyed) return;
     console.error('[stream/proxy]', err.message);
     res.status(502).json({ error: 'upstream', message: 'Stream fetch failed' });
+  }
+});
+
+/* ------------- English -> Arabic AI Subtitle Translation API ------------- */
+
+function extractSubtitleQuery(slug, queryParam) {
+  if (queryParam && String(queryParam).trim()) return String(queryParam).trim();
+  return String(slug || '')
+    .replace(/^(en|mal)-\d+-/i, '')
+    .replace(/^(ok|blkom|a3rb|ani)-/i, '')
+    .replace(/-/g, ' ')
+    .trim();
+}
+
+/** GET /api/stream/subtitles/:slug/:ep.vtt — WebVTT Arabic translated subtitles */
+router.get('/subtitles/:slug/:ep.vtt', async (req, res) => {
+  const { slug } = req.params;
+  const ep = Math.max(1, Number(req.params.ep) || 1);
+  const query = extractSubtitleQuery(slug, req.query.title || req.query.q);
+  const lang = (req.query.lang || 'ar').toLowerCase();
+
+  try {
+    const subData = await getTranslatedEpisodeSubtitles({
+      query,
+      episode: ep,
+      directSubUrl: req.query.url || null
+    });
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (!subData) {
+      return res.send('WEBVTT\n\n');
+    }
+    return res.send(lang === 'en' ? subData.vttEn : subData.vttAr);
+  } catch (err) {
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    return res.send('WEBVTT\n\n');
+  }
+});
+
+/** GET /api/stream/subtitles/:slug/:ep.srt — Downloadable SubRip (.srt) Arabic subtitles */
+router.get('/subtitles/:slug/:ep.srt', async (req, res) => {
+  const { slug } = req.params;
+  const ep = Math.max(1, Number(req.params.ep) || 1);
+  const query = extractSubtitleQuery(slug, req.query.title || req.query.q);
+
+  try {
+    const subData = await getTranslatedEpisodeSubtitles({
+      query,
+      episode: ep,
+      directSubUrl: req.query.url || null
+    });
+    const safeName = query.replace(/[^a-z0-9-_]/gi, '_') || 'Anime';
+    res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Ep${ep}_AR.srt"`);
+    return res.send(subData ? subData.srtAr : '');
+  } catch (err) {
+    return res.status(502).send('');
+  }
+});
+
+/** GET /api/stream/subtitles/:slug/:ep — JSON cues (startSec, endSec, textAr, textEn) + VTT/SRT links */
+router.get('/subtitles/:slug/:ep', async (req, res) => {
+  const { slug } = req.params;
+  const ep = Math.max(1, Number(req.params.ep) || 1);
+  const query = extractSubtitleQuery(slug, req.query.title || req.query.q);
+
+  try {
+    const subData = await getTranslatedEpisodeSubtitles({
+      query,
+      episode: ep,
+      directSubUrl: req.query.url || null
+    });
+    if (!subData) {
+      return res.json({
+        ok: false,
+        cueCount: 0,
+        cues: [],
+        message: 'No external subtitle file found for this episode'
+      });
+    }
+    return res.json({
+      ok: true,
+      query: subData.query,
+      episode: subData.episode,
+      fileName: subData.fileName,
+      cueCount: subData.cueCount,
+      cues: subData.cues,
+      vttUrl: `/api/stream/subtitles/${encodeURIComponent(slug)}/${ep}.vtt?title=${encodeURIComponent(query)}`,
+      srtUrl: `/api/stream/subtitles/${encodeURIComponent(slug)}/${ep}.srt?title=${encodeURIComponent(query)}`
+    });
+  } catch (err) {
+    return res.status(502).json({ ok: false, cueCount: 0, cues: [], error: err.message });
+  }
+});
+
+/** POST /api/stream/translate-subtitle — Translate custom .srt/.vtt text or URL from English to Arabic */
+router.post('/translate-subtitle', async (req, res) => {
+  const { text, url, query, episode } = req.body || {};
+  try {
+    if (text && typeof text === 'string') {
+      const cues = parseSubtitles(text);
+      if (!cues.length) {
+        return res.status(400).json({ ok: false, message: 'No valid subtitle cues found' });
+      }
+      const arLines = await translateLinesToArabic(cues.map((c) => c.textEn));
+      cues.forEach((c, idx) => {
+        c.textAr = arLines[idx] || c.textEn;
+      });
+      return res.json({
+        ok: true,
+        cueCount: cues.length,
+        cues,
+        vttAr: buildVttFromCues(cues, 'textAr'),
+        srtAr: buildSrtFromCues(cues, 'textAr')
+      });
+    }
+
+    const subData = await getTranslatedEpisodeSubtitles({
+      query: query || 'anime',
+      episode: Number(episode) || 1,
+      directSubUrl: url || null
+    });
+    if (!subData) {
+      return res.status(404).json({ ok: false, message: 'Subtitle not found' });
+    }
+    return res.json({
+      ok: true,
+      cueCount: subData.cueCount,
+      cues: subData.cues,
+      vttAr: subData.vttAr,
+      srtAr: subData.srtAr
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
