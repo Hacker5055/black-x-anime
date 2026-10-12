@@ -6484,23 +6484,612 @@ body {
   }
 }
 
+/* ============================================================================
+   COMPREHENSIVE MOBILE UI OVERHAUL (PHONES & TABLETS) — PURE MONOCHROME BLACK
+   ============================================================================ */
+
+/* Desktop defaults for mobile-only elements */
+.wit-mobile-only {
+  display: none !important;
+}
+
+.wit-mobile-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+
+.wit-mobile-icon-btn:active,
+.wit-mobile-icon-btn.active {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+/* Expandable Mobile Search Bar below Header */
+.wit-mobile-search-panel {
+  background: #080808;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.65rem 0.85rem;
+  animation: mobileSlideDown 0.2s ease-out;
+}
+
+@keyframes mobileSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wit-mobile-search-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.wit-mobile-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 0.9rem;
+  border-radius: 11px;
+  background: #121212;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 16px; /* Prevents iOS Safari auto-zoom */
+  outline: none;
+}
+
+.wit-mobile-search-input:focus {
+  border-color: #ffffff;
+}
+
+.wit-mobile-search-submit {
+  height: 42px;
+  padding: 0 1.1rem;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 900;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Mobile Slide-Out Drawer */
+.wit-mobile-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2000;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.wit-mobile-drawer {
+  width: min(84vw, 320px);
+  height: 100%;
+  background: #060606;
+  border-inline-end: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 1.1rem 1rem calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.98);
+}
+
+.wit-mobile-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wit-mobile-drawer__user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 14px;
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.wit-mobile-drawer__auth {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.wit-mobile-drawer__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.wit-mobile-drawer__link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.78rem 0.9rem;
+  border-radius: 12px;
+  color: #d4d4d8;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 800;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+}
+
+.wit-mobile-drawer__link:hover,
+.wit-mobile-drawer__link.active {
+  background: #161616;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
 @media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .wit-mobile-only {
+    display: inline-flex !important;
+  }
+
+  .wit-desktop-lang,
+  .wit-nav-search,
+  .wit-exact-nav__links {
+    display: none !important;
+  }
+
+  /* Compact Sticky Top Navbar on Mobile */
+  .wit-exact-nav {
+    height: auto !important;
+    min-height: 58px !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1100 !important;
+  }
+
+  .wit-exact-nav__inner {
+    height: 58px !important;
+    padding: 0 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .wit-exact-nav__right {
+    gap: 0.55rem !important;
+  }
+
+  .wit-brand {
+    font-size: 1.08rem !important;
+    gap: 0.4rem !important;
+  }
+
+  .wit-brand__box {
+    width: 27px !important;
+    height: 27px !important;
+    font-size: 0.92rem !important;
+  }
+
+  .wit-exact-nav__left {
+    gap: 0.4rem !important;
+  }
+
+  .nav__auth-group .nav-auth-btn--reg {
+    display: none !important;
+  }
+
+  .nav__auth-group .nav-auth-btn--login {
+    padding: 0.38rem 0.75rem !important;
+    font-size: 0.78rem !important;
+  }
+
+  /* Main Container & Safe Bottom Padding for Fixed Mobile Tab Bar */
+  .main {
+    padding-top: 0.5rem !important;
+    padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .container {
+    padding-inline: 0.75rem !important;
+    max-width: 100% !important;
+  }
+
+  .footer {
+    padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Fixed Bottom Mobile Navigation Bar */
+  .nav-mobile-tabs {
+    height: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    background: rgba(5, 5, 5, 0.96) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.14) !important;
+    z-index: 1200 !important;
+  }
+
+  .nav-mobile-tabs a {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.18rem !important;
+    padding: 0.35rem 0.15rem !important;
+    font-size: 0.68rem !important;
+    font-weight: 800 !important;
+    color: #a1a1aa !important;
+    text-decoration: none !important;
+    border-radius: 10px !important;
+  }
+
+  .nav-mobile-tabs a.active {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .nav-mobile-tabs__icon {
+    font-size: 1.12rem !important;
+    line-height: 1 !important;
+  }
+
+  /* Home Cinema Hero Banner on Mobile */
   .wit-cinema-hero {
-    min-height: 360px;
-    padding: 1.5rem 1rem;
+    min-height: 310px !important;
+    padding: 1.35rem 1rem 1.25rem !important;
+    border-radius: 16px !important;
+    margin-bottom: 0.25rem !important;
+    align-items: flex-end !important;
   }
+
   .wit-cinema-hero__art-wrap {
-    width: 100%;
-    opacity: 0.45;
+    width: 100% !important;
+    opacity: 0.52 !important;
   }
+
+  .wit-cinema-hero__fade {
+    background:
+      linear-gradient(to top, #080808 8%, rgba(8, 8, 8, 0.72) 55%, rgba(8, 8, 8, 0.35) 100%) !important;
+  }
+
+  .wit-cinema-hero__content {
+    max-width: 100% !important;
+    gap: 0.55rem !important;
+  }
+
+  .wit-cinema-hero__title {
+    font-size: clamp(1.22rem, 5.2vw, 1.65rem) !important;
+    line-height: 1.25 !important;
+  }
+
+  .wit-cinema-hero__meta {
+    font-size: 0.75rem !important;
+    gap: 0.35rem !important;
+  }
+
+  .wit-cinema-hero__desc {
+    font-size: 0.8rem !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+  }
+
+  .wit-watch-pill-btn {
+    padding: 0.6rem 1.45rem !important;
+    font-size: 0.86rem !important;
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .wit-hero-dots {
+    margin-top: 0.65rem !important;
+  }
+
+  /* Section Headers on Mobile */
+  .wit-sec-header {
+    padding-bottom: 0.55rem !important;
+    margin-bottom: 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .wit-sec-header__title {
+    font-size: 1.02rem !important;
+  }
+
+  .wit-sec-header__sub {
+    font-size: 0.72rem !important;
+  }
+
+  .wit-sec-header__more {
+    font-size: 0.74rem !important;
+    padding: 0.3rem 0.65rem !important;
+  }
+
+  /* 2-Column Grids for Episodes & Anime Cards on Mobile Phones */
+  .wit-grid-4,
+  .wit-grid-6,
+  .wit-grid-anime,
+  .grid-anime,
+  .grid-episodes,
+  .bx-anime-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem !important;
+  }
+
   .wit-ranked-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 0.5rem !important;
   }
-  .wit-nav-search {
-    display: none;
+
+  /* Disable 3D tilt hover transforms on touch devices so scrolling is buttery-smooth */
+  .show-card:hover,
+  .ep-tile:hover,
+  .wit-ep-card:hover,
+  .bx-anime-card:hover {
+    transform: none !important;
+  }
+
+  /* Weekly Airing Schedule Horizontal Swipe on Mobile */
+  .wit-schedule-tabs {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 0.4rem !important;
+    padding-bottom: 0.35rem !important;
+  }
+
+  .wit-schedule-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .wit-schedule-tab {
+    flex: 0 0 auto !important;
+    padding: 0.48rem 0.9rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* Trending & Catalog Page on Mobile */
+  .bx-trending-hero {
+    padding: 1.15rem 0.95rem !important;
+    border-radius: 18px !important;
+  }
+
+  .bx-trending-search {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 0.55rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .bx-trending-search input {
+    font-size: 16px !important;
+  }
+
+  .bx-trending-search .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .bx-server-selector {
+    padding: 0.85rem !important;
+    border-radius: 14px !important;
+  }
+
+  .bx-server-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    width: 100% !important;
+    gap: 0.45rem !important;
+  }
+
+  .bx-server-tabs button {
+    justify-content: center !important;
+    padding: 0.5rem 0.55rem !important;
+    font-size: 0.76rem !important;
+    text-align: center !important;
+  }
+
+  .bx-filter-row {
+    gap: 0.65rem !important;
+  }
+
+  .bx-filter-chips {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    width: 100% !important;
+    padding-bottom: 0.25rem !important;
+    scrollbar-width: none !important;
+  }
+
+  .bx-filter-chips::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .bx-filter-chips .chip {
+    flex: 0 0 auto !important;
+    font-size: 0.76rem !important;
+    padding: 0.42rem 0.8rem !important;
+  }
+
+  /* Show Detail Page on Mobile */
+  .detail-hero {
+    padding: 1.1rem 0.9rem !important;
+    border-radius: 18px !important;
+  }
+
+  .detail-hero__content {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+    text-align: center !important;
+  }
+
+  .detail-poster {
+    width: 150px !important;
+    margin: 0 auto !important;
+  }
+
+  .detail-meta {
+    justify-content: center !important;
+  }
+
+  .wit-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+    text-align: start !important;
+  }
+
+  /* Watch Page & Video Player on Mobile */
+  .watch-layout {
+    grid-template-columns: 1fr !important;
+    gap: 0.9rem !important;
+  }
+
+  .wit-servers-box {
+    padding: 0.65rem 0.75rem !important;
+    border-radius: 12px !important;
+  }
+
+  .wit-servers-box__head {
+    font-size: 0.78rem !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+  }
+
+  .wit-servers-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.42rem !important;
+  }
+
+  .wit-server-tab {
+    width: 100% !important;
+    justify-content: space-between !important;
+    padding: 0.48rem 0.6rem !important;
+    font-size: 0.74rem !important;
+  }
+
+  .watch-meta {
+    padding: 0.9rem !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .watch-meta__title {
+    font-size: 1.15rem !important;
+  }
+
+  .watch-meta__shortcuts {
+    display: none !important;
+  }
+
+  .watch-meta__actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+    width: 100% !important;
+  }
+
+  .watch-meta__actions .btn {
+    width: 100% !important;
+    justify-content: center !important;
+    font-size: 0.76rem !important;
+    padding: 0.55rem 0.5rem !important;
+  }
+
+  /* Profile Dashboard & Community on Mobile */
+  .wit-profile-card__body {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 0 1rem 1.2rem !important;
+  }
+
+  .wit-pill-tabs {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    padding: 0.35rem !important;
+    gap: 0.35rem !important;
+  }
+
+  .wit-pill-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .wit-pill-tab {
+    flex: 0 0 auto !important;
+    font-size: 0.78rem !important;
+    padding: 0.48rem 0.85rem !important;
+  }
+
+  /* Modals on Mobile */
+  .modal {
+    width: calc(100vw - 1rem) !important;
+    max-width: 100% !important;
+    max-height: 88vh !important;
+    padding: 1.1rem 0.95rem !important;
+    border-radius: 18px !important;
+    margin: 0.5rem !important;
+  }
+
+  input, select, textarea {
+    font-size: 16px !important;
   }
 }
+
+@media (max-width: 420px) {
+  .wit-grid-4,
+  .wit-grid-6,
+  .wit-grid-anime,
+  .grid-anime,
+  .grid-episodes,
+  .bx-anime-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+
+  .bx-anime-card h3 {
+    font-size: 0.82rem !important;
+  }
+
+  .bx-anime-card .btn {
+    font-size: 0.72rem !important;
+    padding: 0.42rem 0.5rem !important;
+  }
+}
+
 
 
 

@@ -1,9 +1,8 @@
 import { imgFallback } from '../hooks/hooks.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { ShowSearch } from './Modals.jsx';
 import { UserBadges } from './UserBadges.jsx';
 import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
 import NotificationBell from './NotificationBell.jsx';
@@ -37,9 +36,13 @@ export default function Navbar({ onOpenAuth }) {
   const { t, lang } = useI18n();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [navSearch, setNavSearch] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const menuRef = useRef(null);
+  const mobileSearchInputRef = useRef(null);
 
   const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
   const hasVerified = isDev || (user?.badges || []).includes('blue_verified') || (user?.badges || []).includes('gold_vip') || (user?.badges || []).length > 0;
@@ -52,17 +55,32 @@ export default function Navbar({ onOpenAuth }) {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
+  // Close mobile drawer & search bar on route change
+  useEffect(() => {
+    setMobileDrawerOpen(false);
+    setMobileSearchOpen(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (mobileSearchOpen && mobileSearchInputRef.current) {
+      mobileSearchInputRef.current.focus();
+    }
+  }, [mobileSearchOpen]);
+
   const links = [
-    { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home' },
-    { to: '/trending', label: lang === 'ar' ? 'قائمة الأنمي' : 'Anime List' },
-    { to: '/trending?type=movie', label: lang === 'ar' ? 'أفلام' : 'Movies' },
-    { to: '/#schedule-section', label: lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule', isHash: true },
-    { to: '/browse', label: lang === 'ar' ? 'المانجا' : 'Manga' },
-    { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community' }
+    { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home', icon: '🏠' },
+    { to: '/trending', label: lang === 'ar' ? 'قائمة الأنمي' : 'Anime List', icon: '🔥' },
+    { to: '/trending?type=movie', label: lang === 'ar' ? 'أفلام' : 'Movies', icon: '🎬' },
+    { to: '/#schedule-section', label: lang === 'ar' ? 'مواعيد الحلقات' : 'Schedule', icon: '📅', isHash: true },
+    { to: '/browse', label: lang === 'ar' ? 'المانجا' : 'Manga', icon: '📖' },
+    { to: '/rankings', label: lang === 'ar' ? 'التصنيفات' : 'Rankings', icon: '🏆' },
+    { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community', icon: '💬' }
   ];
 
   const handleNavSearchSubmit = (e) => {
     e.preventDefault();
+    setMobileSearchOpen(false);
+    setMobileDrawerOpen(false);
     if (!navSearch.trim()) {
       navigate('/trending');
       return;
@@ -74,8 +92,21 @@ export default function Navbar({ onOpenAuth }) {
     <>
       <header className="nav wit-exact-nav">
         <div className="nav__inner wit-exact-nav__inner">
-          {/* Right side in RTL: Brand Logo + Links */}
+          {/* Right side in RTL: Mobile Hamburger + Brand Logo + Desktop Links */}
           <div className="wit-exact-nav__right">
+            <button
+              type="button"
+              className="wit-mobile-icon-btn wit-mobile-only"
+              onClick={() => {
+                setMobileDrawerOpen((v) => !v);
+                setMobileSearchOpen(false);
+              }}
+              aria-label={lang === 'ar' ? 'القائمة' : 'Menu'}
+              aria-expanded={mobileDrawerOpen}
+            >
+              {mobileDrawerOpen ? '✕' : '☰'}
+            </button>
+
             <NavLink to="/" className="wit-brand" aria-label="BLACK X">
               <span className="wit-brand__box">X</span>
               <span className="wit-brand__text">BLACK X</span>
@@ -101,7 +132,7 @@ export default function Navbar({ onOpenAuth }) {
             </nav>
           </div>
 
-          {/* Left side in RTL: Search Pill with Filter button + Avatar */}
+          {/* Left side in RTL: Search Pill + Mobile Search Button + Bell + Lang + Auth/Avatar */}
           <div className="wit-exact-nav__left">
             <form className="wit-nav-search" onSubmit={handleNavSearchSubmit}>
               <span className="wit-nav-search__icon" aria-hidden="true">🔍</span>
@@ -121,8 +152,24 @@ export default function Navbar({ onOpenAuth }) {
               </button>
             </form>
 
+            {/* Mobile-only Search Toggle Button */}
+            <button
+              type="button"
+              className={`wit-mobile-icon-btn wit-mobile-only ${mobileSearchOpen ? 'active' : ''}`}
+              onClick={() => {
+                setMobileSearchOpen((v) => !v);
+                setMobileDrawerOpen(false);
+              }}
+              aria-label={lang === 'ar' ? 'بحث' : 'Search'}
+            >
+              🔍
+            </button>
+
             <NotificationBell />
-            <LanguageToggle />
+            <div className="wit-desktop-lang">
+              <LanguageToggle />
+            </div>
+
             {!user ? (
               <div className="nav__auth-group">
                 <button type="button" className="btn btn--ghost btn--sm nav-auth-btn nav-auth-btn--login" onClick={() => onOpenAuth('login')}>
@@ -154,7 +201,6 @@ export default function Navbar({ onOpenAuth }) {
                       mode="frame"
                       size={40}
                     />
-                    {/* Verification badges attached directly beside/on user picture like Facebook and Instagram */}
                     {isDev ? (
                       <span className="avatar-badge avatar-badge--dev" title="👑 مطور BLACK X">👑</span>
                     ) : hasVerified ? (
@@ -187,7 +233,7 @@ export default function Navbar({ onOpenAuth }) {
                       <button
                         type="button"
                         className="user-menu__item"
-                        style={{ color: '#f472b6', fontWeight: 700 }}
+                        style={{ color: '#ffffff', fontWeight: 700 }}
                         onClick={() => { setMenuOpen(false); navigate('/profile?tab=developer'); }}
                       >
                         <span>👑</span> {t('nav.devConsole')}
@@ -213,19 +259,156 @@ export default function Navbar({ onOpenAuth }) {
             )}
           </div>
         </div>
+
+        {/* Mobile Expandable Search Bar */}
+        {mobileSearchOpen && (
+          <div className="wit-mobile-search-panel">
+            <form className="wit-mobile-search-form" onSubmit={handleNavSearchSubmit}>
+              <input
+                ref={mobileSearchInputRef}
+                type="search"
+                className="wit-mobile-search-input"
+                value={navSearch}
+                onChange={(e) => setNavSearch(e.target.value)}
+                placeholder={lang === 'ar' ? 'ابحث عن أي أنمي أو فيلم في سيرفرات BLACK X...' : 'Search any anime or movie on BLACK X...'}
+              />
+              <button type="submit" className="wit-mobile-search-submit">
+                {lang === 'ar' ? 'بحث' : 'Search'}
+              </button>
+            </form>
+          </div>
+        )}
       </header>
+
+      {/* Mobile Full Navigation Drawer */}
+      {mobileDrawerOpen && (
+        <div className="wit-mobile-drawer-backdrop" onClick={() => setMobileDrawerOpen(false)}>
+          <aside className="wit-mobile-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="wit-mobile-drawer__head">
+              <div className="wit-brand">
+                <span className="wit-brand__box">X</span>
+                <span className="wit-brand__text">BLACK X</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LanguageToggle />
+                <button
+                  type="button"
+                  className="wit-mobile-icon-btn"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {user ? (
+              <div
+                className="wit-mobile-drawer__user"
+                onClick={() => {
+                  setMobileDrawerOpen(false);
+                  navigate('/profile');
+                }}
+              >
+                <span className="avatar user-avatar-circle" style={{ background: user.avatarColor, width: 42, height: 42 }}>
+                  {(user.photoURL || user.photoUrl) ? (
+                    <img onError={imgFallback} src={user.photoURL || user.photoUrl} alt={user.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    user.displayName?.[0]?.toUpperCase() || 'X'
+                  )}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 900, color: '#fff', fontSize: '0.92rem' }}>{user.displayName}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#a1a1aa' }}>
+                    {isDev ? '👑 مطور BLACK X' : `@${user.username || 'user'}`}
+                  </div>
+                </div>
+                <span style={{ color: '#a1a1aa', fontSize: '0.85rem' }}>←</span>
+              </div>
+            ) : (
+              <div className="wit-mobile-drawer__auth">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    onOpenAuth('login');
+                  }}
+                >
+                  {t('nav.login')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    onOpenAuth('register');
+                  }}
+                >
+                  {t('nav.register')}
+                </button>
+              </div>
+            )}
+
+            <nav className="wit-mobile-drawer__nav">
+              {links.map((l) =>
+                l.isHash ? (
+                  <a
+                    key={l.to}
+                    href={l.to}
+                    className="wit-mobile-drawer__link"
+                    onClick={() => setMobileDrawerOpen(false)}
+                  >
+                    <span>{l.icon}</span>
+                    <span>{l.label}</span>
+                  </a>
+                ) : (
+                  <NavLink
+                    key={l.to}
+                    to={l.to}
+                    end={l.to === '/'}
+                    className={({ isActive }) => `wit-mobile-drawer__link ${isActive ? 'active' : ''}`}
+                    onClick={() => setMobileDrawerOpen(false)}
+                  >
+                    <span>{l.icon}</span>
+                    <span>{l.label}</span>
+                  </NavLink>
+                )
+              )}
+              <NavLink
+                to="/mylist"
+                className={({ isActive }) => `wit-mobile-drawer__link ${isActive ? 'active' : ''}`}
+                onClick={() => setMobileDrawerOpen(false)}
+              >
+                <span>♥</span>
+                <span>{lang === 'ar' ? 'قائمتي المفضلة' : 'My List'}</span>
+              </NavLink>
+              <NavLink
+                to="/profile"
+                className={({ isActive }) => `wit-mobile-drawer__link ${isActive ? 'active' : ''}`}
+                onClick={() => setMobileDrawerOpen(false)}
+              >
+                <span>👤</span>
+                <span>{lang === 'ar' ? 'الملف الشخصي' : 'Profile'}</span>
+              </NavLink>
+            </nav>
+          </aside>
+        </div>
+      )}
 
       <nav className="nav-mobile-tabs" aria-label="Mobile">
         {[
           { to: '/', label: lang === 'ar' ? 'الرئيسية' : 'Home', icon: '🏠' },
-          { to: '/trending', label: lang === 'ar' ? 'الرائجة' : 'Trending', icon: '🔥' },
-          { to: '/browse', label: lang === 'ar' ? 'المكتبة' : 'Library', icon: '📖' },
+          { to: '/trending', label: lang === 'ar' ? 'الأنميات' : 'Anime', icon: '🔥' },
+          { to: '/browse', label: lang === 'ar' ? 'المانجا' : 'Manga', icon: '📖' },
           { to: '/community', label: lang === 'ar' ? 'المجتمع' : 'Community', icon: '💬' },
           { to: '/profile', label: lang === 'ar' ? 'حسابي' : 'Profile', icon: '👤' }
         ].map((l) => (
           <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')} end={l.to === '/'}>
-            <span>{l.icon}</span>
-            <span>{l.label}</span>
+            <span className="nav-mobile-tabs__icon">{l.icon}</span>
+            <span className="nav-mobile-tabs__label">{l.label}</span>
           </NavLink>
         ))}
       </nav>

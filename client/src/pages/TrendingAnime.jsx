@@ -453,10 +453,10 @@ export default function TrendingAnime() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+    <div className="bx-trending-page" style={{ display: 'flex', flexDirection: 'column', gap: '1.35rem' }}>
       {/* Hero Banner & Dedicated Anime Search Engine */}
       <section
-        className="glass"
+        className="glass bx-trending-hero"
         style={{
           padding: '2.25rem 2rem',
           borderRadius: '26px',
@@ -529,6 +529,7 @@ export default function TrendingAnime() {
 
         {/* Dedicated Instant Anime Search Bar */}
         <div
+          className="bx-trending-search"
           style={{
             display: 'flex',
             gap: '0.65rem',
@@ -540,7 +541,7 @@ export default function TrendingAnime() {
             marginBottom: '1.15rem'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '240px', paddingInlineStart: '0.6rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '180px', paddingInlineStart: '0.6rem' }}>
             <span style={{ fontSize: '1.25rem' }}>🔍</span>
             <input
               type="search"
@@ -638,7 +639,7 @@ export default function TrendingAnime() {
 
       {/* Official BLACK X Anime Server Engine Selector */}
       <div
-        className="glass"
+        className="glass bx-server-selector"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -665,7 +666,7 @@ export default function TrendingAnime() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+        <div className="bx-server-tabs" style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
           {[
             { id: 'all', icon: '🌟', labelAr: 'جميع سيرفرات BLACK X (الكل)', labelEn: 'All BLACK X Servers' },
             { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1', labelEn: 'BLACK X Server 1' },
@@ -713,8 +714,8 @@ export default function TrendingAnime() {
       </div>
 
       {/* Filter Tabs & Genre Chips */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="bx-filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div className="bx-filter-chips" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {[
             { id: 'trending', ar: '🔥 الأكثر رواجاً الآن', en: '🔥 Trending Now' },
             { id: 'random', ar: '🎲 أنميات عشوائية', en: '🎲 Random Anime' },
@@ -798,6 +799,7 @@ export default function TrendingAnime() {
         </div>
       ) : (
         <div
+          className="bx-anime-cards-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
@@ -815,7 +817,7 @@ export default function TrendingAnime() {
               <article
                 key={item.id}
                 onClick={() => handleOpenAnime(item)}
-                className="glass glass-hover"
+                className="glass glass-hover bx-anime-card"
                 style={{
                   borderRadius: '18px',
                   overflow: 'hidden',
