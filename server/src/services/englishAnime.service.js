@@ -271,6 +271,88 @@ class EnglishAnimeService {
   }
 
   /**
+   * Fetch direct MP4 streams from AnimeHeaven.me (Zero Cloudflare, Zero Iframe Sandbox)
+   */
+  async fetchAnimeHeavenStreams(titleEn, titleRomaji, episode) {
+    const ua =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+    const clean = (s) =>
+      String(s || '')
+        .replace(/\([^)]*[\u0600-\u06FF][^)]*\)/g, ' ')
+        .replace(/[\u0600-\u06FF]+/g, ' ')
+        .replace(/season\s*\d+|part\s*\d+|cour\s*\d+/gi, ' ')
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const queries = [];
+    const cEn = clean(titleEn);
+    const cRo = clean(titleRomaji);
+    if (cEn) queries.push(cEn);
+    if (cRo && cRo.toLowerCase() !== cEn.toLowerCase()) queries.push(cRo);
+    const words = cEn.split(' ').filter((w) => w.length >= 3);
+    if (words.length >= 2) queries.push(words.slice(0, 2).join(' '));
+    if (words.length >= 1 && words[0].length >= 4) queries.push(words[0]);
+
+    for (const q of [...new Set(queries)]) {
+      try {
+        const sRes = await fetch(`https://animeheaven.me/search.php?s=${encodeURIComponent(q)}`, {
+          headers: { 'User-Agent': ua },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!sRes.ok) continue;
+        const sHtml = await sRes.text();
+        const matches = [...sHtml.matchAll(/href=['"](anime\.php\?[^'"]+)['"][^>]*>([^<]+)<\/a>/gi)];
+        if (!matches.length) continue;
+
+        const bestHref = matches[0][1];
+        const showRes = await fetch(`https://animeheaven.me/${bestHref}`, {
+          headers: { 'User-Agent': ua },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!showRes.ok) continue;
+        const showHtml = await showRes.text();
+        const eps = [
+          ...showHtml.matchAll(
+            /id\s*=\s*"([a-f0-9]{32})"[\s\S]*?<div\s+class=\s*'\s*watch2\s+bc\s*'\s*>(\d+(?:\.\d+)?)<\/div>/gi
+          )
+        ];
+        if (!eps.length) continue;
+
+        const targetEp =
+          eps.find((m) => Number(m[2]) === Number(episode)) || eps[eps.length - 1];
+        if (!targetEp) continue;
+
+        const epKey = targetEp[1];
+        const gateRes = await fetch('https://animeheaven.me/gate.php', {
+          headers: {
+            'User-Agent': ua,
+            Cookie: `key=${epKey}`,
+            Referer: `https://animeheaven.me/${bestHref}`
+          },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!gateRes.ok) continue;
+        const gateHtml = await gateRes.text();
+        const vidIdx = gateHtml.indexOf("<video id='vid'");
+        const vidBlock =
+          vidIdx >= 0 ? gateHtml.slice(vidIdx, gateHtml.indexOf('</video>', vidIdx)) : gateHtml;
+        const sources = [
+          ...new Set(
+            [...vidBlock.matchAll(/src=['"](https:\/\/[a-z0-9.]*animeheaven\.me\/video\.mp4\?[^'"]+)['"]/gi)].map(
+              (m) => m[1]
+            )
+          )
+        ];
+        if (sources.length > 0) {
+          return sources;
+        }
+      } catch {}
+    }
+    return [];
+  }
+
+  /**
    * Resolve episode streaming servers + auto-translated Arabic subtitle tracks
    */
   async getEpisode(rawSlug, epNumber) {
@@ -279,7 +361,7 @@ class EnglishAnimeService {
     if (!show) return null;
 
     const { malId, aniId, titleEn, titleRomaji, slug } = show;
-    const cacheKey = `en_anime:ep:v2:${malId}:${episode}`;
+    const cacheKey = `en_anime:ep:v3:${malId}:${episode}`;
     const cached = streamGet(cacheKey);
     if (cached) return cached;
 
@@ -288,7 +370,98 @@ class EnglishAnimeService {
     const resolved = {};
     const resolvedDownloads = {};
 
-    // 1) Try resolving real WitAnime servers for this anime first (Arabic-subtitled fast servers)
+    const subVttUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.vtt?title=${encodeURIComponent(titleEn)}`;
+    const subSrtUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.srt?title=${encodeURIComponent(titleEn)}`;
+
+    // 1) Fetch direct MP4 streams from AnimeHeaven (plays in native <video> with ZERO iframe sandbox!)
+    try {
+      const ahSources = await this.fetchAnimeHeavenStreams(titleEn, titleRomaji, episode);
+      if (ahSources.length > 0) {
+        const primaryMp4 = ahSources[0];
+        const backupMp4 = ahSources[1] || ahSources[0];
+
+        // Server 1: Native <video> HD (Free & VIP compatible — zero iframe, zero sandbox error)
+        const idNativeHd = `en-ah-native-hd-${malId}-${episode}`;
+        entries.push({
+          id: idNativeHd,
+          token: idNativeHd,
+          server: '⚡ BLACK X Direct Player (مشغل مباشر بدون Sandbox + ترجمة عربية AI)',
+          quality: '720p HD',
+          version: 'sub',
+          lang: 'en->ar',
+          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(primaryMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
+          directUrl: primaryMp4,
+          isFastCdn: true,
+          hasAutoArabicSub: true,
+          source: 'english'
+        });
+        resolved[idNativeHd] = {
+          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(primaryMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
+          directUrl: primaryMp4
+        };
+
+        // Server 2: Self-Hosted Clean HTML5 Player with built-in Arabic Subtitles
+        const idEmbedClean = `en-ah-embed-hd-${malId}-${episode}`;
+        entries.push({
+          id: idEmbedClean,
+          token: idEmbedClean,
+          server: '🌐 BLACK X Cinema Player (مترجم عربي مدمج داخل المشغل)',
+          quality: '720p HD',
+          version: 'sub',
+          lang: 'en->ar',
+          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(backupMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
+          directUrl: null,
+          isFastCdn: true,
+          hasAutoArabicSub: true,
+          source: 'english'
+        });
+        resolved[idEmbedClean] = {
+          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(backupMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
+          directUrl: null
+        };
+
+        // Server 3: Native 1080p FHD Mirror
+        const idNativeFhd = `en-ah-native-fhd-${malId}-${episode}`;
+        entries.push({
+          id: idNativeFhd,
+          token: idNativeFhd,
+          server: '👑 BLACK X Direct 1080p FHD (سيرفر فائق السرعة)',
+          quality: '1080p FHD',
+          version: 'sub',
+          lang: 'en->ar',
+          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(primaryMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
+          directUrl: primaryMp4,
+          isFastCdn: true,
+          hasAutoArabicSub: true,
+          source: 'english'
+        });
+        resolved[idNativeFhd] = {
+          embedUrl: `/api/stream/mp4-player?url=${encodeURIComponent(primaryMp4)}&sub=${encodeURIComponent(subVttUrl)}`,
+          directUrl: primaryMp4
+        };
+
+        // Also add direct MP4 download links
+        ahSources.slice(0, 2).forEach((mp4Url, idx) => {
+          const dlId = `dl-en-mp4-${malId}-${episode}-${idx + 1}`;
+          const proxiedDl = `/api/stream/download?url=${encodeURIComponent(mp4Url)}&filename=${encodeURIComponent(`${titleEn}-EP${episode}.mp4`)}`;
+          downloads.push({
+            id: dlId,
+            token: dlId,
+            server: `📥 تحميل الحلقة MP4 مباشر (سيرفر ${idx + 1})`,
+            quality: idx === 0 ? '1080p FHD' : '720p HD',
+            version: 'sub',
+            lang: 'en',
+            downloadUrl: proxiedDl
+          });
+          resolvedDownloads[dlId] = {
+            url: proxiedDl,
+            directUrl: proxiedDl
+          };
+        });
+      }
+    } catch (_) {}
+
+    // 2) Also resolve real WitAnime servers (videa, Google Drive via yonaplay, unwrapped hgcloud HLS)
     try {
       let witaCandidates = await searchShows(titleEn).catch(() => []);
       if (!witaCandidates.length && titleRomaji && titleRomaji !== titleEn) {
@@ -298,7 +471,6 @@ class EnglishAnimeService {
       if (witaSlug) {
         const witaEp = await fetchEpisode(witaSlug, episode).catch(() => null);
         if (witaEp && Array.isArray(witaEp.entries) && witaEp.entries.length > 0) {
-          // Eagerly resolve the first WitAnime server so playback starts immediately
           const firstEntry = witaEp.entries[0];
           try {
             const firstResolved = await resolveEntry(witaSlug, episode, firstEntry.id);
@@ -330,73 +502,6 @@ class EnglishAnimeService {
         }
       }
     } catch (_) {}
-
-    // 2) Add Global English Streaming Servers (Videasy Pro + VidLink Pro Sub & Dub)
-    const englishServers = [
-      {
-        id: `en-videasy-sub-${malId}-${episode}`,
-        token: `en-ve-sub-${malId}-${episode}`,
-        server: '🌐 Videasy Pro (Sub EN + ترجمة عربية فورية AI)',
-        quality: '1080p FHD',
-        version: 'sub',
-        lang: 'en->ar',
-        embedUrl: `https://player.videasy.net/anime/${aniId || malId}/${episode}`,
-        directUrl: null,
-        isFastCdn: true,
-        hasAutoArabicSub: true,
-        source: 'english'
-      },
-      {
-        id: `en-vidlink-sub-${malId}-${episode}`,
-        token: `en-vl-sub-${malId}-${episode}`,
-        server: '🌐 VidLink Pro (Sub EN + ترجمة عربية فورية AI)',
-        quality: '1080p FHD',
-        version: 'sub',
-        lang: 'en->ar',
-        embedUrl: `https://vidlink.pro/anime/${malId}/${episode}/sub`,
-        directUrl: null,
-        isFastCdn: true,
-        hasAutoArabicSub: true,
-        source: 'english'
-      },
-      {
-        id: `en-videasy-dub-${malId}-${episode}`,
-        token: `en-ve-dub-${malId}-${episode}`,
-        server: '🎙️ Videasy Pro (Dub EN + ترجمة عربية فورية AI)',
-        quality: '1080p FHD',
-        version: 'dub',
-        lang: 'en->ar',
-        embedUrl: `https://player.videasy.net/anime/${aniId || malId}/${episode}?dub=true`,
-        directUrl: null,
-        isFastCdn: true,
-        hasAutoArabicSub: true,
-        source: 'english'
-      },
-      {
-        id: `en-vidlink-dub-${malId}-${episode}`,
-        token: `en-vl-dub-${malId}-${episode}`,
-        server: '🎙️ VidLink Pro (Dub EN + ترجمة عربية فورية AI)',
-        quality: '1080p FHD',
-        version: 'dub',
-        lang: 'en->ar',
-        embedUrl: `https://vidlink.pro/anime/${malId}/${episode}/dub`,
-        directUrl: null,
-        isFastCdn: true,
-        hasAutoArabicSub: true,
-        source: 'english'
-      }
-    ];
-
-    for (const e of englishServers) {
-      entries.push(e);
-      resolved[e.id] = {
-        embedUrl: e.embedUrl,
-        directUrl: null
-      };
-    }
-
-    const subVttUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.vtt?title=${encodeURIComponent(titleEn)}`;
-    const subSrtUrl = `/api/stream/subtitles/${encodeURIComponent(slug)}/${episode}.srt?title=${encodeURIComponent(titleEn)}`;
 
     const subDownloads = [
       {

@@ -535,16 +535,33 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
       };
     });
 
-    // If VIP Monarch, surface 4K HDR 60fps ultra option
+    // If VIP Monarch, surface 4K HDR 60fps ultra option backed by the best available server
     let entriesWithVip = prioritizedEntries;
-    if (isVipMonarch) {
+    const resolvedMap = { ...(data.resolved || {}) };
+    if (isVipMonarch && prioritizedEntries.length > 0) {
+      const firstReal = prioritizedEntries[0];
+      const vipId = `vip-monarch-4k-${cleanSlug}-${episode}`;
+      let firstResolved = resolvedMap[firstReal.id] || null;
+      if (!firstResolved && (firstReal.embedUrl || firstReal.directUrl)) {
+        firstResolved = {
+          embedUrl: firstReal.embedUrl || null,
+          directUrl: firstReal.directUrl || null
+        };
+      }
+      if (firstResolved) {
+        resolvedMap[vipId] = firstResolved;
+      }
       entriesWithVip = [
         {
-          id: `vip-monarch-4k-${cleanSlug}-${episode}`,
-          token: prioritizedEntries[0]?.token || 'vip-4k',
+          id: vipId,
+          realEntryId: firstReal.id,
+          witaSlug: firstReal.witaSlug || null,
+          embedUrl: firstReal.embedUrl || firstResolved?.embedUrl || null,
+          directUrl: firstReal.directUrl || firstResolved?.directUrl || null,
+          token: firstReal.token || 'vip-4k',
           server: '👑 VIP Monarch 4K HDR (60fps Ultra CDN)',
           quality: '4K HDR',
-          version: prioritizedEntries[0]?.version || 'sub',
+          version: firstReal.version || 'sub',
           lang: 'ar/jp',
           isMonarchExclusive: true,
           badge: '4K 60fps'
@@ -557,6 +574,7 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
 
     res.json({
       ...data,
+      resolved: resolvedMap,
       entries: entriesWithVip,
       vipTier: vipStatus || 'Free Otaku',
       isVipBasic,
@@ -576,16 +594,42 @@ router.post('/resolve', async (req, res) => {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
   }
 
+  // Handle VIP Monarch 4K synthetic entry by resolving the primary entry of the episode
+  if (String(entryId).startsWith('vip-monarch-4k-')) {
+    try {
+      if (String(slug).startsWith('en-') || String(slug).startsWith('mal-')) {
+        const enData = await englishAnimeService.getEpisode(String(slug), ep);
+        const first = enData?.entries?.[0];
+        if (first) {
+          if (first.embedUrl || first.directUrl) {
+            return res.json({ source: { embedUrl: first.embedUrl || null, directUrl: first.directUrl || null } });
+          }
+          if (first.witaSlug) {
+            const witaSource = await resolveEntry(first.witaSlug, ep, first.id);
+            if (witaSource) return res.json({ source: witaSource });
+          }
+        }
+      } else {
+        const witaEp = await fetchEpisode(String(slug), ep);
+        const first = witaEp?.entries?.[0];
+        if (first) {
+          const source = await resolveEntry(String(slug), ep, first.id);
+          if (source) return res.json({ source });
+        }
+      }
+    } catch (_) {}
+  }
+
   // If this is an English Anime entry or slug, resolve via englishAnimeService / witaSlug
   if (String(entryId).startsWith('en-') || String(slug).startsWith('en-') || String(slug).startsWith('mal-')) {
     try {
       const enData = await englishAnimeService.getEpisode(String(slug), ep);
       const match = enData?.entries?.find((e) => e.id === entryId);
       if (match) {
-        if (match.embedUrl) {
+        if (match.embedUrl || match.directUrl) {
           return res.json({
             source: {
-              embedUrl: match.embedUrl,
+              embedUrl: match.embedUrl || null,
               directUrl: match.directUrl || null
             }
           });
@@ -869,7 +913,12 @@ const ALLOWED_HOSTS = [
   'streamruby.com',
   'rubyvidhub.com',
   'vkvideo.ru',
-  'vk.com'
+  'vk.com',
+  'animeheaven.me',
+  'premilkyway.com',
+  'sunrisegroveproduction.cfd',
+  'vibuxer.com',
+  'huntrexus.com'
 ];
 
 function hostAllowed(hostname) {
@@ -912,6 +961,9 @@ router.get('/download', optionalAuth, async (req, res) => {
       headers.Origin = 'https://www.mp4upload.com';
     } else if (target.hostname.includes('mediafire')) {
       headers.Referer = 'https://www.mediafire.com/';
+    } else if (target.hostname.includes('animeheaven.me')) {
+      headers.Referer = 'https://animeheaven.me/';
+      headers.Origin = 'https://animeheaven.me';
     } else {
       headers.Referer = `https://www.${brand}/`;
     }
@@ -999,11 +1051,12 @@ router.get('/proxy', optionalAuth, async (req, res) => {
     // (e.g. https://www.mp4upload.com/ for a4.mp4upload.com:183).
     const labels = target.hostname.split('.');
     const brand = labels.length >= 2 ? labels.slice(-2).join('.') : target.hostname;
+    const isAh = target.hostname.includes('animeheaven.me');
     const headers = {
-      'User-Agent': 'Mozilla/5.0',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       Accept: '*/*',
-      Referer: `https://www.${brand}/`,
-      Origin: `https://www.${brand}`
+      Referer: isAh ? 'https://animeheaven.me/' : `https://www.${brand}/`,
+      Origin: isAh ? 'https://animeheaven.me' : `https://www.${brand}`
     };
     if (req.headers.range) headers.Range = req.headers.range;
 
@@ -1042,6 +1095,173 @@ router.get('/proxy', optionalAuth, async (req, res) => {
     console.error('[stream/proxy]', err.message);
     res.status(502).json({ error: 'upstream', message: 'Stream fetch failed' });
   }
+});
+
+/**
+ * GET /api/stream/hls-lib.js — serves local hls.min.js so self-hosted HLS player needs zero external CDNs
+ */
+router.get('/hls-lib.js', async (_req, res) => {
+  try {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const hlsPath = path.resolve(process.cwd(), 'node_modules/hls.js/dist/hls.min.js');
+    const js = await fs.readFile(hlsPath, 'utf8');
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(js);
+  } catch {
+    res.status(404).end();
+  }
+});
+
+/**
+ * GET /api/stream/hls-proxy?url=… — proxies HLS .m3u8 playlists and .ts segments with Referer bypass
+ */
+router.get('/hls-proxy', async (req, res) => {
+  let target;
+  try {
+    target = new URL(String(req.query.url || ''));
+  } catch {
+    return res.status(400).send('Invalid url');
+  }
+  try {
+    const upstream = await fetch(target.href, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: '*/*',
+        Referer: 'https://vibuxer.com/',
+        Origin: 'https://vibuxer.com'
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(25000)
+    });
+    if (!upstream.ok) return res.status(upstream.status).end();
+
+    const ct = (upstream.headers.get('content-type') || '').toLowerCase();
+    const isM3u8 =
+      target.pathname.endsWith('.m3u8') ||
+      target.pathname.endsWith('.txt') ||
+      ct.includes('mpegurl') ||
+      ct.includes('text/plain');
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    if (isM3u8) {
+      const text = await upstream.text();
+      if (text.trimStart().startsWith('#EXTM3U')) {
+        const rewritten = text
+          .split(/\r?\n/)
+          .map((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return line;
+            if (trimmed.startsWith('#')) {
+              return line.replace(/URI="([^"]+)"/g, (_, uri) => {
+                try {
+                  const full = new URL(uri, target.href).href;
+                  return `URI="/api/stream/hls-proxy?url=${encodeURIComponent(full)}"`;
+                } catch {
+                  return `URI="${uri}"`;
+                }
+              });
+            }
+            try {
+              const full = new URL(trimmed, target.href).href;
+              return `/api/stream/hls-proxy?url=${encodeURIComponent(full)}`;
+            } catch {
+              return line;
+            }
+          })
+          .join('\n');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        return res.send(rewritten);
+      }
+    }
+
+    if (ct) res.setHeader('Content-Type', ct);
+    const { Readable } = await import('stream');
+    const upstreamStream = Readable.fromWeb(upstream.body);
+    const cleanup = () => {
+      if (!upstreamStream.destroyed) upstreamStream.destroy();
+    };
+    upstreamStream.on('error', cleanup);
+    res.on('close', cleanup);
+    res.on('error', cleanup);
+    upstreamStream.pipe(res);
+  } catch (err) {
+    if (!res.headersSent) res.status(502).end();
+  }
+});
+
+/**
+ * GET /api/stream/hls-player?url=…&sub=… — Self-hosted, 100% Sandbox-Safe HTML5 + hls.js player
+ */
+router.get('/hls-player', (req, res) => {
+  const rawUrl = String(req.query.url || '');
+  const subUrl = String(req.query.sub || '');
+  if (!rawUrl) return res.status(400).send('Missing url');
+  const proxiedM3u8 = `/api/stream/hls-proxy?url=${encodeURIComponent(rawUrl)}`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BLACK X HLS Player</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  video { width: 100%; height: 100%; object-fit: contain; background: #000; outline: none; }
+  video::cue { background: rgba(0,0,0,0.78); color: #fff; font-family: 'Cairo', 'Tajawal', sans-serif; font-size: 1.15rem; }
+</style>
+<script src="/api/stream/hls-lib.js"></script>
+</head>
+<body>
+<video id="v" controls autoplay playsinline crossorigin="anonymous">
+  ${subUrl ? `<track kind="subtitles" srclang="ar" label="العربية (AI)" src="${subUrl.replace(/"/g, '&quot;')}" default />` : ''}
+</video>
+<script>
+  const video = document.getElementById('v');
+  const src = ${JSON.stringify(proxiedM3u8)};
+  if (window.Hls && Hls.isSupported()) {
+    const hls = new Hls({ maxBufferLength: 30 });
+    hls.loadSource(src);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = src;
+    video.addEventListener('loadedmetadata', () => { video.play().catch(() => {}); });
+  }
+</script>
+</body>
+</html>`);
+});
+
+/**
+ * GET /api/stream/mp4-player?url=…&sub=… — Self-hosted, 100% Sandbox-Safe HTML5 MP4 player with Arabic subtitles
+ */
+router.get('/mp4-player', (req, res) => {
+  const rawUrl = String(req.query.url || '');
+  const subUrl = String(req.query.sub || '');
+  if (!rawUrl) return res.status(400).send('Missing url');
+  const proxiedMp4 = `/api/stream/proxy?url=${encodeURIComponent(rawUrl)}`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BLACK X Direct Player</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  video { width: 100%; height: 100%; object-fit: contain; background: #000; outline: none; }
+  video::cue { background: rgba(0,0,0,0.78); color: #fff; font-family: 'Cairo', 'Tajawal', sans-serif; font-size: 1.15rem; }
+</style>
+</head>
+<body>
+<video id="v" src="${proxiedMp4.replace(/"/g, '&quot;')}" controls autoplay playsinline crossorigin="anonymous">
+  ${subUrl ? `<track kind="subtitles" srclang="ar" label="العربية (AI)" src="${subUrl.replace(/"/g, '&quot;')}" default />` : ''}
+</video>
+</body>
+</html>`);
 });
 
 /* ------------- English -> Arabic AI Subtitle Translation API ------------- */

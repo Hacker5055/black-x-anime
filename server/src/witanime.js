@@ -8,6 +8,7 @@
  *   - GET /watch/stream-gate/{token} answers with 302 → upstream embed URL.
  *   - mp4upload & friends embed pages contain a direct .mp4 file URL.
  */
+import crypto from 'node:crypto';
 import { apiGet, apiSet, streamGet, streamSet } from './db.js';
 
 export const WITA_BASE = 'https://witanime.site';
@@ -338,7 +339,7 @@ export async function fetchShow(slug) {
  *     the stored session; if it's stale, re-pull the manifest and retry once.
  * ---------------------------------------------------------------------- */
 const RESOLVE_TTL_MS = 12 * 60 * 60 * 1000;
-const DIRECT_HOST_LABELS = ['mp4upload', 'hgcloud', 'videa', 'videas', '4shared', 'yonaplay'];
+const DIRECT_HOST_LABELS = ['videa', 'videas', 'mp4upload', 'yonaplay', 'hgcloud', '4shared'];
 
 function manifestEntryId(slug, episode, e, idx) {
   return `${slug}-${episode}-${(e.label || e.server || 'srv')}-${e.quality || ''}-${idx}`;
@@ -357,7 +358,7 @@ function orderEntries(entries) {
  *   { entries, resolved: { [id]: {embedUrl, directUrl} }, _session: {cookies, csrf} }
  */
 export async function fetchEpisode(slug, episode, { fresh = false } = {}) {
-  const key = `wita:episode:${slug}:${episode}`;
+  const key = `wita:episode:v2:${slug}:${episode}`;
   const entry = fresh ? null : streamGet(key);
   if (entry && Array.isArray(entry.entries) && entry.entries.length) return entry;
 
@@ -442,7 +443,7 @@ export async function resolveDownloadEntry(slug, episode, entryId) {
     try {
       const source = await resolveDownloadTokenWithSession(entry.token, payload._session);
       payload.resolvedDownloads = { ...(payload.resolvedDownloads || {}), [entryId]: source };
-      streamSet(`wita:episode:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
+      streamSet(`wita:episode:v2:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
       return source;
     } catch (err) {
       if (err.code === 'rate_limited') throw err;
@@ -505,7 +506,7 @@ export async function resolveEntry(slug, episode, entryId) {
     try {
       const source = await resolveTokenWithSession(entry.token, payload._session);
       payload.resolved = { ...(payload.resolved || {}), [entryId]: source };
-      streamSet(`wita:episode:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
+      streamSet(`wita:episode:v2:${slug}:${episode}`, payload, RESOLVE_TTL_MS);
       return source;
     } catch (err) {
       if (err.code === 'rate_limited') throw err;
@@ -521,8 +522,140 @@ export async function resolveEntry(slug, episode, entryId) {
   return null;
 }
 
+/**
+ * Unwraps embed hosts that block sandboxed parent iframes (e.g. AI Studio / Arena):
+ * 1. hgcloud.to / vibuxer.com / streamwish -> unpacks JS eval and extracts direct HLS .m3u8 into /api/stream/hls-player
+ * 2. mid.yonaplay.net -> decrypts AES-256-GCM server list and returns Google Drive / Videa / Mega embed URL directly
+ */
+export async function unwrapSandboxBlockedEmbed(rawEmbedUrl) {
+  if (!rawEmbedUrl || typeof rawEmbedUrl !== 'string') return rawEmbedUrl;
+  try {
+    const parsed = new URL(rawEmbedUrl);
+    const host = parsed.hostname.toLowerCase();
+
+    // 1. hgcloud.to / vibuxer.com / streamwish family
+    if (
+      host.includes('hgcloud.') ||
+      host.includes('vibuxer.') ||
+      host.includes('streamwish.') ||
+      host.includes('hlswish.') ||
+      host.includes('wishembed.')
+    ) {
+      const codeMatch = parsed.pathname.match(/\/e\/([a-zA-Z0-9_-]+)/);
+      const targetUrl = codeMatch
+        ? `https://vibuxer.com/e/${codeMatch[1]}`
+        : rawEmbedUrl;
+
+      const res = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          Referer: 'https://hgcloud.to/'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const m = html.match(/eval\((function\(p,a,c,k,e,d\)\{[\s\S]*?\}\([\s\S]*?\.split\(['"]\|['"]\)\))\)/);
+        if (m && m[1]) {
+          const unpacked = (new Function('return ' + m[1]))();
+          const hls2 =
+            unpacked.match(/"hls2"\s*:\s*"(https?:\/\/[^"]+)"/)?.[1] ||
+            unpacked.match(/"hls3"\s*:\s*"(https?:\/\/[^"]+)"/)?.[1];
+          if (hls2) {
+            return `/api/stream/hls-player?url=${encodeURIComponent(hls2)}`;
+          }
+        }
+      }
+    }
+
+    // 2. mid.yonaplay.net (sets sandbox attribute on its inner iframe) -> unwrap via AES-256-GCM
+    if (host.includes('yonaplay.')) {
+      const safariUA =
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+      const htmlRes = await fetch(rawEmbedUrl, {
+        headers: { 'User-Agent': safariUA, Referer: 'https://witanime.you/' },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (htmlRes.ok) {
+        const html = await htmlRes.text();
+        const cookieHeader = (htmlRes.headers.getSetCookie?.() || [])
+          .map((c) => c.split(';')[0])
+          .join('; ');
+        const m = html.match(/window\._E=\{a:"([^"]+)",c:"([^"]+)",t:"([^"]+)",k:"([^"]+)"\}/);
+        if (m) {
+          const [, , code, token, pageKey] = m;
+          const origin = parsed.origin;
+          const sourcesRes = await fetch(`${origin}/api/sources.php`, {
+            method: 'POST',
+            headers: {
+              'User-Agent': safariUA,
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-Embed-Token': token,
+              Cookie: cookieHeader,
+              Referer: rawEmbedUrl
+            },
+            body: JSON.stringify({ code }),
+            signal: AbortSignal.timeout(8000)
+          });
+          const sources = await sourcesRes.json();
+          const candidates = [];
+          for (const [, group] of Object.entries(sources?.qualities || {})) {
+            for (const srv of group?.servers || []) {
+              candidates.push(srv);
+            }
+          }
+          // Prefer Google Drive or Videa or Mp4upload over Mega
+          candidates.sort((a, b) => {
+            const score = (n) => {
+              const s = String(n || '').toLowerCase();
+              if (s.includes('google') || s.includes('drive')) return 1;
+              if (s.includes('videa') || s.includes('mp4')) return 2;
+              return 5;
+            };
+            return score(a.name) - score(b.name);
+          });
+
+          for (const srv of candidates) {
+            try {
+              const apiRes = await fetch(`${origin}/api/api.php`, {
+                method: 'POST',
+                headers: {
+                  'User-Agent': safariUA,
+                  'Content-Type': 'application/json',
+                  'X-Requested-With': 'XMLHttpRequest',
+                  'X-Embed-Token': token,
+                  Cookie: cookieHeader,
+                  Referer: rawEmbedUrl
+                },
+                body: JSON.stringify({ code, token: srv.token, key: pageKey }),
+                signal: AbortSignal.timeout(8000)
+              });
+              const d = await apiRes.json();
+              if (d?.success && d?.d) {
+                const raw = Buffer.from(d.d, 'base64');
+                const iv = raw.subarray(0, 12);
+                const tag = raw.subarray(12, 28);
+                const ct = raw.subarray(28);
+                const keyHash = crypto.createHash('sha256').update(pageKey).digest();
+                const decipher = crypto.createDecipheriv('aes-256-gcm', keyHash, iv);
+                decipher.setAuthTag(tag);
+                const decryptedUrl = Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+                if (decryptedUrl && decryptedUrl.startsWith('http')) {
+                  return decryptedUrl;
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+  } catch {}
+  return rawEmbedUrl;
+}
+
 async function resolveTokenWithSession(token, sess) {
-  const key = `wita:token:${token}`;
+  const key = `wita:token:v2:${token}`;
   const cached = streamGet(key);
   if (cached) return cached;
 
@@ -537,14 +670,18 @@ async function resolveTokenWithSession(token, sess) {
     cookies: jar,
     redirect: 'manual'
   });
-  const embedUrl = gate.headers.get('location');
-  if (!embedUrl) {
+  const rawEmbedUrl = gate.headers.get('location');
+  if (!rawEmbedUrl) {
     throw Object.assign(new Error('gate did not redirect (stale session?)'), { code: 'stale_session' });
   }
 
+  const embedUrl = await unwrapSandboxBlockedEmbed(rawEmbedUrl);
+
   let directUrl = null;
   try {
-    directUrl = await resolveDirectUrl(embedUrl);
+    if (embedUrl.startsWith('http')) {
+      directUrl = await resolveDirectUrl(embedUrl);
+    }
   } catch { /* keep embed-only */ }
 
   const out = { embedUrl, directUrl };

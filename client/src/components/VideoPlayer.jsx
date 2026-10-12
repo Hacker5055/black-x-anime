@@ -80,15 +80,10 @@ export default function VideoPlayer({
   // auto-pick the first entry (for Free users, prefer non-FHD HD/SD server first if available)
   useEffect(() => {
     if (!activeId && entries.length) {
-      if (!isVip) {
-        const freeServer = entries.find((e) => !isFhdQuality(e.quality));
-        const chosen = freeServer || entries[0];
-        setActiveId(chosen.id);
-        if (!resolved[chosen.id] && onResolve) {
-          onResolve(chosen).catch(() => {});
-        }
-      } else {
-        setActiveId(entries[0].id);
+      const chosen = !isVip ? (entries.find((e) => !isFhdQuality(e.quality)) || entries[0]) : entries[0];
+      setActiveId(chosen.id);
+      if (!resolved[chosen.id] && onResolve) {
+        onResolve(chosen).catch(() => {});
       }
     }
   }, [entries, activeId, isVip, resolved, onResolve]);
