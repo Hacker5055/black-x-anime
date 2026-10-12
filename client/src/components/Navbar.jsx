@@ -1,4 +1,4 @@
-import { imgFallback, pushToast } from '../hooks/hooks.js';
+import { imgFallback } from '../hooks/hooks.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
@@ -6,8 +6,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { UserBadges } from './UserBadges.jsx';
 import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
 import NotificationBell from './NotificationBell.jsx';
-import { Modal } from './Modals.jsx';
-import { getServerUrl, setServerUrl, isNativeApk } from '../api.js';
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -41,62 +39,10 @@ export default function Navbar({ onOpenAuth }) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [navSearch, setNavSearch] = useState('');
-  const [apkModalOpen, setApkModalOpen] = useState(false);
-  const [serverInput, setServerInput] = useState(() => getServerUrl());
-  const [testingServer, setTestingServer] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const menuRef = useRef(null);
   const mobileSearchInputRef = useRef(null);
-
-  useEffect(() => {
-    if (isNativeApk() && !getServerUrl()) {
-      setApkModalOpen(true);
-    }
-  }, []);
-
-  const handleSaveServerUrl = async (e) => {
-    e?.preventDefault?.();
-    const cleaned = String(serverInput || '').trim().replace(/\/+$/, '');
-    if (!cleaned) {
-      setServerUrl('');
-      pushToast(lang === 'ar' ? 'تمت إعادة ضبط رابط السيرفر للوضع الافتراضي' : 'Server URL reset to default', 'info');
-      setApkModalOpen(false);
-      window.location.reload();
-      return;
-    }
-    setTestingServer(true);
-    try {
-      const res = await fetch(`${cleaned}/api/health`);
-      if (res.ok) {
-        setServerUrl(cleaned);
-        pushToast(
-          lang === 'ar'
-            ? '✓ تم الاتصال بسيرفر BLACK X بنجاح وحفظ الإعدادات!'
-            : '✓ Connected to BLACK X Server and saved!',
-          'success'
-        );
-        setApkModalOpen(false);
-        window.location.reload();
-      } else {
-        setServerUrl(cleaned);
-        pushToast(
-          lang === 'ar' ? 'تم حفظ الرابط (تأكد من تشغيل الخادم السحابي)' : 'URL saved',
-          'info'
-        );
-        setApkModalOpen(false);
-      }
-    } catch {
-      setServerUrl(cleaned);
-      pushToast(
-        lang === 'ar' ? 'تم حفظ رابط السيرفر' : 'Server URL saved',
-        'info'
-      );
-      setApkModalOpen(false);
-    } finally {
-      setTestingServer(false);
-    }
-  };
 
   const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
   const hasVerified = isDev || (user?.badges || []).includes('blue_verified') || (user?.badges || []).includes('gold_vip') || (user?.badges || []).length > 0;
@@ -218,33 +164,6 @@ export default function Navbar({ onOpenAuth }) {
               aria-label={lang === 'ar' ? 'بحث' : 'Search'}
             >
               🔍
-            </button>
-
-            {/* APK Download & Cloud Server Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setServerInput(getServerUrl());
-                setApkModalOpen(true);
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.18)',
-                color: '#fff',
-                borderRadius: '99px',
-                padding: '0.36rem 0.72rem',
-                fontSize: '0.76rem',
-                fontWeight: 900,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-                whiteSpace: 'nowrap'
-              }}
-              title={lang === 'ar' ? 'تطبيق الأندرويد APK وإعدادات السيرفر' : 'Android APK & Server Settings'}
-            >
-              <span>📲</span>
-              <span>APK</span>
             </button>
 
             <NotificationBell />
@@ -475,189 +394,9 @@ export default function Navbar({ onOpenAuth }) {
                 <span>👤</span>
                 <span>{lang === 'ar' ? 'الملف الشخصي' : 'Profile'}</span>
               </NavLink>
-              <button
-                type="button"
-                className="wit-mobile-drawer__link"
-                style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', textAlign: 'start', cursor: 'pointer' }}
-                onClick={() => {
-                  setMobileDrawerOpen(false);
-                  setServerInput(getServerUrl());
-                  setApkModalOpen(true);
-                }}
-              >
-                <span>📲</span>
-                <span>{lang === 'ar' ? 'تحميل تطبيق الأندرويد (APK) / السيرفر' : 'Android APK & Cloud Server'}</span>
-              </button>
             </nav>
           </aside>
         </div>
-      )}
-
-      {apkModalOpen && (
-        <Modal
-          title={lang === 'ar' ? '📲 تطبيق BLACK X الرسمي للأندرويد (APK)' : '📲 BLACK X Official Android APK'}
-          sub={
-            lang === 'ar'
-              ? 'نسخة Capacitor الأصلية للهواتف مع ربط سحابي مرن بسيرفرات BLACK X 1 / 2 / 3'
-              : 'Native Capacitor Android App with Dynamic Cloud Server Connection'
-          }
-          onClose={() => setApkModalOpen(false)}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-            {/* Direct APK Download Section */}
-            <div
-              style={{
-                padding: '1rem',
-                borderRadius: '14px',
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.75rem'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 900, fontSize: '0.96rem', color: '#fff' }}>
-                    {lang === 'ar' ? 'تثبيت تطبيق BLACK X على هاتفك' : 'Install BLACK X on Android'}
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: '#a1a1aa', marginTop: '0.2rem' }}>
-                    {lang === 'ar'
-                      ? 'يتم بناء وتحديث ملف BLACK-X.apk تلقائياً عبر GitHub Actions مع كل تحديث'
-                      : 'Automatically built & signed via GitHub Actions on every push'}
-                  </div>
-                </div>
-                <span
-                  style={{
-                    background: '#fff',
-                    color: '#000',
-                    fontSize: '0.72rem',
-                    fontWeight: 900,
-                    padding: '0.2rem 0.6rem',
-                    borderRadius: '99px'
-                  }}
-                >
-                  v1.0 APK
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-                <a
-                  href="https://github.com/Hacker5055/black-x-anime/releases/latest/download/BLACK-X.apk"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn--primary"
-                  style={{
-                    flex: 1,
-                    justifyContent: 'center',
-                    textDecoration: 'none',
-                    fontWeight: 900,
-                    minWidth: '200px'
-                  }}
-                >
-                  ⬇ {lang === 'ar' ? 'تحميل BLACK-X.apk مباشر' : 'Download BLACK-X.apk'}
-                </a>
-                <a
-                  href="https://github.com/Hacker5055/black-x-anime/actions"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn--ghost"
-                  style={{
-                    justifyContent: 'center',
-                    textDecoration: 'none',
-                    fontWeight: 700
-                  }}
-                >
-                  ⚙️ {lang === 'ar' ? 'صفحة البناء (GitHub Actions)' : 'GitHub Actions Builds'}
-                </a>
-              </div>
-            </div>
-
-            {/* Dynamic Cloud Server Configurator */}
-            <form
-              onSubmit={handleSaveServerUrl}
-              style={{
-                padding: '1rem',
-                borderRadius: '14px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.75rem'
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#fff' }}>
-                🌐 {lang === 'ar' ? 'رابط الخادم السحابي المرن (Backend Server URL)' : 'Dynamic Cloud Server URL'}
-              </div>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: '#a1a1aa', lineHeight: 1.55 }}>
-                {lang === 'ar'
-                  ? 'عند تشغيل تطبيق الـ APK على الهاتف، يتصل التطبيق بهذا الرابط لتشغيل سيرفرات الأنمي والمانجا والترجمة الفورية. يمكنك تحديثه في أي وقت دون الحاجة لإعادة بناء الـ APK:'
-                  : 'Inside the Android APK, the app connects to this cloud URL for live anime/manga streaming and Arabic subtitle translation:'}
-              </p>
-
-              <input
-                type="url"
-                className="input"
-                value={serverInput}
-                onChange={(e) => setServerInput(e.target.value)}
-                placeholder="https://your-blackx-server.onrender.com"
-                style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'monospace' }}
-              />
-
-              {typeof window !== 'undefined' &&
-                window.location.protocol.startsWith('http') &&
-                window.location.hostname !== 'localhost' && (
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => {
-                      setServerInput(window.location.origin);
-                      navigator.clipboard?.writeText?.(window.location.origin).catch(() => {});
-                      pushToast(
-                        lang === 'ar'
-                          ? '✓ تم نسخ ووضع رابط الاستضافة الحالي!'
-                          : '✓ Current host URL copied!',
-                        'success'
-                      );
-                    }}
-                    style={{ alignSelf: 'flex-start', fontSize: '0.76rem' }}
-                  >
-                    📋 {lang === 'ar' ? `استخدام رابط هذا الخادم (${window.location.origin})` : `Use current host (${window.location.origin})`}
-                  </button>
-                )}
-
-              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                <button
-                  type="submit"
-                  className="btn btn--primary"
-                  disabled={testingServer}
-                  style={{ flex: 1, justifyContent: 'center', fontWeight: 800 }}
-                >
-                  {testingServer
-                    ? lang === 'ar'
-                      ? 'جارٍ فحص الاتصال...'
-                      : 'Testing connection...'
-                    : lang === 'ar'
-                    ? '✓ حفظ وربط السيرفر'
-                    : '✓ Save & Connect Server'}
-                </button>
-                {serverInput && (
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={() => {
-                      setServerInput('');
-                      setServerUrl('');
-                      pushToast(lang === 'ar' ? 'تم مسح الرابط المخصص' : 'Custom URL cleared', 'info');
-                    }}
-                  >
-                    {lang === 'ar' ? 'إعادة ضبط' : 'Reset'}
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-        </Modal>
       )}
 
       <nav className="nav-mobile-tabs" aria-label="Mobile">
