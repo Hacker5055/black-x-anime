@@ -177,29 +177,6 @@ export default function Navbar({ onOpenAuth }) {
               🔍
             </button>
 
-            <button
-              type="button"
-              onClick={() => window.triggerBlackXMotion?.(undefined, 4000)}
-              title={lang === 'ar' ? 'استوديو الموشن جرافيك (5 حركات 120Hz)' : '5-Motion Graphics Studio (120Hz)'}
-              style={{
-                height: '36px',
-                padding: '0 0.68rem',
-                borderRadius: '999px',
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                color: '#ffffff',
-                fontSize: '0.74rem',
-                fontWeight: 900,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.32rem',
-                cursor: 'pointer'
-              }}
-            >
-              <span>🎬</span>
-              <span>120Hz</span>
-            </button>
-
             <NotificationBell />
             <div className="wit-desktop-lang">
               <LanguageToggle />

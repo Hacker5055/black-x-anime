@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
 
 /**
  * BLACK X MOBILE — 120Hz Native Android Edition
@@ -651,6 +652,7 @@ export default function MobileApkApp() {
   const [devGenBusy, setDevGenBusy] = useState(false);
   const [lastGenCode, setLastGenCode] = useState('');
   const [redeemedVipTier, setRedeemedVipTier] = useState(() => localStorage.getItem('bx_mob_redeemed_vip_tier') || '');
+  const [motionPref, setMotionPref] = useState(() => localStorage.getItem('bx_motion_pref') || 'random');
 
   const isDeveloper = useMemo(() => {
     if (!user) return false;
@@ -1643,6 +1645,36 @@ export default function MobileApkApp() {
   const handleRealGoogleOAuthLogin = useCallback(async () => {
     setAuthBusy(true);
     try {
+      // Handler for Native Android System Google Account Picker (Google accounts signed in on the phone)
+      window.__onBlackXPhoneGoogleAccountPicked = async (pickedEmail) => {
+        try {
+          const cleanEmail = String(pickedEmail || '').trim().toLowerCase();
+          if (cleanEmail && cleanEmail.includes('@')) {
+            await completeVerifiedGoogleLogin({
+              email: cleanEmail,
+              idToken: 'android_system_google_account',
+              localId: `google_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+              displayName: cleanEmail.split('@')[0]
+            });
+            return;
+          }
+          setAuthBusy(false);
+        } catch (_) {
+          setAuthBusy(false);
+        }
+      };
+
+      window.__onBlackXGoogleOAuthError = () => {
+        setAuthBusy(false);
+      };
+
+      // 1. If running inside the Android APK with Native System Account Picker, open the phone's Google Accounts sheet immediately!
+      if (window.BlackXNativeAuth?.pickPhoneGoogleAccount) {
+        window.BlackXNativeAuth.pickPhoneGoogleAccount('');
+        return;
+      }
+
+      // 2. Fallback OAuth URI flow
       const continueUri = 'https://spry-oxide-1h7sp.firebaseapp.com/__/auth/handler';
       const createRes = await fetch(
         `https://www.googleapis.com/identitytoolkit/v3/relyingparty/createAuthUri?key=${BX_KEY}`,
@@ -1691,10 +1723,6 @@ export default function MobileApkApp() {
         } catch (_) {
           setAuthBusy(false);
         }
-      };
-
-      window.__onBlackXGoogleOAuthError = () => {
-        setAuthBusy(false);
       };
 
       if (window.BlackXNativeAuth?.startGoogleLogin) {
@@ -2778,8 +2806,6 @@ export default function MobileApkApp() {
           <img
             src="/blackx-logo.png"
             alt="BLACK X"
-            onClick={() => window.dispatchEvent(new Event('bx_replay_splash'))}
-            title={isRtl ? 'اضغط لعرض انترو بوابة الظلال 120Hz' : 'Replay 120Hz Shadow Vortex Intro'}
             style={{
               width: '36px',
               height: '36px',
@@ -2787,8 +2813,7 @@ export default function MobileApkApp() {
               background: '#000000',
               objectFit: 'cover',
               border: '1px solid rgba(255,255,255,0.22)',
-              boxShadow: '0 0 18px rgba(255,0,0,0.35)',
-              cursor: 'pointer'
+              boxShadow: '0 0 18px rgba(255,0,0,0.35)'
             }}
           />
           <div>
@@ -2814,30 +2839,6 @@ export default function MobileApkApp() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          {/* 5-Motion Graphics Studio Trigger */}
-          <button
-            type="button"
-            onClick={() => window.triggerBlackXMotion?.(undefined, 4000)}
-            title={isRtl ? 'استوديو الموشن جرافيك (5 حركات 120Hz)' : '5-Motion Graphics Studio (120Hz)'}
-            style={{
-              height: '36px',
-              padding: '0 0.6rem',
-              borderRadius: '11px',
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.24)',
-              color: '#fff',
-              fontSize: '0.72rem',
-              fontWeight: 900,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.28rem',
-              cursor: 'pointer'
-            }}
-          >
-            <span>🎬</span>
-            <span>5</span>
-          </button>
-
           {/* Instant Search Trigger */}
           <button
             type="button"
@@ -5397,11 +5398,11 @@ export default function MobileApkApp() {
                 <span>
                   {authBusy
                     ? isRtl
-                      ? '⏳ جاري الاتصال ببوابة Google الرسمية...'
-                      : '⏳ Connecting to Google OAuth...'
+                      ? '⏳ جاري فتح حسابات Google على الهاتف...'
+                      : '⏳ Opening Phone Google Accounts...'
                     : isRtl
-                    ? 'تسجيل الدخول باستخدام حساب Google الرسمي'
-                    : 'Sign in with Google Account'}
+                    ? 'تسجيل الدخول بحسابات Google الموجودة على الهاتف'
+                    : 'Sign in with Phone Google Accounts'}
                 </span>
               </button>
 
@@ -5613,6 +5614,83 @@ export default function MobileApkApp() {
                 {vipRedeemBusy ? '⏳' : isRtl ? 'تفعيل' : 'Activate'}
               </button>
             </form>
+          </div>
+
+          {/* Internal Splash Screen Motion Graphics Selector (من الداخل فقط) */}
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.88rem' }}>
+                🎬 {isRtl ? 'إعدادات شاشة البداية (5 موشنات 120Hz):' : 'Splash Screen Motion (5 Themes 120Hz):'}
+              </span>
+              <button
+                type="button"
+                onClick={() => window.triggerBlackXMotion?.(motionPref === 'random' ? undefined : motionPref, 4000)}
+                style={{
+                  padding: '0.28rem 0.7rem',
+                  borderRadius: '99px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.7rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ▶ {isRtl ? 'معاينة الآن' : 'Preview'}
+              </button>
+            </div>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+              {isRtl
+                ? 'اختر الموشن جرافيك الذي يظهر عند فتح التطبيق (تغيير شاشة البداية يتم من هنا من داخل الإعدادات فقط):'
+                : 'Select which 120Hz motion graphic plays when launching the app:'}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.45rem' }}>
+              {BLACK_X_MOTION_THEMES.map((m) => {
+                const active = motionPref === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setMotionPref(m.id);
+                      localStorage.setItem('bx_motion_pref', m.id);
+                      showToast(
+                        isRtl
+                          ? `✓ تم اعتماد شاشة البداية: ${m.nameAr}`
+                          : `✓ Splash motion set to: ${m.nameEn}`
+                      );
+                    }}
+                    style={{
+                      padding: '0.58rem 0.65rem',
+                      borderRadius: '11px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                      color: active ? '#000000' : '#ffffff',
+                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                      fontWeight: 900,
+                      fontSize: '0.73rem',
+                      textAlign: isRtl ? 'right' : 'left',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.38rem'
+                    }}
+                  >
+                    <span>{m.icon}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {isRtl ? m.nameAr : m.nameEn}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* 6-Tab Personal Library Manager (Favorites, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
@@ -7166,7 +7244,7 @@ export default function MobileApkApp() {
                       cursor: 'pointer'
                     }}
                   >
-                    G {isRtl ? 'تسجيل الدخول بحساب Google الرسمي' : 'Sign in with Google Account'}
+                    G {isRtl ? 'تسجيل الدخول بحسابات Google الموجودة على الهاتف' : 'Sign in with Phone Google Accounts'}
                   </button>
 
                   <form onSubmit={handleAuthSubmit} style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>

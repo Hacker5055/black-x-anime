@@ -14,6 +14,7 @@ import Avatar3DDecoration from '../components/Avatar3DDecoration.jsx';
 import MangaNovelReader from '../components/MangaNovelReader.jsx';
 import { OrnamentShop, WrappedCardPanel } from '../components/OrnamentShopAndWrapped.jsx';
 import { VipPlansSection, DevVipCodeGenerator, resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
+import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
 import { auth, onProfileSnapshot, onDeveloperProfileSnapshot } from '../firebase.js';
 
 // Helper to build instant, zero-404 SVG anime character portraits
@@ -85,6 +86,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
 
   const urlTab = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(urlTab === 'developer' && isDeveloper ? 'developer' : (urlTab || 'overview'));
+  const [motionPref, setMotionPref] = useState(() => localStorage.getItem('bx_motion_pref') || 'random');
 
   useEffect(() => {
     if (urlTab === 'developer' && isDeveloper) {
@@ -897,6 +899,75 @@ export default function ProfileDashboard({ onOpenAuth }) {
       {/* ================= TAB: نظرة عامة (Exact 3 Stacked Action Cards from Screenshot) ================= */}
       {activeTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* Internal Splash Screen Motion Graphics Selector (من الداخل فقط) */}
+          <div
+            style={{
+              background: '#161616',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '14px',
+              padding: '1.1rem 1.25rem'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#ffffff' }}>
+                🎬 {lang === 'ar' ? 'إعدادات شاشة البداية (5 موشنات 120Hz):' : 'Splash Screen Motion (5 Themes 120Hz):'}
+              </span>
+              <button
+                type="button"
+                onClick={() => window.triggerBlackXMotion?.(motionPref === 'random' ? undefined : motionPref, 4000)}
+                style={{
+                  padding: '0.34rem 0.85rem',
+                  borderRadius: '99px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.76rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ▶ {lang === 'ar' ? 'معاينة شاشة البداية المختارة' : 'Preview Selected Motion'}
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.5rem' }}>
+              {BLACK_X_MOTION_THEMES.map((m) => {
+                const active = motionPref === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setMotionPref(m.id);
+                      localStorage.setItem('bx_motion_pref', m.id);
+                      pushToast(
+                        lang === 'ar'
+                          ? `✓ تم اعتماد شاشة البداية: ${m.nameAr}`
+                          : `✓ Splash motion set to: ${m.nameEn}`,
+                        'success'
+                      );
+                    }}
+                    style={{
+                      padding: '0.62rem 0.75rem',
+                      borderRadius: '11px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
+                      color: active ? '#000000' : '#ffffff',
+                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)',
+                      fontWeight: 900,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.45rem'
+                    }}
+                  >
+                    <span>{m.icon}</span>
+                    <span>{lang === 'ar' ? m.nameAr : m.nameEn}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 1. قائمتي (My List) */}
           <div
             onClick={() => navigate('/mylist')}

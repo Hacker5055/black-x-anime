@@ -1,7 +1,9 @@
 package app.blackx.mobile;
 
+import android.accounts.AccountManager;
 import android.app.Dialog;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.Bundle;
@@ -20,6 +22,7 @@ import android.webkit.WebViewClient;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private static final int REQ_PICK_GOOGLE_ACCOUNT = 9001;
     private Dialog oauthDialog = null;
 
     @Override
@@ -203,6 +206,58 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /**
+     * Native Android System Google Account Picker:
+     * Opens the phone's built-in Google account chooser listing all Google accounts
+     * already signed in on the device without typing email/password.
+     */
+    @JavascriptInterface
+    public void pickPhoneGoogleAccount(final String fallbackAuthUrl) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Intent intent = AccountManager.newChooseAccountIntent(
+                        null,
+                        null,
+                        new String[]{"com.google"},
+                        true,
+                        null,
+                        null,
+                        null,
+                        null
+                    );
+                    if (intent != null) {
+                        startActivityForResult(intent, REQ_PICK_GOOGLE_ACCOUNT);
+                        return;
+                    }
+                } catch (Exception ignored) {
+                }
+                if (fallbackAuthUrl != null && !fallbackAuthUrl.isEmpty()) {
+                    startGoogleLogin(fallbackAuthUrl);
+                } else {
+                    deliverOAuthErrorToJs("picker_unavailable");
+                }
+            }
+        });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_PICK_GOOGLE_ACCOUNT) {
+            if (resultCode == -1 && data != null) {
+                String email = data.getStringExtra("authAccount");
+                if (email != null && !email.isEmpty()) {
+                    deliverPhoneGoogleAccountToJs(email);
+                    return;
+                }
+            }
+            deliverOAuthErrorToJs("user_cancelled");
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
     @JavascriptInterface
     public void startGoogleLogin(final String authUrl) {
         runOnUiThread(new Runnable() {
@@ -303,6 +358,17 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+    }
+
+    private void deliverPhoneGoogleAccountToJs(String email) {
+        try {
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                String safe = email.replace("\\", "\\\\").replace("'", "\\'");
+                String js = "window.__onBlackXPhoneGoogleAccountPicked && window.__onBlackXPhoneGoogleAccountPicked('" + safe + "');";
+                this.bridge.getWebView().evaluateJavascript(js, null);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void deliverOAuthRedirectToJs(String redirectUrl) {

@@ -1,5 +1,6 @@
 package com.getcapacitor;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.Window;
@@ -15,5 +16,7 @@ public class BridgeActivity extends Context {
     public WindowManager getWindowManager() { return null; }
     public void runOnUiThread(Runnable action) {}
     public void setRequestedOrientation(int requestedOrientation) {}
+    public void startActivityForResult(Intent intent, int requestCode) {}
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {}
     public void finish() {}
 }

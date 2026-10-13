@@ -996,60 +996,20 @@ export default function BlackXSplashVortex({
         </div>
       </div>
 
-      {/* Bottom Interactive 5-Motion Switcher & Progress Bar */}
+      {/* Bottom Cinematic Loader Bar (Clean External Splash — Theme selection is strictly inside App Settings) */}
       <div
         style={{
           position: 'absolute',
-          bottom: 'max(1.25rem, env(safe-area-inset-bottom, 1.25rem))',
+          bottom: 'max(1.6rem, env(safe-area-inset-bottom, 1.6rem))',
           left: '50%',
           transform: 'translateX(-50%)',
-          width: 'min(520px, 94vw)',
+          width: 'min(340px, 84vw)',
           zIndex: 6,
           display: 'flex',
           flexDirection: 'column',
-          gap: '0.6rem'
+          gap: '0.42rem'
         }}
       >
-        {/* 5-Motion Theme Switcher Pills */}
-        {durationMs >= 2500 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.32rem',
-              flexWrap: 'wrap'
-            }}
-          >
-            {BLACK_X_MOTION_THEMES.map((m) => {
-              const isSelected =
-                prefMode === m.id || (prefMode !== 'random' && activeMode === m.id);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => handleSelectMode(m.id)}
-                  style={{
-                    padding: '0.28rem 0.58rem',
-                    borderRadius: '999px',
-                    background: isSelected ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                    color: isSelected ? '#000000' : '#ffffff',
-                    border: isSelected
-                      ? '1px solid #ffffff'
-                      : '1px solid rgba(255,255,255,0.2)',
-                    fontSize: '0.66rem',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {m.icon} {isRtl ? m.nameAr : m.nameEn}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
         {/* Progress Status & Track */}
         <div style={{ maxWidth: '340px', width: '100%', margin: '0 auto' }}>
           <div
