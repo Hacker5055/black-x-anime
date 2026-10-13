@@ -4815,27 +4815,30 @@ export default function MobileApkApp() {
               </span>
             </div>
             <div style={{ fontSize: '0.63rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
-              {isRtl ? 'إصدار v10.0 الملكي • 6,973 أنمي' : 'v10.0 Sovereign • 6,973 Anime'}
+              {isRtl ? 'إصدار v11.0 الملكي (5 واجهات) • 6,973 أنمي' : 'v11.0 Omni-UI (5-in-1) • 6,973 Anime'}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.42rem' }}>
-          {/* Home Hero Style Switcher (SlothUI Full-Bleed vs Prime Rounded Cards) */}
+          {/* v11.0 4-Mode UI Architecture Switcher (SlothUI -> Waku3D -> AnymeX -> Prime) */}
           <button
             type="button"
             onClick={() => {
-              const nextMode = homeDesignMode === 'sloth' ? 'prime' : 'sloth';
+              const modes = ['sloth', 'waku3d', 'anymex', 'prime'];
+              const idx = modes.indexOf(homeDesignMode);
+              const nextMode = modes[(idx + 1) % modes.length];
               setHomeDesignMode(nextMode);
-              showToast(
-                nextMode === 'sloth'
-                  ? isRtl
-                    ? '🎬 تم تفعيل واجهة العرض السينمائي الكامل (SlothUI)'
-                    : '🎬 SlothUI Full-Bleed Hero Active'
-                  : isRtl
-                  ? '🖼️ تم تفعيل واجهة البطاقات الدائرية الفاخرة (Prime Cards)'
-                  : '🖼️ Prime Rounded Hero Active'
-              );
+              try {
+                localStorage.setItem('bx_mob_home_design', nextMode);
+              } catch (_) {}
+              const labels = {
+                sloth: isRtl ? '🎬 واجهة SlothUI السينمائية الكاملة' : '🎬 SlothUI Full-Bleed Cinema',
+                waku3d: isRtl ? '🃏 واجهة WakuWaku المروحة ثلاثية الأبعاد (3D Fan Deck)' : '🃏 WakuWaku 3D Fan Deck',
+                anymex: isRtl ? '⚡ واجهة AnymeX / Dantotsu الموحدة للأنمي والمانجا' : '⚡ AnymeX / Dantotsu Portal UI',
+                prime: isRtl ? '🖼️ واجهة Prime البطاقات الدائرية الفاخرة' : '🖼️ Prime Luxury Rounded Cards'
+              };
+              showToast(labels[nextMode]);
             }}
             style={{
               width: '38px',
@@ -4847,9 +4850,15 @@ export default function MobileApkApp() {
               fontSize: '0.88rem',
               cursor: 'pointer'
             }}
-            title={isRtl ? 'تبديل تصميم الواجهة الرئيسية' : 'Switch Home Layout'}
+            title={isRtl ? 'تبديل نظام الواجهة (4 أنظمة)' : 'Switch UI Architecture (4 Modes)'}
           >
-            {homeDesignMode === 'sloth' ? '🖼️' : '🎬'}
+            {homeDesignMode === 'sloth'
+              ? '🎬'
+              : homeDesignMode === 'waku3d'
+              ? '🃏'
+              : homeDesignMode === 'anymex'
+              ? '⚡'
+              : '🖼️'}
           </button>
 
           {/* Circular Glass Search Button (Matches Image 3) */}
@@ -4997,7 +5006,61 @@ export default function MobileApkApp() {
             })}
           </div>
 
-          {/* v10.0 Dual-Mode Hero Showcase: SlothUI Full-Bleed (Image 3) OR Prime Rounded Card (Image 1) */}
+          {/* v11.0 4-Mode UI Engine Selector Strip (SlothUI | Waku 3D Deck | AnymeX Portal | Prime Cards) */}
+          <div
+            className="bx-mob-scroll"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.35rem',
+              overflowX: 'auto',
+              padding: '0.42rem 1rem',
+              background: '#050507',
+              borderBottom: '1px solid rgba(255,255,255,0.07)'
+            }}
+          >
+            <span style={{ fontSize: '0.66rem', fontWeight: 900, color: 'rgba(255,255,255,0.58)', whiteSpace: 'nowrap' }}>
+              🎨 {isRtl ? 'شكل الواجهة:' : 'UI Style:'}
+            </span>
+            <div style={{ display: 'flex', gap: '0.35rem' }}>
+              {[
+                { id: 'sloth', label: '🎬 SlothUI' },
+                { id: 'waku3d', label: isRtl ? '🃏 مروحة 3D' : '🃏 3D Deck' },
+                { id: 'anymex', label: '⚡ AnymeX' },
+                { id: 'prime', label: '🖼️ Prime' }
+              ].map((m) => {
+                const active = homeDesignMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setHomeDesignMode(m.id);
+                      try {
+                        localStorage.setItem('bx_mob_home_design', m.id);
+                      } catch (_) {}
+                    }}
+                    style={{
+                      padding: '0.26rem 0.68rem',
+                      borderRadius: '999px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                      color: active ? '#000000' : 'rgba(255,255,255,0.82)',
+                      border: active ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                      fontSize: '0.66rem',
+                      fontWeight: 900,
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* v11.0 Mode 1: SlothUI Full-Bleed Hero (Image 3) */}
           {heroAnime && homeDesignMode === 'sloth' && (
             <section
               style={{
@@ -5361,6 +5424,410 @@ export default function MobileApkApp() {
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* v11.0 Mode 3: WakuWaku 3D Stacked Fan Deck Carousel (3 Overlapping Tilted Posters) */}
+          {heroAnime && homeDesignMode === 'waku3d' && (
+            <section
+              style={{
+                position: 'relative',
+                padding: '0.85rem 1rem 1.05rem',
+                overflow: 'hidden',
+                borderBottom: '1px solid rgba(255,255,255,0.08)'
+              }}
+            >
+              {/* Soft Monochrome Ambient Blur Backdrop */}
+              <img
+                src={heroAnime.poster}
+                alt=""
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  filter: 'blur(38px) brightness(0.22)',
+                  transform: 'scale(1.2)',
+                  pointerEvents: 'none'
+                }}
+              />
+
+              <div style={{ position: 'relative', zIndex: 2 }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>
+                  {isRtl ? 'شاهد اليوم • مروحة الأنمي ثلاثية الأبعاد' : 'Watch Today • 3D Fan Deck'}
+                </div>
+
+                {/* 3D Stacked Fan Deck Stage */}
+                {(() => {
+                  const pool = popularList.slice(0, 6);
+                  const total = pool.length || 1;
+                  const prevItem = pool[(heroSlide - 1 + total) % total] || heroAnime;
+                  const nextItem = pool[(heroSlide + 1) % total] || heroAnime;
+                  return (
+                    <div
+                      style={{
+                        position: 'relative',
+                        height: '295px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0.2rem 0 0.75rem'
+                      }}
+                    >
+                      {/* Left Tilted Fan Card */}
+                      <div
+                        onClick={() => setHeroSlide((heroSlide - 1 + total) % total)}
+                        style={{
+                          position: 'absolute',
+                          width: '168px',
+                          height: '242px',
+                          borderRadius: '20px',
+                          overflow: 'hidden',
+                          transform: 'translateX(-66px) scale(0.86) rotate(-9deg)',
+                          opacity: 0.52,
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          boxShadow: '0 14px 32px rgba(0,0,0,0.85)',
+                          cursor: 'pointer',
+                          transition: 'all 0.28s ease',
+                          zIndex: 1
+                        }}
+                      >
+                        <img
+                          src={prevItem.poster}
+                          alt={prevItem.titleEn}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+
+                      {/* Right Tilted Fan Card */}
+                      <div
+                        onClick={() => setHeroSlide((heroSlide + 1) % total)}
+                        style={{
+                          position: 'absolute',
+                          width: '168px',
+                          height: '242px',
+                          borderRadius: '20px',
+                          overflow: 'hidden',
+                          transform: 'translateX(66px) scale(0.86) rotate(9deg)',
+                          opacity: 0.52,
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          boxShadow: '0 14px 32px rgba(0,0,0,0.85)',
+                          cursor: 'pointer',
+                          transition: 'all 0.28s ease',
+                          zIndex: 1
+                        }}
+                      >
+                        <img
+                          src={nextItem.poster}
+                          alt={nextItem.titleEn}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+
+                      {/* Center Elevated Hero Fan Card */}
+                      <div
+                        onClick={() => handleOpenAnime(heroAnime)}
+                        style={{
+                          position: 'relative',
+                          width: '198px',
+                          height: '282px',
+                          borderRadius: '24px',
+                          overflow: 'hidden',
+                          border: '1.5px solid rgba(255,255,255,0.42)',
+                          boxShadow: '0 24px 60px rgba(255,255,255,0.16), 0 14px 36px rgba(0,0,0,0.95)',
+                          cursor: 'pointer',
+                          transition: 'all 0.28s ease',
+                          zIndex: 4
+                        }}
+                      >
+                        <img
+                          src={heroAnime.poster}
+                          alt={heroAnime.titleEn}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'linear-gradient(180deg, transparent 52%, rgba(0,0,0,0.92) 100%)'
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '10px',
+                            left: '10px',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            color: '#000000',
+                            fontWeight: 900,
+                            fontSize: '0.7rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          X
+                        </span>
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: '10px',
+                            left: '12px',
+                            right: '12px',
+                            textAlign: 'center',
+                            fontSize: '0.78rem',
+                            fontWeight: 900,
+                            color: '#ffffff',
+                            textShadow: '0 2px 10px #000',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {heroAnime.titleEn}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* WakuWaku Bottom Caption + Dual Pill Buttons */}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)', fontWeight: 800, marginBottom: '0.18rem' }}>
+                    {isRtl ? 'مقترح في قائمة مشاهدتك' : 'Up on your watchlist'}
+                  </div>
+                  <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.18rem', fontWeight: 900 }}>
+                    {heroAnime.titleEn}
+                  </h2>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.82)', marginBottom: '0.7rem' }}>
+                    {heroAnime.year || '2026'} &nbsp;•&nbsp; ★ {heroAnime.rating || '9.2'} &nbsp;•&nbsp; {heroAnime.type}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', maxWidth: '340px', margin: '0 auto' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAnime(heroAnime, 1)}
+                      style={{
+                        padding: '0.68rem 0.9rem',
+                        borderRadius: '999px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ▶ {isRtl ? 'تشغيل الآن' : 'Play Now'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAnime(heroAnime)}
+                      style={{
+                        padding: '0.68rem 0.9rem',
+                        borderRadius: '999px',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.24)',
+                        fontWeight: 900,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⓘ {isRtl ? 'صفحة العمل' : 'Details'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* v11.0 Mode 4: AnymeX / Dantotsu / Saikou Unified Portal Dashboard */}
+          {heroAnime && homeDesignMode === 'anymex' && (
+            <section
+              style={{
+                padding: '1rem 1rem 0.6rem',
+                borderBottom: '1px solid rgba(255,255,255,0.08)'
+              }}
+            >
+              {/* Centered AnymeX Personal Greeting */}
+              <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.38rem', fontWeight: 900, lineHeight: 1.25 }}>
+                  {isRtl
+                    ? `أهلاً بك يا ${user?.displayName || 'ملك الأوتاكو'}، ماذا سنشاهد اليوم؟`
+                    : `Hey ${user?.displayName || 'Otaku Monarch'}, What are we doing today?`}
+                </h1>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'rgba(255,255,255,0.62)', fontWeight: 700 }}>
+                  {isRtl
+                    ? 'اكتشف أضخم مكتبة أنمي ومانهوا ومانجا مترجمة بجودة 4K وسرعة 120Hz!'
+                    : 'Find your favourite anime, manga, or manhwa in 4K 120Hz!'}
+                </p>
+              </div>
+
+              {/* Dual Artwork Portal Cards: [ANIME LIST] & [MANGA LIST] (Exact Match to AnymeX UI) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.85rem' }}>
+                <div
+                  onClick={() => setActiveTab('catalog')}
+                  style={{
+                    position: 'relative',
+                    height: '88px',
+                    borderRadius: '18px',
+                    overflow: 'hidden',
+                    border: '1.5px solid rgba(255,255,255,0.28)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src={heroAnime.banner || heroAnime.poster}
+                    alt="Anime List"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      filter: 'brightness(0.45) contrast(1.1)'
+                    }}
+                  />
+                  <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.86rem', letterSpacing: '0.05em' }}>
+                    {isRtl ? 'قائمة الأنمي' : 'ANIME LIST'}
+                  </span>
+                  <span
+                    style={{
+                      position: 'relative',
+                      zIndex: 2,
+                      marginTop: '5px',
+                      width: '48px',
+                      height: '3px',
+                      borderRadius: '99px',
+                      background: '#ffffff'
+                    }}
+                  />
+                </div>
+
+                <div
+                  onClick={() => setActiveTab('manga')}
+                  style={{
+                    position: 'relative',
+                    height: '88px',
+                    borderRadius: '18px',
+                    overflow: 'hidden',
+                    border: '1.5px solid rgba(255,255,255,0.28)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src={popularList[1]?.poster || heroAnime.poster}
+                    alt="Manga List"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      filter: 'brightness(0.45) contrast(1.1)'
+                    }}
+                  />
+                  <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.86rem', letterSpacing: '0.05em' }}>
+                    {isRtl ? 'قائمة المانجا' : 'MANGA LIST'}
+                  </span>
+                  <span
+                    style={{
+                      position: 'relative',
+                      zIndex: 2,
+                      marginTop: '5px',
+                      width: '48px',
+                      height: '3px',
+                      borderRadius: '99px',
+                      background: '#ffffff'
+                    }}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* v11.0 Always-Available AnymeX Dual Portal Cards (when in SlothUI, Waku3D, or Prime mode) */}
+          {homeDesignMode !== 'anymex' && heroAnime && (
+            <section style={{ padding: '0.7rem 1rem 0.1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                <div
+                  onClick={() => setActiveTab('catalog')}
+                  style={{
+                    position: 'relative',
+                    height: '66px',
+                    borderRadius: '16px',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src={heroAnime.banner || heroAnime.poster}
+                    alt="Anime List"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      filter: 'brightness(0.38)'
+                    }}
+                  />
+                  <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.78rem', letterSpacing: '0.04em' }}>
+                    🎬 {isRtl ? 'قائمة الأنمي (ANIME LIST)' : 'ANIME LIST'}
+                  </span>
+                  <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '40px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
+                </div>
+
+                <div
+                  onClick={() => setActiveTab('manga')}
+                  style={{
+                    position: 'relative',
+                    height: '66px',
+                    borderRadius: '16px',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src={popularList[2]?.poster || heroAnime.poster}
+                    alt="Manga List"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      filter: 'brightness(0.38)'
+                    }}
+                  />
+                  <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.78rem', letterSpacing: '0.04em' }}>
+                    📖 {isRtl ? 'قائمة المانجا (MANGA LIST)' : 'MANGA LIST'}
+                  </span>
+                  <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '40px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
                 </div>
               </div>
             </section>
@@ -6095,6 +6562,7 @@ export default function MobileApkApp() {
                         >
                           {favorites.some((f) => f.objectID === item.objectID) ? '✓' : '🔖'}
                         </span>
+                        {/* AnymeX / Dantotsu Bottom-Right Corner Episode Progress Badge (▶ Ep) */}
                         <span
                           onClick={(e) => {
                             e.stopPropagation();
@@ -6104,20 +6572,26 @@ export default function MobileApkApp() {
                             position: 'absolute',
                             bottom: '6px',
                             right: '6px',
-                            width: '22px',
-                            height: '22px',
-                            borderRadius: '50%',
-                            background: 'rgba(0,0,0,0.82)',
-                            border: '1px solid rgba(255,255,255,0.32)',
+                            padding: '0.14rem 0.45rem',
+                            borderRadius: '8px',
+                            background: 'rgba(12,12,18,0.88)',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.28)',
                             color: '#ffffff',
-                            fontSize: '0.66rem',
+                            fontSize: '0.62rem',
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            gap: '3px'
                           }}
                         >
-                          ⓘ
+                          <span>▶</span>
+                          <span>
+                            {(() => {
+                              const wh = watchHistory.find((h) => h.objectID === item.objectID);
+                              return wh ? wh.episode : '1';
+                            })()}
+                          </span>
                         </span>
                         <span
                           style={{
@@ -6155,6 +6629,103 @@ export default function MobileApkApp() {
               </div>
             </section>
           ))}
+
+          {/* v11.0 UI #3: Visual Genre Art Cards Grid (2x3 Illustrated Genre Cards) */}
+          {popularList.length >= 6 && (
+            <section style={{ padding: '0.95rem 1rem 0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
+                  🎨 {isRtl ? 'تصفح حسب التصنيفات المصوّرة (Genres)' : 'Visual Genres'}
+                </h2>
+                <span
+                  onClick={() => setActiveTab('catalog')}
+                  style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, cursor: 'pointer' }}
+                >
+                  {isRtl ? 'كل التصنيفات ←' : 'See All →'}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
+                {[
+                  { key: 'أكشن', ar: 'أكشن وقتال', en: 'Action', img: popularList[0]?.banner || popularList[0]?.poster },
+                  { key: 'فانتازيا', ar: 'فانتازيا وسحر', en: 'Fantasy', img: popularList[1]?.banner || popularList[1]?.poster },
+                  { key: 'رعب', ar: 'رعب وغموض', en: 'Horror & Mystery', img: popularList[2]?.banner || popularList[2]?.poster },
+                  { key: 'كوميديا', ar: 'كوميديا', en: 'Comedy', img: popularList[3]?.banner || popularList[3]?.poster },
+                  { key: 'إيسيكاي', ar: 'عالم آخر (Isekai)', en: 'Isekai', img: popularList[4]?.banner || popularList[4]?.poster },
+                  { key: 'شياطين', ar: 'شياطين وقوى خارقة', en: 'Supernatural', img: popularList[5]?.banner || popularList[5]?.poster }
+                ].map((vg) => (
+                  <div
+                    key={vg.key}
+                    className="bx-mob-card"
+                    onClick={() => {
+                      const foundGenre =
+                        GENRE_CHIPS.find((g) => g.ar.includes(vg.key) || g.en.toLowerCase().includes(vg.en.toLowerCase())) ||
+                        GENRE_CHIPS[0];
+                      setCatalogGenre(foundGenre);
+                      setSearchQuery(vg.key);
+                      setActiveTab('catalog');
+                    }}
+                    style={{
+                      position: 'relative',
+                      height: '94px',
+                      borderRadius: '18px',
+                      overflow: 'hidden',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <img
+                      src={vg.img}
+                      alt={vg.en}
+                      loading="lazy"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        filter: 'brightness(0.58) contrast(1.08)'
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.88) 100%)'
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '10px',
+                        left: '12px',
+                        right: '12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#ffffff', textShadow: '0 2px 10px #000' }}>
+                        {isRtl ? vg.ar : vg.en}
+                      </span>
+                      <span
+                        style={{
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.18)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.66rem',
+                          fontWeight: 900
+                        }}
+                      >
+                        ↗
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </main>
       )}
 
@@ -6460,25 +7031,37 @@ export default function MobileApkApp() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setCatalogCardStyle((s) => (s === 'wide' ? 'grid' : 'wide'))}
-              style={{
-                padding: '0.38rem 0.78rem',
-                borderRadius: '99px',
-                background: '#ffffff',
-                color: '#000000',
-                border: 'none',
-                fontSize: '0.72rem',
-                fontWeight: 900,
-                cursor: 'pointer'
-              }}
-            >
-              {catalogCardStyle === 'wide' ? (isRtl ? '☷ عرض شبكي' : '☷ Grid') : isRtl ? '🖼️ بطاقات سينمائية' : '🖼️ Wide Cards'}
-            </button>
+            <div style={{ display: 'flex', gap: '0.32rem' }}>
+              {[
+                { id: 'bento', label: isRtl ? '🍱 بينتو' : '🍱 Bento' },
+                { id: 'wide', label: isRtl ? '🖼️ عريضة' : '🖼️ Wide' },
+                { id: 'grid', label: isRtl ? '☷ شبكة' : '☷ Grid' }
+              ].map((cm) => {
+                const active = catalogCardStyle === cm.id;
+                return (
+                  <button
+                    key={cm.id}
+                    type="button"
+                    onClick={() => setCatalogCardStyle(cm.id)}
+                    style={{
+                      padding: '0.34rem 0.65rem',
+                      borderRadius: '99px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                      color: active ? '#000000' : '#ffffff',
+                      border: active ? 'none' : '1px solid rgba(255,255,255,0.16)',
+                      fontSize: '0.68rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {cm.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Image 1 Middle Screen: Wide 24px-Rounded Cinema Cards OR 3-Column Poster Grid */}
+          {/* v11.0 3-Mode Catalog Grid: Bento Asymmetric Grid (UI #4) OR Wide 24px Cinema Cards OR 3-Column Poster Grid */}
           {catalogLoading ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
               {Array.from({ length: 12 }).map((_, i) => (
@@ -6490,7 +7073,123 @@ export default function MobileApkApp() {
             </div>
           ) : (
             <>
-              {catalogCardStyle === 'wide' ? (
+              {catalogCardStyle === 'bento' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.72rem' }}>
+                  {catalogItems.map((item, idx) => {
+                    const isFeaturedSpan = idx % 5 === 0;
+                    return (
+                      <div
+                        key={item.objectID}
+                        className="bx-mob-card"
+                        onClick={() => handleOpenAnime(item)}
+                        style={{
+                          gridColumn: isFeaturedSpan ? 'span 2' : 'span 1',
+                          position: 'relative',
+                          height: isFeaturedSpan ? '195px' : '225px',
+                          borderRadius: '22px',
+                          overflow: 'hidden',
+                          background: '#0b0b10',
+                          border: '1px solid rgba(255,255,255,0.18)',
+                          boxShadow: '0 14px 34px rgba(0,0,0,0.82)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <img
+                          src={isFeaturedSpan ? item.banner || item.poster : item.poster}
+                          alt={item.titleEn}
+                          loading="lazy"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            filter: 'brightness(0.76) contrast(1.06)'
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'linear-gradient(180deg, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.25) 45%, rgba(0,0,0,0.94) 100%)'
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '10px',
+                            left: '10px',
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            color: '#000000',
+                            fontWeight: 900,
+                            fontSize: '0.64rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          X
+                        </span>
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '99px',
+                            background: 'rgba(14,14,20,0.82)',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.22)',
+                            fontSize: '0.66rem',
+                            fontWeight: 900
+                          }}
+                        >
+                          ★ {item.rating}
+                        </span>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '10px',
+                            left: '12px',
+                            right: '12px'
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: isFeaturedSpan ? '1.05rem' : '0.82rem',
+                              fontWeight: 900,
+                              color: '#ffffff',
+                              lineHeight: 1.25,
+                              marginBottom: '0.25rem',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            {item.titleEn}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>
+                            <span>{(item.tags || [item.type || 'Anime']).slice(0, 2).join(' • ')}</span>
+                            <span
+                              style={{
+                                padding: '0.12rem 0.48rem',
+                                borderRadius: '8px',
+                                background: '#ffffff',
+                                color: '#000000',
+                                fontWeight: 900
+                              }}
+                            >
+                              ▶ 1
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : catalogCardStyle === 'wide' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   {catalogItems.map((item) => (
                     <div
@@ -11813,10 +12512,20 @@ export default function MobileApkApp() {
             </div>
           )}
 
-          {/* ==================== v10.0 SLOTH-UI & MARVELS FULL-BLEED ANIME SHOW HUB HEADER ==================== */}
+          {/* ==================== v11.0 OMNI-UI (SLOTH-UI + CURVED ARCH + WAKUWAKU 6-STATS) ANIME SHOW HUB HEADER ==================== */}
           <div style={{ position: 'relative', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            {/* Full-Bleed Key Art Hero Banner (Matches Image 3 Left "Demonic Slash" & Image 1 Bottom-Right "The Marvels") */}
-            <div style={{ position: 'relative', width: '100%', height: '310px', overflow: 'hidden' }}>
+            {/* Full-Bleed Key Art Hero Banner with Curved Arch Bottom Edge (UI #3 + SlothUI) */}
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '315px',
+                overflow: 'hidden',
+                borderBottomLeftRadius: '38px',
+                borderBottomRightRadius: '38px',
+                borderBottom: '1px solid rgba(255,255,255,0.16)'
+              }}
+            >
               <img
                 src={selectedAnime.poster || selectedAnime.banner}
                 alt={selectedAnime.titleEn}
@@ -11842,7 +12551,7 @@ export default function MobileApkApp() {
               <div
                 style={{
                   position: 'absolute',
-                  bottom: '12px',
+                  bottom: '16px',
                   left: '16px',
                   right: '16px'
                 }}
@@ -11896,7 +12605,7 @@ export default function MobileApkApp() {
               </div>
             </div>
 
-            <div style={{ position: 'relative', zIndex: 2, padding: '0.2rem 1rem 1rem', background: '#000000' }}>
+            <div style={{ position: 'relative', zIndex: 2, padding: '0.55rem 1rem 1rem', background: '#000000' }}>
               {/* Image 1 & Image 3 Metadata Line: Year • Episodes • [Type Pill] • ★ Rating */}
               <div
                 style={{
@@ -11929,6 +12638,36 @@ export default function MobileApkApp() {
                 <span style={{ color: '#ffffff', fontWeight: 900 }}>
                   ★ {selectedAnime.rating} ({getDnaMatchScore(selectedAnime)}% Match)
                 </span>
+              </div>
+
+              {/* v11.0 UI #2 (WakuWaku Drifting Dragons): 6-Icon Micro-Stats Strip */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(6, 1fr)',
+                  gap: '0.25rem',
+                  padding: '0.65rem 0.45rem',
+                  marginBottom: '0.8rem',
+                  borderRadius: '18px',
+                  background: '#0b0b10',
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  textAlign: 'center'
+                }}
+              >
+                {[
+                  { icon: '🎞️', val: animeEpisodes.length || '12', lbl: isRtl ? 'حلقات' : 'Eps' },
+                  { icon: '♥', val: Math.round(Number(selectedAnime.rating || 9) * 142), lbl: isRtl ? 'إعجاب' : 'Likes' },
+                  { icon: '👁', val: `${(Number(selectedAnime.rating || 9) * 2.4).toFixed(1)}K`, lbl: isRtl ? 'مشاهدة' : 'Views' },
+                  { icon: '💬', val: animeReviews.length || 18, lbl: isRtl ? 'تعليق' : 'Chat' },
+                  { icon: '🧬', val: `${getDnaMatchScore(selectedAnime)}%`, lbl: isRtl ? 'تطابق' : 'Match' },
+                  { icon: '★', val: selectedAnime.rating || '9.2', lbl: isRtl ? 'تقييم' : 'Score' }
+                ].map((st, idx) => (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ fontSize: '0.84rem', lineHeight: 1 }}>{st.icon}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff' }}>{st.val}</span>
+                    <span style={{ fontSize: '0.56rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>{st.lbl}</span>
+                  </div>
+                ))}
               </div>
 
               {/* Clean 3-Line Story Synopsis (Matches Image 3 Left & Image 1 Bottom-Right) */}
@@ -13250,18 +13989,27 @@ export default function MobileApkApp() {
                   }
                 },
                 {
-                  icon: '🖼️',
+                  icon: '🎨',
                   label:
                     homeDesignMode === 'sloth'
                       ? isRtl
-                        ? 'نمط الواجهة: SlothUI (اضغط للتبديل)'
-                        : 'UI Style: SlothUI (Tap to Switch)'
+                        ? 'الواجهة: SlothUI (اضغط للتبديل)'
+                        : 'UI: SlothUI (Tap to Switch)'
+                      : homeDesignMode === 'waku3d'
+                      ? isRtl
+                        ? 'الواجهة: Waku 3D Deck (اضغط للتبديل)'
+                        : 'UI: Waku 3D Deck (Tap to Switch)'
+                      : homeDesignMode === 'anymex'
+                      ? isRtl
+                        ? 'الواجهة: AnymeX Portal (اضغط للتبديل)'
+                        : 'UI: AnymeX Portal (Tap to Switch)'
                       : isRtl
-                      ? 'نمط الواجهة: Prime Cards (اضغط للتبديل)'
-                      : 'UI Style: Prime Cards (Tap to Switch)',
-                  badge: homeDesignMode === 'sloth' ? 'S' : 'P',
+                      ? 'الواجهة: Prime Cards (اضغط للتبديل)'
+                      : 'UI: Prime Cards (Tap to Switch)',
+                  badge: homeDesignMode.toUpperCase(),
                   onClick: () => {
-                    const next = homeDesignMode === 'sloth' ? 'prime' : 'sloth';
+                    const modes = ['sloth', 'waku3d', 'anymex', 'prime'];
+                    const next = modes[(modes.indexOf(homeDesignMode) + 1) % modes.length];
                     setHomeDesignMode(next);
                     try {
                       localStorage.setItem('bx_mob_home_design', next);
