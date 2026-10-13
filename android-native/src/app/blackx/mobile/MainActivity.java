@@ -24,6 +24,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private static final int REQ_PICK_GOOGLE_ACCOUNT = 9001;
     private Dialog oauthDialog = null;
+    private boolean volumeKeyScrollEnabled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,15 +42,24 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * Intercept hardware & gesture navigation bar Back button on Android 12/13/14/15 (CMF Phone 1)
-     * so pressing Back navigates inside the app instead of closing the app!
+     * AND optional Volume Up/Down keys when reading Manhwa/Manga!
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event != null && event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-            if (event.getAction() == KeyEvent.ACTION_UP) {
-                triggerJsBackNavigation();
+        if (event != null) {
+            int code = event.getKeyCode();
+            if (code == KeyEvent.KEYCODE_BACK) {
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    triggerJsBackNavigation();
+                }
+                return true;
             }
-            return true;
+            if (volumeKeyScrollEnabled && (code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    triggerJsVolumeScroll(code == KeyEvent.KEYCODE_VOLUME_DOWN ? "down" : "up");
+                }
+                return true;
+            }
         }
         return super.dispatchKeyEvent(event);
     }
@@ -59,12 +69,67 @@ public class MainActivity extends BridgeActivity {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             return true;
         }
+        if (volumeKeyScrollEnabled && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            return true;
+        }
         return super.onKeyDown(keyCode, event);
     }
 
     @Override
     public void onBackPressed() {
         triggerJsBackNavigation();
+    }
+
+    private void triggerJsVolumeScroll(String dir) {
+        try {
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().evaluateJavascript(
+                    "if(window.__bxVolumeKeyScroll){window.__bxVolumeKeyScroll('" + dir + "');}",
+                    null
+                );
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    @JavascriptInterface
+    public void setVolumeKeyScroll(final boolean enabled) {
+        this.volumeKeyScrollEnabled = enabled;
+    }
+
+    @JavascriptInterface
+    public void setScreenBrightness(final float level) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Window window = getWindow();
+                    if (window != null) {
+                        WindowManager.LayoutParams params = window.getAttributes();
+                        if (params != null) {
+                            params.screenBrightness = level;
+                            window.setAttributes(params);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void enterPipMode() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (Build.VERSION.SDK_INT >= 24) {
+                        enterPictureInPictureMode();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        });
     }
 
     private void triggerJsBackNavigation() {

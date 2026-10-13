@@ -531,7 +531,15 @@ export default function MobileApkApp() {
   const [videoFullscreen, setVideoFullscreen] = useState(false);
   const [videoFitMode, setVideoFitMode] = useState('cover'); // 'cover' (full 20:9 screen) | 'contain' (16:9) | 'fill'
   const [skipRipple, setSkipRipple] = useState(null); // 'left' | 'right'
+  const [videoTouchLocked, setVideoTouchLocked] = useState(false);
+  const [videoBrightness, setVideoBrightness] = useState(100);
+  const [videoVolume, setVideoVolume] = useState(100);
+  const [gestureHud, setGestureHud] = useState(null); // { type: 'brightness' | 'volume', value: number } | null
+  const [longPress2x, setLongPress2x] = useState(false);
   const videoRef = useRef(null);
+  const gestureStartRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const gestureHudTimerRef = useRef(null);
 
   // Manga States (30,000+ Arabic Manga & Manhwa from BLACK X Engines)
   const [mangaList, setMangaList] = useState([]);
@@ -540,7 +548,7 @@ export default function MobileApkApp() {
   const [mangaPage, setMangaPage] = useState(1);
   const [mangaQuery, setMangaQuery] = useState('');
   const [mangaLoading, setMangaLoading] = useState(false);
-  const [loadingMoreManga, setLoadingMoreManga, ] = useState(false);
+  const [loadingMoreManga, setLoadingMoreManga] = useState(false);
   const [selectedManga, setSelectedManga] = useState(null);
   const [mangaChapters, setMangaChapters] = useState([]);
   const [mangaChaptersLoading, setMangaChaptersLoading] = useState(false);
@@ -553,6 +561,13 @@ export default function MobileApkApp() {
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0); // 0 | 1 | 2 | 3
   const [readerFullscreen, setReaderFullscreen] = useState(true);
   const [readerHudVisible, setReaderHudVisible] = useState(true);
+  const [readerEyeFilter, setReaderEyeFilter] = useState('normal'); // 'normal' | 'warm' | 'contrast'
+  const [volumeKeyScroll, setVolumeKeyScroll] = useState(true);
+  const mangaReaderContainerRef = useRef(null);
+  const prefetchedChapterRef = useRef({});
+  const [globalBroadcastMsg, setGlobalBroadcastMsg] = useState('');
+  const [devBroadcastInput, setDevBroadcastInput] = useState('');
+  const [devBroadcastBusy, setDevBroadcastBusy] = useState(false);
   const [mangaHistory, setMangaHistory] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('bx_mob_manga_history') || '[]');
@@ -676,7 +691,7 @@ export default function MobileApkApp() {
     }, 3200);
   }, []);
 
-  // Sync Native Immersive Fullscreen & Landscape Orientation whenever videoFullscreen or activeMangaChapter changes
+  // Sync Native Immersive Fullscreen & Landscape Orientation + Volume Key Scroll Interceptor
   useEffect(() => {
     try {
       if (videoFullscreen && activeEpisode) {
@@ -686,8 +701,112 @@ export default function MobileApkApp() {
       } else {
         window.BlackXNativeAuth?.setFullscreen?.(false, false);
       }
+      window.BlackXNativeAuth?.setVolumeKeyScroll?.(Boolean(activeMangaChapter && volumeKeyScroll));
     } catch (_) {}
-  }, [videoFullscreen, activeEpisode, activeMangaChapter]);
+  }, [videoFullscreen, activeEpisode, activeMangaChapter, volumeKeyScroll]);
+
+  useEffect(() => {
+    window.__bxVolumeKeyScroll = (dir) => {
+      if (!activeMangaChapter) return;
+      if (readerMode === 'page') {
+        if (dir === 'down') {
+          setCurrentPageIdx((p) => Math.min(mangaPages.length - 1, p + 1));
+        } else {
+          setCurrentPageIdx((p) => Math.max(0, p - 1));
+        }
+      } else if (mangaReaderContainerRef.current) {
+        const delta = window.innerHeight * 0.72 * (dir === 'down' ? 1 : -1);
+        mangaReaderContainerRef.current.scrollBy({ top: delta, behavior: 'smooth' });
+      }
+    };
+    return () => {
+      delete window.__bxVolumeKeyScroll;
+    };
+  }, [activeMangaChapter, readerMode, mangaPages.length]);
+
+  // Pro Video Player Touch Gestures: Left Vertical Swipe = Brightness, Right Vertical Swipe = Volume, Long Press = 2.0x Speed
+  const showGestureIndicator = useCallback((type, value) => {
+    setGestureHud({ type, value });
+    if (gestureHudTimerRef.current) clearTimeout(gestureHudTimerRef.current);
+    gestureHudTimerRef.current = setTimeout(() => setGestureHud(null), 1100);
+  }, []);
+
+  const handleVideoTouchStart = useCallback(
+    (e) => {
+      if (videoTouchLocked) return;
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const relX = (touch.clientX - rect.left) / Math.max(1, rect.width);
+      gestureStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        side: relX < 0.42 ? 'left' : relX > 0.58 ? 'right' : 'center',
+        startBrightness: videoBrightness,
+        startVolume: videoVolume,
+        moved: false
+      };
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = setTimeout(() => {
+        if (gestureStartRef.current && !gestureStartRef.current.moved && videoRef.current) {
+          videoRef.current.playbackRate = 2.0;
+          setLongPress2x(true);
+        }
+      }, 300);
+    },
+    [videoTouchLocked, videoBrightness, videoVolume]
+  );
+
+  const handleVideoTouchMove = useCallback(
+    (e) => {
+      if (videoTouchLocked || !gestureStartRef.current) return;
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const dx = touch.clientX - gestureStartRef.current.x;
+      const dy = gestureStartRef.current.y - touch.clientY; // positive = swipe up
+      if (Math.hypot(dx, dy) > 12) {
+        gestureStartRef.current.moved = true;
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
+      if (Math.abs(dy) > 16 && Math.abs(dy) > Math.abs(dx) * 1.25) {
+        const deltaPct = Math.round((dy / 180) * 100);
+        if (gestureStartRef.current.side === 'left') {
+          const nextB = Math.max(15, Math.min(120, gestureStartRef.current.startBrightness + deltaPct));
+          setVideoBrightness(nextB);
+          try {
+            window.BlackXNativeAuth?.setScreenBrightness?.(Math.min(1, nextB / 100));
+          } catch (_) {}
+          showGestureIndicator('brightness', nextB);
+        } else if (gestureStartRef.current.side === 'right') {
+          const nextV = Math.max(0, Math.min(100, gestureStartRef.current.startVolume + deltaPct));
+          setVideoVolume(nextV);
+          if (videoRef.current) {
+            videoRef.current.volume = nextV / 100;
+            videoRef.current.muted = nextV === 0;
+          }
+          showGestureIndicator('volume', nextV);
+        }
+      }
+    },
+    [videoTouchLocked, showGestureIndicator]
+  );
+
+  const handleVideoTouchEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (longPress2x) {
+      setLongPress2x(false);
+      if (videoRef.current) {
+        videoRef.current.playbackRate = playbackSpeed;
+      }
+    }
+    gestureStartRef.current = null;
+  }, [longPress2x, playbackSpeed]);
 
   // Complete Phone Back Button & Gesture Navigation Engine (Never exits the app unexpectedly!)
   const navRef = useRef({});
@@ -823,6 +942,9 @@ export default function MobileApkApp() {
         if (Array.isArray(parsed.codes)) {
           setCloudVipCodes(parsed.codes);
         }
+        if (typeof parsed.broadcastMsg === 'string') {
+          setGlobalBroadcastMsg(parsed.broadcastMsg);
+        }
       } else if (typeof doc?.fields?.enforced?.booleanValue === 'boolean') {
         const enf = doc.fields.enforced.booleanValue;
         setGlobalVipEnforced(enf);
@@ -847,7 +969,8 @@ export default function MobileApkApp() {
         enforced: nextEnforced,
         updatedAt: new Date().toISOString(),
         updatedBy: user?.email || 'developer',
-        codes: cloudVipCodes
+        codes: cloudVipCodes,
+        broadcastMsg: globalBroadcastMsg
       };
       await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
         method: 'PATCH',
@@ -917,7 +1040,8 @@ export default function MobileApkApp() {
         enforced: globalVipEnforced,
         updatedAt: new Date().toISOString(),
         updatedBy: user?.email || 'developer',
-        codes: updatedCodes
+        codes: updatedCodes,
+        broadcastMsg: globalBroadcastMsg
       };
       await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
         method: 'PATCH',
@@ -1002,7 +1126,8 @@ export default function MobileApkApp() {
                 stringValue: JSON.stringify({
                   enforced: currentEnforced,
                   updatedAt: new Date().toISOString(),
-                  codes: updatedCodes
+                  codes: updatedCodes,
+                  broadcastMsg: globalBroadcastMsg
                 })
               },
               enforced: { booleanValue: currentEnforced },
@@ -1045,7 +1170,48 @@ export default function MobileApkApp() {
         setVipRedeemBusy(false);
       }
     },
-    [vipRedeemCode, cloudVipCodes, globalVipEnforced, user, showToast, lang]
+    [vipRedeemCode, cloudVipCodes, globalVipEnforced, globalBroadcastMsg, user, showToast, lang]
+  );
+
+  // Developer Only: Send or Clear a Global Cloud Broadcast Banner to ALL users immediately
+  const handleDevSendBroadcast = useCallback(
+    async (clearMsg = false) => {
+      if (!isDeveloper) return;
+      setDevBroadcastBusy(true);
+      const nextMsg = clearMsg ? '' : String(devBroadcastInput || '').trim();
+      try {
+        const payload = {
+          enforced: globalVipEnforced,
+          updatedAt: new Date().toISOString(),
+          updatedBy: user?.email || 'developer',
+          codes: cloudVipCodes,
+          broadcastMsg: nextMsg
+        };
+        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(payload) },
+              enforced: { booleanValue: globalVipEnforced },
+              updatedAt: { stringValue: payload.updatedAt }
+            }
+          })
+        });
+        setGlobalBroadcastMsg(nextMsg);
+        if (clearMsg) setDevBroadcastInput('');
+        showToast(
+          nextMsg
+            ? '📢 تم بث الإشعار العام السحابي لجميع مستخدمي التطبيق والموقع فوراً!'
+            : '🗑️ تم إخفاء الإشعار العام من جميع الأجهزة'
+        );
+      } catch (_) {
+        showToast('تعذر إرسال الإشعار السحابي');
+      } finally {
+        setDevBroadcastBusy(false);
+      }
+    },
+    [isDeveloper, devBroadcastInput, globalVipEnforced, user, cloudVipCodes, showToast]
   );
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
@@ -2266,6 +2432,48 @@ export default function MobileApkApp() {
     }
   }, []);
 
+  const fetchChapterPagesList = useCallback(async (ch) => {
+    if (!ch) return [];
+    if (prefetchedChapterRef.current[ch.id]?.length) {
+      return prefetchedChapterRef.current[ch.id];
+    }
+    let imgs = [];
+    if (ch.source === 'mello' && ch.mangaId && ch.chapterId) {
+      const json = await nativeGetJson(
+        `https://plus.mangamello.com/api/v1/mangas/${ch.mangaId}/chapters/${ch.chapterId}?relations=chapterImages`,
+        MELLO_API_HEADERS
+      );
+      imgs = (json?.data?.chapterImages || [])
+        .map((img) => rewriteLegacyMangaImageUrl(img.src))
+        .filter(Boolean);
+    } else if (ch.source === 'azora' && ch.chapterId) {
+      const json = await nativeGetJson(`https://api.azorafly.com/api/chapter?chapterId=${ch.chapterId}`);
+      imgs = (json?.chapter?.images || []).map((img) => img.url).filter(Boolean);
+    } else if (ch.source === 'swat' && ch.chapterId) {
+      const json = await nativeGetJson(
+        `https://appswat.com/v2/api/v2/chapters/${ch.chapterId}/`,
+        SWAT_API_HEADERS
+      );
+      imgs = (json?.images || [])
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map((img) => img.image)
+        .filter(Boolean);
+    } else {
+      const atHome = await fetch(`https://api.mangadex.org/at-home/server/${ch.id}`).then((r) => r.json());
+      const baseUrl = atHome?.baseUrl;
+      const hash = atHome?.chapter?.hash;
+      const files = atHome?.chapter?.dataSaver || atHome?.chapter?.data || [];
+      const mode = atHome?.chapter?.dataSaver ? 'data-saver' : 'data';
+      if (baseUrl && hash && files.length) {
+        imgs = files.map((f) => `${baseUrl}/${mode}/${hash}/${f}`);
+      }
+    }
+    if (imgs.length > 0) {
+      prefetchedChapterRef.current[ch.id] = imgs;
+    }
+    return imgs;
+  }, []);
+
   const handleReadMangaChapter = useCallback(
     async (ch) => {
       window.triggerBlackXMotion?.(
@@ -2277,8 +2485,14 @@ export default function MobileApkApp() {
       setActiveMangaChapter(ch);
       setCurrentPageIdx(0);
       setAutoScrollSpeed(0);
-      setMangaPages([]);
-      setMangaPagesLoading(true);
+      const cached = prefetchedChapterRef.current[ch.id];
+      if (cached?.length) {
+        setMangaPages(cached);
+        setMangaPagesLoading(false);
+      } else {
+        setMangaPages([]);
+        setMangaPagesLoading(true);
+      }
 
       // Save to Manga Reading History
       if (selectedManga) {
@@ -2302,52 +2516,30 @@ export default function MobileApkApp() {
       }
 
       try {
-        if (ch.source === 'mello' && ch.mangaId && ch.chapterId) {
-          const json = await nativeGetJson(
-            `https://plus.mangamello.com/api/v1/mangas/${ch.mangaId}/chapters/${ch.chapterId}?relations=chapterImages`,
-            MELLO_API_HEADERS
-          );
-          const imgs = (json?.data?.chapterImages || [])
-            .map((img) => rewriteLegacyMangaImageUrl(img.src))
-            .filter(Boolean);
+        if (!cached?.length) {
+          const imgs = await fetchChapterPagesList(ch);
           setMangaPages(imgs);
-          return;
         }
-
-        if (ch.source === 'azora' && ch.chapterId) {
-          const json = await nativeGetJson(`https://api.azorafly.com/api/chapter?chapterId=${ch.chapterId}`);
-          const imgs = (json?.chapter?.images || []).map((img) => img.url).filter(Boolean);
-          setMangaPages(imgs);
-          return;
-        }
-
-        if (ch.source === 'swat' && ch.chapterId) {
-          const json = await nativeGetJson(
-            `https://appswat.com/v2/api/v2/chapters/${ch.chapterId}/`,
-            SWAT_API_HEADERS
-          );
-          const imgs = (json?.images || [])
-            .sort((a, b) => (a.order || 0) - (b.order || 0))
-            .map((img) => img.image)
-            .filter(Boolean);
-          setMangaPages(imgs);
-          return;
-        }
-
-        const atHome = await fetch(`https://api.mangadex.org/at-home/server/${ch.id}`).then((r) => r.json());
-        const baseUrl = atHome?.baseUrl;
-        const hash = atHome?.chapter?.hash;
-        const files = atHome?.chapter?.dataSaver || atHome?.chapter?.data || [];
-        const mode = atHome?.chapter?.dataSaver ? 'data-saver' : 'data';
-        if (baseUrl && hash && files.length) {
-          setMangaPages(files.map((f) => `${baseUrl}/${mode}/${hash}/${f}`));
+        // Smart Background Next-Chapter Prefetching (Zero-Wait Transition)
+        const chIdx = mangaChapters.findIndex((c) => c.id === ch.id);
+        const nextCh = chIdx > 0 ? mangaChapters[chIdx - 1] : null;
+        if (nextCh && !prefetchedChapterRef.current[nextCh.id]) {
+          setTimeout(async () => {
+            try {
+              const nextImgs = await fetchChapterPagesList(nextCh);
+              nextImgs.slice(0, 5).forEach((url) => {
+                const preImg = new Image();
+                preImg.src = url;
+              });
+            } catch (_) {}
+          }, 1200);
         }
       } catch (_) {
       } finally {
         setMangaPagesLoading(false);
       }
     },
-    [selectedManga]
+    [selectedManga, mangaChapters, fetchChapterPagesList]
   );
 
   // Set Watchlist Status (watching | completed | planned | on_hold)
@@ -2906,6 +3098,26 @@ export default function MobileApkApp() {
           </button>
         </div>
       </header>
+
+      {/* Global Real-Time Developer Push Broadcast Banner */}
+      {globalBroadcastMsg && (
+        <div
+          style={{
+            padding: '0.52rem 0.9rem',
+            background: '#ffffff',
+            color: '#000000',
+            fontWeight: 900,
+            fontSize: '0.75rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '0.6rem',
+            borderBottom: '1px solid #000000'
+          }}
+        >
+          <span>📢 {globalBroadcastMsg}</span>
+        </div>
+      )}
 
       {/* ==================== TAB 1: HOME (ANIME WITCHER LUXURY LAYOUT) ==================== */}
       {activeTab === 'home' && !selectedAnime && (
@@ -3894,6 +4106,7 @@ export default function MobileApkApp() {
         <main style={{ padding: activeMangaChapter ? '0' : '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
           {activeMangaChapter ? (
             <div
+              ref={mangaReaderContainerRef}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -4054,6 +4267,56 @@ export default function MobileApkApp() {
                       </button>
                     )}
 
+                    {/* Hardware Volume Keys Scroll Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setVolumeKeyScroll((v) => !v)}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '8px',
+                        background: volumeKeyScroll ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                        color: volumeKeyScroll ? '#000000' : '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔊 {isRtl ? `أزرار الصوت: ${volumeKeyScroll ? 'تمرير' : 'صوت'}` : `Vol Keys: ${volumeKeyScroll ? 'Scroll' : 'Off'}`}
+                    </button>
+
+                    {/* AMOLED Eye-Care / Contrast Booster Filter */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReaderEyeFilter((f) => (f === 'normal' ? 'warm' : f === 'warm' ? 'contrast' : 'normal'))
+                      }
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '8px',
+                        background: readerEyeFilter !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                        color: readerEyeFilter !== 'normal' ? '#000000' : '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {readerEyeFilter === 'normal'
+                        ? isRtl
+                          ? '👁️ ألوان أصلية'
+                          : '👁️ Normal'
+                        : readerEyeFilter === 'warm'
+                        ? isRtl
+                          ? '🌙 حماية العين'
+                          : '🌙 Eye Care'
+                        : isRtl
+                        ? '⚡ تباين فائق'
+                        : '⚡ Contrast+'}
+                    </button>
+
                     <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800, alignSelf: 'center', whiteSpace: 'nowrap' }}>
                       {isRtl ? '💡 اضغط على الصورة لإخفاء/إظهار الشريط' : '💡 Tap page to toggle HUD'}
                     </span>
@@ -4081,7 +4344,13 @@ export default function MobileApkApp() {
                         height: 'auto',
                         display: 'block',
                         margin: '0 auto',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        filter:
+                          readerEyeFilter === 'warm'
+                            ? 'sepia(0.24) brightness(0.92)'
+                            : readerEyeFilter === 'contrast'
+                            ? 'contrast(1.16) saturate(1.12)'
+                            : 'none'
                       }}
                     />
                   </div>
@@ -4139,7 +4408,13 @@ export default function MobileApkApp() {
                         maxWidth: readerZoom === 100 ? '100vw' : 'none',
                         height: 'auto',
                         display: 'block',
-                        margin: '0 auto'
+                        margin: '0 auto',
+                        filter:
+                          readerEyeFilter === 'warm'
+                            ? 'sepia(0.24) brightness(0.92)'
+                            : readerEyeFilter === 'contrast'
+                            ? 'contrast(1.16) saturate(1.12)'
+                            : 'none'
                       }}
                     />
                   ))}
@@ -5342,6 +5617,71 @@ export default function MobileApkApp() {
                       </div>
                     )}
                   </div>
+
+                  {/* Developer Global Push Broadcast Transmitter */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
+                      📢 {isRtl ? 'بث إشعار عام فوري لجميع الهواتف والموقع:' : 'Global Real-Time Push Broadcast Banner:'}
+                    </div>
+                    <input
+                      type="text"
+                      value={devBroadcastInput}
+                      onChange={(e) => setDevBroadcastInput(e.target.value)}
+                      placeholder={
+                        globalBroadcastMsg ||
+                        (isRtl ? 'اكتب نص الإشعار ليظهر فوراً أعلى جميع نسخ التطبيق...' : 'Enter broadcast message...')
+                      }
+                      style={{
+                        width: '100%',
+                        padding: '0.58rem 0.75rem',
+                        borderRadius: '10px',
+                        background: '#000',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: '0.76rem',
+                        marginBottom: '0.45rem'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '0.45rem' }}>
+                      <button
+                        type="button"
+                        disabled={devBroadcastBusy}
+                        onClick={() => handleDevSendBroadcast(false)}
+                        style={{
+                          flex: 1,
+                          padding: '0.62rem',
+                          borderRadius: '10px',
+                          border: 'none',
+                          background: '#ffffff',
+                          color: '#000000',
+                          fontWeight: 900,
+                          fontSize: '0.76rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {devBroadcastBusy ? '⏳...' : isRtl ? '📢 بث الإشعار للجميع' : '📢 Broadcast Now'}
+                      </button>
+                      {globalBroadcastMsg && (
+                        <button
+                          type="button"
+                          disabled={devBroadcastBusy}
+                          onClick={() => handleDevSendBroadcast(true)}
+                          style={{
+                            padding: '0.62rem 0.85rem',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(255,255,255,0.25)',
+                            background: 'rgba(255,255,255,0.08)',
+                            color: '#ffffff',
+                            fontWeight: 900,
+                            fontSize: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🗑️ {isRtl ? 'إخفاء' : 'Clear'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>
@@ -5693,6 +6033,57 @@ export default function MobileApkApp() {
             </div>
           </div>
 
+          {/* In-App Cloud OTA Update Checker & Direct APK Installer */}
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '0.75rem',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 900, fontSize: '0.86rem' }}>
+                🔄 {isRtl ? 'نظام التحديث الهوائي الفوري (OTA Update)' : 'Cloud OTA App Update'}
+              </div>
+              <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
+                {isRtl
+                  ? 'الإصدار الحالي: BLACK X Mobile v3.3 Pro (120Hz Full Package)'
+                  : 'Current Version: BLACK X Mobile v3.3 Pro (120Hz Full Package)'}
+              </div>
+            </div>
+            <a
+              href="https://github.com/Hacker5055/black-x-anime/releases/download/v3.0-mobile-120hz/BLACK-X-Mobile-120Hz.apk"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() =>
+                showToast(
+                  isRtl
+                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile Pro 120Hz المباشرة...'
+                    : '✓ Downloading latest BLACK X Mobile Pro 120Hz APK...'
+                )
+              }
+              style={{
+                padding: '0.52rem 0.9rem',
+                borderRadius: '11px',
+                background: '#ffffff',
+                color: '#000000',
+                fontWeight: 900,
+                fontSize: '0.75rem',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              ⬇ {isRtl ? 'تحديث مباشر الآن' : 'Update APK Now'}
+            </a>
+          </div>
+
           {/* 6-Tab Personal Library Manager (Favorites, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
           <div style={{ marginTop: '1.15rem' }}>
             <h3 style={{ margin: '0 0 0.55rem', fontSize: '0.95rem', fontWeight: 900 }}>
@@ -5964,58 +6355,130 @@ export default function MobileApkApp() {
                     pointerEvents: 'auto'
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setVideoFullscreen(false)}
-                    style={{
-                      padding: '0.38rem 0.8rem',
-                      borderRadius: '10px',
-                      background: 'rgba(255,255,255,0.16)',
-                      border: '1px solid rgba(255,255,255,0.3)',
-                      color: '#fff',
-                      fontWeight: 900,
-                      fontSize: '0.75rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ✕ {isRtl ? 'خروج من ملء الشاشة' : 'Exit Fullscreen'}
-                  </button>
-                  <span style={{ fontWeight: 900, fontSize: '0.8rem', color: '#fff', textShadow: '0 2px 6px #000' }}>
-                    {selectedAnime.titleEn} • {activeEpisode.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setVideoFitMode((m) => (m === 'cover' ? 'contain' : m === 'contain' ? 'fill' : 'cover'))
-                    }
-                    style={{
-                      padding: '0.38rem 0.8rem',
-                      borderRadius: '10px',
-                      background: '#ffffff',
-                      border: 'none',
-                      color: '#000',
-                      fontWeight: 900,
-                      fontSize: '0.74rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    📐{' '}
-                    {videoFitMode === 'cover'
-                      ? isRtl
-                        ? 'ملء الشاشة (Cover)'
-                        : 'Full Cover'
-                      : videoFitMode === 'fill'
-                      ? isRtl
-                        ? 'تمديد كامل (Fill)'
-                        : 'Stretch Fill'
-                      : isRtl
-                      ? 'أبعاد أصلية (16:9)'
-                      : 'Original 16:9'}
-                  </button>
+                  {videoTouchLocked ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVideoTouchLocked(false);
+                        showToast(isRtl ? '🔓 تم فتح قفل اللمس' : '🔓 Touch unlocked');
+                      }}
+                      style={{
+                        padding: '0.42rem 0.9rem',
+                        borderRadius: '99px',
+                        background: '#ffffff',
+                        border: 'none',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.76rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔒 {isRtl ? 'الشاشة مقفلة — اضغط لفتح القفل' : 'Screen Locked — Tap to Unlock'}
+                    </button>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => setVideoFullscreen(false)}
+                          style={{
+                            padding: '0.38rem 0.75rem',
+                            borderRadius: '10px',
+                            background: 'rgba(255,255,255,0.16)',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            color: '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.74rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✕ {isRtl ? 'خروج' : 'Exit'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVideoTouchLocked(true);
+                            showToast(isRtl ? '🔒 تم قفل لمس الشاشة لمنع اللمس الخاطئ' : '🔒 Screen touch locked');
+                          }}
+                          style={{
+                            padding: '0.38rem 0.7rem',
+                            borderRadius: '10px',
+                            background: 'rgba(255,255,255,0.16)',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            color: '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.74rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🔒 {isRtl ? 'قفل اللمس' : 'Lock'}
+                        </button>
+                      </div>
+                      <span style={{ fontWeight: 900, fontSize: '0.78rem', color: '#fff', textShadow: '0 2px 6px #000' }}>
+                        {selectedAnime.titleEn} • {activeEpisode.name}
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (videoRef.current) {
+                              videoRef.current.currentTime = Math.min(
+                                videoRef.current.duration || 9999,
+                                (videoRef.current.currentTime || 0) + 85
+                              );
+                              showToast(isRtl ? '⏭ تم تخطي المقدمة (+85 ثانية)' : '⏭ Skipped Intro (+85s)');
+                            }
+                          }}
+                          style={{
+                            padding: '0.38rem 0.7rem',
+                            borderRadius: '10px',
+                            background: 'rgba(255,255,255,0.18)',
+                            border: '1px solid rgba(255,255,255,0.35)',
+                            color: '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.72rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⏭ +85s
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVideoFitMode((m) => (m === 'cover' ? 'contain' : m === 'contain' ? 'fill' : 'cover'))
+                          }
+                          style={{
+                            padding: '0.38rem 0.75rem',
+                            borderRadius: '10px',
+                            background: '#ffffff',
+                            border: 'none',
+                            color: '#000',
+                            fontWeight: 900,
+                            fontSize: '0.73rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📐{' '}
+                          {videoFitMode === 'cover'
+                            ? isRtl
+                              ? 'ملء (Cover)'
+                              : 'Cover'
+                            : videoFitMode === 'fill'
+                            ? isRtl
+                              ? 'تمديد (Fill)'
+                              : 'Fill'
+                            : '16:9'}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
               <div
+                onTouchStart={handleVideoTouchStart}
+                onTouchMove={handleVideoTouchMove}
+                onTouchEnd={handleVideoTouchEnd}
                 style={
                   videoFullscreen
                     ? { position: 'relative', width: '100vw', height: '100vh', background: '#000000' }
@@ -6046,12 +6509,38 @@ export default function MobileApkApp() {
                     <video
                       ref={videoRef}
                       src={playingVideoUrl}
-                      controls
+                      controls={!videoTouchLocked}
                       autoPlay
                       playsInline
                       referrerPolicy="no-referrer"
                       onError={handleVideoElementError}
+                      onLoadedMetadata={(e) => {
+                        try {
+                          const savedSec = Number(localStorage.getItem(`bx_ep_sec_${activeEpisode.docId}`) || 0);
+                          if (savedSec > 12 && e.currentTarget.duration && savedSec < e.currentTarget.duration - 20) {
+                            e.currentTarget.currentTime = savedSec;
+                            const m = Math.floor(savedSec / 60);
+                            const s = String(Math.floor(savedSec % 60)).padStart(2, '0');
+                            showToast(
+                              isRtl
+                                ? `⏯ تم استئناف الحلقة تلقائياً من ${m}:${s}`
+                                : `⏯ Auto-resumed episode at ${m}:${s}`
+                            );
+                          }
+                        } catch (_) {}
+                      }}
+                      onTimeUpdate={(e) => {
+                        try {
+                          const cur = Math.floor(e.currentTarget.currentTime || 0);
+                          if (cur > 5 && cur % 3 === 0) {
+                            localStorage.setItem(`bx_ep_sec_${activeEpisode.docId}`, String(cur));
+                          }
+                        } catch (_) {}
+                      }}
                       onEnded={() => {
+                        try {
+                          localStorage.removeItem(`bx_ep_sec_${activeEpisode.docId}`);
+                        } catch (_) {}
                         if (!autoNextEp) return;
                         const idx = animeEpisodes.findIndex((e) => e.docId === activeEpisode.docId);
                         if (idx !== -1 && idx + 1 < animeEpisodes.length) {
@@ -6062,18 +6551,69 @@ export default function MobileApkApp() {
                         width: '100%',
                         height: '100%',
                         objectFit: videoFullscreen ? videoFitMode : 'contain',
-                        background: '#000'
+                        background: '#000',
+                        filter: videoBrightness !== 100 ? `brightness(${videoBrightness}%)` : 'none',
+                        pointerEvents: videoTouchLocked ? 'none' : 'auto'
                       }}
                     />
                     {/* Left/Right Double-Tap ±10s Zones */}
-                    <div
-                      onDoubleClick={() => handleVideoDoubleTap('left')}
-                      style={{ position: 'absolute', top: '18%', bottom: '28%', left: 0, width: '28%' }}
-                    />
-                    <div
-                      onDoubleClick={() => handleVideoDoubleTap('right')}
-                      style={{ position: 'absolute', top: '18%', bottom: '28%', right: 0, width: '28%' }}
-                    />
+                    {!videoTouchLocked && (
+                      <>
+                        <div
+                          onDoubleClick={() => handleVideoDoubleTap('left')}
+                          style={{ position: 'absolute', top: '18%', bottom: '28%', left: 0, width: '28%' }}
+                        />
+                        <div
+                          onDoubleClick={() => handleVideoDoubleTap('right')}
+                          style={{ position: 'absolute', top: '18%', bottom: '28%', right: 0, width: '28%' }}
+                        />
+                      </>
+                    )}
+                    {/* Live Brightness / Volume Gesture HUD */}
+                    {gestureHud && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '18%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          background: 'rgba(0,0,0,0.85)',
+                          border: '1px solid rgba(255,255,255,0.28)',
+                          padding: '0.42rem 0.95rem',
+                          borderRadius: '99px',
+                          fontWeight: 900,
+                          fontSize: '0.8rem',
+                          color: '#ffffff',
+                          zIndex: 30,
+                          pointerEvents: 'none'
+                        }}
+                      >
+                        {gestureHud.type === 'brightness'
+                          ? `☀️ ${isRtl ? 'السطوع' : 'Brightness'}: ${gestureHud.value}%`
+                          : `🔊 ${isRtl ? 'الصوت' : 'Volume'}: ${gestureHud.value}%`}
+                      </div>
+                    )}
+                    {/* Long-Press 2.0x Speed Boost Badge */}
+                    {longPress2x && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '12%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          background: '#ffffff',
+                          color: '#000000',
+                          padding: '0.32rem 0.85rem',
+                          borderRadius: '99px',
+                          fontWeight: 900,
+                          fontSize: '0.76rem',
+                          zIndex: 30,
+                          pointerEvents: 'none'
+                        }}
+                      >
+                        ⚡ 2.0x {isRtl ? 'سرعة مضاعفة' : 'Fast Forward'}
+                      </div>
+                    )}
                     {skipRipple && (
                       <div
                         style={{
@@ -6197,6 +6737,31 @@ export default function MobileApkApp() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (videoRef.current) {
+                            videoRef.current.currentTime = Math.min(
+                              videoRef.current.duration || 9999,
+                              (videoRef.current.currentTime || 0) + 85
+                            );
+                            showToast(isRtl ? '⏭ تم تخطي المقدمة (+85 ثانية)' : '⏭ Skipped Intro (+85s)');
+                          }
+                        }}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.14)',
+                          border: '1px solid rgba(255,255,255,0.28)',
+                          color: '#fff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⏭ {isRtl ? 'تخطي المقدمة +85s' : 'Skip Intro +85s'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
                           const speeds = [1, 1.25, 1.5, 2, 0.75];
                           const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
                           setPlaybackSpeed(next);
@@ -6218,6 +6783,12 @@ export default function MobileApkApp() {
                       <button
                         type="button"
                         onClick={() => {
+                          try {
+                            if (window.BlackXNativeAuth?.enterPipMode) {
+                              window.BlackXNativeAuth.enterPipMode();
+                              return;
+                            }
+                          } catch (_) {}
                           if (videoRef.current?.requestPictureInPicture) {
                             videoRef.current.requestPictureInPicture().catch(() => {});
                           }

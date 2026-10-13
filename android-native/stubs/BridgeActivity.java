@@ -18,5 +18,6 @@ public class BridgeActivity extends Context {
     public void setRequestedOrientation(int requestedOrientation) {}
     public void startActivityForResult(Intent intent, int requestCode) {}
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {}
+    public void enterPictureInPictureMode() {}
     public void finish() {}
 }
