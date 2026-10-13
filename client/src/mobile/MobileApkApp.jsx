@@ -779,6 +779,11 @@ export default function MobileApkApp() {
   const [userRequestBusy, setUserRequestBusy] = useState(false);
   const [cloudUserRequests, setCloudUserRequests] = useState([]);
 
+  // ==================== v8.0 GLOBAL LUXURY & NETFLIX/CRUNCHYROLL UI STATES ====================
+  const [quickPeekAnime, setQuickPeekAnime] = useState(null);
+  const [universalMangaHits, setUniversalMangaHits] = useState([]);
+  const [homeCategoryFilter, setHomeCategoryFilter] = useState('all'); // 'all' | 'series' | 'movies' | 'simulcast'
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -2535,6 +2540,128 @@ export default function MobileApkApp() {
     },
     [isDeveloper, cloudUserRequests, globalVipEnforced, cloudVipCodes, globalBroadcastMsg, globalPinnedRec, showToast]
   );
+
+  // ==================== v8.0 GLOBAL LUXURY CONTROLLERS ====================
+  // 1. Shareable BLACK X Sovereign Otaku ID Card Generator (1080x600 Canvas PNG)
+  const handleGenerateOtakuIdCard = useCallback(() => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1080;
+      canvas.height = 600;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Pure Obsidian Black Background
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 1080, 600);
+
+      // Double Luxury Frame Border
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(28, 28, 1024, 544);
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(42, 42, 996, 516);
+
+      // Header Seal
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 42px sans-serif';
+      ctx.fillText('BLACK X — SOVEREIGN OTAKU ID', 74, 115);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '700 20px sans-serif';
+      ctx.fillText('120Hz GLOBAL LUXURY EDITION • OFFICIAL MEMBERSHIP PASS', 74, 152);
+
+      // Divider Line
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(74, 178, 932, 2);
+
+      // User Identity
+      const dispName = user?.displayName || user?.username || 'BLACK X HUNTER';
+      const handleName = `@${user?.username || 'blackx_member'}`;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 54px sans-serif';
+      ctx.fillText(dispName, 74, 265);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.font = '700 26px monospace';
+      ctx.fillText(`${handleName}  •  Lv.${Math.floor(userXp / 100) + 1} (${userXp} XP)`, 74, 312);
+
+      // Sovereign Title Pill
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(74, 342, 420, 54);
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 26px sans-serif';
+      ctx.fillText(selectedSovereignTitle, 96, 378);
+
+      // Stats Boxes
+      const stats = [
+        { label: 'EPISODES', val: String(watchHistory.length) },
+        { label: 'MANHWA CH.', val: String(mangaHistory.length) },
+        { label: 'FAVORITES', val: String(favorites.length) },
+        { label: 'TIER', val: userVipTier === 'vip_monarch' ? 'MONARCH' : userVipTier === 'vip_basic' ? 'VIP' : 'MEMBER' }
+      ];
+      stats.forEach((st, idx) => {
+        const bx = 74 + idx * 238;
+        const by = 430;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx, by, 218, 96);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 34px sans-serif';
+        ctx.fillText(st.val, bx + 24, by + 48);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = '800 16px sans-serif';
+        ctx.fillText(st.label, bx + 24, by + 78);
+      });
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `BLACK-X-ID-${user?.username || 'Sovereign'}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast('🪪 تم توليد وتحميل بطاقة هويتك الملكية (BLACK X ID) بدقة عالية!');
+    } catch (_) {
+      showToast('تعذر توليد بطاقة الهوية');
+    }
+  }, [user, userXp, selectedSovereignTitle, watchHistory.length, mangaHistory.length, favorites.length, userVipTier, showToast]);
+
+  // 2. Universal Spotlight Search (Simultaneously searches Manhwa when searching in Catalog)
+  useEffect(() => {
+    const q = String(searchQuery || '').trim();
+    if (!q || q.length < 2) {
+      setUniversalMangaHits([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://api.azorafly.com/api/query?page=1&perPage=8&searchTerm=${encodeURIComponent(q)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const mapped = (json?.posts || []).slice(0, 8).map((post) => ({
+          objectID: `az_${post.id}`,
+          slug: post.slug,
+          sourceEngine: 'azorafly',
+          sourceLabel: '🔥 BLACK X 3',
+          name: post.postTitle || 'مانهوا',
+          poster_uri: post.featuredImage || '/blackx-logo.png',
+          poster: { large: post.featuredImage || '/blackx-logo.png' },
+          type: 'مانهوا',
+          rate: String(post.averageRating || '9.4').slice(0, 3),
+          story_ar: (post.postContent || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية عبر BLACK X.'
+        }));
+        setUniversalMangaHits(mapped);
+      } catch (_) {}
+    }, 320);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [searchQuery]);
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
   useEffect(() => {
@@ -4730,187 +4857,264 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== TAB 1: HOME (ANIME WITCHER LUXURY LAYOUT) ==================== */}
+      {/* ==================== TAB 1: HOME (v8.0 NETFLIX & CRUNCHYROLL GLOBAL LUXURY CINEMA UI) ==================== */}
       {activeTab === 'home' && !selectedAnime && (
         <main style={{ animation: 'bxSlideUp 0.22s ease-out' }}>
-          {/* Hero Spotlight Banner */}
+          {/* Netflix-Style Floating Category Filter Bar (مسلسلات | أفلام | يعرض الآن | مانهوا | فاجئني) */}
+          <div
+            className="bx-mob-scroll"
+            style={{
+              display: 'flex',
+              gap: '0.42rem',
+              overflowX: 'auto',
+              padding: '0.55rem 1rem',
+              background: 'rgba(0,0,0,0.92)',
+              borderBottom: '1px solid rgba(255,255,255,0.08)'
+            }}
+          >
+            {[
+              { id: 'all', ar: '🔥 الكل', en: '🔥 All' },
+              { id: 'series', ar: '📺 مسلسلات', en: '📺 Series' },
+              { id: 'movies', ar: '🎬 أفلام', en: '🎬 Movies' },
+              { id: 'simulcast', ar: '⚡ يعرض الآن', en: '⚡ Simulcast' },
+              { id: 'manhwa', ar: '📖 مانهوا', en: '📖 Manhwa' }
+            ].map((cat) => {
+              const active = homeCategoryFilter === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => {
+                    if (cat.id === 'manhwa') {
+                      setActiveTab('manga');
+                      return;
+                    }
+                    setHomeCategoryFilter(cat.id);
+                  }}
+                  style={{
+                    padding: '0.36rem 0.85rem',
+                    borderRadius: '99px',
+                    background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                    color: active ? '#000000' : 'rgba(255,255,255,0.88)',
+                    border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.18)',
+                    fontWeight: 900,
+                    fontSize: '0.72rem',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isRtl ? cat.ar : cat.en}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Netflix / Crunchyroll Full-Bleed Vertical Cinema Hero Showcase */}
           {heroAnime && (
             <section
               style={{
                 position: 'relative',
                 width: '100%',
-                height: '390px',
+                height: '455px',
                 overflow: 'hidden',
                 borderBottom: '1px solid rgba(255,255,255,0.08)'
               }}
             >
               <img
-                src={heroAnime.banner || heroAnime.poster}
+                src={heroAnime.poster || heroAnime.banner}
                 alt={heroAnime.titleEn}
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  filter: 'brightness(0.55) contrast(1.08)'
+                  objectPosition: 'center 20%',
+                  filter: 'brightness(0.68) contrast(1.12)'
                 }}
               />
+              {/* Multi-Stop Netflix Cinema Vignette */}
               <div
                 style={{
                   position: 'absolute',
                   inset: 0,
                   background:
-                    'linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.65) 55%, #000000 100%)'
+                    'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.68) 68%, #000000 100%)'
                 }}
               />
 
+              {/* Centered Editorial Metadata & Netflix 3-Button Action Bar */}
               <div
                 style={{
                   position: 'absolute',
-                  bottom: '16px',
+                  bottom: '18px',
                   left: '16px',
                   right: '16px',
+                  textAlign: 'center',
                   display: 'flex',
-                  gap: '0.9rem',
-                  alignItems: 'flex-end'
+                  flexDirection: 'column',
+                  alignItems: 'center'
                 }}
               >
-                <img
-                  src={heroAnime.poster}
-                  alt={heroAnime.titleEn}
-                  onClick={() => handleOpenAnime(heroAnime)}
+                {/* Netflix TOP 10 Badge */}
+                <div
                   style={{
-                    width: '104px',
-                    height: '148px',
-                    objectFit: 'cover',
-                    borderRadius: '14px',
-                    border: '1.5px solid rgba(255,255,255,0.35)',
-                    boxShadow: '0 12px 28px rgba(0,0,0,0.85)',
-                    flexShrink: 0
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    marginBottom: '0.45rem',
+                    padding: '0.18rem 0.65rem',
+                    borderRadius: '6px',
+                    background: 'rgba(0,0,0,0.75)',
+                    border: '1px solid rgba(255,255,255,0.28)'
                   }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-                    <span
-                      style={{
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontSize: '0.66rem',
-                        fontWeight: 900,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      ★ {heroAnime.rating} BLACK X
-                    </span>
-                    <span
-                      style={{
-                        background: 'rgba(255,255,255,0.18)',
-                        color: '#ffffff',
-                        fontSize: '0.66rem',
-                        fontWeight: 900,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      🧬 {isRtl ? `تطابق ${getDnaMatchScore(heroAnime)}%` : `${getDnaMatchScore(heroAnime)}% Match`}
-                    </span>
-                    <span
-                      style={{
-                        background: 'rgba(255,255,255,0.14)',
-                        color: '#ffffff',
-                        fontSize: '0.66rem',
-                        fontWeight: 800,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      {heroAnime.type} • {heroAnime.state}
-                    </span>
-                  </div>
-
-                  <h1
+                >
+                  <span
                     style={{
-                      margin: '0 0 0.3rem',
-                      fontSize: '1.15rem',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontSize: '0.58rem',
                       fontWeight: 900,
-                      lineHeight: 1.25,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden'
+                      padding: '0.08rem 0.35rem',
+                      borderRadius: '3px',
+                      letterSpacing: '0.04em'
                     }}
                   >
-                    {heroAnime.titleEn}
-                  </h1>
+                    TOP 10
+                  </span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#ffffff' }}>
+                    {isRtl ? `#${heroSlide + 1} في BLACK X اليوم` : `#${heroSlide + 1} on BLACK X Today`}
+                  </span>
+                </div>
 
-                  <p
+                {/* Giant Cinema Title */}
+                <h1
+                  style={{
+                    margin: '0 0 0.35rem',
+                    fontSize: '1.42rem',
+                    fontWeight: 900,
+                    lineHeight: 1.2,
+                    letterSpacing: '-0.01em',
+                    textShadow: '0 4px 18px rgba(0,0,0,0.95)',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {heroAnime.titleEn}
+                </h1>
+
+                {/* Netflix Dot-Separated Metadata Tags */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    flexWrap: 'wrap',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    color: 'rgba(255,255,255,0.85)',
+                    marginBottom: '0.85rem'
+                  }}
+                >
+                  <span style={{ color: '#ffffff', fontWeight: 900 }}>
+                    🧬 {getDnaMatchScore(heroAnime)}% {isRtl ? 'تطابق' : 'Match'}
+                  </span>
+                  <span>•</span>
+                  <span>★ {heroAnime.rating}</span>
+                  <span>•</span>
+                  <span>{heroAnime.type}</span>
+                  <span>•</span>
+                  <span
                     style={{
-                      margin: '0 0 0.65rem',
-                      fontSize: '0.74rem',
-                      color: 'rgba(255,255,255,0.72)',
-                      lineHeight: 1.45,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden'
+                      padding: '0.06rem 0.38rem',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(255,255,255,0.4)',
+                      fontSize: '0.62rem',
+                      fontWeight: 900
                     }}
                   >
-                    {heroAnime.storyAr}
-                  </p>
+                    4K 120Hz
+                  </span>
+                </div>
 
-                  <div style={{ display: 'flex', gap: '0.45rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenAnime(heroAnime)}
-                      style={{
-                        flex: 1,
-                        padding: '0.58rem 0.85rem',
-                        borderRadius: '11px',
-                        border: 'none',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 900,
-                        fontSize: '0.78rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ▶ {isRtl ? 'شاهد الآن' : 'Watch Now'}
-                    </button>
-                    {heroAnime.youtubeId && (
-                      <button
-                        type="button"
-                        onClick={() => setHeroTrailerOpen((v) => !v)}
-                        style={{
-                          padding: '0.58rem 0.7rem',
-                          borderRadius: '11px',
-                          border: '1px solid rgba(255,255,255,0.28)',
-                          background: 'rgba(255,255,255,0.1)',
-                          color: '#ffffff',
-                          fontWeight: 900,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🎬 {isRtl ? 'تريلر' : 'Trailer'}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(heroAnime)}
-                      style={{
-                        padding: '0.58rem 0.75rem',
-                        borderRadius: '11px',
-                        border: '1px solid rgba(255,255,255,0.28)',
-                        background: 'rgba(255,255,255,0.08)',
-                        color: '#ffffff',
-                        fontWeight: 900,
-                        fontSize: '0.8rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {favorites.some((f) => f.objectID === heroAnime.objectID) ? '♥' : '＋'}
-                    </button>
-                  </div>
+                {/* Netflix 3-Column Hero Action Row (＋ قائمتي | ▶ تشغيل الآن | ⓘ التفاصيل) */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '76px 1fr 76px',
+                    gap: '0.65rem',
+                    width: '100%',
+                    maxWidth: '370px',
+                    alignItems: 'center'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(heroAnime)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      padding: '0.4rem 0.2rem',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#ffffff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.15rem', fontWeight: 900 }}>
+                      {favorites.some((f) => f.objectID === heroAnime.objectID) ? '✓' : '＋'}
+                    </span>
+                    <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)' }}>
+                      {isRtl ? 'قائمتي' : 'My List'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAnime(heroAnime)}
+                    style={{
+                      padding: '0.68rem 1.1rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontWeight: 900,
+                      fontSize: '0.88rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.45rem',
+                      boxShadow: '0 8px 24px rgba(255,255,255,0.18)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span>▶</span>
+                    <span>{isRtl ? 'تشغيل الآن' : 'Play Now'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setQuickPeekAnime(heroAnime)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      padding: '0.4rem 0.2rem',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#ffffff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.12rem', fontWeight: 900 }}>ⓘ</span>
+                    <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)' }}>
+                      {isRtl ? 'التفاصيل' : 'Info'}
+                    </span>
+                  </button>
                 </div>
               </div>
 
@@ -5140,18 +5344,18 @@ export default function MobileApkApp() {
             )}
           </section>
 
-          {/* Continue Watching Strip (Synced with Website) */}
+          {/* Netflix-Style Continue Watching Strip (With Play Overlay + Bottom Progress Bar) */}
           {watchHistory.length > 0 && (
-            <section style={{ padding: '1rem 1rem 0.2rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+            <section style={{ padding: '0.9rem 1rem 0.2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
                 <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
-                  ⚡ {isRtl ? 'أكمل المشاهدة' : 'Continue Watching'}
+                  ▶ {isRtl ? 'متابعة المشاهدة' : 'Continue Watching'}
                 </h2>
-                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>
-                  {isRtl ? 'متزامن مع حسابك' : 'Cloud Synced'}
+                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
+                  {isRtl ? 'مزامنة سحابية' : 'Cloud Synced'}
                 </span>
               </div>
-              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
                 {watchHistory.slice(0, 12).map((h, i) => (
                   <div
                     key={`${h.objectID}-${i}`}
@@ -5171,37 +5375,200 @@ export default function MobileApkApp() {
                       })
                     }
                     style={{
-                      minWidth: '155px',
-                      background: '#0a0a0c',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      borderRadius: '14px',
-                      padding: '0.55rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.6rem',
+                      minWidth: '116px',
+                      maxWidth: '116px',
+                      background: '#09090c',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
                       cursor: 'pointer'
                     }}
                   >
-                    <img
-                      src={h.poster}
-                      alt={h.titleEn}
-                      style={{ width: '46px', height: '64px', borderRadius: '9px', objectFit: 'cover', flexShrink: 0 }}
-                    />
-                    <div style={{ minWidth: 0 }}>
+                    <div style={{ position: 'relative', width: '116px', height: '152px' }}>
+                      <img
+                        src={h.poster}
+                        alt={h.titleEn}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.82)' }}
+                      />
                       <div
                         style={{
-                          fontSize: '0.76rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}
                       >
-                        {h.titleEn}
+                        <span
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.72)',
+                            border: '2px solid #ffffff',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.85rem',
+                            fontWeight: 900
+                          }}
+                        >
+                          ▶
+                        </span>
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.2rem' }}>
-                        ▶ {isRtl ? `الحلقة ${h.episode}` : `Episode ${h.episode}`}
+                      {/* Netflix Bottom Episode Progress Bar */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: '3.5px',
+                          background: 'rgba(255,255,255,0.22)'
+                        }}
+                      >
+                        <div style={{ width: `${62 + ((i * 11) % 30)}%`, height: '100%', background: '#ffffff' }} />
                       </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: '0.38rem 0.45rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: '#0c0c10'
+                      }}
+                    >
+                      <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#ffffff' }}>
+                        {isRtl ? `ح ${h.episode}` : `E${h.episode}`}
+                      </span>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuickPeekAnime({
+                            objectID: h.objectID,
+                            slug: h.slug,
+                            titleEn: h.titleEn,
+                            titleAr: h.titleAr,
+                            poster: h.poster,
+                            banner: h.poster,
+                            rating: '9.2',
+                            type: 'مسلسل',
+                            state: 'مستمر',
+                            storyAr: 'تابع مشاهدة هذا العمل من حيث توقفت بأعلى جودة 1080p.'
+                          });
+                        }}
+                        style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.75)', fontWeight: 900 }}
+                      >
+                        ⓘ
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ==================== v8.0 NETFLIX SIGNATURE TOP 10 RANKED ROW WITH GIANT OUTLINED NUMBERS ==================== */}
+          {popularList.length > 0 && (
+            <section style={{ padding: '0.95rem 1rem 0.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <h2 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 900 }}>
+                  🏆 {isRtl ? 'أفضل 10 أعمال في BLACK X اليوم' : 'Top 10 on BLACK X Today'}
+                </h2>
+                <span
+                  style={{
+                    fontSize: '0.62rem',
+                    fontWeight: 900,
+                    padding: '0.12rem 0.45rem',
+                    borderRadius: '4px',
+                    background: '#ffffff',
+                    color: '#000000'
+                  }}
+                >
+                  TOP 10
+                </span>
+              </div>
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.85rem', overflowX: 'auto', paddingBottom: '0.45rem' }}>
+                {popularList.slice(0, 10).map((item, idx) => (
+                  <div
+                    key={`top10-${item.objectID}`}
+                    className="bx-mob-card"
+                    onClick={() => handleOpenAnime(item)}
+                    style={{
+                      position: 'relative',
+                      minWidth: '148px',
+                      height: '176px',
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      justifyContent: 'flex-end',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {/* Giant Outlined Netflix Ranking Number (1 to 10) */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: idx === 9 ? '-6px' : '2px',
+                        bottom: '-12px',
+                        fontSize: idx === 9 ? '4.8rem' : '5.8rem',
+                        fontWeight: 900,
+                        lineHeight: 1,
+                        color: '#000000',
+                        WebkitTextStroke: '2.4px rgba(255,255,255,0.88)',
+                        textShadow: '0 6px 18px rgba(0,0,0,0.95)',
+                        zIndex: 2,
+                        userSelect: 'none',
+                        pointerEvents: 'none',
+                        fontFamily: 'Impact, system-ui, sans-serif'
+                      }}
+                    >
+                      {idx + 1}
+                    </span>
+
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '112px',
+                        height: '166px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        background: '#0d0d10',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        zIndex: 1
+                      }}
+                    >
+                      <img
+                        src={item.poster}
+                        alt={item.titleEn}
+                        loading="lazy"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuickPeekAnime(item);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '5px',
+                          right: '5px',
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.78)',
+                          border: '1px solid rgba(255,255,255,0.35)',
+                          color: '#ffffff',
+                          fontSize: '0.68rem',
+                          fontWeight: 900,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        ⓘ
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -5264,45 +5631,53 @@ export default function MobileApkApp() {
             </section>
           )}
 
-          {/* Horizontal Mobile Sections (Airing, Latest, Popular, Top Ranked, Movies, Seasonal) */}
+          {/* Horizontal Mobile Sections (Filtered by Netflix Category Strip: All / Series / Movies / Simulcast) */}
           {[
             {
+              cat: 'simulcast',
               titleAr: '🟢 يعرض الآن هذا الموسم (أنميات مستمرة)',
               titleEn: '🟢 Currently Airing This Season',
               items: airingList,
               sortKey: 'series_fav_count_desc'
             },
             {
+              cat: 'series',
               titleAr: '🔥 أحدث الأنميات والحلقات المضافة',
               titleEn: '🔥 Recently Updated Anime',
               items: latestList,
               sortKey: 'series_date_created'
             },
             {
+              cat: 'series',
               titleAr: '👑 الأكثر شعبية في BLACK X (6,973)',
               titleEn: '👑 Most Popular Anime (6,973)',
               items: popularList,
               sortKey: 'series_fav_count_desc'
             },
             {
+              cat: 'series',
               titleAr: '⭐ أساطير الأنمي الأعلى تقييماً في BLACK X',
               titleEn: '⭐ Highest Rated on BLACK X',
               items: topRankedList,
               sortKey: 'best_mal_ranked'
             },
             {
+              cat: 'movies',
               titleAr: '🎬 أفلام الأنمي السينمائية (1,266 فيلم)',
               titleEn: '🎬 Blockbuster Anime Movies (1,266)',
               items: moviesList,
               sortKey: 'series_fav_count_desc'
             },
             {
+              cat: 'simulcast',
               titleAr: '🍂 أحدث إضافات الموسم',
               titleEn: '🍂 New Seasonal Releases',
               items: seasonalList,
               sortKey: 'series_date_created'
             }
-          ].map((sec, sIdx) => (
+          ]
+            .filter((sec) => homeCategoryFilter === 'all' || sec.cat === homeCategoryFilter)
+            .map((sec, sIdx) => (
             <section key={sIdx} style={{ padding: '0.95rem 1rem 0.2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
                 <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
@@ -5363,10 +5738,10 @@ export default function MobileApkApp() {
                           position: 'relative',
                           width: '124px',
                           height: '176px',
-                          borderRadius: '14px',
+                          borderRadius: '12px',
                           overflow: 'hidden',
                           background: '#0d0d10',
-                          border: '1px solid rgba(255,255,255,0.12)'
+                          border: '1px solid rgba(255,255,255,0.14)'
                         }}
                       >
                         <img
@@ -5390,6 +5765,30 @@ export default function MobileApkApp() {
                           }}
                         >
                           ★ {item.rating}
+                        </span>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuickPeekAnime(item);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            left: '6px',
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.78)',
+                            border: '1px solid rgba(255,255,255,0.35)',
+                            color: '#ffffff',
+                            fontSize: '0.68rem',
+                            fontWeight: 900,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          ⓘ
                         </span>
                         <span
                           style={{
@@ -5430,7 +5829,7 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 2: FULL 6,973 ANIME CATALOG & GENRES ==================== */}
+      {/* ==================== TAB 2: FULL 6,973 ANIME CATALOG & GENRES (WITH v8.0 UNIVERSAL SPOTLIGHT SEARCH) ==================== */}
       {activeTab === 'catalog' && !selectedAnime && (
         <main style={{ padding: '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
           {/* Instant Mobile Search Input */}
@@ -5453,8 +5852,8 @@ export default function MobileApkApp() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={
                 isRtl
-                  ? 'ابحث في 6,973 أنمي وفيلم وأوفا (مثال: Solo Leveling, One Piece)...'
-                  : 'Search 6,973 anime, movies & OVAs...'
+                  ? 'بحث شامل وموحد في الأنمي والمانهوا (مثال: Solo Leveling, One Piece)...'
+                  : 'Universal search across Anime & Manhwa...'
               }
               style={{
                 flex: 1,
@@ -5476,6 +5875,63 @@ export default function MobileApkApp() {
               </button>
             )}
           </div>
+
+          {/* Universal Spotlight Search: Matching Manhwa Results Row */}
+          {searchQuery.trim().length >= 2 && universalMangaHits.length > 0 && (
+            <div
+              style={{
+                marginBottom: '0.85rem',
+                padding: '0.7rem',
+                borderRadius: '14px',
+                background: '#09090d',
+                border: '1px solid rgba(255,255,255,0.18)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                <span style={{ fontWeight: 900, fontSize: '0.78rem' }}>
+                  📖 {isRtl ? `نتائج المانهوا والمانجا المطابقة (${universalMangaHits.length})` : `Matching Manhwa (${universalMangaHits.length})`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMangaQuery(searchQuery);
+                    setActiveTab('manga');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '0.7rem',
+                    fontWeight: 900,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isRtl ? 'فتح في قسم المانجا ←' : 'Open in Manga →'}
+                </button>
+              </div>
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                {universalMangaHits.map((mh) => (
+                  <div
+                    key={mh.objectID}
+                    onClick={() => {
+                      setActiveTab('manga');
+                      handleOpenManga(mh);
+                    }}
+                    style={{ minWidth: '96px', maxWidth: '96px', cursor: 'pointer' }}
+                  >
+                    <img
+                      src={mh.poster_uri}
+                      alt={mh.name}
+                      style={{ width: '96px', height: '132px', borderRadius: '10px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.18)' }}
+                    />
+                    <div style={{ fontSize: '0.68rem', fontWeight: 900, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {mh.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Sort Mode Selector */}
           <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.45rem', overflowX: 'auto', marginBottom: '0.65rem' }}>
@@ -7405,6 +7861,23 @@ export default function MobileApkApp() {
                   </button>
                   <button
                     type="button"
+                    onClick={handleGenerateOtakuIdCard}
+                    style={{
+                      padding: '0.65rem 0.75rem',
+                      borderRadius: '11px',
+                      border: '1px solid rgba(255,255,255,0.28)',
+                      background: 'rgba(255,255,255,0.1)',
+                      color: '#fff',
+                      fontWeight: 900,
+                      fontSize: '0.76rem',
+                      cursor: 'pointer'
+                    }}
+                    title="تحميل بطاقة الهوية الملكية"
+                  >
+                    🪪 ID
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       setUser(null);
                       localStorage.removeItem('bx_mob_user');
@@ -7526,8 +7999,28 @@ export default function MobileApkApp() {
                         fontWeight: 900
                       }}
                     >
-                      DEV v7.0
+                      DEV v8.0
                     </span>
+                  </div>
+
+                  {/* Developer Live Platform Telemetry Strip */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem', marginBottom: '0.75rem' }}>
+                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{cloudVipCodes.length}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>أكواد نشطة</div>
+                    </div>
+                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{cloudUserRequests.length}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>طلبات الأعضاء</div>
+                    </div>
+                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{globalVipEnforced ? '🔒 مفعل' : '🔓 مفتوح'}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>بوابة VIP</div>
+                    </div>
+                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{globalBroadcastMsg ? '🟢 مباشر' : '⚪ صامت'}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>البث العام</div>
+                    </div>
                   </div>
 
                   {/* Developer 4-Sub-Tab Switcher */}
@@ -11020,22 +11513,169 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== BOTTOM 6-TAB FLOATING AMOLED NAVIGATION BAR ==================== */}
+      {/* ==================== v8.0 NETFLIX QUICK PEEK / INFO BOTTOM SHEET ==================== */}
+      {quickPeekAnime && (
+        <div
+          onClick={() => setQuickPeekAnime(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9850,
+            background: 'rgba(0,0,0,0.82)',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              borderTopLeftRadius: '24px',
+              borderTopRightRadius: '24px',
+              background: '#0a0a0f',
+              borderTop: '1.5px solid rgba(255,255,255,0.28)',
+              padding: '1.15rem 1.1rem 1.8rem',
+              boxShadow: '0 -16px 48px rgba(0,0,0,0.95)',
+              animation: 'bxSlideUp 0.2s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+              <img
+                src={quickPeekAnime.poster}
+                alt={quickPeekAnime.titleEn}
+                style={{
+                  width: '88px',
+                  height: '126px',
+                  borderRadius: '12px',
+                  objectFit: 'cover',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  flexShrink: 0
+                }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <h3 style={{ margin: '0 0 0.3rem', fontSize: '1.02rem', fontWeight: 900, lineHeight: 1.25 }}>
+                    {quickPeekAnime.titleEn}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setQuickPeekAnime(null)}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.12)',
+                      border: 'none',
+                      color: '#ffffff',
+                      fontWeight: 900,
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', fontSize: '0.68rem', fontWeight: 900, color: 'rgba(255,255,255,0.75)', marginBottom: '0.45rem' }}>
+                  <span style={{ color: '#ffffff' }}>🧬 {getDnaMatchScore(quickPeekAnime)}% Match</span>
+                  <span>•</span>
+                  <span>★ {quickPeekAnime.rating || '9.2'}</span>
+                  <span>•</span>
+                  <span>{quickPeekAnime.type || 'مسلسل'}</span>
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.73rem',
+                    color: 'rgba(255,255,255,0.78)',
+                    lineHeight: 1.48,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {quickPeekAnime.storyAr || 'شاهد جميع حلقات هذا الأنمي بأعلى جودة 1080p بدون إعلانات عبر سيرفرات BLACK X.'}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', marginTop: '0.9rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = quickPeekAnime;
+                  setQuickPeekAnime(null);
+                  handleOpenAnime(target);
+                }}
+                style={{
+                  padding: '0.68rem',
+                  borderRadius: '10px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ▶ {isRtl ? 'تشغيل ومشاهدة الحلقات' : 'Play & Episodes'}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleFavorite(quickPeekAnime)}
+                style={{
+                  padding: '0.68rem 0.9rem',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.76rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {favorites.some((f) => f.objectID === quickPeekAnime.objectID) ? '✓ قائمتي' : '＋ قائمتي'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleSpeakText(quickPeekAnime.storyAr || quickPeekAnime.titleEn)}
+                style={{
+                  padding: '0.68rem 0.8rem',
+                  borderRadius: '10px',
+                  background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                  color: ttsSpeaking ? '#000000' : '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.76rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🔊
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== BOTTOM 6-TAB FLOATING APPLE-STYLE GLASS PILL DOCK ==================== */}
       <nav
         style={{
           position: 'fixed',
-          bottom: '10px',
-          left: '10px',
-          right: '10px',
+          bottom: '12px',
+          left: '12px',
+          right: '12px',
           zIndex: 250,
           display: 'grid',
           gridTemplateColumns: 'repeat(6, 1fr)',
-          padding: '0.38rem',
-          borderRadius: '20px',
-          background: 'rgba(8, 8, 10, 0.94)',
-          backdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255, 255, 255, 0.16)',
-          boxShadow: '0 14px 36px rgba(0, 0, 0, 0.92)'
+          padding: '0.36rem 0.42rem',
+          borderRadius: '99px',
+          background: 'rgba(6, 6, 9, 0.9)',
+          backdropFilter: 'blur(28px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 16px 42px rgba(0, 0, 0, 0.95)'
         }}
       >
         {[
