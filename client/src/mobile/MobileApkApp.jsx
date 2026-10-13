@@ -736,6 +736,34 @@ export default function MobileApkApp() {
   const [bgAudioMode, setBgAudioMode] = useState(false);
   const backupFileInputRef = useRef(null);
 
+  // ==================== v6.0 GOD-TIER ENGINE STATES ====================
+  // 1. Real-Time Anime Visual Enhancer (4K-Feel Shader Presets) & Smart Auto-Skip Intro
+  const [visualShaderMode, setVisualShaderMode] = useState('original'); // 'original' | 'upscale4k' | 'amoled_hdr' | 'cinema_imax'
+  const [autoSkipIntro, setAutoSkipIntro] = useState(() => localStorage.getItem('bx_mob_autoskip_intro') === 'true');
+  const autoSkippedEpRef = useRef({});
+
+  // 2. Webtoon Bionic Reader v6 (Touch-Paused Auto-Scroll, Dual-Page Spread, Double-Tap 200% Zoom)
+  const [readerTouchPaused, setReaderTouchPaused] = useState(false);
+  const [dualPageSpread, setDualPageSpread] = useState(false);
+
+  // 3. Sovereign Titles & 4-Pillar Master Rating (Story / Animation / OST / Characters)
+  const [selectedSovereignTitle, setSelectedSovereignTitle] = useState(
+    () => localStorage.getItem('bx_mob_sovereign_title') || '⚔️ صياد الرتبة S'
+  );
+  const [revStoryScore, setRevStoryScore] = useState(10);
+  const [revAnimScore, setRevAnimScore] = useState(10);
+  const [revOstScore, setRevOstScore] = useState(10);
+  const [revCharScore, setRevCharScore] = useState(10);
+
+  // 4. Developer Live Command Center v6 (Live Cloud User Inspector + Global Featured Spotlight Pin)
+  const [devInspectQuery, setDevInspectQuery] = useState('');
+  const [devInspectedUser, setDevInspectedUser] = useState(null);
+  const [devInspectBusy, setDevInspectBusy] = useState(false);
+  const [globalPinnedRec, setGlobalPinnedRec] = useState(null);
+  const [devPinTitleInput, setDevPinTitleInput] = useState('');
+  const [devPinNoteInput, setDevPinNoteInput] = useState('');
+  const [devPinBusy, setDevPinBusy] = useState(false);
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -1011,6 +1039,9 @@ export default function MobileApkApp() {
         }
         if (typeof parsed.broadcastMsg === 'string') {
           setGlobalBroadcastMsg(parsed.broadcastMsg);
+        }
+        if (parsed.pinnedRec !== undefined) {
+          setGlobalPinnedRec(parsed.pinnedRec || null);
         }
       } else if (typeof doc?.fields?.enforced?.booleanValue === 'boolean') {
         const enf = doc.fields.enforced.booleanValue;
@@ -2111,6 +2142,155 @@ export default function MobileApkApp() {
       e.target.value = '';
     },
     [showToast]
+  );
+
+  // ==================== v6.0 GOD-TIER CONTROLLERS ====================
+
+  // 1. Real-Time Anime Visual Enhancer (4K-Feel Shader Presets)
+  const handleCycleVisualShader = useCallback(() => {
+    const order = ['original', 'upscale4k', 'amoled_hdr', 'cinema_imax'];
+    const next = order[(order.indexOf(visualShaderMode) + 1) % order.length];
+    setVisualShaderMode(next);
+    const labels = {
+      original: '👁️ معالج الصورة: العرض الأصلي (Original)',
+      upscale4k: '✨ معالج الصورة: حدة 4K Anime Upscale (إبراز خطوط الرسم)',
+      amoled_hdr: '🌑 معالج الصورة: عمق AMOLED HDR (تباين وألوان فائقة)',
+      cinema_imax: '🎬 معالج الصورة: سينمائي دافئ (Cinema IMAX)'
+    };
+    showToast(labels[next]);
+  }, [visualShaderMode, showToast]);
+
+  // 2. Fine-Grained 120Hz Webtoon Auto-Scroll Engine (Pauses automatically on touch)
+  useEffect(() => {
+    if (!activeMangaChapter || readerMode !== 'webtoon' || !autoScrollSpeed || readerTouchPaused) return;
+    let rafId;
+    const step = () => {
+      if (mangaReaderContainerRef.current) {
+        mangaReaderContainerRef.current.scrollTop += autoScrollSpeed * 1.35;
+      }
+      rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [activeMangaChapter, readerMode, autoScrollSpeed, readerTouchPaused]);
+
+  // 3. Developer Live Cloud User Inspector (كشاف المستخدمين السحابي المباشر)
+  const handleDevInspectUser = useCallback(async () => {
+    if (!isDeveloper) return;
+    const q = String(devInspectQuery || '').trim().toLowerCase();
+    if (!q) {
+      showToast('أدخل اسم المستخدم أو البريد الإلكتروني للفحص');
+      return;
+    }
+    setDevInspectBusy(true);
+    try {
+      const isEm = q.includes('@');
+      const key1 = isEm ? cleanCloudKey('email', q) : cleanCloudKey('user', q);
+      let res = await fetch(`${BX_SETTINGS_BASE}/${key1}?key=${BX_KEY}`);
+      if (!res.ok && !isEm) {
+        res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('email', `${q}@gmail.com`)}?key=${BX_KEY}`);
+      }
+      if (!res.ok) {
+        setDevInspectedUser(null);
+        showToast('❌ لم يتم العثور على حساب مسجل بهذا الاسم أو البريد');
+        setDevInspectBusy(false);
+        return;
+      }
+      const doc = await res.json();
+      const raw = doc?.fields?.json?.stringValue;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setDevInspectedUser(parsed);
+        showToast(`🔍 تم جلب بيانات حساب (${parsed.username || parsed.email}) بنجاح!`);
+      }
+    } catch (_) {
+      showToast('تعذر فحص الحساب عبر السحابة');
+    } finally {
+      setDevInspectBusy(false);
+    }
+  }, [isDeveloper, devInspectQuery, showToast]);
+
+  // 4. Developer Global Featured Spotlight Pin (تثبيت ترشيح المطور الرسمي في الصفحة الرئيسية للجميع)
+  const handleDevPinRecommendation = useCallback(
+    async (clearPin = false) => {
+      if (!isDeveloper) return;
+      setDevPinBusy(true);
+      try {
+        let nextPin = null;
+        if (!clearPin) {
+          const qTitle = String(devPinTitleInput || '').trim();
+          let matchAnime =
+            popularList.find((a) => a.titleEn.toLowerCase().includes(qTitle.toLowerCase())) ||
+            airingList.find((a) => a.titleEn.toLowerCase().includes(qTitle.toLowerCase())) ||
+            popularList[0];
+          if (qTitle) {
+            const alg = await queryAlgolia('series', { query: qTitle, hitsPerPage: 1 }).catch(() => null);
+            if (alg?.hits?.[0]) {
+              matchAnime = formatAnimeHit(alg.hits[0]) || matchAnime;
+            }
+          }
+          if (matchAnime) {
+            nextPin = {
+              objectID: matchAnime.objectID,
+              slug: matchAnime.slug,
+              titleEn: matchAnime.titleEn,
+              titleAr: matchAnime.titleAr,
+              poster: matchAnime.poster,
+              banner: matchAnime.banner,
+              rating: matchAnime.rating,
+              type: matchAnime.type,
+              state: matchAnime.state,
+              storyAr: matchAnime.storyAr,
+              devNote:
+                String(devPinNoteInput || '').trim() ||
+                '🔥 ترشيح إدارة BLACK X الرسمي لليوم — عمل أسطوري لا يفوتكم!',
+              pinnedAt: new Date().toISOString()
+            };
+          }
+        }
+        const payload = {
+          enforced: globalVipEnforced,
+          updatedAt: new Date().toISOString(),
+          updatedBy: user?.email || 'developer',
+          codes: cloudVipCodes,
+          broadcastMsg: globalBroadcastMsg,
+          pinnedRec: nextPin
+        };
+        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(payload) },
+              enforced: { booleanValue: globalVipEnforced },
+              updatedAt: { stringValue: payload.updatedAt }
+            }
+          })
+        });
+        setGlobalPinnedRec(nextPin);
+        showToast(
+          nextPin
+            ? `📌 تم تثبيت (${nextPin.titleEn}) كترشيح رسمي في الصفحة الرئيسية لجميع المستخدمين!`
+            : '🗑️ تم إزالة الترشيح المثبت من الصفحة الرئيسية'
+        );
+      } catch (_) {
+        showToast('تعذر تحديث الترشيح المثبت');
+      } finally {
+        setDevPinBusy(false);
+      }
+    },
+    [
+      isDeveloper,
+      devPinTitleInput,
+      devPinNoteInput,
+      popularList,
+      airingList,
+      globalVipEnforced,
+      user,
+      cloudVipCodes,
+      globalBroadcastMsg,
+      showToast
+    ]
   );
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
@@ -3490,11 +3670,19 @@ export default function MobileApkApp() {
     async (e) => {
       e.preventDefault();
       if (!selectedAnime || !newReviewText.trim()) return;
+      const avgScore = Number(((revStoryScore + revAnimScore + revOstScore + revCharScore) / 4).toFixed(1));
       const rev = {
         id: `rev_${Date.now()}`,
         author: user?.displayName || (lang === 'ar' ? 'أوتاكو BLACK X' : 'BLACK X Otaku'),
+        sovereignTitle: selectedSovereignTitle,
         role: user?.role || 'user',
-        score: newReviewScore,
+        score: avgScore || newReviewScore,
+        pillars: {
+          story: revStoryScore,
+          anim: revAnimScore,
+          ost: revOstScore,
+          char: revCharScore
+        },
         episode: activeEpisode?.number || null,
         text: newReviewText.trim(),
         time: lang === 'ar' ? 'الآن' : 'Just now'
@@ -3505,7 +3693,7 @@ export default function MobileApkApp() {
       const nextXp = userXp + 25;
       setUserXp(nextXp);
       localStorage.setItem('bx_mob_xp', String(nextXp));
-      showToast(lang === 'ar' ? '✓ تم نشر تقييمك (+25 XP) ومزامنته مع السحابة!' : '✓ Review posted (+25 XP)!');
+      showToast(lang === 'ar' ? '✓ تم نشر تقييمك الرباعي الاحترافي (+25 XP) ومزامنته مع السحابة!' : '✓ 4-Pillar Review posted (+25 XP)!');
       try {
         const revKey = cleanCloudKey('reviews', selectedAnime.slug || selectedAnime.objectID);
         await fetch(`${BX_SETTINGS_BASE}/${revKey}?key=${BX_KEY}`, {
@@ -3520,7 +3708,22 @@ export default function MobileApkApp() {
         });
       } catch (_) {}
     },
-    [selectedAnime, newReviewText, newReviewScore, activeEpisode, user, animeReviews, userXp, showToast, lang]
+    [
+      selectedAnime,
+      newReviewText,
+      newReviewScore,
+      revStoryScore,
+      revAnimScore,
+      revOstScore,
+      revCharScore,
+      selectedSovereignTitle,
+      activeEpisode,
+      user,
+      animeReviews,
+      userXp,
+      showToast,
+      lang
+    ]
   );
 
   // Vote on Prediction in Arena (+XP)
@@ -3860,6 +4063,15 @@ export default function MobileApkApp() {
           transform: scale(0.95);
         }
       `}</style>
+
+      {/* GPU 4K Anime Line-Art Sharpening Convolution Filter */}
+      <svg width="0" height="0" style={{ position: 'absolute', pointerEvents: 'none' }}>
+        <defs>
+          <filter id="bx-sharpen-4k">
+            <feConvolveMatrix order="3" kernelMatrix="0 -0.45 0 -0.45 2.8 -0.45 0 -0.45 0" preserveAlpha="true" />
+          </filter>
+        </defs>
+      </svg>
 
       {/* Top Toast Notification */}
       {toastMsg && (
@@ -4511,6 +4723,69 @@ export default function MobileApkApp() {
                 />
               </div>
             </div>
+          )}
+
+          {/* Official Developer Pinned Spotlight Recommendation Banner */}
+          {globalPinnedRec && (
+            <section style={{ padding: '0.85rem 1rem 0' }}>
+              <div
+                onClick={() => handleOpenAnime(globalPinnedRec)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.7rem',
+                  borderRadius: '16px',
+                  background: '#09090d',
+                  border: '1.5px solid #ffffff',
+                  cursor: 'pointer'
+                }}
+              >
+                <img
+                  src={globalPinnedRec.poster}
+                  alt={globalPinnedRec.titleEn}
+                  style={{ width: '58px', height: '80px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.22rem' }}>
+                    <span
+                      style={{
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.62rem',
+                        fontWeight: 900,
+                        padding: '0.1rem 0.45rem',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      📌 {isRtl ? 'ترشيح المطور الرسمي' : 'Developer Pick'}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'rgba(255,255,255,0.75)' }}>
+                      ★ {globalPinnedRec.rating}
+                    </span>
+                  </div>
+                  <div style={{ fontWeight: 900, fontSize: '0.86rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {globalPinnedRec.titleEn}
+                  </div>
+                  <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.18rem' }}>
+                    {globalPinnedRec.devNote}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    padding: '0.4rem 0.65rem',
+                    borderRadius: '9px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontSize: '0.72rem',
+                    fontWeight: 900,
+                    flexShrink: 0
+                  }}
+                >
+                  ▶
+                </span>
+              </div>
+            </section>
           )}
 
           {/* ==================== v5.0 SMART DNA MOOD MATCHER & TONIGHT'S SPIN WHEEL ==================== */}
@@ -5364,6 +5639,8 @@ export default function MobileApkApp() {
           {activeMangaChapter ? (
             <div
               ref={mangaReaderContainerRef}
+              onTouchStart={() => setReaderTouchPaused(true)}
+              onTouchEnd={() => setReaderTouchPaused(false)}
               onScroll={(e) => {
                 const el = e.currentTarget;
                 const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
@@ -5494,7 +5771,7 @@ export default function MobileApkApp() {
 
                     <button
                       type="button"
-                      onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : 100))}
+                      onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : z === 150 ? 200 : 100))}
                       style={{
                         padding: '0.3rem 0.65rem',
                         borderRadius: '8px',
@@ -5510,10 +5787,34 @@ export default function MobileApkApp() {
                       🔍 {readerZoom}%
                     </button>
 
+                    {readerMode === 'page' && (
+                      <button
+                        type="button"
+                        onClick={() => setDualPageSpread((d) => !d)}
+                        style={{
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: '8px',
+                          background: dualPageSpread ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          color: dualPageSpread ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📖 {isRtl ? `عرض مزدوج: ${dualPageSpread ? 'صفحتين' : 'صفحة'}` : `Spread: ${dualPageSpread ? '2P' : '1P'}`}
+                      </button>
+                    )}
+
                     {readerMode === 'webtoon' && (
                       <button
                         type="button"
-                        onClick={() => setAutoScrollSpeed((s) => (s + 1) % 4)}
+                        onClick={() => {
+                          const speeds = [0, 0.5, 1, 2, 3.5, 5];
+                          const next = speeds[(speeds.indexOf(autoScrollSpeed) + 1) % speeds.length];
+                          setAutoScrollSpeed(next);
+                        }}
                         style={{
                           padding: '0.3rem 0.65rem',
                           borderRadius: '8px',
@@ -5663,17 +5964,31 @@ export default function MobileApkApp() {
                 </div>
               ) : readerMode === 'page' && mangaPages.length > 0 ? (
                 <div style={{ textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ overflowX: 'auto' }}>
+                  <div
+                    onDoubleClick={() => {
+                      const nextZ = readerZoom === 100 ? 200 : 100;
+                      setReaderZoom(nextZ);
+                      showToast(nextZ === 200 ? '🔍 تكبير اللوحة 200%' : '🔍 الحجم الطبيعي 100%');
+                    }}
+                    style={{
+                      overflowX: 'auto',
+                      display: dualPageSpread ? 'grid' : 'block',
+                      gridTemplateColumns: dualPageSpread ? '1fr 1fr' : 'none',
+                      gap: '2px',
+                      alignItems: 'center'
+                    }}
+                  >
                     <img
                       src={mangaPages[currentPageIdx]}
                       alt={`Page ${currentPageIdx + 1}`}
                       onClick={() => {
-                        if (currentPageIdx + 1 < mangaPages.length) setCurrentPageIdx((p) => p + 1);
+                        if (currentPageIdx + (dualPageSpread ? 2 : 1) < mangaPages.length)
+                          setCurrentPageIdx((p) => p + (dualPageSpread ? 2 : 1));
                         else setReaderHudVisible((v) => !v);
                       }}
                       style={{
                         width: `${readerZoom}%`,
-                        maxWidth: readerZoom === 100 ? '100vw' : 'none',
+                        maxWidth: readerZoom === 100 ? '100%' : 'none',
                         height: 'auto',
                         display: 'block',
                         margin: '0 auto',
@@ -5686,6 +6001,30 @@ export default function MobileApkApp() {
                             : 'none'
                       }}
                     />
+                    {dualPageSpread && mangaPages[currentPageIdx + 1] && (
+                      <img
+                        src={mangaPages[currentPageIdx + 1]}
+                        alt={`Page ${currentPageIdx + 2}`}
+                        onClick={() => {
+                          if (currentPageIdx + 2 < mangaPages.length) setCurrentPageIdx((p) => p + 2);
+                          else setReaderHudVisible((v) => !v);
+                        }}
+                        style={{
+                          width: `${readerZoom}%`,
+                          maxWidth: readerZoom === 100 ? '100%' : 'none',
+                          height: 'auto',
+                          display: 'block',
+                          margin: '0 auto',
+                          cursor: 'pointer',
+                          filter:
+                            readerEyeFilter === 'warm'
+                              ? 'sepia(0.24) brightness(0.92)'
+                              : readerEyeFilter === 'contrast'
+                              ? 'contrast(1.16) saturate(1.12)'
+                              : 'none'
+                        }}
+                      />
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 0.75rem' }}>
                     <button
@@ -5728,6 +6067,11 @@ export default function MobileApkApp() {
               ) : (
                 <div
                   onClick={() => setReaderHudVisible((v) => !v)}
+                  onDoubleClick={() => {
+                    const nextZ = readerZoom === 100 ? 200 : 100;
+                    setReaderZoom(nextZ);
+                    showToast(nextZ === 200 ? '🔍 تكبير اللوحة 200%' : '🔍 الحجم الطبيعي 100%');
+                  }}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -6658,7 +7002,7 @@ export default function MobileApkApp() {
                 {/* Badges Strip */}
                 <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
                   <span style={{ padding: '0.18rem 0.55rem', borderRadius: '99px', background: '#ffffff', color: '#000000', fontSize: '0.66rem', fontWeight: 900 }}>
-                    👑 VIP Monarch
+                    {selectedSovereignTitle}
                   </span>
                   <span style={{ padding: '0.18rem 0.55rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', fontSize: '0.66rem', fontWeight: 800 }}>
                     ⚡ Lv.{Math.floor(userXp / 100) + 1} ({userXp} XP)
@@ -7205,6 +7549,188 @@ export default function MobileApkApp() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Developer Live Cloud User Inspector (كشاف المستخدمين السحابي المباشر) */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
+                      👥 {isRtl ? 'كشاف حسابات المستخدمين المباشر (Cloud User Inspector):' : 'Live Cloud User Inspector:'}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.45rem' }}>
+                      <input
+                        type="text"
+                        value={devInspectQuery}
+                        onChange={(e) => setDevInspectQuery(e.target.value)}
+                        placeholder={isRtl ? 'ابحث باسم المستخدم أو البريد الإلكتروني...' : 'Search username or email...'}
+                        style={{
+                          flex: 1,
+                          padding: '0.55rem 0.75rem',
+                          borderRadius: '10px',
+                          background: '#000',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.75rem'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={devInspectBusy}
+                        onClick={handleDevInspectUser}
+                        style={{
+                          padding: '0 0.85rem',
+                          borderRadius: '10px',
+                          background: '#ffffff',
+                          color: '#000000',
+                          border: 'none',
+                          fontWeight: 900,
+                          fontSize: '0.74rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {devInspectBusy ? '⏳' : isRtl ? '🔍 فحص' : '🔍 Inspect'}
+                      </button>
+                    </div>
+
+                    {devInspectedUser && (
+                      <div
+                        style={{
+                          padding: '0.7rem',
+                          borderRadius: '12px',
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.73rem',
+                          lineHeight: 1.6
+                        }}
+                      >
+                        <div style={{ fontWeight: 900, fontSize: '0.8rem' }}>
+                          👤 {devInspectedUser.displayName || devInspectedUser.username} (@{devInspectedUser.username})
+                        </div>
+                        <div style={{ color: 'rgba(255,255,255,0.72)' }}>📧 {devInspectedUser.email || '—'}</div>
+                        <div>
+                          💎 الحالة: <strong>{devInspectedUser.vipStatus || 'Free Tier'}</strong> • ♥ المفضلة:{' '}
+                          {(devInspectedUser.favorites || []).length} • 🎬 السجل: {(devInspectedUser.progress || []).length}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDevGrantTarget(devInspectedUser.email || devInspectedUser.username);
+                              setDevGrantTier('vip_monarch');
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '0.38rem',
+                              borderRadius: '8px',
+                              background: '#ffffff',
+                              color: '#000000',
+                              border: 'none',
+                              fontWeight: 900,
+                              fontSize: '0.68rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            👑 تحديد للترقية
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDevInspectedUser(null)}
+                            style={{
+                              padding: '0.38rem 0.65rem',
+                              borderRadius: '8px',
+                              background: 'rgba(255,255,255,0.12)',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontWeight: 900,
+                              fontSize: '0.68rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Developer Global Featured Spotlight Pin (تثبيت ترشيح المطور الرسمي) */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
+                      📌 {isRtl ? 'تثبيت أنمي اليوم كترشيح رسمي أعلى الصفحة الرئيسية:' : 'Pin Official Developer Spotlight on Home:'}
+                    </div>
+                    <input
+                      type="text"
+                      value={devPinTitleInput}
+                      onChange={(e) => setDevPinTitleInput(e.target.value)}
+                      placeholder={
+                        globalPinnedRec?.titleEn ||
+                        (isRtl ? 'اكتب اسم الأنمي لتثبيته (مثال: Solo Leveling أو One Piece)...' : 'Anime title to pin...')
+                      }
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '10px',
+                        background: '#000',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: '0.75rem',
+                        marginBottom: '0.4rem'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={devPinNoteInput}
+                      onChange={(e) => setDevPinNoteInput(e.target.value)}
+                      placeholder={isRtl ? 'رسالة الترشيح (مثال: 🔥 عمل أسطوري ننصح بمشاهدته الليلة!)...' : 'Recommendation note...'}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '10px',
+                        background: '#000',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: '0.75rem',
+                        marginBottom: '0.45rem'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '0.45rem' }}>
+                      <button
+                        type="button"
+                        disabled={devPinBusy}
+                        onClick={() => handleDevPinRecommendation(false)}
+                        style={{
+                          flex: 1,
+                          padding: '0.62rem',
+                          borderRadius: '10px',
+                          background: '#ffffff',
+                          color: '#000000',
+                          border: 'none',
+                          fontWeight: 900,
+                          fontSize: '0.75rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {devPinBusy ? '⏳...' : isRtl ? '📌 تثبيت في الرئيسية للجميع' : '📌 Pin on Home'}
+                      </button>
+                      {globalPinnedRec && (
+                        <button
+                          type="button"
+                          disabled={devPinBusy}
+                          onClick={() => handleDevPinRecommendation(true)}
+                          style={{
+                            padding: '0.62rem 0.8rem',
+                            borderRadius: '10px',
+                            background: 'rgba(255,255,255,0.08)',
+                            color: '#ffffff',
+                            border: '1px solid rgba(255,255,255,0.25)',
+                            fontWeight: 900,
+                            fontSize: '0.74rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🗑️ {isRtl ? 'إزالة' : 'Unpin'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>
@@ -7577,8 +8103,8 @@ export default function MobileApkApp() {
               </div>
               <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
                 {isRtl
-                  ? 'الإصدار الحالي: BLACK X Mobile v5.0 Sovereign (120Hz Full Edition)'
-                  : 'Current Version: BLACK X Mobile v5.0 Sovereign (120Hz Full Edition)'}
+                  ? 'الإصدار الحالي: BLACK X Mobile v6.0 God-Tier (120Hz Full Edition)'
+                  : 'Current Version: BLACK X Mobile v6.0 God-Tier (120Hz Full Edition)'}
               </div>
             </div>
             <a
@@ -7588,8 +8114,8 @@ export default function MobileApkApp() {
               onClick={() =>
                 showToast(
                   isRtl
-                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v5.0 Sovereign المباشرة...'
-                    : '✓ Downloading latest BLACK X Mobile v5.0 Sovereign APK...'
+                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v6.0 God-Tier المباشرة...'
+                    : '✓ Downloading latest BLACK X Mobile v6.0 God-Tier APK...'
                 )
               }
               style={{
@@ -7605,6 +8131,65 @@ export default function MobileApkApp() {
             >
               ⬇ {isRtl ? 'تحديث مباشر الآن' : 'Update APK Now'}
             </a>
+          </div>
+
+          {/* Sovereign Achievements & Unlockable Titles Selector (خزنة الأوسمة والألقاب الملكية) */}
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.3rem' }}>
+              🎖️ {isRtl ? 'خزنة الأوسمة والألقاب الملكية (Sovereign Titles):' : 'Sovereign Achievements & Titles:'}
+            </div>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+              {isRtl
+                ? 'اختر لقبك الملكي ليظهر بجانب اسمك في ملفك الشخصي وفي تقييمات الحلقات:'
+                : 'Select your Sovereign Title to display on your profile and episode reviews:'}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.42rem' }}>
+              {[
+                { title: '⚔️ صياد الرتبة S', desc: 'مفتوح للجميع' },
+                { title: '🩸 سيد الظلال', desc: `${watchHistory.length}/3 حلقات` },
+                { title: '📖 حكيم المانهوا', desc: `${mangaHistory.length}/2 فصول` },
+                { title: '⚡ أسطورة 120Hz', desc: `${favorites.length}/3 مفضلة` },
+                { title: '🔮 عراف الأرينا', desc: `${userXp} XP` },
+                { title: '👑 إمبراطور BLACK X', desc: 'رتبة السيادة' }
+              ].map((b) => {
+                const active = selectedSovereignTitle === b.title;
+                return (
+                  <button
+                    key={b.title}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSovereignTitle(b.title);
+                      localStorage.setItem('bx_mob_sovereign_title', b.title);
+                      showToast(`🎖️ تم اعتماد لقبك الملكي: ${b.title}`);
+                    }}
+                    style={{
+                      padding: '0.52rem 0.65rem',
+                      borderRadius: '10px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                      color: active ? '#000000' : '#ffffff',
+                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                      fontWeight: 900,
+                      fontSize: '0.72rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span>{b.title}</span>
+                    <span style={{ fontSize: '0.62rem', opacity: 0.7 }}>{b.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* 1-Tap Full Vault Backup & Restore (تصدير واستيراد الخزنة الكاملة بضغطة واحدة) */}
@@ -8287,6 +8872,22 @@ export default function MobileApkApp() {
                       <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
                         <button
                           type="button"
+                          onClick={handleCycleVisualShader}
+                          style={{
+                            padding: '0.36rem 0.6rem',
+                            borderRadius: '10px',
+                            background: visualShaderMode !== 'original' ? '#ffffff' : 'rgba(255,255,255,0.18)',
+                            border: '1px solid rgba(255,255,255,0.35)',
+                            color: visualShaderMode !== 'original' ? '#000' : '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.7rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✨ {visualShaderMode === 'upscale4k' ? '4K' : visualShaderMode === 'amoled_hdr' ? 'HDR' : visualShaderMode === 'cinema_imax' ? 'IMAX' : 'HD'}
+                        </button>
+                        <button
+                          type="button"
                           onClick={handleTakeVideoSnapshot}
                           style={{
                             padding: '0.36rem 0.6rem',
@@ -8431,6 +9032,17 @@ export default function MobileApkApp() {
                       onTimeUpdate={(e) => {
                         try {
                           const cur = Math.floor(e.currentTarget.currentTime || 0);
+                          if (
+                            autoSkipIntro &&
+                            cur >= 2 &&
+                            cur <= 8 &&
+                            !autoSkippedEpRef.current[activeEpisode.docId]
+                          ) {
+                            autoSkippedEpRef.current[activeEpisode.docId] = true;
+                            e.currentTarget.currentTime = 87;
+                            showToast(isRtl ? '⚡ تم تخطي مقدمة الحلقة تلقائياً (+85s)' : '⚡ Auto-skipped Intro (+85s)');
+                            return;
+                          }
                           if (loopPointA !== null && loopPointB !== null && cur >= loopPointB) {
                             e.currentTarget.currentTime = loopPointA;
                             return;
@@ -8466,7 +9078,18 @@ export default function MobileApkApp() {
                         height: '100%',
                         objectFit: videoFullscreen ? videoFitMode : 'contain',
                         background: '#000',
-                        filter: videoBrightness !== 100 ? `brightness(${videoBrightness}%)` : 'none',
+                        filter: [
+                          videoBrightness !== 100 ? `brightness(${videoBrightness}%)` : '',
+                          visualShaderMode === 'upscale4k'
+                            ? 'url(#bx-sharpen-4k) contrast(1.12) saturate(1.15)'
+                            : visualShaderMode === 'amoled_hdr'
+                            ? 'contrast(1.24) saturate(1.26) brightness(1.04)'
+                            : visualShaderMode === 'cinema_imax'
+                            ? 'contrast(1.1) saturate(1.08) sepia(0.08)'
+                            : ''
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || 'none',
                         pointerEvents: videoTouchLocked ? 'none' : 'auto'
                       }}
                     />
@@ -8816,6 +9439,62 @@ export default function MobileApkApp() {
                             ? 'نهاية الحلقة'
                             : 'End Ep'
                           : `${Math.ceil(sleepTimerRemainingSec / 60)}m`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCycleVisualShader}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: visualShaderMode !== 'original' ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: visualShaderMode !== 'original' ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✨{' '}
+                        {visualShaderMode === 'upscale4k'
+                          ? '4K Upscale'
+                          : visualShaderMode === 'amoled_hdr'
+                          ? 'AMOLED HDR'
+                          : visualShaderMode === 'cinema_imax'
+                          ? 'Cinema IMAX'
+                          : isRtl
+                          ? 'محسن 4K'
+                          : '4K Enhancer'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !autoSkipIntro;
+                          setAutoSkipIntro(next);
+                          localStorage.setItem('bx_mob_autoskip_intro', String(next));
+                          showToast(
+                            next
+                              ? isRtl
+                                ? '⚡ تم تفعيل التخطي التلقائي للمقدمة'
+                                : '⚡ Auto-Skip Intro ON'
+                              : isRtl
+                              ? '⚡ تم إيقاف التخطي التلقائي للمقدمة'
+                              : '⚡ Auto-Skip Intro OFF'
+                          );
+                        }}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: autoSkipIntro ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: autoSkipIntro ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚡ {autoSkipIntro ? (isRtl ? 'تخطي تلقائي ON' : 'Auto-Skip ON') : isRtl ? 'تخطي تلقائي' : 'Auto-Skip'}
                       </button>
                       <button
                         type="button"
@@ -9657,7 +10336,7 @@ export default function MobileApkApp() {
               </div>
             )}
 
-            {/* SUB-TAB 4: CLOUD ANIME REVIEWS & RATINGS */}
+            {/* SUB-TAB 4: CLOUD ANIME REVIEWS & 4-PILLAR MASTER RATINGS */}
             {detailTab === 'reviews' && (
               <div>
                 <form
@@ -9670,29 +10349,66 @@ export default function MobileApkApp() {
                     marginBottom: '0.85rem'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
                     <span style={{ fontSize: '0.78rem', fontWeight: 900 }}>
-                      ⭐ {isRtl ? 'تقييمك للأنمي:' : 'Your Score:'}
+                      ⭐ {isRtl ? 'التقييم الرباعي الاحترافي (4-Pillar Rating):' : '4-Pillar Master Rating:'}
                     </span>
-                    <select
-                      value={newReviewScore}
-                      onChange={(e) => setNewReviewScore(Number(e.target.value))}
+                    <span
                       style={{
-                        padding: '0.25rem 0.6rem',
+                        padding: '0.2rem 0.6rem',
                         borderRadius: '8px',
-                        background: '#000',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.22)',
+                        background: '#ffffff',
+                        color: '#000000',
                         fontWeight: 900,
-                        fontSize: '0.76rem'
+                        fontSize: '0.75rem'
                       }}
                     >
-                      {[10, 9, 8, 7, 6, 5].map((s) => (
-                        <option key={s} value={s}>
-                          ★ {s} / 10
-                        </option>
-                      ))}
-                    </select>
+                      ★ {((revStoryScore + revAnimScore + revOstScore + revCharScore) / 4).toFixed(1)} / 10
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.4rem', marginBottom: '0.55rem' }}>
+                    {[
+                      { label: isRtl ? '📖 القصة' : '📖 Story', val: revStoryScore, set: setRevStoryScore },
+                      { label: isRtl ? '⚡ التحريك' : '⚡ Animation', val: revAnimScore, set: setRevAnimScore },
+                      { label: isRtl ? '🎵 الموسيقى' : '🎵 OST', val: revOstScore, set: setRevOstScore },
+                      { label: isRtl ? '👥 الشخصيات' : '👥 Cast', val: revCharScore, set: setRevCharScore }
+                    ].map((p, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '0.35rem 0.55rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.14)',
+                          fontSize: '0.72rem',
+                          fontWeight: 800
+                        }}
+                      >
+                        <span>{p.label}</span>
+                        <select
+                          value={p.val}
+                          onChange={(e) => p.set(Number(e.target.value))}
+                          style={{
+                            background: '#000',
+                            color: '#fff',
+                            border: '1px solid rgba(255,255,255,0.22)',
+                            borderRadius: '6px',
+                            padding: '0.12rem 0.35rem',
+                            fontWeight: 900,
+                            fontSize: '0.72rem'
+                          }}
+                        >
+                          {[10, 9, 8, 7, 6, 5].map((s) => (
+                            <option key={s} value={s}>
+                              {s}/10
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
                   </div>
                   <div style={{ display: 'flex', gap: '0.45rem' }}>
                     <input
@@ -9739,12 +10455,25 @@ export default function MobileApkApp() {
                         border: '1px solid rgba(255,255,255,0.1)'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                        <span style={{ fontWeight: 900, fontSize: '0.8rem' }}>{rv.author}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontWeight: 900, fontSize: '0.8rem' }}>{rv.author}</span>
+                          {rv.sovereignTitle && (
+                            <span style={{ fontSize: '0.64rem', padding: '0.08rem 0.42rem', borderRadius: '99px', background: 'rgba(255,255,255,0.12)', fontWeight: 800 }}>
+                              {rv.sovereignTitle}
+                            </span>
+                          )}
+                        </div>
                         <span style={{ fontWeight: 900, fontSize: '0.74rem', background: '#fff', color: '#000', padding: '0.08rem 0.45rem', borderRadius: '6px' }}>
                           ★ {rv.score}/10
                         </span>
                       </div>
+                      {rv.pillars && (
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.35rem', fontSize: '0.65rem', color: 'rgba(255,255,255,0.68)' }}>
+                          <span>📖 القصة: {rv.pillars.story}</span>•<span>⚡ التحريك: {rv.pillars.anim}</span>•
+                          <span>🎵 الموسيقى: {rv.pillars.ost}</span>•<span>👥 الشخصيات: {rv.pillars.char}</span>
+                        </div>
+                      )}
                       <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.45 }}>{rv.text}</p>
                     </div>
                   ))}
