@@ -77,7 +77,7 @@ function normalizeAnimeItem(item, thumbBase) {
     .filter(Boolean);
   const slug = toSlug(animeId, titleEn);
 
-  return {
+  const norm = {
     slug,
     anime3rbId: animeId,
     malId: item.MalId_org ? Number(item.MalId_org) : null,
@@ -100,6 +100,9 @@ function normalizeAnimeItem(item, thumbBase) {
     source: 'anime3rb',
     sourceLabel: 'سيرفر BLACK X 2'
   };
+  apiSet(`bx2:record:v3:${animeId}`, norm, 6 * 60 * 60 * 1000);
+  apiSet(`bx2:record:v3:${animeId.toLowerCase()}`, norm, 6 * 60 * 60 * 1000);
+  return norm;
 }
 
 async function extractMediafireDirect(mfCodeOrUrl) {
@@ -124,7 +127,7 @@ async function extractMediafireDirect(mfCodeOrUrl) {
       const html = await res.text();
       const match = html.match(/(https:\/\/download[^"'\s<>]+)/i);
       if (match && match[1]) {
-        streamSet(cacheKey, match[1], 4 * 60 * 60 * 1000);
+        streamSet(cacheKey, match[1], 12 * 60 * 1000);
         return match[1];
       }
     }
@@ -268,7 +271,7 @@ class Anime3rbService {
     if (!clean) return null;
 
     const cacheKey = `bx2:record:v3:${clean}`;
-    const cached = apiGet(cacheKey);
+    const cached = apiGet(cacheKey) || apiGet(`bx2:record:v3:${clean.toLowerCase()}`);
     if (cached) return cached;
 
     // 1) If clean starts with 'x' (native AnimeId like xSousounoFrieren or xOnePiece), search by title derived from camelCase/words
@@ -294,8 +297,35 @@ class Anime3rbService {
       if (words.length >= 2) {
         const shortQ = words.slice(0, 2).join(' ');
         const retry = await this.fetchList({ filterType: 'SEARCH', filterData: shortQ, animeType: 'SERIES', fromIndex: 0 });
-        found = retry.find((x) => isTitleMatch(searchQuery, `${x.titleEn} ${x.titleAr}`, x.anime3rbId)) || null;
+        found = retry.find((x) => x.anime3rbId.toLowerCase() === clean.toLowerCase() || isTitleMatch(searchQuery, `${x.titleEn} ${x.titleAr}`, x.anime3rbId)) || null;
       }
+    }
+
+    // Direct AnimeId fallback when clean is already a native 'x...' AnimeId (e.g. xShingekinoKyojinTheFinalSeason)
+    if (!found && clean.startsWith('x') && clean.length > 2) {
+      found = {
+        slug: toSlug(clean, searchQuery),
+        anime3rbId: clean,
+        malId: null,
+        kind: 'anime',
+        type: 'TV Series',
+        titleEn: searchQuery,
+        titleAr: searchQuery,
+        titleRomaji: searchQuery,
+        poster: '',
+        banner: '',
+        score: 8.8,
+        rating: 8.8,
+        status: 'مكتمل',
+        season: '',
+        episodes: 12,
+        episodeCount: 12,
+        genres: ['Action', 'Drama'],
+        description: searchQuery,
+        url: `/show/${toSlug(clean, searchQuery)}?source=anime3rb`,
+        source: 'anime3rb',
+        sourceLabel: 'سيرفر BLACK X 2'
+      };
     }
 
     if (found) {

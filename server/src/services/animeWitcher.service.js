@@ -518,11 +518,22 @@ export async function resolveWitcherDirectVideoUrl(serverCode, rawLink) {
   let directMp4 = null;
 
   try {
-    // 1. PixelDrain (PD): https://pixeldrain.com/u/{id} -> https://pixeldrain.com/api/file/{id}
+    // 1. PixelDrain (PD): https://pixeldrain.com/u/{id} -> https://pixeldrain.com/api/file/{id} (verify not 404)
     if (code === 'PD' || link.includes('pixeldrain.com')) {
       const pdMatch = link.match(/pixeldrain\.com\/(?:u|api\/file)\/([A-Za-z0-9_-]+)/i);
       if (pdMatch?.[1]) {
-        directMp4 = `https://pixeldrain.com/api/file/${pdMatch[1]}`;
+        const pdId = pdMatch[1];
+        try {
+          const infoRes = await fetch(`https://pixeldrain.com/api/file/${pdId}/info`, {
+            headers: { 'User-Agent': DESKTOP_UA, Accept: 'application/json' },
+            signal: AbortSignal.timeout(3500)
+          });
+          if (infoRes.status !== 404) {
+            directMp4 = `https://pixeldrain.com/api/file/${pdId}`;
+          }
+        } catch {
+          directMp4 = `https://pixeldrain.com/api/file/${pdId}`;
+        }
       }
     }
     // 2. FireStream (SF): https://firestream.to/d/{id} -> "downloadUrl":"https://us-cdn-0.firestream.to/.../video.mp4..."

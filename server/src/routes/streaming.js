@@ -383,9 +383,11 @@ router.get('/show/:slug', async (req, res) => {
         show = await fetchWitcherShow(slug).catch(() => null);
       }
     } else if (source === 'anime3rb' || slug.startsWith('a3rb-') || source === 'okanime' || slug.startsWith('ok-') || source === 'animeblkom' || slug.startsWith('blkom-')) {
-      show = await anime3rbService.getShow(slug.replace(/^(a3rb-|ok-|blkom-)/, ''));
+      const cleanA3rb = slug.replace(/^(a3rb-|ok-|blkom-)/, '');
+      show = await anime3rbService.getShow(cleanA3rb);
       if (!show) {
-        show = await fetchWitcherShow(slug).catch(() => null);
+        const spacedTitle = cleanA3rb.replace(/^x/, '').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+        show = await fetchWitcherShow(spacedTitle || slug).catch(() => null);
       }
     } else {
       // 1) Primary source: BLACK X Server 1 (Anime Witcher 6,973-anime Cloud Engine)
@@ -496,7 +498,8 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
           }
         } catch (_) {}
       } else {
-        data = await fetchWitcherEpisode(cleanSlug, episode).catch(() => null);
+        const spacedTitle = cleanSlug.replace(/^x/, '').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+        data = await fetchWitcherEpisode(spacedTitle || cleanSlug, episode).catch(() => null);
       }
     } else {
       // 1) Primary source: BLACK X Server 1 (Anime Witcher 1080p/720p/480p Direct MP4 + WitAnime) + cross-linked BLACK X Server 2
@@ -1121,9 +1124,75 @@ router.get('/download', optionalAuth, async (req, res) => {
   }
 });
 
+const mfInstanceCache = new Map();
+
+async function resolveFreshMediafireDirectUrl(urlStr) {
+  const mKey =
+    String(urlStr).match(/\/file\/([a-z0-9]{14,16})/i)?.[1] ||
+    String(urlStr).match(/\/([a-z0-9]{15})\//i)?.[1] ||
+    String(urlStr).match(/[?&]qkey=([a-z0-9]{14,16})/i)?.[1];
+  if (!mKey) return null;
+
+  const cached = mfInstanceCache.get(mKey);
+  if (cached && Date.now() - cached.ts < 8 * 60 * 1000) {
+    return cached.url;
+  }
+
+  try {
+    const pageRes = await fetch(`https://www.mediafire.com/file/${mKey}`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: 'text/html'
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000)
+    });
+    if (pageRes.ok) {
+      const html = await pageRes.text();
+      const dlMatch = html.match(/(https:\/\/download[^"'\s<>]+)/i);
+      if (dlMatch && dlMatch[1]) {
+        mfInstanceCache.set(mKey, { url: dlMatch[1], ts: Date.now() });
+        return dlMatch[1];
+      }
+    }
+  } catch {}
+  return null;
+}
+
 /**
- * GET /api/stream/proxy?url=… — pipes a remote video with Range support.
- * Keeps hotlink-protected hosts playable inside our custom player.
+ * Cap Range header to 4 MB chunks so Google Cloud Run / Google Frontend (*.ai.studio)
+ * NEVER hits its 32 MB HTTP response limit (which otherwise kills open-ended Range: bytes=0- with HTTP 500).
+ */
+const MAX_PROXY_CHUNK_BYTES = 4 * 1024 * 1024; // 4 MB
+
+function buildCappedRangeHeader(rawRange) {
+  if (!rawRange || !String(rawRange).startsWith('bytes=')) {
+    return `bytes=0-${MAX_PROXY_CHUNK_BYTES - 1}`;
+  }
+  const spec = String(rawRange).replace(/^bytes=/, '').split(',')[0].trim();
+  const [startStr, endStr] = spec.split('-');
+  const start = parseInt(startStr, 10);
+  if (!Number.isFinite(start) || start < 0) {
+    return `bytes=0-${MAX_PROXY_CHUNK_BYTES - 1}`;
+  }
+  if (!endStr) {
+    return `bytes=${start}-${start + MAX_PROXY_CHUNK_BYTES - 1}`;
+  }
+  const end = parseInt(endStr, 10);
+  if (!Number.isFinite(end) || end < start) {
+    return `bytes=${start}-${start + MAX_PROXY_CHUNK_BYTES - 1}`;
+  }
+  if (end - start + 1 > MAX_PROXY_CHUNK_BYTES * 2) {
+    return `bytes=${start}-${start + MAX_PROXY_CHUNK_BYTES - 1}`;
+  }
+  return `bytes=${start}-${end}`;
+}
+
+/**
+ * GET /api/stream/proxy?url=… — pipes a remote video with 4 MB Range chunking.
+ * Keeps hotlink-protected hosts playable inside our custom player and prevents
+ * Cloud Run / Google Frontend 32 MB response-size HTTP 500 errors.
  */
 router.get('/proxy', optionalAuth, async (req, res) => {
   let target;
@@ -1146,6 +1215,14 @@ router.get('/proxy', optionalAuth, async (req, res) => {
     const isPd = target.hostname.includes('pixeldrain.');
     const isMf = target.hostname.includes('mediafire.');
     const isFs = target.hostname.includes('firestream.');
+
+    // If a MediaFire page link was passed directly, resolve the IP-matched download URL first
+    let fetchHref = target.href;
+    if (isMf && target.hostname === 'www.mediafire.com') {
+      const fresh = await resolveFreshMediafireDirectUrl(fetchHref);
+      if (fresh) fetchHref = fresh;
+    }
+
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       Accept: '*/*'
@@ -1161,29 +1238,54 @@ router.get('/proxy', optionalAuth, async (req, res) => {
       headers.Referer = `https://www.${brand}/`;
       headers.Origin = `https://www.${brand}`;
     }
-    if (req.headers.range) headers.Range = req.headers.range;
 
-    const upstream = await fetch(target.href, {
+    // Always send a capped Range header (<= 4 MB) so Cloud Run / Google Frontend never returns HTTP 500
+    headers.Range = buildCappedRangeHeader(req.headers.range);
+
+    let upstream = await fetch(fetchHref, {
       headers,
       redirect: 'follow',
-      signal: AbortSignal.timeout(30000)
+      signal: AbortSignal.timeout(25000)
     });
+
+    // Self-heal expired or IP-mismatched MediaFire downloadXXXX.mediafire.com URLs that redirect to download_repair.php (text/html)
+    const initialCt = (upstream.headers.get('content-type') || '').toLowerCase();
+    if (isMf && (!upstream.ok || initialCt.includes('text/html'))) {
+      const mKey =
+        fetchHref.match(/\/([a-z0-9]{15})\//i)?.[1] ||
+        fetchHref.match(/\/file\/([a-z0-9]{14,16})/i)?.[1];
+      if (mKey) {
+        mfInstanceCache.delete(mKey);
+        const refreshedUrl = await resolveFreshMediafireDirectUrl(fetchHref);
+        if (refreshedUrl && refreshedUrl !== fetchHref) {
+          upstream = await fetch(refreshedUrl, {
+            headers,
+            redirect: 'follow',
+            signal: AbortSignal.timeout(25000)
+          });
+        }
+      }
+    }
 
     if (!upstream.ok && upstream.status !== 206) {
       return res.status(upstream.status).end();
     }
 
-    res.status(upstream.status);
+    const finalCt = (upstream.headers.get('content-type') || '').toLowerCase();
+    if (finalCt.includes('text/html') || finalCt.includes('application/json')) {
+      return res.status(502).json({ error: 'upstream_not_video', message: 'Upstream returned non-video response' });
+    }
+
+    res.status(upstream.status === 200 && req.headers.range ? 206 : upstream.status);
     const pass = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
     for (const h of pass) {
       const v = upstream.headers.get(h);
       if (v) res.setHeader(h, v);
     }
     if (!res.getHeader('content-type')) res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
-    // pipe the body — never buffer whole videos in memory.
-    // Client aborts must not crash the process (pipe errors are unhandled otherwise).
     const { Readable } = await import('stream');
     const upstreamStream = Readable.fromWeb(upstream.body);
     const cleanup = () => {

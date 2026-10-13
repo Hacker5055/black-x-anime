@@ -18,9 +18,18 @@ const fmt = (s) => {
     : `${m}:${String(sec).padStart(2, '0')}`;
 };
 
-const proxied = (url) => {
+const isDirectCdnPlayable = (url) => {
+  if (!url) return false;
+  const s = String(url).toLowerCase();
+  return s.includes('pixeldrain.com/api/file/');
+};
+
+const proxied = (url, forceProxy = false) => {
   if (!url) return url;
   const s = String(url);
+  if (!forceProxy && isDirectCdnPlayable(s)) {
+    return s;
+  }
   if (s.startsWith('/api/stream/proxy') || s.includes('/api/stream/proxy?url=')) {
     return resolveApiUrl(s);
   }
@@ -79,21 +88,29 @@ export default function VideoPlayer({
   const [showResume, setShowResume] = useState(resumePrompt && startTime > 30);
   const [ended, setEnded] = useState(false);
   const [panel, setPanel] = useState(false);
+  const [forceProxy, setForceProxy] = useState(false);
+  const [forceEmbed, setForceEmbed] = useState(false);
 
   const active = useMemo(() => entries.find((e) => e.id === activeId) || entries[0] || null, [entries, activeId]);
   const activeSource = active ? resolved[active.id] : null;
-  const embedMode = Boolean(activeSource && !activeSource.directUrl);
+  const hasExternalEmbed = Boolean(
+    activeSource?.embedUrl &&
+    !String(activeSource.embedUrl).startsWith('/api/stream/mp4-player')
+  );
+  const embedMode = Boolean(activeSource && (!activeSource.directUrl || (forceEmbed && hasExternalEmbed)));
 
-  // auto-pick the first entry (for Free users, prefer non-FHD HD/SD server first if available)
+  // auto-pick the first entry and resolve immediately
   useEffect(() => {
     if (!activeId && entries.length) {
-      const chosen = !isVip ? (entries.find((e) => !isFhdQuality(e.quality)) || entries[0]) : entries[0];
+      const chosen = entries[0];
       setActiveId(chosen.id);
+      setForceProxy(false);
+      setForceEmbed(false);
       if (!resolved[chosen.id] && onResolve) {
         onResolve(chosen).catch(() => {});
       }
     }
-  }, [entries, activeId, isVip, resolved, onResolve]);
+  }, [entries, activeId, resolved, onResolve]);
 
   /* ------------------------------ controls ------------------------------ */
   const wake = useCallback(() => {
@@ -138,17 +155,9 @@ export default function VideoPlayer({
   const pickSource = useCallback(
     async (entry) => {
       if (!entry) return;
-      if (isFhdQuality(entry.quality) && !isVip) {
-        pushToast(
-          lang === 'ar'
-            ? '👑 سيرفرات المشاهدة بجودة FHD 1080p حصرية لمشتركي VIP فقط! اشترك الآن أو فعّل كودك لفتح الجودة الفائقة.'
-            : '👑 FHD 1080p streaming servers are exclusive to VIP members! Upgrade or redeem a code to unlock.',
-          'info'
-        );
-        onRequireVip?.();
-        return;
-      }
       setEnded(false);
+      setForceProxy(false);
+      setForceEmbed(false);
       setActiveId(entry.id);
       if (!resolved[entry.id] && onResolve) {
         setBusyId(entry.id);
@@ -159,7 +168,7 @@ export default function VideoPlayer({
         }
       }
     },
-    [resolved, onResolve, isVip, lang, onRequireVip]
+    [resolved, onResolve]
   );
 
   // keyboard shortcuts
@@ -291,10 +300,11 @@ export default function VideoPlayer({
           />
         ) : (
           <video
-            key={`${active?.id || 'none'}-${activeSource?.directUrl || ''}`}
+            key={`${active?.id || 'none'}-${activeSource?.directUrl || ''}-${forceProxy ? 'proxy' : 'direct'}`}
             ref={videoRef}
             className="player-video"
-            src={activeSource ? proxied(activeSource.directUrl) : undefined}
+            src={activeSource ? proxied(activeSource.directUrl, forceProxy) : undefined}
+            referrerPolicy="no-referrer"
             playsInline
             autoPlay
             preload="auto"
@@ -327,6 +337,17 @@ export default function VideoPlayer({
             onEnded={() => { setEnded(true); setPlaying(false); setShowControls(true); save(true); onEnded?.(); }}
             onError={() => {
               setBuffering(false);
+              // 1) If direct CDN URL failed, retry via 4MB chunked /api/stream/proxy
+              if (!forceProxy && isDirectCdnPlayable(activeSource?.directUrl)) {
+                setForceProxy(true);
+                return;
+              }
+              // 2) If this server also has an external embed URL (e.g. sendvid/ok.ru), switch to embed
+              if (!forceEmbed && hasExternalEmbed) {
+                setForceEmbed(true);
+                return;
+              }
+              // 3) Advance to next available server
               if (entries.length > 1 && active) {
                 const curIdx = entries.findIndex((x) => x.id === active.id);
                 const nextEntry = entries[curIdx + 1];
@@ -535,7 +556,6 @@ export default function VideoPlayer({
           <div className="wit-servers-list">
             {entries.map((e) => {
               const isFhd = isFhdQuality(e.quality);
-              const locked = isFhd && !isVip;
               const isSelected = active?.id === e.id;
               return (
                 <button
@@ -545,11 +565,11 @@ export default function VideoPlayer({
                   onClick={() => pickSource(e)}
                 >
                   <span>
-                    {busyId === e.id ? '⏳ ' : locked ? '🔒 ' : isFhd ? '👑 ' : '▶ '}
+                    {busyId === e.id ? '⏳ ' : isFhd ? '👑 ' : '▶ '}
                     {e.server}
                   </span>
                   <small>
-                    {isFhd ? `${e.quality || 'FHD'} VIP` : (e.quality || 'HD')}
+                    {e.quality || 'HD'}
                   </small>
                 </button>
               );

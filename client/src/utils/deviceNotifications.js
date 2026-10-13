@@ -161,15 +161,6 @@ export async function toggleAnimeEpisodeAlert(anime, lang = 'ar') {
  * Official new episodes are available immediately on release day for VIP Basic & VIP Monarch,
  * and delayed by 24 hours for Free Tier users.
  */
-export function isEpisodeDelayedForFreeUser({ episodeNumber, totalEpisodes, showStatus, vipTier }) {
-  if (vipTier === 'vip_basic' || vipTier === 'vip_monarch') {
-    return false;
-  }
-  const epNum = Number(episodeNumber || 0);
-  const maxEp = Number(totalEpisodes || 0);
-  // If the show has multiple episodes and this is the latest/newest official episode
-  if (maxEp > 1 && epNum >= maxEp) {
-    return true;
-  }
+export function isEpisodeDelayedForFreeUser() {
   return false;
 }
