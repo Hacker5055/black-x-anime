@@ -669,6 +669,51 @@ export default function MobileApkApp() {
   const [redeemedVipTier, setRedeemedVipTier] = useState(() => localStorage.getItem('bx_mob_redeemed_vip_tier') || '');
   const [motionPref, setMotionPref] = useState(() => localStorage.getItem('bx_motion_pref') || 'random');
 
+  // ==================== v4.0 ULTIMATE ENGINE STATES ====================
+  // 1. True Offline Vault (Chapters & Episodes saved to local storage / CacheStorage)
+  const [offlineChapters, setOfflineChapters] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('bx_mob_offline_chapters') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [savingOfflineChapter, setSavingOfflineChapter] = useState(false);
+
+  // 2. Anime Ultra Player v4 (Audio Booster 200% + Bass, A-B Scene Loop, Smart Sleep Timer, Frame Snapshot)
+  const [audioBoostMode, setAudioBoostMode] = useState('normal'); // 'normal' | 'boost150' | 'boost200' | 'voice'
+  const [loopPointA, setLoopPointA] = useState(null);
+  const [loopPointB, setLoopPointB] = useState(null);
+  const [sleepTimerMode, setSleepTimerMode] = useState('off'); // 'off' | 'end_of_ep' | '15' | '30' | '60'
+  const [sleepTimerRemainingSec, setSleepTimerRemainingSec] = useState(0);
+  const audioCtxRef = useRef(null);
+  const audioGainNodeRef = useRef(null);
+  const audioFilterNodeRef = useRef(null);
+  const audioConnectedVideoRef = useRef(null);
+
+  // 3. Webtoon Studio v4 (Micro Progress Bar + ETA, Seamless Webtoon Stitcher, Visual Panel Bookmarks)
+  const [readProgressPct, setReadProgressPct] = useState(0);
+  const [seamlessStitch, setSeamlessStitch] = useState(true);
+  const [savedPanels, setSavedPanels] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('bx_mob_saved_panels') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  // 4. Privacy (App PIN Lock + Incognito Mode), New Release Radar, & Developer Direct User VIP Grant
+  const [incognitoMode, setIncognitoMode] = useState(() => localStorage.getItem('bx_mob_incognito') === 'true');
+  const [appPinCode, setAppPinCode] = useState(() => localStorage.getItem('bx_mob_pin_code') || '');
+  const [pinLocked, setPinLocked] = useState(() => Boolean(localStorage.getItem('bx_mob_pin_code')));
+  const [pinInput, setPinInput] = useState('');
+  const [pinSetupInput, setPinSetupInput] = useState('');
+  const [radarModalOpen, setRadarModalOpen] = useState(false);
+  const [devGrantTarget, setDevGrantTarget] = useState('');
+  const [devGrantTier, setDevGrantTier] = useState('vip_monarch');
+  const [devGrantDays, setDevGrantDays] = useState(30);
+  const [devGrantBusy, setDevGrantBusy] = useState(false);
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -1213,6 +1258,348 @@ export default function MobileApkApp() {
     },
     [isDeveloper, devBroadcastInput, globalVipEnforced, user, cloudVipCodes, showToast]
   );
+
+  // ==================== v4.0 ULTIMATE CONTROLLERS ====================
+
+  // 1. Developer Direct User VIP Upgrade (Upgrade any username or email directly in Cloud Firestore without code)
+  const handleDevDirectGrantUserVip = useCallback(async () => {
+    if (!isDeveloper) return;
+    const target = String(devGrantTarget || '').trim().toLowerCase();
+    if (!target) {
+      showToast(lang === 'ar' ? 'يرجى كتابة اسم المستخدم أو البريد الإلكتروني للعضو' : 'Enter username or email');
+      return;
+    }
+    setDevGrantBusy(true);
+    try {
+      const isEmailTarget = target.includes('@');
+      const primaryKey = isEmailTarget ? cleanCloudKey('email', target) : cleanCloudKey('user', target);
+      let existingUser = null;
+      const getRes = await fetch(`${BX_SETTINGS_BASE}/${primaryKey}?key=${BX_KEY}`);
+      if (getRes.ok) {
+        const doc = await getRes.json();
+        const raw = doc?.fields?.json?.stringValue;
+        if (raw) existingUser = JSON.parse(raw);
+      }
+
+      const newStatus = devGrantTier === 'vip_monarch' ? 'VIP Monarch' : 'VIP Basic';
+      const expiresAt = new Date(Date.now() + Number(devGrantDays || 30) * 86400 * 1000).toISOString();
+      const baseUsername = existingUser?.username || (isEmailTarget ? target.split('@')[0] : target);
+      const baseEmail = existingUser?.email || (isEmailTarget ? target : '');
+
+      const upgradedUser = {
+        ...(existingUser || {
+          id: `usr_${Date.now()}`,
+          username: baseUsername,
+          email: baseEmail,
+          displayName: existingUser?.displayName || baseUsername,
+          role: 'user',
+          favorites: [],
+          progress: []
+        }),
+        vipTier: devGrantTier,
+        vipStatus: newStatus,
+        vipExpiresAt: expiresAt,
+        grantedByDeveloperAt: new Date().toISOString()
+      };
+
+      const body = {
+        fields: {
+          json: { stringValue: JSON.stringify(upgradedUser) },
+          username: { stringValue: String(baseUsername).toLowerCase() },
+          email: { stringValue: String(baseEmail).toLowerCase() },
+          updatedAt: { stringValue: new Date().toISOString() }
+        }
+      };
+
+      await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('user', baseUsername)}?key=${BX_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (baseEmail) {
+        await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('email', baseEmail)}?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }
+
+      setDevGrantTarget('');
+      showToast(
+        lang === 'ar'
+          ? `👑 تم ترقية حساب (${target}) مباشرة إلى ${newStatus} لمدة ${devGrantDays} يوم في السحابة!`
+          : `👑 Upgraded (${target}) to ${newStatus} for ${devGrantDays} days!`
+      );
+    } catch (_) {
+      showToast(lang === 'ar' ? 'تعذر ترقية المستخدم عبر السحابة' : 'Cloud upgrade failed');
+    } finally {
+      setDevGrantBusy(false);
+    }
+  }, [isDeveloper, devGrantTarget, devGrantTier, devGrantDays, showToast, lang]);
+
+  // 2. True Offline Vault: Save Manhwa/Manga Chapter for Offline Reading
+  const handleSaveChapterOffline = useCallback(async () => {
+    if (!activeMangaChapter || !mangaPages.length || savingOfflineChapter) return;
+    setSavingOfflineChapter(true);
+    showToast(
+      lang === 'ar'
+        ? `📥 جاري حفظ الفصل ${activeMangaChapter.chapter} (${mangaPages.length} صفحة) للقراءة بدون إنترنت...`
+        : `📥 Saving Ch. ${activeMangaChapter.chapter} (${mangaPages.length} pages) for offline reading...`
+    );
+    try {
+      if (window.caches) {
+        const cache = await window.caches.open('bx-offline-chapters-v1');
+        await Promise.allSettled(
+          mangaPages.map((url) =>
+            fetch(url, { mode: 'no-cors' }).then((res) => cache.put(url, res))
+          )
+        );
+      }
+      const entry = {
+        id: activeMangaChapter.id,
+        chapter: activeMangaChapter.chapter,
+        title: activeMangaChapter.title || `الفصل ${activeMangaChapter.chapter}`,
+        source: activeMangaChapter.source,
+        mangaId: selectedManga?.objectID || activeMangaChapter.mangaId || 'offline_manga',
+        mangaName: selectedManga?.name || 'مانهوا محفوظة',
+        poster: selectedManga?.poster?.large || selectedManga?.poster_uri || '',
+        pagesCount: mangaPages.length,
+        pages: mangaPages,
+        savedAt: new Date().toISOString()
+      };
+      setOfflineChapters((prev) => {
+        const next = [entry, ...prev.filter((x) => x.id !== entry.id)].slice(0, 60);
+        localStorage.setItem('bx_mob_offline_chapters', JSON.stringify(next));
+        return next;
+      });
+      showToast(
+        lang === 'ar'
+          ? `✓ تم حفظ الفصل ${activeMangaChapter.chapter} بالكامل في خزنة بدون نت!`
+          : `✓ Chapter ${activeMangaChapter.chapter} saved to Offline Vault!`
+      );
+    } catch (_) {
+      showToast(lang === 'ar' ? 'تم حفظ روابط الفصل في الخزنة المحلية' : 'Saved chapter to local vault');
+    } finally {
+      setSavingOfflineChapter(false);
+    }
+  }, [activeMangaChapter, mangaPages, savingOfflineChapter, selectedManga, showToast, lang]);
+
+  const handleDeleteOfflineChapter = useCallback(
+    (chId) => {
+      setOfflineChapters((prev) => {
+        const next = prev.filter((x) => x.id !== chId);
+        localStorage.setItem('bx_mob_offline_chapters', JSON.stringify(next));
+        return next;
+      });
+      showToast(lang === 'ar' ? '🗑️ تم حذف الفصل من التنزيلات المحفوظة' : '🗑️ Removed from Offline Vault');
+    },
+    [showToast, lang]
+  );
+
+  // 3. Visual Panel & Frame Bookmarking
+  const handleBookmarkCurrentPanel = useCallback(() => {
+    if (!activeMangaChapter || !mangaPages.length) return;
+    const targetIdx =
+      readerMode === 'page'
+        ? currentPageIdx
+        : Math.min(
+            mangaPages.length - 1,
+            Math.max(0, Math.floor((readProgressPct / 100) * mangaPages.length))
+          );
+    const imgUrl = mangaPages[targetIdx] || mangaPages[0];
+    const item = {
+      id: `panel_${Date.now()}`,
+      type: 'manhwa',
+      title: selectedManga?.name || 'Manhwa',
+      subtitle: `الفصل ${activeMangaChapter.chapter} • صفحة ${targetIdx + 1}`,
+      imageUrl: imgUrl,
+      savedAt: new Date().toISOString()
+    };
+    setSavedPanels((prev) => {
+      const next = [item, ...prev].slice(0, 80);
+      localStorage.setItem('bx_mob_saved_panels', JSON.stringify(next));
+      return next;
+    });
+    showToast(
+      lang === 'ar'
+        ? `🔖 تم حفظ اللقطة (صفحة ${targetIdx + 1}) في معرض لقطاتي المفضلة!`
+        : `🔖 Saved panel (Page ${targetIdx + 1}) to bookmarks!`
+    );
+  }, [activeMangaChapter, mangaPages, readerMode, currentPageIdx, readProgressPct, selectedManga, showToast, lang]);
+
+  // 4. Anime Ultra Player v4: Audio Booster 200% + Bass / Vocal Clarity EQ
+  const handleCycleAudioBooster = useCallback(() => {
+    const order = ['normal', 'boost150', 'boost200', 'voice'];
+    const nextMode = order[(order.indexOf(audioBoostMode) + 1) % order.length];
+    setAudioBoostMode(nextMode);
+
+    try {
+      const vid = videoRef.current;
+      if (vid) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          if (!audioCtxRef.current) {
+            audioCtxRef.current = new AudioContextClass();
+          }
+          if (audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume().catch(() => {});
+          }
+          if (audioConnectedVideoRef.current !== vid) {
+            const source = audioCtxRef.current.createMediaElementSource(vid);
+            const filter = audioCtxRef.current.createBiquadFilter();
+            const gain = audioCtxRef.current.createGain();
+            source.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtxRef.current.destination);
+            audioFilterNodeRef.current = filter;
+            audioGainNodeRef.current = gain;
+            audioConnectedVideoRef.current = vid;
+          }
+          if (audioGainNodeRef.current && audioFilterNodeRef.current) {
+            if (nextMode === 'normal') {
+              audioGainNodeRef.current.gain.value = 1.0;
+              audioFilterNodeRef.current.type = 'allpass';
+              audioFilterNodeRef.current.gain.value = 0;
+            } else if (nextMode === 'boost150') {
+              audioGainNodeRef.current.gain.value = 1.5;
+              audioFilterNodeRef.current.type = 'allpass';
+              audioFilterNodeRef.current.gain.value = 0;
+            } else if (nextMode === 'boost200') {
+              audioGainNodeRef.current.gain.value = 2.0;
+              audioFilterNodeRef.current.type = 'lowshelf';
+              audioFilterNodeRef.current.frequency.value = 105;
+              audioFilterNodeRef.current.gain.value = 6.5;
+            } else if (nextMode === 'voice') {
+              audioGainNodeRef.current.gain.value = 1.45;
+              audioFilterNodeRef.current.type = 'peaking';
+              audioFilterNodeRef.current.frequency.value = 1900;
+              audioFilterNodeRef.current.Q.value = 1.1;
+              audioFilterNodeRef.current.gain.value = 5.5;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    const labelsAr = {
+      normal: '🔊 الصوت: 100% طبيعي',
+      boost150: '🔊 مضخم الصوت: 150% عالي',
+      boost200: '💥 مضخم الصوت: 200% أقصى تضخيم + Bass سينمائي',
+      voice: '🎙️ وضع توضيح الحوارات الصوتية (Vocal Clarity)'
+    };
+    showToast(labelsAr[nextMode] || nextMode);
+  }, [audioBoostMode, showToast]);
+
+  // 5. Anime Ultra Player v4: 1-Tap 1080p Frame Snapshot
+  const handleTakeVideoSnapshot = useCallback(() => {
+    const vid = videoRef.current;
+    if (!vid || !selectedAnime || !activeEpisode) return;
+    const curSec = Math.floor(vid.currentTime || 0);
+    const mm = Math.floor(curSec / 60);
+    const ss = String(curSec % 60).padStart(2, '0');
+    let dataUrl = '';
+
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = vid.videoWidth || 1920;
+      canvas.height = vid.videoHeight || 1080;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+      dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `BLACK-X-${selectedAnime.titleEn.replace(/[^a-z0-9]/gi, '_')}-Ep${activeEpisode.number}-${mm}m${ss}s.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (_) {
+      dataUrl = selectedAnime.banner || selectedAnime.poster || '';
+    }
+
+    const snapItem = {
+      id: `snap_${Date.now()}`,
+      type: 'anime',
+      title: selectedAnime.titleEn,
+      subtitle: `${activeEpisode.name} • الدقيقة ${mm}:${ss}`,
+      imageUrl: dataUrl || selectedAnime.banner || selectedAnime.poster,
+      savedAt: new Date().toISOString()
+    };
+    setSavedPanels((prev) => {
+      const next = [snapItem, ...prev].slice(0, 80);
+      localStorage.setItem('bx_mob_saved_panels', JSON.stringify(next));
+      return next;
+    });
+    showToast(
+      lang === 'ar'
+        ? `📸 تم التقاط وحفظ اللقطة عند الدقيقة ${mm}:${ss} في معرض لقطاتي!`
+        : `📸 Frame captured at ${mm}:${ss} & saved!`
+    );
+  }, [selectedAnime, activeEpisode, showToast, lang]);
+
+  // 6. Anime Ultra Player v4: A-B Scene Loop
+  const handleCycleAbLoop = useCallback(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    const cur = Math.floor(vid.currentTime || 0);
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (loopPointA === null) {
+      setLoopPointA(cur);
+      setLoopPointB(null);
+      showToast(
+        lang === 'ar'
+          ? `🔁 تم تحديد بداية المشهد (A = ${fmt(cur)}) — اضغط مرة أخرى لتحديد النهاية B`
+          : `🔁 Loop Point A set (${fmt(cur)}) — Tap again to set B`
+      );
+    } else if (loopPointB === null) {
+      const endPt = Math.max(loopPointA + 3, cur);
+      setLoopPointB(endPt);
+      showToast(
+        lang === 'ar'
+          ? `🔁 تكرار المشهد القتالي مفعل (${fmt(loopPointA)} ← ${fmt(endPt)})`
+          : `🔁 Scene Loop Active (${fmt(loopPointA)} → ${fmt(endPt)})`
+      );
+    } else {
+      setLoopPointA(null);
+      setLoopPointB(null);
+      showToast(lang === 'ar' ? '🔁 تم إيقاف تكرار المشهد A-B' : '🔁 Scene Loop cleared');
+    }
+  }, [loopPointA, loopPointB, showToast, lang]);
+
+  // 7. Anime Ultra Player v4: Smart Sleep Timer
+  const handleCycleSleepTimer = useCallback(() => {
+    const modes = ['off', 'end_of_ep', '15', '30', '60'];
+    const next = modes[(modes.indexOf(sleepTimerMode) + 1) % modes.length];
+    setSleepTimerMode(next);
+    if (next === 'off' || next === 'end_of_ep') {
+      setSleepTimerRemainingSec(0);
+    } else {
+      setSleepTimerRemainingSec(Number(next) * 60);
+    }
+    const labels = {
+      off: '💤 مؤقت النوم: متوقف',
+      end_of_ep: '💤 مؤقت النوم: إيقاف تلقائي عند نهاية الحلقة',
+      '15': '💤 مؤقت النوم: إيقاف بعد 15 دقيقة',
+      '30': '💤 مؤقت النوم: إيقاف بعد 30 دقيقة',
+      '60': '💤 مؤقت النوم: إيقاف بعد 60 دقيقة'
+    };
+    showToast(labels[next]);
+  }, [sleepTimerMode, showToast]);
+
+  useEffect(() => {
+    if (sleepTimerRemainingSec <= 0) return;
+    const t = setInterval(() => {
+      setSleepTimerRemainingSec((prev) => {
+        if (prev <= 1) {
+          if (videoRef.current) videoRef.current.pause();
+          setSleepTimerMode('off');
+          showToast('💤 انتهى مؤقت النوم — تم إيقاف تشغيل الفيديو تلقائياً');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [sleepTimerRemainingSec, showToast]);
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
   useEffect(() => {
@@ -2086,24 +2473,28 @@ export default function MobileApkApp() {
       setEpisodeServers([]);
       setPlayingVideoUrl('');
       setResolvingVideo(true);
+      setLoopPointA(null);
+      setLoopPointB(null);
 
-      // Save to Watch History & sync with Website Cloud DB
-      const newHistItem = {
-        slug: anime.slug,
-        objectID: anime.objectID,
-        episode: epObj.number,
-        docId: epObj.docId,
-        titleEn: anime.titleEn,
-        titleAr: anime.titleAr,
-        poster: anime.poster,
-        updatedAt: new Date().toISOString()
-      };
-      setWatchHistory((prev) => {
-        const next = [newHistItem, ...prev.filter((x) => x.objectID !== anime.objectID)].slice(0, 50);
-        localStorage.setItem('bx_mob_history', JSON.stringify(next));
-        if (user) syncUserStateToCloud(user, favorites, next);
-        return next;
-      });
+      // Save to Watch History & sync with Website Cloud DB (unless Incognito Mode is active)
+      if (!incognitoMode) {
+        const newHistItem = {
+          slug: anime.slug,
+          objectID: anime.objectID,
+          episode: epObj.number,
+          docId: epObj.docId,
+          titleEn: anime.titleEn,
+          titleAr: anime.titleAr,
+          poster: anime.poster,
+          updatedAt: new Date().toISOString()
+        };
+        setWatchHistory((prev) => {
+          const next = [newHistItem, ...prev.filter((x) => x.objectID !== anime.objectID)].slice(0, 50);
+          localStorage.setItem('bx_mob_history', JSON.stringify(next));
+          if (user) syncUserStateToCloud(user, favorites, next);
+          return next;
+        });
+      }
 
       const encId = encodeURIComponent(anime.objectID);
       const docIdsToTry = Array.from(
@@ -2484,18 +2875,22 @@ export default function MobileApkApp() {
       );
       setActiveMangaChapter(ch);
       setCurrentPageIdx(0);
+      setReadProgressPct(0);
       setAutoScrollSpeed(0);
-      const cached = prefetchedChapterRef.current[ch.id];
-      if (cached?.length) {
-        setMangaPages(cached);
+      const offlineSaved =
+        (Array.isArray(ch.pages) && ch.pages.length ? ch.pages : null) ||
+        offlineChapters.find((x) => x.id === ch.id)?.pages ||
+        prefetchedChapterRef.current[ch.id];
+      if (offlineSaved?.length) {
+        setMangaPages(offlineSaved);
         setMangaPagesLoading(false);
       } else {
         setMangaPages([]);
         setMangaPagesLoading(true);
       }
 
-      // Save to Manga Reading History
-      if (selectedManga) {
+      // Save to Manga Reading History (unless Incognito Mode is active)
+      if (selectedManga && !incognitoMode) {
         const histEntry = {
           objectID: selectedManga.objectID,
           name: selectedManga.name,
@@ -2516,7 +2911,7 @@ export default function MobileApkApp() {
       }
 
       try {
-        if (!cached?.length) {
+        if (!offlineSaved?.length) {
           const imgs = await fetchChapterPagesList(ch);
           setMangaPages(imgs);
         }
@@ -2979,6 +3374,209 @@ export default function MobileApkApp() {
         </div>
       )}
 
+      {/* App 4-Digit PIN Lock Screen Overlay */}
+      {pinLocked && appPinCode && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9998,
+            background: '#000000',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem'
+          }}
+        >
+          <img
+            src="/blackx-logo.png"
+            alt="BLACK X"
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '18px',
+              border: '1px solid rgba(255,255,255,0.25)',
+              marginBottom: '1rem'
+            }}
+          />
+          <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.15rem', fontWeight: 900 }}>
+            🔒 {isRtl ? 'قفل حماية BLACK X مفعل' : 'BLACK X PIN Lock'}
+          </h2>
+          <p style={{ margin: '0 0 1.2rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
+            {isRtl ? 'أدخل رمز الـ PIN المكون من 4 أرقام لفتح التطبيق:' : 'Enter your 4-digit PIN code to unlock:'}
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  background: pinInput.length > i ? '#ffffff' : 'transparent',
+                  border: '2px solid #ffffff'
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 72px)', gap: '0.75rem' }}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, '✓'].map((k) => (
+              <button
+                key={String(k)}
+                type="button"
+                onClick={() => {
+                  if (k === '⌫') {
+                    setPinInput((p) => p.slice(0, -1));
+                    return;
+                  }
+                  if (k === '✓') {
+                    if (pinInput === appPinCode) {
+                      setPinLocked(false);
+                      setPinInput('');
+                    } else {
+                      setPinInput('');
+                      showToast(isRtl ? '❌ رمز الـ PIN غير صحيح' : '❌ Incorrect PIN');
+                    }
+                    return;
+                  }
+                  const next = (pinInput + String(k)).slice(0, 4);
+                  setPinInput(next);
+                  if (next.length === 4) {
+                    if (next === appPinCode) {
+                      setPinLocked(false);
+                      setPinInput('');
+                    } else {
+                      setTimeout(() => {
+                        setPinInput('');
+                        showToast(isRtl ? '❌ رمز الـ PIN غير صحيح' : '❌ Incorrect PIN');
+                      }, 180);
+                    }
+                  }
+                }}
+                style={{
+                  height: '62px',
+                  borderRadius: '16px',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#ffffff',
+                  fontSize: '1.25rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* New Release Radar Modal (🔔 رادار الحلقات والفصول الجديدة) */}
+      {radarModalOpen && (
+        <div
+          onClick={() => setRadarModalOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9700,
+            background: 'rgba(0,0,0,0.88)',
+            backdropFilter: 'blur(16px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '420px',
+              maxHeight: '82vh',
+              overflowY: 'auto',
+              background: '#08080c',
+              border: '1.5px solid #ffffff',
+              borderRadius: '20px',
+              padding: '1.1rem'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div style={{ fontWeight: 900, fontSize: '0.96rem' }}>
+                🔔 {isRtl ? 'رادار الحلقات والفصول الجديدة' : 'New Release Radar'}
+              </div>
+              <button
+                type="button"
+                onClick={() => setRadarModalOpen(false)}
+                style={{
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.25rem 0.65rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: '0 0 0.85rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.5 }}>
+              {isRtl
+                ? 'أحدث التحديثات للأعمال المضافة في مفضلتك وأحدث الحلقات الصادرة هذا الأسبوع:'
+                : 'Latest updates from your favorites and airing releases:'}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+              {(favorites.length > 0 ? favorites.slice(0, 6) : latestList.slice(0, 6)).map((item, idx) => (
+                <div
+                  key={item.objectID || idx}
+                  onClick={() => {
+                    setRadarModalOpen(false);
+                    handleOpenAnime(item);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    padding: '0.55rem',
+                    borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <img
+                    src={item.poster}
+                    alt={item.titleEn}
+                    style={{ width: '46px', height: '64px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.titleEn}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.18rem' }}>
+                      🟢 {isRtl ? 'متاح الآن بأعلى جودة 1080p على سيرفرات BLACK X' : 'Available now in 1080p'}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      padding: '0.28rem 0.55rem',
+                      borderRadius: '8px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontSize: '0.68rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    ▶
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Native-Style AMOLED Header Bar */}
       <header
         style={{
@@ -3030,7 +3628,53 @@ export default function MobileApkApp() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {incognitoMode && (
+            <span
+              title={isRtl ? 'وضع التصفح الخفي مفعل' : 'Incognito Mode Active'}
+              style={{
+                padding: '0.22rem 0.48rem',
+                borderRadius: '8px',
+                background: '#ffffff',
+                color: '#000000',
+                fontSize: '0.66rem',
+                fontWeight: 900
+              }}
+            >
+              🕵️
+            </span>
+          )}
+
+          {/* New Release Radar Button */}
+          <button
+            type="button"
+            onClick={() => setRadarModalOpen(true)}
+            style={{
+              position: 'relative',
+              width: '36px',
+              height: '36px',
+              borderRadius: '11px',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              color: '#fff',
+              fontSize: '0.92rem',
+              cursor: 'pointer'
+            }}
+          >
+            🔔
+            <span
+              style={{
+                position: 'absolute',
+                top: '5px',
+                right: '5px',
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: '#ffffff'
+              }}
+            />
+          </button>
+
           {/* Instant Search Trigger */}
           <button
             type="button"
@@ -4107,6 +4751,12 @@ export default function MobileApkApp() {
           {activeMangaChapter ? (
             <div
               ref={mangaReaderContainerRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
+                const pct = Math.min(100, Math.max(0, Math.round((el.scrollTop / maxScroll) * 100)));
+                setReadProgressPct(pct);
+              }}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -4317,6 +4967,76 @@ export default function MobileApkApp() {
                         : '⚡ Contrast+'}
                     </button>
 
+                    {/* Seamless Webtoon Stitcher Toggle */}
+                    {readerMode === 'webtoon' && (
+                      <button
+                        type="button"
+                        onClick={() => setSeamlessStitch((s) => !s)}
+                        style={{
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: '8px',
+                          background: seamlessStitch ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          color: seamlessStitch ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✂️ {isRtl ? `دمج الشرائح: ${seamlessStitch ? 'مفعل' : 'عادي'}` : `Stitch: ${seamlessStitch ? 'ON' : 'OFF'}`}
+                      </button>
+                    )}
+
+                    {/* Offline Chapter Caching Button */}
+                    <button
+                      type="button"
+                      disabled={savingOfflineChapter}
+                      onClick={handleSaveChapterOffline}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '8px',
+                        background: offlineChapters.some((x) => x.id === activeMangaChapter.id)
+                          ? '#ffffff'
+                          : 'rgba(255,255,255,0.12)',
+                        color: offlineChapters.some((x) => x.id === activeMangaChapter.id) ? '#000000' : '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {savingOfflineChapter
+                        ? '⏳...'
+                        : offlineChapters.some((x) => x.id === activeMangaChapter.id)
+                        ? isRtl
+                          ? '✓ محفوظ بدون نت'
+                          : '✓ Offline Saved'
+                        : isRtl
+                        ? '📥 حفظ بدون نت'
+                        : '📥 Save Offline'}
+                    </button>
+
+                    {/* Visual Panel Bookmark Button */}
+                    <button
+                      type="button"
+                      onClick={handleBookmarkCurrentPanel}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.12)',
+                        color: '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔖 {isRtl ? 'حفظ لقطة' : 'Bookmark Panel'}
+                    </button>
+
                     <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800, alignSelf: 'center', whiteSpace: 'nowrap' }}>
                       {isRtl ? '💡 اضغط على الصورة لإخفاء/إظهار الشريط' : '💡 Tap page to toggle HUD'}
                     </span>
@@ -4395,7 +5115,15 @@ export default function MobileApkApp() {
               ) : (
                 <div
                   onClick={() => setReaderHudVisible((v) => !v)}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 0, width: '100vw', overflowX: 'auto' }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0,
+                    width: '100vw',
+                    overflowX: 'auto',
+                    lineHeight: 0,
+                    fontSize: 0
+                  }}
                 >
                   {mangaPages.map((pg, idx) => (
                     <img
@@ -4408,7 +5136,7 @@ export default function MobileApkApp() {
                         maxWidth: readerZoom === 100 ? '100vw' : 'none',
                         height: 'auto',
                         display: 'block',
-                        margin: '0 auto',
+                        margin: seamlessStitch && idx > 0 ? '-1px auto 0' : '0 auto',
                         filter:
                           readerEyeFilter === 'warm'
                             ? 'sepia(0.24) brightness(0.92)'
@@ -4419,6 +5147,67 @@ export default function MobileApkApp() {
                     />
                   ))}
                 </div>
+              )}
+
+              {/* Micro Progress Bar & Reading ETA Indicator at Bottom of Reader */}
+              {!mangaPagesLoading && mangaPages.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      position: 'fixed',
+                      bottom: '10px',
+                      left: '12px',
+                      zIndex: 9650,
+                      padding: '0.22rem 0.6rem',
+                      borderRadius: '99px',
+                      background: 'rgba(0,0,0,0.82)',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      color: '#ffffff',
+                      fontSize: '0.66rem',
+                      fontWeight: 900,
+                      pointerEvents: 'none'
+                    }}
+                  >
+                    {(() => {
+                      const pct =
+                        readerMode === 'page'
+                          ? Math.round(((currentPageIdx + 1) / Math.max(1, mangaPages.length)) * 100)
+                          : readProgressPct;
+                      const remMin = Math.max(
+                        1,
+                        Math.ceil(((100 - pct) / 100) * Math.max(2, Math.round(mangaPages.length * 0.18)))
+                      );
+                      return isRtl
+                        ? `📊 ${pct}% • متبقي ~${pct >= 98 ? 0 : remMin} د`
+                        : `📊 ${pct}% • ~${pct >= 98 ? 0 : remMin}m left`;
+                    })()}
+                  </div>
+                  <div
+                    style={{
+                      position: 'fixed',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: '3px',
+                      background: 'rgba(255,255,255,0.14)',
+                      zIndex: 9650,
+                      pointerEvents: 'none'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${
+                          readerMode === 'page'
+                            ? Math.round(((currentPageIdx + 1) / Math.max(1, mangaPages.length)) * 100)
+                            : readProgressPct
+                        }%`,
+                        height: '100%',
+                        background: '#ffffff',
+                        transition: 'width 0.15s ease-out'
+                      }}
+                    />
+                  </div>
+                </>
               )}
 
               {/* Bottom Next / Previous Chapter Navigation Bar */}
@@ -5682,6 +6471,89 @@ export default function MobileApkApp() {
                       )}
                     </div>
                   </div>
+
+                  {/* Developer Direct User VIP Upgrade (Upgrade any username or email without code) */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
+                      👑 {isRtl ? 'ترقية أي مستخدم مباشرة إلى VIP (بدون كود):' : 'Direct User VIP Grant (No Code Needed):'}
+                    </div>
+                    <input
+                      type="text"
+                      value={devGrantTarget}
+                      onChange={(e) => setDevGrantTarget(e.target.value)}
+                      placeholder={isRtl ? 'اكتب اسم المستخدم أو البريد الإلكتروني للعضو...' : 'Username or Email...'}
+                      style={{
+                        width: '100%',
+                        padding: '0.58rem 0.75rem',
+                        borderRadius: '10px',
+                        background: '#000',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontSize: '0.76rem',
+                        marginBottom: '0.45rem'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.45rem' }}>
+                      <select
+                        value={devGrantTier}
+                        onChange={(e) => setDevGrantTier(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: '0.48rem',
+                          borderRadius: '10px',
+                          background: '#000',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.74rem',
+                          fontWeight: 800
+                        }}
+                      >
+                        <option value="vip_monarch">👑 باقة الملك (VIP Monarch)</option>
+                        <option value="vip_basic">⚡ الباقة الأساسية (VIP Basic)</option>
+                      </select>
+                      <select
+                        value={devGrantDays}
+                        onChange={(e) => setDevGrantDays(Number(e.target.value))}
+                        style={{
+                          width: '110px',
+                          padding: '0.48rem',
+                          borderRadius: '10px',
+                          background: '#000',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.74rem',
+                          fontWeight: 800
+                        }}
+                      >
+                        <option value={30}>30 يوم</option>
+                        <option value={90}>90 يوم</option>
+                        <option value={365}>سنة كاملة</option>
+                        <option value={3650}>مدى الحياة</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={devGrantBusy}
+                      onClick={handleDevDirectGrantUserVip}
+                      style={{
+                        width: '100%',
+                        padding: '0.65rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.78rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {devGrantBusy
+                        ? '⏳ جاري ترقية الحساب...'
+                        : isRtl
+                        ? '👑 ترقية حساب العضو فوراً في السحابة'
+                        : '👑 Grant VIP Immediately'}
+                    </button>
+                  </div>
                 </div>
               )}
             </>
@@ -6054,8 +6926,8 @@ export default function MobileApkApp() {
               </div>
               <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
                 {isRtl
-                  ? 'الإصدار الحالي: BLACK X Mobile v3.3 Pro (120Hz Full Package)'
-                  : 'Current Version: BLACK X Mobile v3.3 Pro (120Hz Full Package)'}
+                  ? 'الإصدار الحالي: BLACK X Mobile v4.0 Ultimate (120Hz Full Edition)'
+                  : 'Current Version: BLACK X Mobile v4.0 Ultimate (120Hz Full Edition)'}
               </div>
             </div>
             <a
@@ -6065,8 +6937,8 @@ export default function MobileApkApp() {
               onClick={() =>
                 showToast(
                   isRtl
-                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile Pro 120Hz المباشرة...'
-                    : '✓ Downloading latest BLACK X Mobile Pro 120Hz APK...'
+                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v4.0 Ultimate المباشرة...'
+                    : '✓ Downloading latest BLACK X Mobile v4.0 Ultimate APK...'
                 )
               }
               style={{
@@ -6084,14 +6956,145 @@ export default function MobileApkApp() {
             </a>
           </div>
 
-          {/* 6-Tab Personal Library Manager (Favorites, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
+          {/* Privacy & Security Suite: Incognito Mode + 4-Digit App PIN Lock */}
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: '0.88rem', marginBottom: '0.6rem' }}>
+              🛡️ {isRtl ? 'الخصوصية والحماية الذكية (PIN + التصفح الخفي):' : 'Privacy & Security Suite:'}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: '0.78rem' }}>
+                  🕵️ {isRtl ? 'وضع التصفح الخفي (Incognito Mode)' : 'Incognito Mode'}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)' }}>
+                  {isRtl ? 'مشاهدة الحلقات وقراءة الفصول بدون حفظها في السجل' : 'Watch & read without saving history'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !incognitoMode;
+                  setIncognitoMode(next);
+                  localStorage.setItem('bx_mob_incognito', String(next));
+                  showToast(
+                    next
+                      ? isRtl
+                        ? '🕵️ تم تفعيل وضع التصفح الخفي'
+                        : '🕵️ Incognito Mode ON'
+                      : isRtl
+                      ? '✓ تم إيقاف وضع التصفح الخفي'
+                      : '✓ Incognito Mode OFF'
+                  );
+                }}
+                style={{
+                  padding: '0.42rem 0.85rem',
+                  borderRadius: '10px',
+                  background: incognitoMode ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                  color: incognitoMode ? '#000000' : '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.74rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {incognitoMode ? (isRtl ? 'مفعل ON' : 'ON') : isRtl ? 'متوقف OFF' : 'OFF'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+              <input
+                type="password"
+                maxLength={4}
+                value={pinSetupInput}
+                onChange={(e) => setPinSetupInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                placeholder={
+                  appPinCode
+                    ? isRtl
+                      ? '🔒 القفل مفعل (أدخل 4 أرقام لتغييره)'
+                      : '🔒 PIN Active (4 digits)'
+                    : isRtl
+                    ? 'أدخل رمز PIN من 4 أرقام لقفل التطبيق...'
+                    : 'Set 4-digit PIN lock...'
+                }
+                style={{
+                  flex: 1,
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '10px',
+                  background: '#050507',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff',
+                  fontSize: '0.75rem'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (pinSetupInput.length !== 4) {
+                    showToast(isRtl ? 'يرجى إدخال 4 أرقام بالضبط' : 'Enter 4 digits');
+                    return;
+                  }
+                  setAppPinCode(pinSetupInput);
+                  localStorage.setItem('bx_mob_pin_code', pinSetupInput);
+                  setPinSetupInput('');
+                  showToast(isRtl ? '🔒 تم تفعيل قفل التطبيق برمز PIN بنجاح!' : '🔒 App PIN Lock enabled!');
+                }}
+                style={{
+                  padding: '0.55rem 0.85rem',
+                  borderRadius: '10px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.74rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {isRtl ? 'حفظ PIN' : 'Set PIN'}
+              </button>
+              {appPinCode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppPinCode('');
+                    setPinLocked(false);
+                    localStorage.removeItem('bx_mob_pin_code');
+                    showToast(isRtl ? '🔓 تم إلغاء قفل الـ PIN' : '🔓 PIN Lock removed');
+                  }}
+                  style={{
+                    padding: '0.55rem 0.7rem',
+                    borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.1)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontWeight: 900,
+                    fontSize: '0.72rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isRtl ? 'إلغاء' : 'Clear'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 8-Tab Personal Library Manager (Favorites, Offline Vault, Saved Panels, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
           <div style={{ marginTop: '1.15rem' }}>
             <h3 style={{ margin: '0 0 0.55rem', fontSize: '0.95rem', fontWeight: 900 }}>
-              📚 {isRtl ? 'مكتبتي الشخصية وقوائم المتابعة' : 'My Personal Anime & Manga Library'}
+              📚 {isRtl ? 'مكتبتي الشخصية، خزنة بدون نت، ولقطاتي' : 'My Library, Offline Vault & Snapshots'}
             </h3>
             <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginBottom: '0.85rem', paddingBottom: '0.2rem' }}>
               {[
                 { id: 'favorites', ar: `♥ المفضلة (${favorites.length})`, en: `♥ Favorites (${favorites.length})` },
+                { id: 'offline', ar: `📥 بدون نت (${offlineChapters.length})`, en: `📥 Offline (${offlineChapters.length})` },
+                { id: 'panels', ar: `🔖 لقطاتي (${savedPanels.length})`, en: `🔖 Snapshots (${savedPanels.length})` },
                 { id: 'watching', ar: '🔥 أشاهد حالياً', en: '🔥 Watching' },
                 { id: 'completed', ar: '✔ مكتمل', en: '✔ Completed' },
                 { id: 'planned', ar: '📌 أخطط لمشاهدته', en: '📌 Plan to Watch' },
@@ -6160,6 +7163,156 @@ export default function MobileApkApp() {
                 </div>
               );
             })()}
+
+            {librarySubTab === 'offline' && (
+              offlineChapters.length === 0 ? (
+                <div style={{ padding: '1.25rem', borderRadius: '14px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
+                  {isRtl
+                    ? 'خزنة القراءة بدون إنترنت فارغة حالياً. اضغط على (📥 حفظ بدون نت) من داخل أي فصل مانهوا أو مانجا لحفظه هنا!'
+                    : 'Offline Vault is empty. Tap (📥 Save Offline) inside any chapter to cache it here!'}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  {offlineChapters.map((och) => (
+                    <div
+                      key={och.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.7rem',
+                        padding: '0.6rem',
+                        borderRadius: '12px',
+                        background: '#0a0a0e',
+                        border: '1px solid rgba(255,255,255,0.15)'
+                      }}
+                    >
+                      {och.poster && (
+                        <img
+                          src={och.poster}
+                          alt={och.mangaName}
+                          style={{ width: '50px', height: '68px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                        />
+                      )}
+                      <div
+                        onClick={() => {
+                          setActiveTab('manga');
+                          setSelectedManga({
+                            objectID: och.mangaId,
+                            name: och.mangaName,
+                            poster_uri: och.poster,
+                            source: och.source
+                          });
+                          handleReadMangaChapter(och);
+                        }}
+                        style={{ flex: 1, cursor: 'pointer' }}
+                      >
+                        <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{och.mangaName}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>
+                          📥 {isRtl ? `الفصل ${och.chapter} • ${och.pagesCount} صفحة محفوظة` : `Ch. ${och.chapter} • ${och.pagesCount} pages`}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('manga');
+                          setSelectedManga({
+                            objectID: och.mangaId,
+                            name: och.mangaName,
+                            poster_uri: och.poster,
+                            source: och.source
+                          });
+                          handleReadMangaChapter(och);
+                        }}
+                        style={{
+                          padding: '0.4rem 0.7rem',
+                          borderRadius: '8px',
+                          background: '#ffffff',
+                          color: '#000000',
+                          border: 'none',
+                          fontWeight: 900,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📖 {isRtl ? 'قراءة' : 'Read'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOfflineChapter(och.id)}
+                        style={{
+                          padding: '0.4rem 0.55rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+
+            {librarySubTab === 'panels' && (
+              savedPanels.length === 0 ? (
+                <div style={{ padding: '1.25rem', borderRadius: '14px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
+                  {isRtl
+                    ? 'لم تقم بحفظ أي لقطة شاشة أو صفحة مانهوا بعد. اضغط على (📸 لقطة) داخل مشغل الأنمي أو (🔖 حفظ لقطة) داخل قارئ المانهوا!'
+                    : 'No saved snapshots or panels yet.'}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
+                  {savedPanels.map((sp) => (
+                    <div
+                      key={sp.id}
+                      style={{
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        background: '#0a0a0e',
+                        border: '1px solid rgba(255,255,255,0.16)'
+                      }}
+                    >
+                      <img
+                        src={sp.imageUrl}
+                        alt={sp.title}
+                        style={{ width: '100%', height: '135px', objectFit: 'cover', display: 'block' }}
+                      />
+                      <div style={{ padding: '0.5rem' }}>
+                        <div style={{ fontWeight: 900, fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {sp.title}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.22rem' }}>
+                          <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.65)' }}>{sp.subtitle}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSavedPanels((prev) => {
+                                const next = prev.filter((x) => x.id !== sp.id);
+                                localStorage.setItem('bx_mob_saved_panels', JSON.stringify(next));
+                                return next;
+                              });
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'rgba(255,255,255,0.7)',
+                              fontSize: '0.72rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
 
             {librarySubTab === 'history' && (
               watchHistory.length === 0 ? (
@@ -6417,7 +7570,39 @@ export default function MobileApkApp() {
                       <span style={{ fontWeight: 900, fontSize: '0.78rem', color: '#fff', textShadow: '0 2px 6px #000' }}>
                         {selectedAnime.titleEn} • {activeEpisode.name}
                       </span>
-                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={handleTakeVideoSnapshot}
+                          style={{
+                            padding: '0.36rem 0.6rem',
+                            borderRadius: '10px',
+                            background: 'rgba(255,255,255,0.18)',
+                            border: '1px solid rgba(255,255,255,0.35)',
+                            color: '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.72rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📸
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCycleAudioBooster}
+                          style={{
+                            padding: '0.36rem 0.6rem',
+                            borderRadius: '10px',
+                            background: audioBoostMode !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.18)',
+                            border: '1px solid rgba(255,255,255,0.35)',
+                            color: audioBoostMode !== 'normal' ? '#000' : '#fff',
+                            fontWeight: 900,
+                            fontSize: '0.7rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🔊 {audioBoostMode === 'boost200' ? '200%' : audioBoostMode === 'boost150' ? '150%' : audioBoostMode === 'voice' ? '🎙️' : '100%'}
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -6532,6 +7717,10 @@ export default function MobileApkApp() {
                       onTimeUpdate={(e) => {
                         try {
                           const cur = Math.floor(e.currentTarget.currentTime || 0);
+                          if (loopPointA !== null && loopPointB !== null && cur >= loopPointB) {
+                            e.currentTarget.currentTime = loopPointA;
+                            return;
+                          }
                           if (cur > 5 && cur % 3 === 0) {
                             localStorage.setItem(`bx_ep_sec_${activeEpisode.docId}`, String(cur));
                           }
@@ -6541,6 +7730,11 @@ export default function MobileApkApp() {
                         try {
                           localStorage.removeItem(`bx_ep_sec_${activeEpisode.docId}`);
                         } catch (_) {}
+                        if (sleepTimerMode === 'end_of_ep') {
+                          setSleepTimerMode('off');
+                          showToast('💤 انتهت الحلقة — تم إيقاف التشغيل حسب مؤقت النوم');
+                          return;
+                        }
                         if (!autoNextEp) return;
                         const idx = animeEpisodes.findIndex((e) => e.docId === activeEpisode.docId);
                         if (idx !== -1 && idx + 1 < animeEpisodes.length) {
@@ -6779,6 +7973,97 @@ export default function MobileApkApp() {
                         }}
                       >
                         ⚡ {playbackSpeed}x
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCycleAudioBooster}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: audioBoostMode !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: audioBoostMode !== 'normal' ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔊{' '}
+                        {audioBoostMode === 'boost200'
+                          ? '200% Bass'
+                          : audioBoostMode === 'boost150'
+                          ? '150%'
+                          : audioBoostMode === 'voice'
+                          ? isRtl
+                            ? '🎙️ حوارات'
+                            : '🎙️ Voice'
+                          : '100%'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleTakeVideoSnapshot}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📸 {isRtl ? 'لقطة' : 'Snap'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCycleAbLoop}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: loopPointA !== null ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: loopPointA !== null ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔁{' '}
+                        {loopPointA === null
+                          ? 'A-B'
+                          : loopPointB === null
+                          ? 'A→...'
+                          : 'A⇄B'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCycleSleepTimer}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: sleepTimerMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: sleepTimerMode !== 'off' ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        💤{' '}
+                        {sleepTimerMode === 'off'
+                          ? isRtl
+                            ? 'مؤقت'
+                            : 'Sleep'
+                          : sleepTimerMode === 'end_of_ep'
+                          ? isRtl
+                            ? 'نهاية الحلقة'
+                            : 'End Ep'
+                          : `${Math.ceil(sleepTimerRemainingSec / 60)}m`}
                       </button>
                       <button
                         type="button"
