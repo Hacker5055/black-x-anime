@@ -109,7 +109,18 @@ export default function Navbar({ onOpenAuth }) {
             </button>
 
             <NavLink to="/" className="wit-brand" aria-label="BLACK X">
-              <span className="wit-brand__box">X</span>
+              <img
+                src="/blackx-logo.png"
+                alt="BLACK X"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '9px',
+                  objectFit: 'cover',
+                  background: '#000000',
+                  border: '1px solid rgba(255,255,255,0.2)'
+                }}
+              />
               <span className="wit-brand__text">BLACK X</span>
             </NavLink>
 

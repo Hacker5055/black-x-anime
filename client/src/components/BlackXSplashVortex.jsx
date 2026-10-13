@@ -910,7 +910,7 @@ export default function BlackXSplashVortex({
           >
             <polygon
               points="70,4 120,20 136,70 120,120 70,136 20,120 4,70 20,20"
-              fill="rgba(0,0,0,0.85)"
+              fill="rgba(0,0,0,0.92)"
               stroke="#ffffff"
               strokeWidth="1.8"
               strokeDasharray={textVisible ? '420' : '90 30'}
@@ -925,12 +925,20 @@ export default function BlackXSplashVortex({
               strokeWidth="1"
               strokeDasharray="6 6"
             />
-            <path
-              d="M34 28 L52 28 L70 55 L88 28 L106 28 L80 70 L108 112 L90 112 L70 83 L50 112 L32 112 L60 70 Z"
-              fill="#ffffff"
-            />
-            <circle cx="70" cy="70" r="3.2" fill="#000000" />
           </svg>
+          <img
+            src="/blackx-logo.png"
+            alt="BLACK X"
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              width: '88px',
+              height: '88px',
+              borderRadius: '20px',
+              objectFit: 'cover',
+              boxShadow: '0 0 26px rgba(255, 0, 0, 0.45)'
+            }}
+          />
         </div>
 
         <div
