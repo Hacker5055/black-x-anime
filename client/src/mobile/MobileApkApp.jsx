@@ -793,6 +793,11 @@ export default function MobileApkApp() {
   const [mangaChAsc, setMangaChAsc] = useState(false); // Sort chapters ascending vs descending
   const pendingAutoPlayEpRef = useRef(null);
 
+  // ==================== v10.0 SLOTH-UI & PRIME LUXURY DESIGN STATES ====================
+  const [homeDesignMode, setHomeDesignMode] = useState('sloth'); // 'sloth' (Image 3 Full-Bleed Hero) | 'prime' (Image 1 Rounded Hero Card)
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false); // Image 2 Luxury Rounded Command Menu Card
+  const [catalogCardStyle, setCatalogCardStyle] = useState('wide'); // 'wide' (Image 1 Popular Titles Wide Cards) | 'grid' (3-Column Grid)
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -937,6 +942,7 @@ export default function MobileApkApp() {
   const lastBackPressRef = useRef(0);
   useEffect(() => {
     navRef.current = {
+      commandMenuOpen,
       storyPreviewAnime,
       quickPeekAnime,
       videoFullscreen,
@@ -951,6 +957,7 @@ export default function MobileApkApp() {
       activeTab
     };
   }, [
+    commandMenuOpen,
     storyPreviewAnime,
     quickPeekAnime,
     videoFullscreen,
@@ -968,6 +975,7 @@ export default function MobileApkApp() {
   // Push a browser history entry whenever the user navigates deeper so WebView gesture back also triggers popstate
   useEffect(() => {
     if (
+      commandMenuOpen ||
       storyPreviewAnime ||
       quickPeekAnime ||
       videoFullscreen ||
@@ -984,6 +992,7 @@ export default function MobileApkApp() {
       } catch (_) {}
     }
   }, [
+    commandMenuOpen,
     storyPreviewAnime,
     quickPeekAnime,
     videoFullscreen,
@@ -1000,6 +1009,10 @@ export default function MobileApkApp() {
   useEffect(() => {
     const handleStepBack = () => {
       const s = navRef.current;
+      if (s.commandMenuOpen) {
+        setCommandMenuOpen(false);
+        return true;
+      }
       if (s.storyPreviewAnime) {
         setStoryPreviewAnime(null);
         return true;
@@ -4746,7 +4759,7 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* Top Native-Style AMOLED Header Bar */}
+      {/* Top SlothUI / Prime Luxury Floating Glass Header Bar */}
       <header
         style={{
           position: 'sticky',
@@ -4755,35 +4768,45 @@ export default function MobileApkApp() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0.7rem 1rem',
-          background: 'rgba(0, 0, 0, 0.86)',
-          backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+          padding: '0.65rem 1rem',
+          background: 'rgba(0, 0, 0, 0.84)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.07)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-          <img
-            src="/blackx-logo.png"
-            alt="BLACK X"
+          <div
+            onClick={() => setCommandMenuOpen(true)}
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: '#000000',
-              objectFit: 'cover',
-              border: '1px solid rgba(255,255,255,0.22)',
-              boxShadow: '0 0 18px rgba(255,0,0,0.35)'
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: '#0a0a0f',
+              border: '1.5px solid rgba(255,255,255,0.28)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              boxShadow: '0 4px 16px rgba(255,255,255,0.1)',
+              cursor: 'pointer'
             }}
-          />
+          >
+            <img
+              src="/blackx-logo.png"
+              alt="BLACK X"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontWeight: 900, fontSize: '1rem', letterSpacing: '0.06em' }}>BLACK X</span>
+              <span style={{ fontWeight: 900, fontSize: '0.98rem', letterSpacing: '0.06em' }}>BLACK X</span>
               <span
                 style={{
-                  fontSize: '0.62rem',
+                  fontSize: '0.6rem',
                   fontWeight: 900,
-                  padding: '0.12rem 0.42rem',
-                  borderRadius: '6px',
+                  padding: '0.1rem 0.42rem',
+                  borderRadius: '99px',
                   background: '#ffffff',
                   color: '#000000'
                 }}
@@ -4791,60 +4814,45 @@ export default function MobileApkApp() {
                 {fpsHz}Hz
               </span>
             </div>
-            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
-              {isRtl ? 'نسخة الهاتف السحابية • 6,973 أنمي' : 'Mobile Cloud Edition • 6,973 Anime'}
+            <div style={{ fontSize: '0.63rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
+              {isRtl ? 'إصدار v10.0 الملكي • 6,973 أنمي' : 'v10.0 Sovereign • 6,973 Anime'}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          {incognitoMode && (
-            <span
-              title={isRtl ? 'وضع التصفح الخفي مفعل' : 'Incognito Mode Active'}
-              style={{
-                padding: '0.22rem 0.48rem',
-                borderRadius: '8px',
-                background: '#ffffff',
-                color: '#000000',
-                fontSize: '0.66rem',
-                fontWeight: 900
-              }}
-            >
-              🕵️
-            </span>
-          )}
-
-          {/* New Release Radar Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.42rem' }}>
+          {/* Home Hero Style Switcher (SlothUI Full-Bleed vs Prime Rounded Cards) */}
           <button
             type="button"
-            onClick={() => setRadarModalOpen(true)}
+            onClick={() => {
+              const nextMode = homeDesignMode === 'sloth' ? 'prime' : 'sloth';
+              setHomeDesignMode(nextMode);
+              showToast(
+                nextMode === 'sloth'
+                  ? isRtl
+                    ? '🎬 تم تفعيل واجهة العرض السينمائي الكامل (SlothUI)'
+                    : '🎬 SlothUI Full-Bleed Hero Active'
+                  : isRtl
+                  ? '🖼️ تم تفعيل واجهة البطاقات الدائرية الفاخرة (Prime Cards)'
+                  : '🖼️ Prime Rounded Hero Active'
+              );
+            }}
             style={{
-              position: 'relative',
-              width: '36px',
-              height: '36px',
-              borderRadius: '11px',
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.14)',
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.09)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: '#fff',
-              fontSize: '0.92rem',
+              fontSize: '0.88rem',
               cursor: 'pointer'
             }}
+            title={isRtl ? 'تبديل تصميم الواجهة الرئيسية' : 'Switch Home Layout'}
           >
-            🔔
-            <span
-              style={{
-                position: 'absolute',
-                top: '5px',
-                right: '5px',
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: '#ffffff'
-              }}
-            />
+            {homeDesignMode === 'sloth' ? '🖼️' : '🎬'}
           </button>
 
-          {/* Instant Search Trigger */}
+          {/* Circular Glass Search Button (Matches Image 3) */}
           <button
             type="button"
             onClick={() => {
@@ -4852,62 +4860,67 @@ export default function MobileApkApp() {
               setActiveTab('catalog');
             }}
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '11px',
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.14)',
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.09)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: '#fff',
-              fontSize: '0.95rem',
+              fontSize: '0.92rem',
               cursor: 'pointer'
             }}
           >
             🔍
           </button>
 
-          {/* AR / EN Toggle */}
+          {/* Circular Glass TV / Release Radar Button (Matches Image 3) */}
           <button
             type="button"
-            onClick={() => {
-              const next = lang === 'ar' ? 'en' : 'ar';
-              setLang(next);
-              localStorage.setItem('bx_mob_lang', next);
-            }}
+            onClick={() => setRadarModalOpen(true)}
             style={{
-              height: '36px',
-              padding: '0 0.65rem',
-              borderRadius: '11px',
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.14)',
+              position: 'relative',
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.09)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: '#fff',
-              fontSize: '0.75rem',
-              fontWeight: 900,
+              fontSize: '0.88rem',
               cursor: 'pointer'
             }}
           >
-            {lang === 'ar' ? 'EN' : 'عربي'}
+            📺
+            <span
+              style={{
+                position: 'absolute',
+                top: '6px',
+                right: '6px',
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: '#ffffff'
+              }}
+            />
           </button>
 
-          {/* Profile Avatar Pill */}
+          {/* Circular Profile / Command Menu Trigger (Opens Image 2 Luxury Command Menu) */}
           <button
             type="button"
-            onClick={() => {
-              setSelectedAnime(null);
-              setActiveTab('profile');
-            }}
+            onClick={() => setCommandMenuOpen(true)}
             style={{
-              width: '36px',
-              height: '36px',
+              width: '38px',
+              height: '38px',
               borderRadius: '50%',
-              background: user ? '#ffffff' : 'rgba(255,255,255,0.1)',
-              color: user ? '#000000' : '#ffffff',
-              border: '1px solid rgba(255,255,255,0.25)',
+              background: '#ffffff',
+              color: '#000000',
+              border: '2px solid rgba(255,255,255,0.35)',
               fontWeight: 900,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
+              fontSize: '0.86rem',
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(255,255,255,0.2)'
             }}
           >
-            {user ? (user.displayName?.[0] || 'X').toUpperCase() : '👤'}
+            {user ? (user.displayName?.[0] || 'X').toUpperCase() : '☷'}
           </button>
         </div>
       </header>
@@ -4984,13 +4997,13 @@ export default function MobileApkApp() {
             })}
           </div>
 
-          {/* Netflix / Crunchyroll Full-Bleed Vertical Cinema Hero Showcase */}
-          {heroAnime && (
+          {/* v10.0 Dual-Mode Hero Showcase: SlothUI Full-Bleed (Image 3) OR Prime Rounded Card (Image 1) */}
+          {heroAnime && homeDesignMode === 'sloth' && (
             <section
               style={{
                 position: 'relative',
                 width: '100%',
-                height: '455px',
+                height: '485px',
                 overflow: 'hidden',
                 borderBottom: '1px solid rgba(255,255,255,0.08)'
               }}
@@ -5002,21 +5015,21 @@ export default function MobileApkApp() {
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  objectPosition: 'center 20%',
-                  filter: 'brightness(0.68) contrast(1.12)'
+                  objectPosition: 'center 18%',
+                  filter: 'brightness(0.72) contrast(1.12)'
                 }}
               />
-              {/* Multi-Stop Netflix Cinema Vignette */}
+              {/* Multi-Stop SlothUI Pitch-Black Vignette */}
               <div
                 style={{
                   position: 'absolute',
                   inset: 0,
                   background:
-                    'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.68) 68%, #000000 100%)'
+                    'linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.04) 28%, rgba(0,0,0,0.78) 68%, #000000 100%)'
                 }}
               />
 
-              {/* Centered Editorial Metadata & Netflix 3-Button Action Bar */}
+              {/* Centered Editorial Metadata & SlothUI 50/50 Dual Pill Buttons (Matches Image 3 "RISE OF X") */}
               <div
                 style={{
                   position: 'absolute',
@@ -5029,46 +5042,46 @@ export default function MobileApkApp() {
                   alignItems: 'center'
                 }}
               >
-                {/* Netflix TOP 10 Badge */}
+                {/* [X] BLACK X ORIGINAL Seal */}
                 <div
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '0.4rem',
-                    marginBottom: '0.45rem',
-                    padding: '0.18rem 0.65rem',
-                    borderRadius: '6px',
-                    background: 'rgba(0,0,0,0.75)',
-                    border: '1px solid rgba(255,255,255,0.28)'
+                    gap: '0.42rem',
+                    marginBottom: '0.35rem'
                   }}
                 >
                   <span
                     style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
                       background: '#ffffff',
                       color: '#000000',
-                      fontSize: '0.58rem',
+                      fontSize: '0.66rem',
                       fontWeight: 900,
-                      padding: '0.08rem 0.35rem',
-                      borderRadius: '3px',
-                      letterSpacing: '0.04em'
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}
                   >
-                    TOP 10
+                    X
                   </span>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#ffffff' }}>
-                    {isRtl ? `#${heroSlide + 1} في BLACK X اليوم` : `#${heroSlide + 1} on BLACK X Today`}
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em' }}>
+                    BLACK X <span style={{ fontWeight: 500, opacity: 0.8 }}>original</span>
                   </span>
                 </div>
 
-                {/* Giant Cinema Title */}
+                {/* Giant SlothUI Display Title */}
                 <h1
                   style={{
-                    margin: '0 0 0.35rem',
-                    fontSize: '1.42rem',
+                    margin: '0 0 0.45rem',
+                    fontSize: '1.68rem',
                     fontWeight: 900,
-                    lineHeight: 1.2,
-                    letterSpacing: '-0.01em',
-                    textShadow: '0 4px 18px rgba(0,0,0,0.95)',
+                    lineHeight: 1.12,
+                    letterSpacing: '0.02em',
+                    textTransform: 'uppercase',
+                    textShadow: '0 6px 24px rgba(0,0,0,0.95)',
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
@@ -5078,117 +5091,110 @@ export default function MobileApkApp() {
                   {heroAnime.titleEn}
                 </h1>
 
-                {/* Netflix Dot-Separated Metadata Tags */}
+                {/* SlothUI Metadata Row: Year • Seasons/Type • [TV-MA] Pill */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.6rem',
+                    flexWrap: 'wrap',
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    color: 'rgba(255,255,255,0.88)',
+                    marginBottom: '0.5rem'
+                  }}
+                >
+                  <span>{heroAnime.year || '2026'}</span>
+                  <span>{heroAnime.type || (isRtl ? 'مسلسل أنمي' : 'Anime Series')}</span>
+                  <span
+                    style={{
+                      padding: '0.12rem 0.55rem',
+                      borderRadius: '99px',
+                      border: '1px solid rgba(255,255,255,0.45)',
+                      fontSize: '0.64rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    TV-MA • 4K
+                  </span>
+                </div>
+
+                {/* SlothUI Ranking Line: 📺 #1 in TV Shows Today */}
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '0.45rem',
-                    flexWrap: 'wrap',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    color: 'rgba(255,255,255,0.85)',
-                    marginBottom: '0.85rem'
+                    fontSize: '0.8rem',
+                    fontWeight: 900,
+                    color: '#ffffff',
+                    marginBottom: '0.9rem'
                   }}
                 >
-                  <span style={{ color: '#ffffff', fontWeight: 900 }}>
-                    🧬 {getDnaMatchScore(heroAnime)}% {isRtl ? 'تطابق' : 'Match'}
-                  </span>
-                  <span>•</span>
-                  <span>★ {heroAnime.rating}</span>
-                  <span>•</span>
-                  <span>{heroAnime.type}</span>
-                  <span>•</span>
-                  <span
-                    style={{
-                      padding: '0.06rem 0.38rem',
-                      borderRadius: '4px',
-                      border: '1px solid rgba(255,255,255,0.4)',
-                      fontSize: '0.62rem',
-                      fontWeight: 900
-                    }}
-                  >
-                    4K 120Hz
+                  <span>📺</span>
+                  <span>
+                    {isRtl
+                      ? `#${heroSlide + 1} في مسلسلات BLACK X اليوم`
+                      : `#${heroSlide + 1} in TV Shows Today`}
                   </span>
                 </div>
 
-                {/* Netflix 3-Column Hero Action Row (＋ قائمتي | ▶ تشغيل الآن | ⓘ التفاصيل) */}
+                {/* SlothUI Dual 50/50 Rounded Pill Buttons (▶ Play | ⓘ More Info) */}
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '76px 1fr 76px',
-                    gap: '0.65rem',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.7rem',
                     width: '100%',
-                    maxWidth: '370px',
-                    alignItems: 'center'
+                    maxWidth: '370px'
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleFavorite(heroAnime)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px',
-                      padding: '0.4rem 0.2rem',
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#ffffff',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <span style={{ fontSize: '1.15rem', fontWeight: 900 }}>
-                      {favorites.some((f) => f.objectID === heroAnime.objectID) ? '✓' : '＋'}
-                    </span>
-                    <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)' }}>
-                      {isRtl ? 'قائمتي' : 'My List'}
-                    </span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => handleOpenAnime(heroAnime, 1)}
                     style={{
-                      padding: '0.68rem 1.1rem',
-                      borderRadius: '8px',
+                      padding: '0.76rem 1rem',
+                      borderRadius: '999px',
                       border: 'none',
                       background: '#ffffff',
                       color: '#000000',
                       fontWeight: 900,
-                      fontSize: '0.88rem',
+                      fontSize: '0.86rem',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '0.45rem',
-                      boxShadow: '0 8px 24px rgba(255,255,255,0.18)',
+                      boxShadow: '0 8px 24px rgba(255,255,255,0.2)',
                       cursor: 'pointer'
                     }}
                   >
                     <span>▶</span>
-                    <span>{isRtl ? 'تشغيل الآن' : 'Play Now'}</span>
+                    <span>{isRtl ? 'تشغيل' : 'Play'}</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setQuickPeekAnime(heroAnime)}
+                    onClick={() => handleOpenAnime(heroAnime)}
                     style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px',
-                      padding: '0.4rem 0.2rem',
-                      background: 'transparent',
-                      border: 'none',
+                      padding: '0.76rem 1rem',
+                      borderRadius: '999px',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      background: 'rgba(22, 22, 28, 0.88)',
+                      backdropFilter: 'blur(16px)',
                       color: '#ffffff',
+                      fontWeight: 900,
+                      fontSize: '0.84rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.45rem',
                       cursor: 'pointer'
                     }}
                   >
-                    <span style={{ fontSize: '1.12rem', fontWeight: 900 }}>ⓘ</span>
-                    <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)' }}>
-                      {isRtl ? 'التفاصيل' : 'Info'}
-                    </span>
+                    <span>ⓘ</span>
+                    <span>{isRtl ? 'تفاصيل أكثر' : 'More Info'}</span>
                   </button>
                 </div>
               </div>
@@ -5217,6 +5223,145 @@ export default function MobileApkApp() {
                     }}
                   />
                 ))}
+              </div>
+            </section>
+          )}
+
+          {/* Mode B: Prime Rounded Hero Card + Top Search Bar (Matches Image 1 Left Screen "Popular Movies / HEROES") */}
+          {heroAnime && homeDesignMode === 'prime' && (
+            <section style={{ padding: '0.75rem 1rem 0.25rem' }}>
+              {/* Rounded Search Trigger Bar */}
+              <div
+                onClick={() => {
+                  setSelectedAnime(null);
+                  setActiveTab('catalog');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  padding: '0.72rem 1.05rem',
+                  borderRadius: '999px',
+                  background: '#111116',
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  color: 'rgba(255,255,255,0.6)',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  marginBottom: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>🔍</span>
+                <span>{isRtl ? 'ابحث عن الأنميات، الأفلام، والمانهوا...' : 'Movies, Anime, Drama & other...'}</span>
+              </div>
+
+              {/* Section Header: Popular Movies / See All */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900 }}>
+                  {isRtl ? 'الأعمال الرائجة' : 'Popular Anime'}
+                </h2>
+                <span
+                  onClick={() => setActiveTab('catalog')}
+                  style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, cursor: 'pointer' }}
+                >
+                  {isRtl ? 'عرض الكل' : 'See All'}
+                </span>
+              </div>
+
+              {/* Large 26px Rounded Featured Hero Card (Matches Image 1 "HEROES") */}
+              <div
+                onClick={() => handleOpenAnime(heroAnime)}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '255px',
+                  borderRadius: '26px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  boxShadow: '0 18px 42px rgba(0,0,0,0.85)',
+                  cursor: 'pointer'
+                }}
+              >
+                <img
+                  src={heroAnime.banner || heroAnime.poster}
+                  alt={heroAnime.titleEn}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.78)' }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.2) 45%, rgba(0,0,0,0.92) 100%)'
+                  }}
+                />
+
+                {/* Top-Right Floating Glass Rating Pill (★ 8.1) */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '14px',
+                    right: '14px',
+                    padding: '0.28rem 0.65rem',
+                    borderRadius: '99px',
+                    background: 'rgba(18,18,24,0.78)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255,255,255,0.24)',
+                    fontSize: '0.74rem',
+                    fontWeight: 900,
+                    color: '#ffffff'
+                  }}
+                >
+                  ★ {heroAnime.rating || '9.2'}
+                </div>
+
+                {/* Bottom-Left Title + Pipe-Separated Genre Pills + Pagination Dots */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '14px',
+                    left: '16px',
+                    right: '16px'
+                  }}
+                >
+                  <h1 style={{ margin: '0 0 0.45rem', fontSize: '1.32rem', fontWeight: 900, textShadow: '0 4px 14px #000' }}>
+                    {heroAnime.titleEn}
+                  </h1>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                    <div
+                      style={{
+                        padding: '0.32rem 0.75rem',
+                        borderRadius: '99px',
+                        background: 'rgba(20,20,26,0.82)',
+                        backdropFilter: 'blur(14px)',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        color: 'rgba(255,255,255,0.88)'
+                      }}
+                    >
+                      {(heroAnime.tags || ['أكشن', 'فانتازيا', 'تشويق']).slice(0, 3).join('  |  ')}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                      {popularList.slice(0, 5).map((_, idx) => (
+                        <span
+                          key={idx}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHeroSlide(idx);
+                          }}
+                          style={{
+                            width: heroSlide === idx ? '16px' : '6px',
+                            height: '6px',
+                            borderRadius: '99px',
+                            background: heroSlide === idx ? '#ffffff' : 'rgba(255,255,255,0.35)',
+                            transition: 'all 0.2s ease'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
           )}
@@ -5889,10 +6034,10 @@ export default function MobileApkApp() {
                           position: 'relative',
                           width: '124px',
                           height: '176px',
-                          borderRadius: '12px',
+                          borderRadius: '18px',
                           overflow: 'hidden',
                           background: '#0d0d10',
-                          border: '1px solid rgba(255,255,255,0.14)'
+                          border: '1px solid rgba(255,255,255,0.16)'
                         }}
                       >
                         <img
@@ -5901,21 +6046,54 @@ export default function MobileApkApp() {
                           loading="lazy"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
+                        {/* Top-Left Circular [X] Brand Seal (Matches Image 3 "Popular on slothUI") */}
                         <span
                           style={{
                             position: 'absolute',
-                            top: '6px',
-                            right: '6px',
-                            background: 'rgba(0,0,0,0.85)',
-                            color: '#ffffff',
+                            top: '7px',
+                            left: '7px',
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            color: '#000000',
                             fontSize: '0.64rem',
                             fontWeight: 900,
-                            padding: '0.12rem 0.38rem',
-                            borderRadius: '6px',
-                            border: '1px solid rgba(255,255,255,0.2)'
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.85)'
                           }}
                         >
-                          ★ {item.rating}
+                          X
+                        </span>
+                        {/* Top-Right Circular Glass Bookmark Button (Matches Image 1 "Amazon Originals") */}
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(item);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '7px',
+                            right: '7px',
+                            width: '26px',
+                            height: '26px',
+                            borderRadius: '50%',
+                            background: favorites.some((f) => f.objectID === item.objectID)
+                              ? '#ffffff'
+                              : 'rgba(12,12,16,0.78)',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.32)',
+                            color: favorites.some((f) => f.objectID === item.objectID) ? '#000000' : '#ffffff',
+                            fontSize: '0.68rem',
+                            fontWeight: 900,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {favorites.some((f) => f.objectID === item.objectID) ? '✓' : '🔖'}
                         </span>
                         <span
                           onClick={(e) => {
@@ -5924,15 +6102,15 @@ export default function MobileApkApp() {
                           }}
                           style={{
                             position: 'absolute',
-                            top: '6px',
-                            left: '6px',
+                            bottom: '6px',
+                            right: '6px',
                             width: '22px',
                             height: '22px',
                             borderRadius: '50%',
-                            background: 'rgba(0,0,0,0.78)',
-                            border: '1px solid rgba(255,255,255,0.35)',
+                            background: 'rgba(0,0,0,0.82)',
+                            border: '1px solid rgba(255,255,255,0.32)',
                             color: '#ffffff',
-                            fontSize: '0.68rem',
+                            fontSize: '0.66rem',
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',
@@ -5947,14 +6125,14 @@ export default function MobileApkApp() {
                             bottom: '6px',
                             left: '6px',
                             background: 'rgba(0,0,0,0.85)',
-                            color: 'rgba(255,255,255,0.9)',
+                            color: 'rgba(255,255,255,0.95)',
                             fontSize: '0.6rem',
-                            fontWeight: 800,
-                            padding: '0.1rem 0.38rem',
-                            borderRadius: '5px'
+                            fontWeight: 900,
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: '6px'
                           }}
                         >
-                          {item.type}
+                          ★ {item.rating}
                         </span>
                       </div>
                       <div
@@ -5980,20 +6158,20 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 2: FULL 6,973 ANIME CATALOG & GENRES (WITH v8.0 UNIVERSAL SPOTLIGHT SEARCH) ==================== */}
+      {/* ==================== TAB 2: FULL 6,973 ANIME CATALOG & TRENDING SEARCH (MATCHES IMAGE 1 MIDDLE SCREEN) ==================== */}
       {activeTab === 'catalog' && !selectedAnime && (
         <main style={{ padding: '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
-          {/* Instant Mobile Search Input */}
+          {/* Rounded Pill Search Input (Matches Image 1 Middle Screen) */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem',
-              background: '#0b0b0e',
-              border: '1px solid rgba(255,255,255,0.18)',
-              borderRadius: '14px',
-              padding: '0.6rem 0.9rem',
-              marginBottom: '0.75rem'
+              gap: '0.55rem',
+              background: '#111116',
+              border: '1px solid rgba(255,255,255,0.16)',
+              borderRadius: '999px',
+              padding: '0.68rem 1.05rem',
+              marginBottom: '0.85rem'
             }}
           >
             <span>🔍</span>
@@ -6003,8 +6181,8 @@ export default function MobileApkApp() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={
                 isRtl
-                  ? 'بحث شامل وموحد في الأنمي والمانهوا (مثال: Solo Leveling, One Piece)...'
-                  : 'Universal search across Anime & Manhwa...'
+                  ? 'ابحث عن الأنميات، الأفلام، والمانهوا...'
+                  : 'Movies, Anime, Drama & other...'
               }
               style={{
                 flex: 1,
@@ -6012,7 +6190,7 @@ export default function MobileApkApp() {
                 border: 'none',
                 outline: 'none',
                 color: '#ffffff',
-                fontSize: '0.86rem',
+                fontSize: '0.84rem',
                 fontWeight: 700
               }}
             />
@@ -6025,6 +6203,48 @@ export default function MobileApkApp() {
                 ✕
               </button>
             )}
+          </div>
+
+          {/* Image 1 Middle Screen: "Trending Search" Pill Tags */}
+          <div style={{ marginBottom: '0.9rem' }}>
+            <h3 style={{ margin: '0 0 0.55rem', fontSize: '0.92rem', fontWeight: 900 }}>
+              {isRtl ? 'عمليات البحث الرائجة (Trending Search)' : 'Trending Search'}
+            </h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.42rem' }}>
+              {[
+                'One Piece',
+                'Solo Leveling',
+                'Jujutsu Kaisen',
+                'Attack on Titan',
+                'Demon Slayer',
+                'Bleach',
+                'Hunter x Hunter',
+                'Death Note',
+                'Blue Lock',
+                'Dragon Ball'
+              ].map((tag) => {
+                const active = searchQuery.toLowerCase() === tag.toLowerCase();
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSearchQuery(active ? '' : tag)}
+                    style={{
+                      padding: '0.38rem 0.85rem',
+                      borderRadius: '999px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.04)',
+                      color: active ? '#000000' : 'rgba(255,255,255,0.85)',
+                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Universal Spotlight Search: Matching Manhwa Results Row */}
@@ -6220,110 +6440,289 @@ export default function MobileApkApp() {
             })}
           </div>
 
-          {/* Live Count Bar */}
+          {/* Live Count Bar + Popular Titles View Mode Switcher (Matches Image 1 Middle Screen) */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '0.75rem',
-              fontSize: '0.75rem',
-              color: 'rgba(255,255,255,0.68)',
-              fontWeight: 800
+              marginBottom: '0.75rem'
             }}
           >
-            <span>
-              {isRtl
-                ? `📚 إجمالي الأعمال المتوفرة: ${catalogTotal.toLocaleString()} أنمي وفيلم`
-                : `📚 Total Available: ${catalogTotal.toLocaleString()} Anime & Movies`}
-            </span>
-            <span>1080p • 720p • 480p</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
+                {isRtl ? 'الأعمال الأكثر شعبية (Popular Titles)' : 'Popular Titles'}
+              </h3>
+              <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700, marginTop: '2px' }}>
+                {isRtl
+                  ? `📚 إجمالي الأعمال المتوفرة: ${catalogTotal.toLocaleString()} أنمي وفيلم`
+                  : `📚 Total Available: ${catalogTotal.toLocaleString()} Anime & Movies`}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setCatalogCardStyle((s) => (s === 'wide' ? 'grid' : 'wide'))}
+              style={{
+                padding: '0.38rem 0.78rem',
+                borderRadius: '99px',
+                background: '#ffffff',
+                color: '#000000',
+                border: 'none',
+                fontSize: '0.72rem',
+                fontWeight: 900,
+                cursor: 'pointer'
+              }}
+            >
+              {catalogCardStyle === 'wide' ? (isRtl ? '☷ عرض شبكي' : '☷ Grid') : isRtl ? '🖼️ بطاقات سينمائية' : '🖼️ Wide Cards'}
+            </button>
           </div>
 
-          {/* 3-Column Anime Witcher Mobile Poster Grid */}
+          {/* Image 1 Middle Screen: Wide 24px-Rounded Cinema Cards OR 3-Column Poster Grid */}
           {catalogLoading ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
               {Array.from({ length: 12 }).map((_, i) => (
                 <div
                   key={i}
-                  style={{ aspectRatio: '2/3', borderRadius: '12px', background: 'rgba(255,255,255,0.06)' }}
+                  style={{ aspectRatio: '2/3', borderRadius: '18px', background: 'rgba(255,255,255,0.06)' }}
                 />
               ))}
             </div>
           ) : (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
-                {catalogItems.map((item) => (
-                  <div
-                    key={item.objectID}
-                    className="bx-mob-card"
-                    onClick={() => handleOpenAnime(item)}
-                    style={{ cursor: 'pointer' }}
-                  >
+              {catalogCardStyle === 'wide' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {catalogItems.map((item) => (
                     <div
+                      key={item.objectID}
+                      className="bx-mob-card"
+                      onClick={() => handleOpenAnime(item)}
                       style={{
                         position: 'relative',
-                        aspectRatio: '2 / 2.9',
-                        borderRadius: '12px',
+                        width: '100%',
+                        height: '205px',
+                        borderRadius: '24px',
                         overflow: 'hidden',
-                        background: '#0b0b0e',
-                        border: '1px solid rgba(255,255,255,0.12)'
+                        background: '#0b0b10',
+                        border: '1px solid rgba(255,255,255,0.16)',
+                        boxShadow: '0 14px 36px rgba(0,0,0,0.8)',
+                        cursor: 'pointer'
                       }}
                     >
                       <img
-                        src={item.poster}
+                        src={item.banner || item.poster}
                         alt={item.titleEn}
                         loading="lazy"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          filter: 'brightness(0.75) contrast(1.06)'
+                        }}
                       />
-                      <span
+                      <div
                         style={{
                           position: 'absolute',
-                          top: '5px',
-                          right: '5px',
-                          background: 'rgba(0,0,0,0.85)',
-                          color: '#fff',
-                          fontSize: '0.6rem',
+                          inset: 0,
+                          background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.22) 42%, rgba(0,0,0,0.92) 100%)'
+                        }}
+                      />
+
+                      {/* Top-Right Floating Glass Star Rating Pill (Matches Image 1 "★ 8.3") */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '12px',
+                          right: '12px',
+                          padding: '0.26rem 0.65rem',
+                          borderRadius: '99px',
+                          background: 'rgba(18,18,24,0.78)',
+                          backdropFilter: 'blur(12px)',
+                          border: '1px solid rgba(255,255,255,0.24)',
+                          fontSize: '0.72rem',
                           fontWeight: 900,
-                          padding: '0.1rem 0.34rem',
-                          borderRadius: '5px'
+                          color: '#ffffff'
                         }}
                       >
-                        ★ {item.rating}
-                      </span>
-                      <span
+                        ★ {item.rating || '9.2'}
+                      </div>
+
+                      {/* Top-Left Circular [X] Seal */}
+                      <div
                         style={{
                           position: 'absolute',
-                          bottom: '5px',
-                          left: '5px',
-                          background: 'rgba(0,0,0,0.84)',
-                          color: '#fff',
-                          fontSize: '0.58rem',
-                          fontWeight: 800,
-                          padding: '0.08rem 0.34rem',
-                          borderRadius: '5px'
+                          top: '12px',
+                          left: '12px',
+                          width: '26px',
+                          height: '26px',
+                          borderRadius: '50%',
+                          background: '#ffffff',
+                          color: '#000000',
+                          fontSize: '0.72rem',
+                          fontWeight: 900,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}
                       >
-                        {item.type}
-                      </span>
+                        X
+                      </div>
+
+                      {/* Bottom Title + Pipe-Separated Genres Pill + Duration */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '12px',
+                          left: '14px',
+                          right: '14px'
+                        }}
+                      >
+                        <h4
+                          style={{
+                            margin: '0 0 0.42rem',
+                            fontSize: '1.12rem',
+                            fontWeight: 900,
+                            color: '#ffffff',
+                            textShadow: '0 4px 14px #000',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {item.titleEn}
+                        </h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                          <span
+                            style={{
+                              padding: '0.26rem 0.7rem',
+                              borderRadius: '99px',
+                              background: 'rgba(20,20,28,0.82)',
+                              backdropFilter: 'blur(14px)',
+                              border: '1px solid rgba(255,255,255,0.18)',
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              color: 'rgba(255,255,255,0.88)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '68%'
+                            }}
+                          >
+                            {(item.tags || ['أكشن', 'فانتازيا', 'تشويق']).slice(0, 3).join('  |  ')}
+                          </span>
+                          <span
+                            style={{
+                              padding: '0.26rem 0.65rem',
+                              borderRadius: '99px',
+                              background: 'rgba(20,20,28,0.82)',
+                              backdropFilter: 'blur(14px)',
+                              border: '1px solid rgba(255,255,255,0.18)',
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              color: 'rgba(255,255,255,0.88)',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            ⏱ {item.duration || '24m'} • {item.type}
+                          </span>
+                        </div>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
+                  {catalogItems.map((item) => (
                     <div
-                      style={{
-                        marginTop: '0.32rem',
-                        fontSize: '0.73rem',
-                        fontWeight: 800,
-                        lineHeight: 1.28,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
-                      }}
+                      key={item.objectID}
+                      className="bx-mob-card"
+                      onClick={() => handleOpenAnime(item)}
+                      style={{ cursor: 'pointer' }}
                     >
-                      {item.titleEn}
+                      <div
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '2 / 2.9',
+                          borderRadius: '18px',
+                          overflow: 'hidden',
+                          background: '#0b0b0e',
+                          border: '1px solid rgba(255,255,255,0.14)'
+                        }}
+                      >
+                        <img
+                          src={item.poster}
+                          alt={item.titleEn}
+                          loading="lazy"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            left: '6px',
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            color: '#000000',
+                            fontSize: '0.58rem',
+                            fontWeight: 900,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          X
+                        </span>
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            right: '6px',
+                            background: 'rgba(0,0,0,0.85)',
+                            color: '#fff',
+                            fontSize: '0.6rem',
+                            fontWeight: 900,
+                            padding: '0.1rem 0.34rem',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          ★ {item.rating}
+                        </span>
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: '6px',
+                            left: '6px',
+                            background: 'rgba(0,0,0,0.84)',
+                            color: '#fff',
+                            fontSize: '0.58rem',
+                            fontWeight: 800,
+                            padding: '0.08rem 0.34rem',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          {item.type}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          marginTop: '0.32rem',
+                          fontSize: '0.73rem',
+                          fontWeight: 800,
+                          lineHeight: 1.28,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {item.titleEn}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {catalogItems.length < catalogTotal && (
                 <button
@@ -11414,110 +11813,272 @@ export default function MobileApkApp() {
             </div>
           )}
 
-          {/* ==================== v9.0 NETFLIX / CRUNCHYROLL FULL-BLEED ANIME SHOW HUB HEADER ==================== */}
-          <div style={{ position: 'relative', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-            {/* Blurred Obsidian Cinema Backdrop */}
-            <img
-              src={selectedAnime.banner || selectedAnime.poster}
-              alt={selectedAnime.titleEn}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                filter: 'blur(26px) brightness(0.28)',
-                transform: 'scale(1.15)',
-                pointerEvents: 'none'
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.82) 70%, #000000 100%)',
-                pointerEvents: 'none'
-              }}
-            />
+          {/* ==================== v10.0 SLOTH-UI & MARVELS FULL-BLEED ANIME SHOW HUB HEADER ==================== */}
+          <div style={{ position: 'relative', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            {/* Full-Bleed Key Art Hero Banner (Matches Image 3 Left "Demonic Slash" & Image 1 Bottom-Right "The Marvels") */}
+            <div style={{ position: 'relative', width: '100%', height: '310px', overflow: 'hidden' }}>
+              <img
+                src={selectedAnime.poster || selectedAnime.banner}
+                alt={selectedAnime.titleEn}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center 20%',
+                  filter: 'brightness(0.75) contrast(1.1)'
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.08) 32%, rgba(0,0,0,0.88) 78%, #000000 100%)',
+                  pointerEvents: 'none'
+                }}
+              />
 
-            <div style={{ position: 'relative', zIndex: 2, padding: '1rem' }}>
-              <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'flex-start' }}>
-                <img
-                  src={selectedAnime.poster}
-                  alt={selectedAnime.titleEn}
+              {/* SlothUI [X] BLACK X ORIGINAL Seal overlaid on lower-left of Key Art */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '12px',
+                  left: '16px',
+                  right: '16px'
+                }}
+              >
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.42rem', marginBottom: '0.35rem' }}>
+                  <span
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontSize: '0.64rem',
+                      fontWeight: 900,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    X
+                  </span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.9)', letterSpacing: '0.03em' }}>
+                    BLACK X <span style={{ fontWeight: 500, opacity: 0.8 }}>original</span>
+                  </span>
+                  <span
+                    style={{
+                      marginInlineStart: '0.35rem',
+                      padding: '0.1rem 0.45rem',
+                      borderRadius: '6px',
+                      background: 'rgba(255,255,255,0.16)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      fontSize: '0.6rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    4K Ultra
+                  </span>
+                </div>
+
+                <h1
                   style={{
-                    width: '112px',
-                    height: '162px',
-                    borderRadius: '14px',
-                    objectFit: 'cover',
-                    border: '1.5px solid rgba(255,255,255,0.32)',
-                    boxShadow: '0 14px 32px rgba(0,0,0,0.85)',
-                    flexShrink: 0
+                    margin: 0,
+                    fontSize: '1.52rem',
+                    fontWeight: 900,
+                    lineHeight: 1.18,
+                    textShadow: '0 4px 18px #000000'
                   }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>
-                    <span
-                      style={{
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontSize: '0.66rem',
-                        fontWeight: 900,
-                        padding: '0.14rem 0.5rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      🧬 {getDnaMatchScore(selectedAnime)}% {isRtl ? 'تطابق' : 'Match'}
-                    </span>
-                    <span
-                      style={{
-                        background: 'rgba(255,255,255,0.14)',
-                        fontSize: '0.66rem',
-                        fontWeight: 900,
-                        padding: '0.14rem 0.5rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      ★ {selectedAnime.rating}
-                    </span>
-                    <span
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        fontSize: '0.66rem',
-                        fontWeight: 800,
-                        padding: '0.14rem 0.5rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      {selectedAnime.state}
-                    </span>
-                    <span
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        fontSize: '0.66rem',
-                        fontWeight: 900,
-                        padding: '0.14rem 0.5rem',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(255,255,255,0.28)'
-                      }}
-                    >
-                      4K 120Hz
-                    </span>
-                  </div>
+                >
+                  {selectedAnime.titleEn}
+                </h1>
+              </div>
+            </div>
 
-                  <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.12rem', fontWeight: 900, lineHeight: 1.28 }}>
-                    {selectedAnime.titleEn}
-                  </h1>
+            <div style={{ position: 'relative', zIndex: 2, padding: '0.2rem 1rem 1rem', background: '#000000' }}>
+              {/* Image 1 & Image 3 Metadata Line: Year • Episodes • [Type Pill] • ★ Rating */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  flexWrap: 'wrap',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  color: 'rgba(255,255,255,0.85)',
+                  marginBottom: '0.7rem'
+                }}
+              >
+                <span>{selectedAnime.year || '2026'}</span>
+                <span>▶</span>
+                <span>{selectedAnime.tags?.[0] || selectedAnime.type || (isRtl ? 'أكشن' : 'Action')}</span>
+                <span>|</span>
+                <span
+                  style={{
+                    padding: '0.12rem 0.55rem',
+                    borderRadius: '99px',
+                    border: '1px solid rgba(255,255,255,0.35)',
+                    fontSize: '0.66rem',
+                    fontWeight: 900
+                  }}
+                >
+                  {animeEpisodes.length} {isRtl ? 'حلقة' : 'Eps'}
+                </span>
+                <span>|</span>
+                <span style={{ color: '#ffffff', fontWeight: 900 }}>
+                  ★ {selectedAnime.rating} ({getDnaMatchScore(selectedAnime)}% Match)
+                </span>
+              </div>
 
-                  <div style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.6, fontWeight: 700 }}>
-                    <div>🎬 {isRtl ? 'الاستوديو:' : 'Studio:'} {selectedAnime.studio}</div>
-                    <div>📅 {isRtl ? 'الموسم:' : 'Season:'} {selectedAnime.season} ({selectedAnime.year})</div>
-                    <div>📼 {isRtl ? 'الحلقات:' : 'Episodes:'} {animeEpisodes.length} {selectedAnime.duration ? `• ⏱ ${selectedAnime.duration}` : ''}</div>
-                  </div>
+              {/* Clean 3-Line Story Synopsis (Matches Image 3 Left & Image 1 Bottom-Right) */}
+              <div
+                onClick={() => setStoryExpanded((v) => !v)}
+                style={{ marginBottom: '0.9rem', cursor: 'pointer' }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.77rem',
+                    color: 'rgba(255,255,255,0.78)',
+                    lineHeight: 1.55,
+                    display: storyExpanded ? 'block' : '-webkit-box',
+                    WebkitLineClamp: storyExpanded ? 'unset' : 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {selectedAnime.storyAr}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 900, color: '#ffffff', opacity: 0.85 }}>
+                    {storyExpanded ? (isRtl ? 'عرض أقل ▲' : 'Show less ▲') : isRtl ? '...قراءة المزيد' : '...Read more'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleSpeakText(selectedAnime.storyAr);
+                    }}
+                    style={{
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '99px',
+                      background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                      color: ttsSpeaking ? '#000000' : '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      fontSize: '0.66rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {ttsSpeaking ? (isRtl ? '🔇 إيقاف' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen'}
+                  </button>
                 </div>
               </div>
 
-              {/* Netflix Giant Primary Play / Resume CTA Button -> Opens Dedicated Standalone Video Player Page */}
+              {/* Image 3 Left Signature Circular Action Row: (▶) Play S1 E1 + (＋) + (ⓘ) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  marginBottom: '0.85rem'
+                }}
+              >
+                <div
+                  onClick={() => {
+                    const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                    const targetEp =
+                      (savedHist && animeEpisodes.find((e) => Number(e.number) === Number(savedHist.episode))) ||
+                      animeEpisodes[0];
+                    if (targetEp) handlePlayEpisode(selectedAnime, targetEp);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.7rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '50%',
+                      background: '#ffffff',
+                      color: '#000000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.1rem',
+                      fontWeight: 900,
+                      boxShadow: '0 8px 24px rgba(255,255,255,0.22)'
+                    }}
+                  >
+                    ▶
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#ffffff' }}>
+                      {(() => {
+                        const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                        return savedHist
+                          ? isRtl
+                            ? `متابعة ح ${savedHist.episode}`
+                            : `Resume S1 E${savedHist.episode}`
+                          : isRtl
+                          ? 'تشغيل م1 ح1'
+                          : 'Play S1 E1';
+                      })()}
+                    </div>
+                    <div style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800 }}>
+                      {isRtl ? 'يفتح في المشغل السينمائي المستقل' : 'Opens in Standalone Cinema Player'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(selectedAnime)}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '50%',
+                      background: favorites.some((f) => f.objectID === selectedAnime.objectID)
+                        ? '#ffffff'
+                        : 'rgba(255,255,255,0.1)',
+                      color: favorites.some((f) => f.objectID === selectedAnime.objectID) ? '#000000' : '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.24)',
+                      fontSize: '1.05rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {favorites.some((f) => f.objectID === selectedAnime.objectID) ? '✓' : '＋'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab('trailer')}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.1)',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.24)',
+                      fontSize: '0.98rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ⓘ
+                  </button>
+                </div>
+              </div>
+
+              {/* Image 1 Bottom-Right Giant Full-Width Pill "Watch Now" CTA Button */}
               <button
                 type="button"
                 disabled={episodesLoading || animeEpisodes.length === 0}
@@ -11532,9 +12093,8 @@ export default function MobileApkApp() {
                 }}
                 style={{
                   width: '100%',
-                  marginTop: '0.9rem',
-                  padding: '0.78rem 1rem',
-                  borderRadius: '11px',
+                  padding: '0.82rem 1rem',
+                  borderRadius: '999px',
                   border: 'none',
                   background: '#ffffff',
                   color: '#000000',
@@ -11550,153 +12110,102 @@ export default function MobileApkApp() {
               >
                 <span>▶</span>
                 <span>
-                  {(() => {
-                    if (episodesLoading) {
-                      return isRtl ? 'جاري تجهيز المشغل المستقل...' : 'Preparing Standalone Player...';
-                    }
-                    const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
-                    if (savedHist) {
-                      return isRtl
-                        ? `متابعة المشاهدة — الحلقة ${savedHist.episode} (مشغل مستقل)`
-                        : `Resume Episode ${savedHist.episode} (Standalone Player)`;
-                    }
-                    return isRtl
-                      ? 'تشغيل الآن — الحلقة 1 (في مشغل مستقل)'
-                      : 'Play Episode 1 (Standalone Player)';
-                  })()}
+                  {episodesLoading
+                    ? isRtl
+                      ? 'جاري تجهيز المشغل المستقل...'
+                      : 'Preparing Standalone Player...'
+                    : isRtl
+                    ? 'مشاهدة الآن (Watch Now)'
+                    : 'Watch Now'}
                 </span>
               </button>
 
-              {/* Watchlist Status Bar (Watching / Completed / Plan to Watch / Dropped) */}
-              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginTop: '0.75rem' }}>
-                {[
-                  { id: 'watching', label: '🔥 أشاهد حالياً' },
-                  { id: 'completed', label: '✔ مكتمل' },
-                  { id: 'planned', label: '📌 أخطط لمشاهدته' },
-                  { id: 'dropped', label: '⏸ متوقف' }
-                ].map((st) => {
-                  const currentStatus = watchlistMap[selectedAnime.objectID]?.status;
-                  const active = currentStatus === st.id;
-                  return (
-                    <button
-                      key={st.id}
-                      type="button"
-                      onClick={() => handleSetWatchlistStatus(selectedAnime, st.id)}
-                      style={{
-                        padding: '0.38rem 0.75rem',
-                        borderRadius: '10px',
-                        fontSize: '0.71rem',
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
-                        background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                        color: active ? '#000000' : '#ffffff',
-                        border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
-                      }}
-                    >
-                      {st.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Genre Tags */}
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-                {(selectedAnime.tags || []).map((t, idx) => (
-                  <span
-                    key={idx}
-                    onClick={() => {
-                      setSelectedAnime(null);
-                      setCatalogGenre(t);
-                      setActiveTab('catalog');
-                    }}
-                    style={{
-                      padding: '0.24rem 0.65rem',
-                      borderRadius: '99px',
-                      background: 'rgba(255,255,255,0.07)',
-                      border: '1px solid rgba(255,255,255,0.14)',
-                      fontSize: '0.7rem',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-
-              {/* Expandable Arabic Story + v7.0 Arabic TTS Story Narrator */}
+              {/* Image 1 Bottom-Right 3-Column Pipe-Separated Action Bar: 🔖 List | 👍 Like | ↗ Share */}
               <div
-                onClick={() => setStoryExpanded((v) => !v)}
                 style={{
-                  marginTop: '0.75rem',
-                  padding: '0.75rem',
-                  borderRadius: '13px',
-                  background: '#0a0a0d',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  cursor: 'pointer'
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1px 1fr 1px 1fr',
+                  alignItems: 'center',
+                  marginTop: '0.85rem',
+                  padding: '0.45rem 0',
+                  borderTop: '1px solid rgba(255,255,255,0.08)',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <div style={{ fontSize: '0.76rem', fontWeight: 900 }}>
-                    📖 {isRtl ? 'قصة الأنمي بالعربية (اضغط للتوسيع)' : 'Synopsis'}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleSpeakText(selectedAnime.storyAr);
-                    }}
-                    style={{
-                      padding: '0.24rem 0.65rem',
-                      borderRadius: '99px',
-                      background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
-                      color: ttsSpeaking ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      fontSize: '0.68rem',
-                      fontWeight: 900,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen'}
-                  </button>
-                </div>
-                <p
+                <button
+                  type="button"
+                  onClick={() => toggleFavorite(selectedAnime)}
                   style={{
-                    margin: 0,
-                    fontSize: '0.76rem',
-                    color: 'rgba(255,255,255,0.78)',
-                    lineHeight: 1.55,
-                    display: storyExpanded ? 'block' : '-webkit-box',
-                    WebkitLineClamp: storyExpanded ? 'unset' : 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden'
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255,255,255,0.88)',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
                   }}
                 >
-                  {selectedAnime.storyAr}
-                </p>
+                  🔖 {favorites.some((f) => f.objectID === selectedAnime.objectID) ? (isRtl ? 'في قائمتي' : 'Saved') : isRtl ? 'قائمتي' : 'List'}
+                </button>
+                <div style={{ height: '16px', background: 'rgba(255,255,255,0.2)' }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSetWatchlistStatus(selectedAnime, 'watching');
+                    showToast(isRtl ? '👍 تم تسجيل إعجابك وإضافة العمل لقائمة المشاهدة' : '👍 Liked & added to Watching');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255,255,255,0.88)',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  👍 {isRtl ? 'أعجبني' : 'Like'}
+                </button>
+                <div style={{ height: '16px', background: 'rgba(255,255,255,0.2)' }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      navigator.clipboard?.writeText(`https://black-x-anime.ai.studio/`);
+                      showToast(isRtl ? '↗ تم نسخ رابط المشاركة' : '↗ Share link copied');
+                    } catch (_) {}
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255,255,255,0.88)',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ↗ {isRtl ? 'مشاركة' : 'Share'}
+                </button>
               </div>
             </div>
           </div>
 
           <div style={{ padding: '0 1rem 1rem' }}>
-            {/* 4-Tab Detail Studio Switcher (Episodes | Characters & VA | Trailer & Related | Reviews) */}
+            {/* Image 3 Left Underlined Season / Detail Studio Tab Bar */}
             <div
               className="bx-mob-scroll"
               style={{
                 display: 'flex',
-                gap: '0.4rem',
+                gap: '1.15rem',
                 overflowX: 'auto',
-                marginTop: '0.95rem',
-                marginBottom: '0.75rem',
-                paddingBottom: '0.2rem'
+                marginTop: '0.65rem',
+                marginBottom: '0.85rem',
+                borderBottom: '1px solid rgba(255,255,255,0.14)'
               }}
             >
               {[
-                { id: 'episodes', label: isRtl ? `🎞️ الحلقات (${animeEpisodes.length})` : `🎞️ Episodes (${animeEpisodes.length})` },
-                { id: 'characters', label: isRtl ? `👥 الشخصيات (${animeCharacters.length})` : `👥 Cast (${animeCharacters.length})` },
-                { id: 'trailer', label: isRtl ? '🎬 التريلر والمشابهة' : '🎬 Trailer & Related' },
-                { id: 'reviews', label: isRtl ? `💬 التقييمات (${animeReviews.length})` : `💬 Reviews (${animeReviews.length})` }
+                { id: 'episodes', label: isRtl ? `الحلقات (${animeEpisodes.length})` : `Season 1 (${animeEpisodes.length})` },
+                { id: 'characters', label: isRtl ? `الشخصيات (${animeCharacters.length})` : `Cast (${animeCharacters.length})` },
+                { id: 'trailer', label: isRtl ? 'التريلر والمشابهة' : 'More Like This' },
+                { id: 'reviews', label: isRtl ? `التقييمات (${animeReviews.length})` : `Reviews (${animeReviews.length})` }
               ].map((dt) => {
                 const active = detailTab === dt.id;
                 return (
@@ -11705,15 +12214,15 @@ export default function MobileApkApp() {
                     type="button"
                     onClick={() => setDetailTab(dt.id)}
                     style={{
-                      padding: '0.5rem 0.85rem',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
+                      padding: '0.55rem 0.2rem',
+                      fontSize: '0.8rem',
                       fontWeight: 900,
                       whiteSpace: 'nowrap',
                       cursor: 'pointer',
-                      background: active ? '#ffffff' : '#0a0a0e',
-                      color: active ? '#000000' : '#ffffff',
-                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
+                      background: 'transparent',
+                      color: active ? '#ffffff' : 'rgba(255,255,255,0.52)',
+                      border: 'none',
+                      borderBottom: active ? '2.5px solid #ffffff' : '2.5px solid transparent'
                     }}
                   >
                     {dt.label}
@@ -12654,31 +13163,298 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== BOTTOM 6-TAB FLOATING APPLE-STYLE GLASS PILL DOCK ==================== */}
+      {/* ==================== v10.0 IMAGE 2 LUXURY 32PX-ROUNDED COMMAND & PROFILE MENU CARD MODAL ==================== */}
+      {commandMenuOpen && (
+        <div
+          onClick={() => setCommandMenuOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9600,
+            background: 'rgba(0,0,0,0.82)',
+            backdropFilter: 'blur(20px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.2rem'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '350px',
+              borderRadius: '32px',
+              background: '#0e0e13',
+              border: '1px solid rgba(255,255,255,0.18)',
+              boxShadow: '0 28px 80px rgba(0,0,0,0.95)',
+              padding: '1.25rem 1.15rem',
+              color: '#ffffff',
+              animation: 'bxSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
+            {/* Top Row: Brand & Circular Close Button (Matches Image 2 Top Right X) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', padding: '0 0.35rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontWeight: 900,
+                    fontSize: '0.8rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  X
+                </span>
+                <span style={{ fontWeight: 900, fontSize: '0.88rem', letterSpacing: '0.04em' }}>
+                  BLACK X MENU
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCommandMenuOpen(false)}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#ffffff',
+                  fontSize: '0.9rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Menu Items List (Matches Image 2 Vertical Command Menu with Circular Count Badges) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+              {[
+                {
+                  icon: '🏠',
+                  label: isRtl ? 'لوحة التحكم الرئيسية' : 'Dashboard',
+                  badge: null,
+                  onClick: () => {
+                    setCommandMenuOpen(false);
+                    setSelectedAnime(null);
+                    setActiveEpisode(null);
+                    setActiveTab('home');
+                  }
+                },
+                {
+                  icon: '🖼️',
+                  label:
+                    homeDesignMode === 'sloth'
+                      ? isRtl
+                        ? 'نمط الواجهة: SlothUI (اضغط للتبديل)'
+                        : 'UI Style: SlothUI (Tap to Switch)'
+                      : isRtl
+                      ? 'نمط الواجهة: Prime Cards (اضغط للتبديل)'
+                      : 'UI Style: Prime Cards (Tap to Switch)',
+                  badge: homeDesignMode === 'sloth' ? 'S' : 'P',
+                  onClick: () => {
+                    const next = homeDesignMode === 'sloth' ? 'prime' : 'sloth';
+                    setHomeDesignMode(next);
+                    try {
+                      localStorage.setItem('bx_mob_home_design', next);
+                    } catch (_) {}
+                  }
+                },
+                {
+                  icon: '👑',
+                  label: isRtl ? 'العضوية الملكية وكود VIP' : 'Subscription & VIP',
+                  badge: userVipTier !== 'free' || isDeveloper ? 'VIP' : null,
+                  onClick: () => {
+                    setCommandMenuOpen(false);
+                    setSelectedAnime(null);
+                    setActiveEpisode(null);
+                    setActiveTab('profile');
+                  }
+                },
+                {
+                  icon: '🪪',
+                  label: isRtl ? 'بطاقة الأوتاكو وجينات الأنمي' : 'Otaku ID & DNA',
+                  badge: favorites.length + watchHistory.length,
+                  onClick: () => {
+                    setCommandMenuOpen(false);
+                    setSelectedAnime(null);
+                    setActiveEpisode(null);
+                    setActiveTab('profile');
+                  }
+                },
+                {
+                  icon: '📥',
+                  label: isRtl ? 'التنزيلات بدون إنترنت' : 'Offline Downloads',
+                  badge: downloadedEpisodes.length + downloadedChapters.length,
+                  onClick: () => {
+                    setCommandMenuOpen(false);
+                    setSelectedAnime(null);
+                    setActiveEpisode(null);
+                    setActiveTab('profile');
+                  }
+                },
+                {
+                  icon: '🔮',
+                  label: isRtl ? 'ساحة الأوتاكو والجدول' : 'Otaku Arena & Radar',
+                  badge: null,
+                  onClick: () => {
+                    setCommandMenuOpen(false);
+                    setSelectedAnime(null);
+                    setActiveEpisode(null);
+                    setActiveTab('community');
+                  }
+                }
+              ].map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={item.onClick}
+                  style={{
+                    width: '100%',
+                    padding: '0.78rem 0.9rem',
+                    borderRadius: '18px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'rgba(255,255,255,0.88)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.86rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    textAlign: isRtl ? 'right' : 'left'
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '1.05rem', opacity: 0.85 }}>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </span>
+                  {item.badge !== null && (
+                    <span
+                      style={{
+                        minWidth: '28px',
+                        height: '28px',
+                        padding: '0 0.45rem',
+                        borderRadius: '999px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        color: '#ffffff',
+                        fontSize: '0.72rem',
+                        fontWeight: 900,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+
+              {/* Highlighted Pill Profile Row at Bottom (Exact Match to Image 2 "Profile (8)") */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCommandMenuOpen(false);
+                  setSelectedAnime(null);
+                  setActiveEpisode(null);
+                  setActiveTab('profile');
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '0.45rem',
+                  padding: '0.72rem 0.85rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.88rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                  <span
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: '#ffffff',
+                      color: '#000000',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.85rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    👤
+                  </span>
+                  <span>
+                    {user?.displayName || (isRtl ? 'الملف الشخصي ومكتبتي' : 'Profile & Library')}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    minWidth: '32px',
+                    height: '32px',
+                    padding: '0 0.5rem',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontSize: '0.76rem',
+                    fontWeight: 900,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {favorites.length + watchHistory.length}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== v10.0 IMAGE 1 FLOATING CIRCULAR BUBBLE CAPSULE BOTTOM DOCK ==================== */}
       <nav
         style={{
           position: 'fixed',
           bottom: '12px',
-          left: '12px',
-          right: '12px',
+          left: '14px',
+          right: '14px',
           zIndex: 250,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
-          padding: '0.36rem 0.42rem',
-          borderRadius: '99px',
-          background: 'rgba(6, 6, 9, 0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.42rem 0.55rem',
+          borderRadius: '999px',
+          background: 'rgba(12, 12, 18, 0.9)',
           backdropFilter: 'blur(28px)',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          boxShadow: '0 16px 42px rgba(0, 0, 0, 0.95)'
+          border: '1px solid rgba(255, 255, 255, 0.18)',
+          boxShadow: '0 18px 48px rgba(0, 0, 0, 0.96)'
         }}
       >
         {[
           { id: 'home', icon: '🏠', ar: 'الرئيسية', en: 'Home' },
-          { id: 'catalog', icon: '🧭', ar: 'الأنميات', en: 'Catalog' },
-          { id: 'schedule', icon: '📅', ar: 'الجدول', en: 'Schedule' },
+          { id: 'catalog', icon: '🔍', ar: 'البحث', en: 'Search' },
+          { id: 'schedule', icon: '📅', ar: 'الجدول', en: 'Radar' },
           { id: 'manga', icon: '📖', ar: 'المانجا', en: 'Manga' },
           { id: 'community', icon: '🔮', ar: 'الساحة', en: 'Arena' },
-          { id: 'profile', icon: '👤', ar: 'مكتبتي', en: 'Library' }
+          { id: 'profile', icon: '👤', ar: 'حسابي', en: 'Profile' }
         ].map((t) => {
           const active = activeTab === t.id && !selectedAnime;
           return (
@@ -12688,27 +13464,30 @@ export default function MobileApkApp() {
               onClick={() => {
                 setSelectedAnime(null);
                 setActiveEpisode(null);
+                setPlayerMinimized(false);
                 setActiveTab(t.id);
               }}
               style={{
                 display: 'flex',
-                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '2px',
-                padding: '0.36rem 0.1rem',
-                borderRadius: '14px',
-                border: 'none',
-                background: active ? '#ffffff' : 'transparent',
-                color: active ? '#000000' : 'rgba(255,255,255,0.68)',
+                gap: active ? '0.36rem' : '0px',
+                height: '44px',
+                minWidth: active ? '88px' : '44px',
+                padding: active ? '0 0.85rem' : '0',
+                borderRadius: '999px',
+                border: active ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                color: active ? '#000000' : 'rgba(255,255,255,0.78)',
                 fontWeight: 900,
-                fontSize: '0.64rem',
+                fontSize: '0.72rem',
                 cursor: 'pointer',
-                transition: 'all 0.16s ease'
+                boxShadow: active ? '0 6px 22px rgba(255,255,255,0.28)' : 'none',
+                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
             >
-              <span style={{ fontSize: '1rem', lineHeight: 1 }}>{t.icon}</span>
-              <span>{isRtl ? t.ar : t.en}</span>
+              <span style={{ fontSize: '1.02rem', lineHeight: 1 }}>{t.icon}</span>
+              {active && <span style={{ whiteSpace: 'nowrap' }}>{isRtl ? t.ar : t.en}</span>}
             </button>
           );
         })}
