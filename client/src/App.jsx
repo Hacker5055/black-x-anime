@@ -16,6 +16,7 @@ import Rankings from './pages/Rankings.jsx';
 import Community from './pages/Community.jsx';
 import AnimeDiscover from './components/AnimeDiscover.jsx';
 import MobileApkApp from './mobile/MobileApkApp.jsx';
+import BlackXSplashVortex from './components/BlackXSplashVortex.jsx';
 import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
@@ -142,11 +143,27 @@ class MobileErrorBoundary extends React.Component {
 export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const { user } = useAuth();
+  const { lang } = useI18n();
   const openAuth = (mode = 'login') => setAuthModal(mode);
   const isApkRuntime =
     isNativeApk() ||
     import.meta.env.VITE_BUILD_TARGET === 'apk' ||
     (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('apk_ui') === '1');
+
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      if (isApkRuntime) return true;
+      return sessionStorage.getItem('bx_splash_played') !== '1';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    const handleReplay = () => setShowSplash(true);
+    window.addEventListener('bx_replay_splash', handleReplay);
+    return () => window.removeEventListener('bx_replay_splash', handleReplay);
+  }, []);
 
   useEffect(() => {
     try {
@@ -158,9 +175,24 @@ export default function App() {
     } catch {}
   }, []);
 
+  const handleSplashDone = () => {
+    try {
+      sessionStorage.setItem('bx_splash_played', '1');
+    } catch {}
+    setShowSplash(false);
+  };
+
   if (isApkRuntime) {
     return (
       <MobileErrorBoundary>
+        {showSplash && (
+          <BlackXSplashVortex
+            durationMs={4000}
+            lang={lang || 'ar'}
+            enableSound={true}
+            onComplete={handleSplashDone}
+          />
+        )}
         <MobileApkApp />
       </MobileErrorBoundary>
     );
@@ -168,6 +200,14 @@ export default function App() {
 
   return (
     <>
+      {showSplash && (
+        <BlackXSplashVortex
+          durationMs={4000}
+          lang={lang || 'ar'}
+          enableSound={true}
+          onComplete={handleSplashDone}
+        />
+      )}
       <GooFilter />
       <Backdrop />
       <ScrollToTop />

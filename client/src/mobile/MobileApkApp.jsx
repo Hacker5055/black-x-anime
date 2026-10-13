@@ -2758,6 +2758,8 @@ export default function MobileApkApp() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
           <div
+            onClick={() => window.dispatchEvent(new Event('bx_replay_splash'))}
+            title={isRtl ? 'اضغط لعرض انترو بوابة الظلال 120Hz' : 'Replay 120Hz Shadow Vortex Intro'}
             style={{
               width: '34px',
               height: '34px',
@@ -2769,7 +2771,8 @@ export default function MobileApkApp() {
               justifyContent: 'center',
               fontWeight: 900,
               fontSize: '1.15rem',
-              boxShadow: '0 0 18px rgba(255,255,255,0.35)'
+              boxShadow: '0 0 18px rgba(255,255,255,0.35)',
+              cursor: 'pointer'
             }}
           >
             X
