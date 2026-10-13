@@ -145,6 +145,63 @@ async function nativeGetHtml(url) {
   return r.text();
 }
 
+async function nativeGetJson(url, headers = {}) {
+  try {
+    const capHttp = window.Capacitor?.Plugins?.CapacitorHttp;
+    if (capHttp?.get) {
+      const res = await capHttp.get({
+        url,
+        headers: {
+          Accept: 'application/json',
+          ...headers
+        }
+      });
+      if (res?.data) {
+        return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      }
+    }
+  } catch (_) {}
+  const r = await fetch(url, { headers: { Accept: 'application/json', ...headers } });
+  return r.json();
+}
+
+const MELLO_API_HEADERS = {
+  Accept: 'application/json',
+  app_version: '1.1.7',
+  installer: 'com.android.vending',
+  lang: 'ar',
+  device: 'android',
+  time_zone: 'Africa/Cairo',
+  'User-Agent': 'Dart/3.8 (dart:io)'
+};
+
+const SWAT_API_HEADERS = {
+  Accept: 'application/json',
+  Origin: 'https://meshmanga.com',
+  Referer: 'https://meshmanga.com/',
+  'User-Agent': 'ktor-client'
+};
+
+function rewriteLegacyMangaImageUrl(rawUrl) {
+  const s = String(rawUrl || '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    const host = u.hostname.toLowerCase();
+    if (host === 'tempstorm.lekmanga.site') {
+      const m = u.pathname.match(/^\/manga\/arb1(\d+)\//i);
+      if (m?.[1]) {
+        return s.replace(/tempstorm\.lekmanga\.site/i, `s${m[1]}storm.lekmanga.site`);
+      }
+    }
+    const legacyMatch = host.match(/^s(\d+)lekmangas\.lekmanga\.site$/i);
+    if (legacyMatch?.[1]) {
+      return s.replace(host, `s${legacyMatch[1]}storm.lekmanga.site`);
+    }
+  } catch (_) {}
+  return s;
+}
+
 function decodeAllAnimeHex(hexStr) {
   const s = String(hexStr || '').replace(/^--/, '');
   let out = '';
@@ -345,12 +402,16 @@ export default function MobileApkApp() {
   const [skipRipple, setSkipRipple] = useState(null); // 'left' | 'right'
   const videoRef = useRef(null);
 
-  // Manga States (2,965 Arabic Manga + MangaDex)
+  // Manga States (30,000+ Arabic Manga & Manhwa from Manga Peak Engines + MangaDex)
   const [mangaList, setMangaList] = useState([]);
+  const [mangaSource, setMangaSource] = useState('all'); // 'all' | 'mello' | 'azora' | 'swat' | 'dilar' | 'mangadex'
+  const [mangaPage, setMangaPage] = useState(1);
   const [mangaQuery, setMangaQuery] = useState('');
   const [mangaLoading, setMangaLoading] = useState(false);
+  const [loadingMoreManga, setLoadingMoreManga] = useState(false);
   const [selectedManga, setSelectedManga] = useState(null);
   const [mangaChapters, setMangaChapters] = useState([]);
+  const [mangaChaptersLoading, setMangaChaptersLoading] = useState(false);
   const [activeMangaChapter, setActiveMangaChapter] = useState(null);
   const [mangaPages, setMangaPages] = useState([]);
   const [mangaPagesLoading, setMangaPagesLoading] = useState(false);
@@ -385,10 +446,7 @@ export default function MobileApkApp() {
   const [authPassword, setAuthPassword] = useState('');
   const [authDisplayName, setAuthDisplayName] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
-  const [googleSheetOpen, setGoogleSheetOpen] = useState(false);
-  const [googleEmailInput, setGoogleEmailInput] = useState('');
-  const [googleNameInput, setGoogleNameInput] = useState('');
-  const [syncedGoogleAccounts, setSyncedGoogleAccounts] = useState([]);
+  const oauthSessionIdRef = useRef('');
   const [toastMsg, setToastMsg] = useState('');
 
   const showToast = useCallback((msg) => {
@@ -505,19 +563,183 @@ export default function MobileApkApp() {
     }
   };
 
-  // Load Manga Catalog (2,965 Arabic Manga in Algolia)
+  // Fetch Manga & Manhwa from Manga Peak Engines (MangaMello Plus 14,331 + Dilar 9,164 + Azorafly 2,453 + Swat 1,669 + Algolia 2,965 + MangaDex)
+  const fetchMangaPeakPage = useCallback(async (srcMode, qStr, pageNum = 1) => {
+    const q = String(qStr || '').trim();
+    const fetchMello = async () => {
+      try {
+        const url = q
+          ? `https://plus.mangamello.com/api/v1/mangas/search?per_page=24&page=${pageNum}&relations=genres&title=${encodeURIComponent(q)}`
+          : `https://plus.mangamello.com/api/v1/mangas?page=${pageNum}&per_page=24&relations=genres&sort_by=views&dir=desc`;
+        const json = await nativeGetJson(url, MELLO_API_HEADERS);
+        return (json?.data || []).map((item) => ({
+          objectID: `mm:${item.id}`,
+          source: 'mello',
+          sourceLabel: 'Mello Plus',
+          sourceId: String(item.id),
+          name: item.title || `Manga #${item.id}`,
+          poster_uri: rewriteLegacyMangaImageUrl(item.img),
+          type: Number(item.type_id) === 1 ? 'مانجا' : 'مانهوا',
+          story_ar: item.summary || 'مانجا ومانهوا مترجمة للعربية بجودة عالية عبر سيرفر Mello Plus.',
+          rate: item.rate ? Number(item.rate).toFixed(1) : '9.2'
+        }));
+      } catch (_) {
+        return [];
+      }
+    };
+
+    const fetchAzora = async () => {
+      try {
+        const url = `https://api.azorafly.com/api/query?page=${pageNum}&perPage=24&orderBy=totalViews&orderDirection=desc&searchTerm=${encodeURIComponent(q)}`;
+        const json = await nativeGetJson(url);
+        return (json?.posts || []).map((post) => ({
+          objectID: `az:${post.slug}`,
+          source: 'azora',
+          sourceLabel: 'Azora Moon',
+          slug: post.slug,
+          postId: post.id,
+          name: post.postTitle || post.slug,
+          poster_uri: post.featuredImage || '',
+          type: post.seriesType === 'MANGA' ? 'مانجا' : 'مانهوا',
+          story_ar: (post.postContent || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة فائقة عبر سيرفر Azora.',
+          rate: post.averageRating ? Number(post.averageRating).toFixed(1) : '9.4'
+        }));
+      } catch (_) {
+        return [];
+      }
+    };
+
+    const fetchSwat = async () => {
+      try {
+        const url = q
+          ? `https://appswat.com/v2/api/v2/series/?search=${encodeURIComponent(q)}&page=${pageNum}`
+          : `https://appswat.com/v2/api/v2/series/?page_size=24&page=${pageNum}&order_by=-followers_count`;
+        const json = await nativeGetJson(url, SWAT_API_HEADERS);
+        return (json?.results || []).map((item) => ({
+          objectID: `sw:${item.id}`,
+          source: 'swat',
+          sourceLabel: 'Manga Swat',
+          sourceId: String(item.id),
+          slug: item.slug || String(item.id),
+          name: item.title || `Manhwa #${item.id}`,
+          poster_uri: item.poster?.medium || item.poster?.thumbnail || '',
+          type: 'مانهوا',
+          story_ar: (item.story || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة عالية عبر سيرفر Manga Swat.',
+          rate: item.rating ? Number(item.rating).toFixed(1) : '9.3'
+        }));
+      } catch (_) {
+        return [];
+      }
+    };
+
+    const fetchDilar = async () => {
+      try {
+        if (q) {
+          const capHttp = window.Capacitor?.Plugins?.CapacitorHttp;
+          let rows = [];
+          if (capHttp?.post) {
+            const r = await capHttp.post({
+              url: 'https://dilar.tube/api/search/quick_search',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json', Referer: 'https://dilar.tube/' },
+              data: { query: q, includes: ['Manga'] }
+            });
+            const data = typeof r?.data === 'string' ? JSON.parse(r.data) : r?.data;
+            rows = data?.[0]?.data || [];
+          }
+          if (rows.length > 0) {
+            return rows.map((row) => ({
+              objectID: `dt:${row.id}`,
+              source: 'dilar',
+              sourceLabel: 'Dilar Tube',
+              sourceId: String(row.id),
+              name: row.title || row.english || `Manga #${row.id}`,
+              poster_uri: row.cover ? `https://dilar.tube/uploads/manga/cover/${row.id}/large_${row.cover}.webp` : '',
+              type: 'مانهوا / مانجا',
+              story_ar: row.summary || 'عمل مترجم للعربية من مكتبة Dilar Tube الشاملة.',
+              rate: '9.2'
+            }));
+          }
+        }
+        const json = await nativeGetJson(`https://v2.dilar.tube/api/series/?page=${pageNum}`, {
+          Referer: 'https://dilar.tube/'
+        });
+        return (json?.series || []).map((item) => ({
+          objectID: `dt:${item.id}`,
+          source: 'dilar',
+          sourceLabel: 'Dilar Tube',
+          sourceId: String(item.id),
+          name: item.title || `Series #${item.id}`,
+          poster_uri: item.cover ? `https://dilar.tube/uploads/manga/cover/${item.id}/large_${item.cover}.webp` : '',
+          type: 'مانهوا / مانجا',
+          story_ar: item.summary || 'عمل مترجم للعربية من مكتبة Dilar Tube الشاملة (9,164 عمل).',
+          rate: item.rating ? Number(item.rating).toFixed(1) : '9.2'
+        }));
+      } catch (_) {
+        return [];
+      }
+    };
+
+    const fetchAlgoliaManga = async () => {
+      try {
+        const res = await queryAlgolia(q ? 'manga' : 'manga_views_desc', {
+          query: q,
+          page: pageNum - 1,
+          hitsPerPage: 24
+        });
+        return (res.hits || []).map((m) => ({
+          ...m,
+          objectID: `awm:${m.objectID}`,
+          source: 'algolia',
+          sourceLabel: 'BLACK X Cloud',
+          poster_uri: m.poster?.large || m.poster_uri || '',
+          story_ar: m.story?.ar || m.story_en || '',
+          rate: '9.1'
+        }));
+      } catch (_) {
+        return [];
+      }
+    };
+
+    if (srcMode === 'mello') return fetchMello();
+    if (srcMode === 'azora') return fetchAzora();
+    if (srcMode === 'swat') return fetchSwat();
+    if (srcMode === 'dilar') return fetchDilar();
+    if (srcMode === 'mangadex') return fetchAlgoliaManga();
+
+    const [mello, azora, swat, dilar, alg] = await Promise.all([
+      fetchMello(),
+      fetchAzora(),
+      fetchSwat(),
+      fetchDilar(),
+      pageNum === 1 ? fetchAlgoliaManga() : Promise.resolve([])
+    ]);
+
+    const merged = [];
+    const seen = new Set();
+    const maxLen = Math.max(mello.length, azora.length, swat.length, dilar.length, alg.length);
+    for (let i = 0; i < maxLen; i++) {
+      for (const list of [mello, azora, swat, dilar, alg]) {
+        const it = list[i];
+        if (!it) continue;
+        const normKey = String(it.name || '').toLowerCase().replace(/[^a-z0-9\u0621-\u064A]+/g, '');
+        if (!normKey || seen.has(normKey)) continue;
+        seen.add(normKey);
+        merged.push(it);
+      }
+    }
+    return merged;
+  }, []);
+
   useEffect(() => {
     if (activeTab !== 'manga') return;
     let alive = true;
     const t = setTimeout(async () => {
       setMangaLoading(true);
+      setMangaPage(1);
       try {
-        const res = await queryAlgolia(mangaQuery.trim() ? 'manga' : 'manga_views_desc', {
-          query: mangaQuery.trim(),
-          hitsPerPage: 36
-        });
+        const list = await fetchMangaPeakPage(mangaSource, mangaQuery, 1);
         if (!alive) return;
-        setMangaList(res.hits || []);
+        setMangaList(list);
       } catch (_) {
       } finally {
         if (alive) setMangaLoading(false);
@@ -527,7 +749,26 @@ export default function MobileApkApp() {
       alive = false;
       clearTimeout(t);
     };
-  }, [activeTab, mangaQuery]);
+  }, [activeTab, mangaSource, mangaQuery, fetchMangaPeakPage]);
+
+  const handleLoadMoreManga = useCallback(async () => {
+    if (loadingMoreManga) return;
+    const nextPage = mangaPage + 1;
+    setLoadingMoreManga(true);
+    try {
+      const more = await fetchMangaPeakPage(mangaSource, mangaQuery, nextPage);
+      if (more.length > 0) {
+        setMangaPage(nextPage);
+        setMangaList((prev) => {
+          const seen = new Set(prev.map((x) => x.objectID));
+          return [...prev, ...more.filter((x) => !seen.has(x.objectID))];
+        });
+      }
+    } catch (_) {
+    } finally {
+      setLoadingMoreManga(false);
+    }
+  }, [loadingMoreManga, mangaPage, mangaSource, mangaQuery, fetchMangaPeakPage]);
 
   // Load & Sync Shared Community Posts from BLACK X Cloud Firestore
   const loadCommunityFeed = useCallback(async () => {
@@ -666,58 +907,19 @@ export default function MobileApkApp() {
     return () => clearInterval(interval);
   }, [user?.username, user?.email, pullCloudUserState]);
 
-  // Load synced Google accounts from Website Cloud Index
-  const loadSyncedGoogleAccounts = useCallback(async () => {
-    try {
-      const [idxRes, devRes] = await Promise.all([
-        fetch(`${BX_SETTINGS_BASE}/google_accounts_index?key=${BX_KEY}`).catch(() => null),
-        fetch(`${BX_SETTINGS_BASE}/developer_profile?key=${BX_KEY}`).catch(() => null)
-      ]);
-      let accounts = [];
-      if (idxRes && idxRes.ok) {
-        const d = await idxRes.json();
-        const raw = d?.fields?.json?.stringValue;
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) accounts = parsed;
-        }
-      }
-      let devName = 'Developer MZ';
-      let devPhoto = '';
-      if (devRes && devRes.ok) {
-        const dd = await devRes.json();
-        devName = dd?.fields?.displayName?.stringValue || devName;
-        devPhoto = dd?.fields?.photoUrl?.stringValue || dd?.fields?.photoURL?.stringValue || '';
-      }
-      if (!accounts.some((a) => a.email?.toLowerCase() === 'mz0970mmz@gmail.com')) {
-        accounts.unshift({
-          email: 'mz0970mmz@gmail.com',
-          username: 'developer',
-          displayName: devName,
-          photoUrl: devPhoto,
-          role: 'developer'
-        });
-      }
-      setSyncedGoogleAccounts(accounts);
-    } catch (_) {}
-  }, []);
-
-  useEffect(() => {
-    loadSyncedGoogleAccounts();
-  }, [loadSyncedGoogleAccounts]);
-
-  // Sign in with Google Account & Sync 100% with Website Database
-  const handleGoogleAccountSync = useCallback(
-    async (emailAddr, customDisplayName = '') => {
-      const cleanEmail = String(emailAddr || '').trim().toLowerCase();
-      if (!cleanEmail || !cleanEmail.includes('@')) {
-        showToast(lang === 'ar' ? 'يرجى إدخال بريد Google صحيح (@gmail.com)' : 'Please enter a valid Google email');
-        return;
-      }
-      setAuthBusy(true);
+  // Real Google OAuth 2.0 Sign-In via Firebase IdentityToolkit & Native Android OAuth Bridge
+  // NEVER lists or exposes any cloud accounts on the login screen.
+  const completeVerifiedGoogleLogin = useCallback(
+    async (idpData) => {
       try {
-        const eKey = cleanCloudKey('email', cleanEmail);
-        const isDev = cleanEmail === 'mz0970mmz@gmail.com';
+        const verifiedEmail = String(idpData?.email || '').trim().toLowerCase();
+        if (!verifiedEmail || !idpData?.idToken) {
+          showToast(lang === 'ar' ? 'فشل التحقق من رمز مصادقة Google' : 'Google token verification failed');
+          setAuthBusy(false);
+          return;
+        }
+        const eKey = cleanCloudKey('email', verifiedEmail);
+        const isDev = verifiedEmail === 'mz0970mmz@gmail.com';
         let cloudUser = null;
 
         const res = await fetch(`${BX_SETTINGS_BASE}/${eKey}?key=${BX_KEY}`);
@@ -727,36 +929,36 @@ export default function MobileApkApp() {
           if (raw) cloudUser = JSON.parse(raw);
         }
 
-        if (!cloudUser && isDev) {
-          const uRes = await fetch(`${BX_SETTINGS_BASE}/user_developer?key=${BX_KEY}`);
-          if (uRes.ok) {
-            const uDoc = await uRes.json();
-            const uRaw = uDoc?.fields?.json?.stringValue;
-            if (uRaw) cloudUser = JSON.parse(uRaw);
-          }
-        }
-
-        const baseUsername = (cloudUser?.username || (isDev ? 'developer' : cleanEmail.split('@')[0]))
+        const baseUsername = (cloudUser?.username || (isDev ? 'developer' : verifiedEmail.split('@')[0]))
           .toLowerCase()
           .replace(/[^a-z0-9_.-]/g, '');
 
-        const mergedFavs = Array.isArray(cloudUser?.favorites) && cloudUser.favorites.length
-          ? [...cloudUser.favorites, ...favorites.filter((f) => !cloudUser.favorites.some((cf) => (cf.objectID || cf.slug) === (f.objectID || f.slug)))]
-          : favorites;
+        const mergedFavs =
+          Array.isArray(cloudUser?.favorites) && cloudUser.favorites.length
+            ? [
+                ...cloudUser.favorites,
+                ...favorites.filter(
+                  (f) => !cloudUser.favorites.some((cf) => (cf.objectID || cf.slug) === (f.objectID || f.slug))
+                )
+              ]
+            : favorites;
 
-        const mergedHist = Array.isArray(cloudUser?.progress) && cloudUser.progress.length
-          ? [...cloudUser.progress, ...watchHistory.filter((h) => !cloudUser.progress.some((ch) => (ch.objectID || ch.slug) === (h.objectID || h.slug)))]
-          : watchHistory;
+        const mergedHist =
+          Array.isArray(cloudUser?.progress) && cloudUser.progress.length
+            ? [
+                ...cloudUser.progress,
+                ...watchHistory.filter(
+                  (h) => !cloudUser.progress.some((ch) => (ch.objectID || ch.slug) === (h.objectID || h.slug))
+                )
+              ]
+            : watchHistory;
 
         const loggedUser = {
-          id: cloudUser?.id || `google_${Date.now()}`,
+          id: idpData.localId || cloudUser?.id || `google_${Date.now()}`,
           username: baseUsername,
-          email: cleanEmail,
-          displayName:
-            customDisplayName.trim() ||
-            cloudUser?.displayName ||
-            (isDev ? 'Developer MZ' : cleanEmail.split('@')[0]),
-          photoUrl: cloudUser?.photoUrl || '',
+          email: verifiedEmail,
+          displayName: idpData.displayName || idpData.fullName || cloudUser?.displayName || verifiedEmail.split('@')[0],
+          photoUrl: idpData.photoUrl || cloudUser?.photoUrl || '',
           avatarColor: cloudUser?.avatarColor || '#ffffff',
           role: isDev || cloudUser?.role === 'developer' ? 'developer' : 'user',
           vipStatus: 'VIP Monarch',
@@ -771,45 +973,88 @@ export default function MobileApkApp() {
         localStorage.setItem('bx_mob_history', JSON.stringify(mergedHist));
 
         await syncUserStateToCloud(loggedUser, mergedFavs, mergedHist);
-
-        // Also update google_accounts_index on cloud
-        const updatedAccounts = [
-          {
-            email: loggedUser.email,
-            username: loggedUser.username,
-            displayName: loggedUser.displayName,
-            photoUrl: loggedUser.photoUrl,
-            role: loggedUser.role,
-            updatedAt: new Date().toISOString()
-          },
-          ...syncedGoogleAccounts.filter((x) => x.email?.toLowerCase() !== loggedUser.email)
-        ].slice(0, 50);
-        setSyncedGoogleAccounts(updatedAccounts);
-        fetch(`${BX_SETTINGS_BASE}/google_accounts_index?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: { stringValue: JSON.stringify(updatedAccounts) },
-              updatedAt: { stringValue: new Date().toISOString() }
-            }
-          })
-        }).catch(() => {});
-
-        setGoogleSheetOpen(false);
         showToast(
           lang === 'ar'
-            ? `✓ تم تسجيل الدخول بحساب Google (${loggedUser.displayName}) ومزامنته مع الموقع!`
-            : `✓ Signed in with Google (${loggedUser.displayName}) & synced with Website!`
+            ? `✓ تم تسجيل الدخول بحساب Google (${loggedUser.displayName}) بنجاح!`
+            : `✓ Signed in with Google (${loggedUser.displayName})!`
         );
       } catch (_) {
-        showToast(lang === 'ar' ? 'تعذر الاتصال بسحابة Google' : 'Google Cloud sync error');
+        showToast(lang === 'ar' ? 'حدث خطأ أثناء مزامنة حساب Google' : 'Google sync error');
       } finally {
         setAuthBusy(false);
       }
     },
-    [favorites, watchHistory, syncedGoogleAccounts, syncUserStateToCloud, showToast, lang]
+    [favorites, watchHistory, syncUserStateToCloud, showToast, lang]
   );
+
+  const handleRealGoogleOAuthLogin = useCallback(async () => {
+    setAuthBusy(true);
+    try {
+      const continueUri = 'https://spry-oxide-1h7sp.firebaseapp.com/__/auth/handler';
+      const createRes = await fetch(
+        `https://www.googleapis.com/identitytoolkit/v3/relyingparty/createAuthUri?key=${BX_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: 'google.com',
+            continueUri,
+            authFlowType: 'CODE_FLOW'
+          })
+        }
+      );
+      const createData = await createRes.json();
+      if (!createData?.authUri || !createData?.sessionId) {
+        throw new Error('Failed to create Google OAuth URI');
+      }
+      oauthSessionIdRef.current = createData.sessionId;
+
+      window.__onBlackXGoogleOAuthRedirect = async (redirectUrl) => {
+        try {
+          const idpRes = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${BX_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                requestUri: redirectUrl,
+                sessionId: oauthSessionIdRef.current,
+                returnSecureToken: true,
+                returnIdpCredential: true
+              })
+            }
+          );
+          const idpData = await idpRes.json();
+          if (idpData?.email && idpData?.idToken) {
+            await completeVerifiedGoogleLogin(idpData);
+          } else {
+            showToast(
+              lang === 'ar'
+                ? 'تعذر إكمال مصادقة Google، يرجى المحاولة مجدداً'
+                : 'Could not verify Google sign-in'
+            );
+            setAuthBusy(false);
+          }
+        } catch (_) {
+          setAuthBusy(false);
+        }
+      };
+
+      window.__onBlackXGoogleOAuthError = () => {
+        setAuthBusy(false);
+      };
+
+      if (window.BlackXNativeAuth?.startGoogleLogin) {
+        window.BlackXNativeAuth.startGoogleLogin(createData.authUri);
+      } else {
+        window.open(createData.authUri, '_blank', 'width=500,height=680');
+        setAuthBusy(false);
+      }
+    } catch (_) {
+      showToast(lang === 'ar' ? 'تعذر فتح بوابة تسجيل الدخول عبر Google' : 'Could not open Google OAuth');
+      setAuthBusy(false);
+    }
+  }, [completeVerifiedGoogleLogin, showToast, lang]);
 
   // Open an Anime Detail Sheet & fetch its episodes from Firestore
   const handleOpenAnime = useCallback(async (anime) => {
@@ -826,7 +1071,7 @@ export default function MobileApkApp() {
       if (res.ok) {
         const doc = await res.json();
         const vals = doc?.fields?.episodes?.arrayValue?.values || [];
-        const eps = vals.map((item, idx) => {
+        const rawEps = vals.map((item, idx) => {
           const f = item?.mapValue?.fields || {};
           const docId = f.doc_id?.stringValue || String(idx + 1).padStart(3, '0');
           const rawName = f.name?.stringValue || `الحلقة ${idx + 1}`;
@@ -834,6 +1079,7 @@ export default function MobileApkApp() {
           const number = numMatch ? Number(numMatch[1]) : idx + 1;
           return {
             number,
+            episode: number,
             docId,
             name: rawName,
             titleAr: f.title_translated?.stringValue || '',
@@ -841,6 +1087,14 @@ export default function MobileApkApp() {
             filler: Boolean(f.filler?.booleanValue)
           };
         });
+        const seenNums = new Map();
+        for (const ep of rawEps) {
+          const existing = seenNums.get(ep.number);
+          if (!existing || String(ep.docId).length > String(existing.docId).length) {
+            seenNums.set(ep.number, ep);
+          }
+        }
+        const eps = Array.from(seenNums.values());
         eps.sort((a, b) => a.number - b.number);
         setAnimeEpisodes(eps);
       } else {
@@ -1093,14 +1347,145 @@ export default function MobileApkApp() {
     [user, watchHistory, syncUserStateToCloud, showToast, lang]
   );
 
-  // Open Manga fromMangaDex API v5 for full instant page reading
+  // Open Manga from Manga Peak Engines (Mello Plus 14,331 + Azora 2,453 + Swat 1,669 + Dilar 9,164) & MangaDex API v5
   const handleOpenManga = useCallback(async (mangaHit) => {
     setSelectedManga(mangaHit);
     setActiveMangaChapter(null);
     setMangaPages([]);
     setMangaChapters([]);
+    setMangaChaptersLoading(true);
     try {
+      const src = mangaHit.source || 'algolia';
       const title = mangaHit.name || '';
+
+      // 1. Mello Plus (plus.mangamello.com)
+      if (src === 'mello' && mangaHit.sourceId) {
+        const json = await nativeGetJson(
+          `https://plus.mangamello.com/api/v1/mangas/${mangaHit.sourceId}/chapters?per_page=1000`,
+          MELLO_API_HEADERS
+        );
+        const chs = (json?.data || []).map((ch, idx) => ({
+          id: `mm:${mangaHit.sourceId}:${ch.id}`,
+          source: 'mello',
+          mangaId: mangaHit.sourceId,
+          chapterId: String(ch.id),
+          chapter: ch.order ?? idx + 1,
+          title: ch.title || `الفصل ${ch.order ?? idx + 1}`,
+          lang: 'ar'
+        }));
+        if (chs.length > 0) {
+          setMangaChapters(chs);
+          return;
+        }
+      }
+
+      // 2. Azora Moon / Azorafly (api.azorafly.com)
+      if (src === 'azora' && mangaHit.slug) {
+        let postId = mangaHit.postId;
+        if (!postId) {
+          const pJson = await nativeGetJson(
+            `https://api.azorafly.com/api/post?postSlug=${encodeURIComponent(mangaHit.slug)}`
+          );
+          postId = pJson?.post?.id;
+        }
+        if (postId) {
+          const chJson = await nativeGetJson(
+            `https://api.azorafly.com/api/chapters?postId=${postId}&skip=0&take=900&order=desc&userid=`
+          );
+          const list = chJson?.post?.chapters || [];
+          const chs = list.map((ch) => ({
+            id: `az:${ch.id}`,
+            source: 'azora',
+            chapterId: String(ch.id),
+            chapter: ch.number ?? '1',
+            title: ch.title || `الفصل ${ch.number ?? ''}`,
+            lang: 'ar'
+          }));
+          if (chs.length > 0) {
+            setMangaChapters(chs);
+            return;
+          }
+        }
+      }
+
+      // 3. Manga Swat (appswat.com)
+      if (src === 'swat' && mangaHit.sourceId) {
+        const chJson = await nativeGetJson(
+          `https://appswat.com/v2/api/v2/chapters/?serie=${mangaHit.sourceId}&order_by=order&page_size=500&page=1`,
+          SWAT_API_HEADERS
+        );
+        const list = chJson?.results || [];
+        const chs = list.map((ch, idx) => ({
+          id: `sw:${ch.id}`,
+          source: 'swat',
+          chapterId: String(ch.id),
+          chapter: ch.chapter || idx + 1,
+          title: ch.title || `الفصل ${ch.chapter || idx + 1}`,
+          lang: 'ar'
+        }));
+        if (chs.length > 0) {
+          setMangaChapters(chs);
+          return;
+        }
+      }
+
+      // 4. For Dilar Tube or Algolia items, first resolve in Mello Plus / Azora / Swat for full Arabic chapters
+      if (title) {
+        const [melloSearch, azoraSearch] = await Promise.all([
+          nativeGetJson(
+            `https://plus.mangamello.com/api/v1/mangas/search?per_page=5&page=1&title=${encodeURIComponent(title)}`,
+            MELLO_API_HEADERS
+          ).catch(() => null),
+          nativeGetJson(
+            `https://api.azorafly.com/api/query?page=1&perPage=5&searchTerm=${encodeURIComponent(title)}`
+          ).catch(() => null)
+        ]);
+
+        const melloMatch = melloSearch?.data?.[0];
+        if (melloMatch?.id) {
+          const chJson = await nativeGetJson(
+            `https://plus.mangamello.com/api/v1/mangas/${melloMatch.id}/chapters?per_page=1000`,
+            MELLO_API_HEADERS
+          ).catch(() => null);
+          if (chJson?.data?.length) {
+            setMangaChapters(
+              chJson.data.map((ch, idx) => ({
+                id: `mm:${melloMatch.id}:${ch.id}`,
+                source: 'mello',
+                mangaId: String(melloMatch.id),
+                chapterId: String(ch.id),
+                chapter: ch.order ?? idx + 1,
+                title: ch.title || `الفصل ${ch.order ?? idx + 1}`,
+                lang: 'ar'
+              }))
+            );
+            return;
+          }
+        }
+
+        const azoraMatch = azoraSearch?.posts?.[0];
+        if (azoraMatch?.id) {
+          const chJson = await nativeGetJson(
+            `https://api.azorafly.com/api/chapters?postId=${azoraMatch.id}&skip=0&take=900&order=desc&userid=`
+          ).catch(() => null);
+          const list = chJson?.post?.chapters || [];
+          if (list.length) {
+            setMangaChapters(
+              list.map((ch) => ({
+                id: `az:${ch.id}`,
+                source: 'azora',
+                chapterId: String(ch.id),
+                chapter: ch.number ?? '1',
+                title: ch.title || `الفصل ${ch.number ?? ''}`,
+                lang: 'ar'
+              }))
+            );
+            return;
+          }
+        }
+      }
+
+      // 5. Fallback to MangaDex API v5
       const mdRes = await fetch(
         `https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=5&order[followedCount]=desc`
       ).then((r) => r.json());
@@ -1119,6 +1504,7 @@ export default function MobileApkApp() {
           seenCh.add(key);
           chs.push({
             id: item.id,
+            source: 'mangadex',
             chapter: chNum,
             title: item.attributes?.title || `الفصل ${chNum}`,
             lang: langCode
@@ -1126,13 +1512,49 @@ export default function MobileApkApp() {
         }
         setMangaChapters(chs);
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      setMangaChaptersLoading(false);
+    }
   }, []);
 
   const handleReadMangaChapter = useCallback(async (ch) => {
     setActiveMangaChapter(ch);
+    setMangaPages([]);
     setMangaPagesLoading(true);
     try {
+      if (ch.source === 'mello' && ch.mangaId && ch.chapterId) {
+        const json = await nativeGetJson(
+          `https://plus.mangamello.com/api/v1/mangas/${ch.mangaId}/chapters/${ch.chapterId}?relations=chapterImages`,
+          MELLO_API_HEADERS
+        );
+        const imgs = (json?.data?.chapterImages || [])
+          .map((img) => rewriteLegacyMangaImageUrl(img.src))
+          .filter(Boolean);
+        setMangaPages(imgs);
+        return;
+      }
+
+      if (ch.source === 'azora' && ch.chapterId) {
+        const json = await nativeGetJson(`https://api.azorafly.com/api/chapter?chapterId=${ch.chapterId}`);
+        const imgs = (json?.chapter?.images || []).map((img) => img.url).filter(Boolean);
+        setMangaPages(imgs);
+        return;
+      }
+
+      if (ch.source === 'swat' && ch.chapterId) {
+        const json = await nativeGetJson(
+          `https://appswat.com/v2/api/v2/chapters/${ch.chapterId}/`,
+          SWAT_API_HEADERS
+        );
+        const imgs = (json?.images || [])
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map((img) => img.image)
+          .filter(Boolean);
+        setMangaPages(imgs);
+        return;
+      }
+
       const atHome = await fetch(`https://api.mangadex.org/at-home/server/${ch.id}`).then((r) => r.json());
       const baseUrl = atHome?.baseUrl;
       const hash = atHome?.chapter?.hash;
@@ -2128,7 +2550,7 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 3: MANGA & MANHWA (2,965 SERIES + 120Hz WEBTOON READER) ==================== */}
+      {/* ==================== TAB 3: MANGA & MANHWA (30,000+ MANGA PEAK ENGINES + 120Hz WEBTOON READER) ==================== */}
       {activeTab === 'manga' && !selectedAnime && (
         <main style={{ padding: '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
           {activeMangaChapter ? (
@@ -2200,7 +2622,7 @@ export default function MobileApkApp() {
                   cursor: 'pointer'
                 }}
               >
-                {isRtl ? '→ العودة لمكتبة المانجا' : '← Back to Manga Library'}
+                {isRtl ? '→ العودة لمكتبة المانجا والمانهوا' : '← Back to Manga Library'}
               </button>
 
               <div style={{ display: 'flex', gap: '0.85rem', marginBottom: '1rem' }}>
@@ -2212,10 +2634,10 @@ export default function MobileApkApp() {
                 <div>
                   <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.05rem', fontWeight: 900 }}>{selectedManga.name}</h2>
                   <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginBottom: '0.4rem' }}>
-                    {selectedManga.type || 'مانهوا'} • {selectedManga.details?.status || 'مستمر'}
+                    {selectedManga.type || 'مانهوا'} • {selectedManga.sourceLabel || 'BLACK X'}
                   </div>
                   <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45 }}>
-                    {(selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 180)}...
+                    {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 180)}...
                   </p>
                 </div>
               </div>
@@ -2223,29 +2645,35 @@ export default function MobileApkApp() {
               <h3 style={{ fontSize: '0.9rem', fontWeight: 900, marginBottom: '0.6rem' }}>
                 📖 {isRtl ? `قائمة الفصول (${mangaChapters.length})` : `Chapters (${mangaChapters.length})`}
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                {mangaChapters.map((ch) => (
-                  <button
-                    key={ch.id}
-                    type="button"
-                    onClick={() => handleReadMangaChapter(ch)}
-                    style={{
-                      padding: '0.65rem 0.75rem',
-                      borderRadius: '11px',
-                      background: '#0c0c10',
-                      border: '1px solid rgba(255,255,255,0.14)',
-                      color: '#fff',
-                      textAlign: 'start',
-                      fontWeight: 800,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    📖 {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}{' '}
-                    <span style={{ opacity: 0.6, fontSize: '0.68rem' }}>({ch.lang.toUpperCase()})</span>
-                  </button>
-                ))}
-              </div>
+              {mangaChaptersLoading ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
+                  {isRtl ? '⏳ جاري جلب جميع الفصول المترجمة...' : '⏳ Loading chapters...'}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                  {mangaChapters.map((ch) => (
+                    <button
+                      key={ch.id}
+                      type="button"
+                      onClick={() => handleReadMangaChapter(ch)}
+                      style={{
+                        padding: '0.65rem 0.75rem',
+                        borderRadius: '11px',
+                        background: '#0c0c10',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        color: '#fff',
+                        textAlign: 'start',
+                        fontWeight: 800,
+                        fontSize: '0.78rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      📖 {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}{' '}
+                      <span style={{ opacity: 0.6, fontSize: '0.68rem' }}>({(ch.lang || 'AR').toUpperCase()})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -2258,7 +2686,7 @@ export default function MobileApkApp() {
                   border: '1px solid rgba(255,255,255,0.18)',
                   borderRadius: '14px',
                   padding: '0.6rem 0.9rem',
-                  marginBottom: '0.85rem'
+                  marginBottom: '0.65rem'
                 }}
               >
                 <span>📖</span>
@@ -2266,7 +2694,7 @@ export default function MobileApkApp() {
                   type="search"
                   value={mangaQuery}
                   onChange={(e) => setMangaQuery(e.target.value)}
-                  placeholder={isRtl ? 'ابحث في 2,965 مانجا ومانهوا...' : 'Search 2,965 Manga & Manhwa...'}
+                  placeholder={isRtl ? 'ابحث في +30,000 مانجا ومانهوا مترجمة...' : 'Search 30,000+ Manga & Manhwa...'}
                   style={{
                     flex: 1,
                     background: 'transparent',
@@ -2279,47 +2707,138 @@ export default function MobileApkApp() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
-                {mangaList.map((m) => (
-                  <div
-                    key={m.objectID}
-                    className="bx-mob-card"
-                    onClick={() => handleOpenManga(m)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div
+              {/* Manga Peak Multi-Engine Source Selector Tabs */}
+              <div
+                className="bx-mob-scroll"
+                style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.85rem', paddingBottom: '0.2rem' }}
+              >
+                {[
+                  { id: 'all', ar: '🔥 الكل (+30,000)', en: '🔥 All (30,000+)' },
+                  { id: 'mello', ar: '📚 Mello Plus (14,331)', en: '📚 Mello Plus (14,331)' },
+                  { id: 'dilar', ar: '👑 Dilar (9,164)', en: '👑 Dilar (9,164)' },
+                  { id: 'azora', ar: '⚡ Azora مانهوا (2,453)', en: '⚡ Azora (2,453)' },
+                  { id: 'swat', ar: '🗡️ Swat مانهوا (1,669)', en: '🗡️ Swat (1,669)' },
+                  { id: 'mangadex', ar: '🌐 المكتبة العالمية', en: '🌐 Global Cloud' }
+                ].map((srv) => {
+                  const active = mangaSource === srv.id;
+                  return (
+                    <button
+                      key={srv.id}
+                      type="button"
+                      onClick={() => setMangaSource(srv.id)}
                       style={{
-                        aspectRatio: '2 / 2.9',
-                        borderRadius: '12px',
-                        overflow: 'hidden',
-                        background: '#0b0b0e',
-                        border: '1px solid rgba(255,255,255,0.12)'
-                      }}
-                    >
-                      <img
-                        src={m.poster?.large || m.poster_uri}
-                        alt={m.name}
-                        loading="lazy"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        marginTop: '0.32rem',
+                        padding: '0.4rem 0.8rem',
+                        borderRadius: '99px',
                         fontSize: '0.73rem',
-                        fontWeight: 800,
-                        lineHeight: 1.28,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                        color: active ? '#000000' : '#ffffff',
+                        border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
                       }}
                     >
-                      {m.name}
-                    </div>
-                  </div>
-                ))}
+                      {isRtl ? srv.ar : srv.en}
+                    </button>
+                  );
+                })}
               </div>
+
+              {mangaLoading ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem', color: 'rgba(255,255,255,0.6)' }}>
+                  {isRtl ? '⏳ جاري جلب مكتبة المانجا والمانهوا الشاملة...' : '⏳ Loading Manga & Manhwa catalog...'}
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
+                    {mangaList.map((m) => (
+                      <div
+                        key={m.objectID}
+                        className="bx-mob-card"
+                        onClick={() => handleOpenManga(m)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div
+                          style={{
+                            position: 'relative',
+                            aspectRatio: '2 / 2.9',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            background: '#0b0b0e',
+                            border: '1px solid rgba(255,255,255,0.12)'
+                          }}
+                        >
+                          <img
+                            src={m.poster?.large || m.poster_uri}
+                            alt={m.name}
+                            loading="lazy"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          {m.sourceLabel && (
+                            <span
+                              style={{
+                                position: 'absolute',
+                                bottom: '5px',
+                                left: '5px',
+                                background: 'rgba(0,0,0,0.85)',
+                                color: '#fff',
+                                fontSize: '0.56rem',
+                                fontWeight: 900,
+                                padding: '0.1rem 0.34rem',
+                                borderRadius: '5px'
+                              }}
+                            >
+                              {m.sourceLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: '0.32rem',
+                            fontSize: '0.73rem',
+                            fontWeight: 800,
+                            lineHeight: 1.28,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {m.name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {mangaList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleLoadMoreManga}
+                      disabled={loadingMoreManga}
+                      style={{
+                        width: '100%',
+                        marginTop: '1.1rem',
+                        padding: '0.85rem',
+                        borderRadius: '14px',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.86rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {loadingMoreManga
+                        ? isRtl
+                          ? '⏳ جاري تحميل المزيد...'
+                          : '⏳ Loading more...'
+                        : isRtl
+                        ? `➕ عرض المزيد من مكتبة المانجا والمانهوا (صفحة ${mangaPage + 1})`
+                        : `➕ Load More Manga & Manhwa (Page ${mangaPage + 1})`}
+                    </button>
+                  )}
+                </>
+              )}
             </>
           )}
         </main>
@@ -2594,13 +3113,11 @@ export default function MobileApkApp() {
                   : 'Sign in with Google or your BLACK X Website account for automatic cross-device sync.'}
               </p>
 
-              {/* Prominent Google Sign-In & Website Sync Button */}
+              {/* Official Google OAuth 2.0 Sign-In (Opens Real accounts.google.com Login — No Cloud Account Listing) */}
               <button
                 type="button"
-                onClick={() => {
-                  loadSyncedGoogleAccounts();
-                  setGoogleSheetOpen(true);
-                }}
+                disabled={authBusy}
+                onClick={handleRealGoogleOAuthLogin}
                 style={{
                   width: '100%',
                   display: 'flex',
@@ -2624,154 +3141,16 @@ export default function MobileApkApp() {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                 </svg>
-                <span>{isRtl ? 'تسجيل الدخول باستخدام Google (مزامنة مع الموقع)' : 'Continue with Google (Synced with Website)'}</span>
+                <span>
+                  {authBusy
+                    ? isRtl
+                      ? '⏳ جاري الاتصال ببوابة Google الرسمية...'
+                      : '⏳ Connecting to Google OAuth...'
+                    : isRtl
+                    ? 'تسجيل الدخول باستخدام حساب Google الرسمي'
+                    : 'Sign in with Google Account'}
+                </span>
               </button>
-
-              {googleSheetOpen && (
-                <div
-                  style={{
-                    padding: '1rem',
-                    borderRadius: '14px',
-                    background: '#050508',
-                    border: '1px solid rgba(255,255,255,0.24)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.65rem'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 900, fontSize: '0.84rem' }}>
-                      {isRtl ? 'اختر حساب Google المتزامن مع الموقع أو أدخل بريدك:' : 'Select Synced Google Account or Enter Gmail:'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setGoogleSheetOpen(false)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'rgba(255,255,255,0.6)',
-                        fontSize: '0.9rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  {/* 1-Tap Synced Google Accounts from Website */}
-                  {syncedGoogleAccounts.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                      {syncedGoogleAccounts.map((acc) => (
-                        <button
-                          key={acc.email}
-                          type="button"
-                          onClick={() => handleGoogleAccountSync(acc.email, acc.displayName)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.65rem',
-                            padding: '0.6rem 0.75rem',
-                            borderRadius: '11px',
-                            background: 'rgba(255,255,255,0.07)',
-                            border: '1px solid rgba(255,255,255,0.18)',
-                            color: '#fff',
-                            textAlign: 'start',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {acc.photoUrl ? (
-                            <img
-                              src={acc.photoUrl}
-                              alt={acc.displayName}
-                              style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <span
-                              style={{
-                                width: '34px',
-                                height: '34px',
-                                borderRadius: '50%',
-                                background: '#ffffff',
-                                color: '#000000',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontWeight: 900,
-                                fontSize: '0.86rem'
-                              }}
-                            >
-                              {(acc.displayName?.[0] || acc.email?.[0] || 'G').toUpperCase()}
-                            </span>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{acc.displayName || acc.username}</div>
-                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)' }}>{acc.email}</div>
-                          </div>
-                          <span
-                            style={{
-                              padding: '0.24rem 0.55rem',
-                              borderRadius: '7px',
-                              background: '#ffffff',
-                              color: '#000000',
-                              fontWeight: 900,
-                              fontSize: '0.68rem'
-                            }}
-                          >
-                            {isRtl ? 'دخول فوري' : '1-Tap'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Or enter any Gmail address */}
-                  <input
-                    type="email"
-                    value={googleEmailInput}
-                    onChange={(e) => setGoogleEmailInput(e.target.value)}
-                    placeholder={isRtl ? 'أدخل بريد Google الخاص بك (مثال: name@gmail.com)' : 'Enter your Google email (name@gmail.com)'}
-                    style={{
-                      padding: '0.68rem 0.85rem',
-                      borderRadius: '10px',
-                      background: '#000000',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      color: '#fff',
-                      fontSize: '0.82rem'
-                    }}
-                  />
-                  <input
-                    type="text"
-                    value={googleNameInput}
-                    onChange={(e) => setGoogleNameInput(e.target.value)}
-                    placeholder={isRtl ? 'الاسم المعروض (اختياري)' : 'Display Name (optional)'}
-                    style={{
-                      padding: '0.68rem 0.85rem',
-                      borderRadius: '10px',
-                      background: '#000000',
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      color: '#fff',
-                      fontSize: '0.82rem'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    disabled={authBusy}
-                    onClick={() => handleGoogleAccountSync(googleEmailInput, googleNameInput)}
-                    style={{
-                      padding: '0.72rem',
-                      borderRadius: '10px',
-                      border: 'none',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontWeight: 900,
-                      fontSize: '0.82rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isRtl ? '✓ ربط ومزامنة حساب Google مع الموقع الآن' : '✓ Sync Google Account with Website Now'}
-                  </button>
-                </div>
-              )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.15rem 0' }}>
                 <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />

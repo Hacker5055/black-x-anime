@@ -19,9 +19,19 @@ export default function Browse() {
   const [serverFilter, setServerFilter] = useState('all'); // all | bx1 | bx2 | bx3
   const [query, setQuery] = useState(initialQ);
   const [libraryItems, setLibraryItems] = useState([]);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchingLive, setSearchingLive] = useState(false);
   const [liveSearchResults, setLiveSearchResults] = useState(null);
+
+  const safeCover = useCallback((url) => {
+    if (!url) return 'https://olympustaff.com/images/manga/thumbnail_b05147568d52f22c663c084172fc0dac.png';
+    if (/(lekmanga|azorafly|azoramoon|appswat|meshmanga|dilar\.tube|mangamello)/i.test(url)) {
+      return resolveApiUrl(`/api/proxy/image?url=${encodeURIComponent(url)}`);
+    }
+    return url;
+  }, []);
 
   // Selected item for chapter modal
   const [selectedItem, setSelectedItem] = useState(null);
@@ -55,8 +65,9 @@ export default function Browse() {
   // Fetch trending items from server
   const loadLibrary = useCallback(async (srv = serverFilter) => {
     setLoading(true);
+    setPage(1);
     try {
-      const res = await api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(srv)}`);
+      const res = await api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(srv)}&page=1`);
       setLibraryItems(res.items || []);
     } catch {
       setLibraryItems([]);
@@ -64,6 +75,27 @@ export default function Browse() {
       setLoading(false);
     }
   }, [serverFilter]);
+
+  const loadMoreLibrary = useCallback(async () => {
+    if (loadingMore) return;
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    try {
+      const res = await api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(serverFilter)}&page=${nextPage}`);
+      const nextItems = res.items || [];
+      if (nextItems.length > 0) {
+        setPage(nextPage);
+        setLibraryItems((prev) => {
+          const seen = new Set(prev.map((x) => x.id));
+          return [...prev, ...nextItems.filter((x) => !seen.has(x.id))];
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, page, serverFilter]);
 
   useEffect(() => {
     loadLibrary(serverFilter);
@@ -632,7 +664,7 @@ export default function Browse() {
               >
                 <img
                   onError={imgFallback}
-                  src={item.poster}
+                  src={safeCover(item.poster)}
                   alt={item.title_en}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
@@ -782,6 +814,27 @@ export default function Browse() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {!loading && liveSearchResults === null && displayedItems.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem', marginBottom: '1rem' }}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={loadingMore}
+            onClick={loadMoreLibrary}
+            style={{ padding: '0.85rem 2.2rem', borderRadius: '99px', fontWeight: 900 }}
+          >
+            <span className="btn__shine" />
+            {loadingMore
+              ? lang === 'ar'
+                ? 'جاري تحميل المزيد...'
+                : 'Loading more...'
+              : lang === 'ar'
+              ? `🔥 عرض المزيد من المكتبة العربية الشاملة (+30,000 مانجا ومانهوا — صفحة ${page + 1})`
+              : `🔥 Load More from 30,000+ Arabic Manga & Manhwa (Page ${page + 1})`}
+          </button>
         </div>
       )}
 

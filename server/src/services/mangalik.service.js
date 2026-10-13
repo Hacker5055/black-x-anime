@@ -19,6 +19,50 @@ const OLYMPUS_BASE = 'https://olympustaff.com';
 const ASQ_BASE = 'https://3asq.online';
 const WEEBCENTRAL_BASE = 'https://weebcentral.com';
 const MANGADEX_API = 'https://api.mangadex.org';
+const MANGAMELLO_API = 'https://plus.mangamello.com/api/v1';
+const AZORAFLY_API = 'https://api.azorafly.com/api';
+const MANGASWAT_API = 'https://appswat.com/v2/api/v2';
+const DILAR_API = 'https://v2.dilar.tube/api';
+
+const MANGAMELLO_HEADERS = {
+  Accept: 'application/json',
+  'Content-Type': 'application/json',
+  app_version: '1.1.7',
+  installer: 'com.android.vending',
+  lang: 'ar',
+  device: 'android',
+  time_zone: 'Africa/Cairo',
+  'User-Agent': 'Dart/3.8 (dart:io)'
+};
+
+const MANGASWAT_HEADERS = {
+  Accept: 'application/json, text/plain, */*',
+  Origin: 'https://meshmanga.com',
+  Referer: 'https://meshmanga.com/',
+  'User-Agent': 'ktor-client'
+};
+
+function rewriteLegacyMangaImageUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const cleaned = rawUrl.trim().replace(/\\\//g, '/').replace(/\\u0026/g, '&');
+  try {
+    const u = new URL(cleaned.startsWith('//') ? `https:${cleaned}` : cleaned);
+    const host = u.hostname.toLowerCase();
+    if (host === 'tempstorm.lekmanga.site') {
+      const m = u.pathname.match(/^\/manga\/arb1(\d+)\//i);
+      if (m?.[1]) {
+        return u.href.replace(u.hostname, `s${m[1]}storm.lekmanga.site`);
+      }
+    }
+    const legMatch = host.match(/^s(\d+)lekmangas\.lekmanga\.site$/i);
+    if (legMatch?.[1]) {
+      return u.href.replace(u.hostname, `s${legMatch[1]}storm.lekmanga.site`);
+    }
+    return u.href;
+  } catch {
+    return cleaned;
+  }
+}
 
 /**
  * Curated cross-server mapping for flagship Manga & Manhwa titles so every card
@@ -973,6 +1017,625 @@ class MangalikService {
   }
 
   /* =========================================================================
+   * MANGA PEAK ENGINES (MangaMello Plus 14,331 + Dilar 9,164 + Azora 2,453 + Swat 1,669)
+   * ========================================================================= */
+
+  async getMangaMelloCatalog(page = 1, sort = 'views') {
+    const cacheKey = `mm:catalog:${page}:${sort}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGAMELLO_API}/mangas?page=${page}&per_page=40&relations=genres&sort_by=${sort}&dir=desc`,
+        { headers: MANGAMELLO_HEADERS, timeout: 10000 }
+      );
+      const list = Array.isArray(data?.data) ? data.data : [];
+      const items = list.map((m) => {
+        const id = `mm:${m.id}`;
+        const title = String(m.title || m.name || '').trim();
+        const poster = rewriteLegacyMangaImageUrl(m.img || m.image || m.cover || m.poster || '');
+        const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : ['مانهوا', 'أكشن'];
+        const isManga = genres.some((g) => /مانجا|شونين|سينين/i.test(g));
+        const rawRate = parseFloat(m.ten_rate || m.average_rate || m.rate || '9.5') || 9.5;
+        return {
+          id,
+          mangalikSlug: id,
+          title,
+          title_ar: title,
+          title_en: title,
+          poster,
+          coverImage: poster,
+          banner: poster,
+          type: isManga ? 'MANGA' : 'MANHWA',
+          status: m.is_completed === 1 ? 'COMPLETED' : 'ONGOING',
+          rating: rawRate > 10 ? +(rawRate / 10).toFixed(1) : +rawRate.toFixed(1),
+          chapters_count: Number(m.chapters_count || m.last_chapter || 100),
+          author: 'سيرفر BLACK X 1 (MangaMello Plus — 14,331 عمل)',
+          description_ar: m.summary || m.description || `اقرأ ${title} بالترجمة العربية الكاملة عبر سيرفر BLACK X 1.`,
+          description_en: m.summary || m.description || `Read ${title} in Arabic on BLACK X 1.`,
+          genres,
+          release_year: 2026,
+          source: 'BLACK X 1',
+          server: 'bx1'
+        };
+      });
+      if (items.length > 0) setCache(cacheKey, items);
+      return items;
+    } catch (err) {
+      console.error('MangaMello catalog error:', err.message);
+      return [];
+    }
+  }
+
+  async searchMangaMello(query, page = 1) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const terms = [...new Set([q, normalizeQueryToEnglish(q)])];
+    const results = [];
+    const seen = new Set();
+
+    for (const term of terms) {
+      try {
+        const { data } = await axios.get(
+          `${MANGAMELLO_API}/mangas/search?per_page=30&page=${page}&relations=genres,type,ageRate&title=${encodeURIComponent(term)}`,
+          { headers: MANGAMELLO_HEADERS, timeout: 10000 }
+        );
+        const list = Array.isArray(data?.data) ? data.data : [];
+        for (const m of list) {
+          if (!m?.id || seen.has(m.id)) continue;
+          seen.add(m.id);
+          const id = `mm:${m.id}`;
+          const title = String(m.title || m.name || '').trim();
+          const poster = rewriteLegacyMangaImageUrl(m.img || m.image || m.cover || m.poster || '');
+          const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : ['مانهوا', 'أكشن'];
+          results.push({
+            id,
+            mangalikSlug: id,
+            title,
+            title_ar: title,
+            title_en: title,
+            poster,
+            coverImage: poster,
+            banner: poster,
+            type: 'MANHWA',
+            status: m.is_completed === 1 ? 'COMPLETED' : 'ONGOING',
+            rating: 9.7,
+            chapters_count: Number(m.chapters_count || 100),
+            author: 'سيرفر BLACK X 1 (MangaMello Plus)',
+            description_ar: m.summary || m.description || `${title} — متاح بالترجمة العربية عبر سيرفر BLACK X 1.`,
+            description_en: m.summary || m.description || `${title} on BLACK X 1.`,
+            genres,
+            source: 'BLACK X 1',
+            server: 'bx1'
+          });
+        }
+      } catch (_) {}
+    }
+    return results;
+  }
+
+  async getMangaMelloDetails(mmId) {
+    const cleanId = String(mmId || '').replace(/^mm:/i, '').trim();
+    if (!cleanId) return null;
+    const cacheKey = `mm:details:${cleanId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGAMELLO_API}/mangas/${encodeURIComponent(cleanId)}?relations=genres,chapters`,
+        { headers: MANGAMELLO_HEADERS, timeout: 12000 }
+      );
+      const m = data?.data || data;
+      if (!m?.id) return null;
+      const title = String(m.title || m.name || '').trim();
+      const poster = rewriteLegacyMangaImageUrl(m.img || m.image || m.cover || m.poster || '');
+      const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : ['مانهوا', 'أكشن'];
+      const rawChapters = Array.isArray(m.chapters) ? m.chapters : m.chapters?.data || [];
+      const info = {
+        id: `mm:${m.id}`,
+        title,
+        title_ar: title,
+        title_en: title,
+        poster,
+        coverImage: poster,
+        banner: poster,
+        type: 'MANHWA',
+        status: m.is_completed === 1 ? 'COMPLETED' : 'ONGOING',
+        rating: 9.7,
+        chapters_count: rawChapters.length || 100,
+        author: 'سيرفر BLACK X 1 (MangaMello Plus)',
+        description_ar: m.summary || m.description || `اقرأ ${title} بالترجمة العربية عبر سيرفر BLACK X 1.`,
+        description_en: m.summary || m.description || `Read ${title} on BLACK X 1.`,
+        genres,
+        release_year: 2026
+      };
+      setCache(cacheKey, info);
+      return info;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async getMangaMelloChapters(mmId) {
+    const cleanId = String(mmId || '').replace(/^mm:/i, '').trim();
+    if (!cleanId) return [];
+    const cacheKey = `mm:chapters:${cleanId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGAMELLO_API}/mangas/${encodeURIComponent(cleanId)}?relations=genres,chapters`,
+        { headers: MANGAMELLO_HEADERS, timeout: 12000 }
+      );
+      const m = data?.data || data;
+      let rawChapters = Array.isArray(m?.chapters) ? m.chapters : m?.chapters?.data || [];
+      if (!rawChapters.length) {
+        const chRes = await axios.get(
+          `${MANGAMELLO_API}/mangas/${encodeURIComponent(cleanId)}/chapters?per_page=2000`,
+          { headers: MANGAMELLO_HEADERS, timeout: 12000 }
+        );
+        rawChapters = Array.isArray(chRes.data?.data) ? chRes.data.data : [];
+      }
+
+      const chapters = rawChapters
+        .map((ch, idx) => {
+          const chId = String(ch.id || '').trim();
+          if (!chId || chId === '0') return null;
+          const num = ch.order ?? ch.chapter ?? ch.number ?? idx + 1;
+          const chTitle = String(ch.title || ch.name || '').trim();
+          return {
+            chapterId: `mm:${cleanId}:${chId}`,
+            chapterNumber: String(num),
+            slug: chId,
+            title: chTitle ? `الفصل ${num} — ${chTitle}` : `الفصل ${num}`,
+            releaseDate: ch.created_at ? String(ch.created_at).slice(0, 10) : '2026',
+            scanlationGroup: 'سيرفر BLACK X 1 (MangaMello Plus)',
+            server: 'bx1',
+            url: `${MANGAMELLO_API}/mangas/${cleanId}/chapters/${chId}`
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => (parseFloat(b.chapterNumber) || 0) - (parseFloat(a.chapterNumber) || 0));
+
+      if (chapters.length > 0) setCache(cacheKey, chapters);
+      return chapters;
+    } catch (err) {
+      console.error(`MangaMello chapters error (${cleanId}):`, err.message);
+      return [];
+    }
+  }
+
+  async getMangaMelloChapterPages(mmId, chapterId) {
+    const cleanMangaId = String(mmId || '').replace(/^mm:/i, '').trim();
+    const cleanChId = String(chapterId || '').trim();
+    if (!cleanMangaId || !cleanChId) return [];
+
+    const cacheKey = `mm:pages:${cleanMangaId}:${cleanChId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGAMELLO_API}/mangas/${encodeURIComponent(cleanMangaId)}/chapters/${encodeURIComponent(cleanChId)}?relations=chapterImages`,
+        { headers: MANGAMELLO_HEADERS, timeout: 14000 }
+      );
+      const root = data?.data || data || {};
+      const arr = root.chapterImages || root.chapter_images || root.images || root.pages || [];
+      const pages = [];
+      const seen = new Set();
+
+      for (const item of arr) {
+        const rawSrc =
+          typeof item === 'string'
+            ? item
+            : item?.src || item?.originalSrc || item?.original_src || item?.url || item?.image || item?.path;
+        const imgUrl = rewriteLegacyMangaImageUrl(rawSrc).replace(/ /g, '%20');
+        if (!imgUrl || seen.has(imgUrl)) continue;
+        seen.add(imgUrl);
+        pages.push({
+          pageNumber: pages.length + 1,
+          url: imgUrl,
+          directUrl: imgUrl,
+          server: 'BLACK X 1'
+        });
+      }
+
+      if (pages.length > 0) setCache(cacheKey, pages);
+      return pages;
+    } catch (err) {
+      console.error(`MangaMello pages error (${cleanMangaId}/${cleanChId}):`, err.message);
+      return [];
+    }
+  }
+
+  async getAzoraflyCatalog(page = 1) {
+    const cacheKey = `az:catalog:${page}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${AZORAFLY_API}/query?page=${page}&perPage=24&orderBy=totalViews&orderDirection=desc`,
+        { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, timeout: 10000 }
+      );
+      const posts = Array.isArray(data?.posts) ? data.posts : [];
+      const items = posts
+        .filter((p) => p?.slug && String(p.seriesType || '').toUpperCase() !== 'NOVEL')
+        .map((p) => {
+          const id = `az:${p.id}:${p.slug}`;
+          const title = String(p.postTitle || p.slug).trim();
+          const poster = String(p.featuredImage || '').trim();
+          const genres = Array.isArray(p.genres) ? p.genres.map((g) => g.name).filter(Boolean) : ['مانهوا كورية', 'أكشن'];
+          return {
+            id,
+            mangalikSlug: id,
+            title,
+            title_ar: title,
+            title_en: title,
+            poster,
+            coverImage: poster,
+            banner: poster,
+            type: 'MANHWA',
+            status: String(p.seriesStatus || 'ONGOING').toUpperCase(),
+            rating: Number(p.averageRating) > 0 ? +(Number(p.averageRating) * 2).toFixed(1) : 9.6,
+            chapters_count: Array.isArray(p.chapters) ? p.chapters.length : 80,
+            author: 'سيرفر BLACK X 1 (Azorafly — مانهوا عربية)',
+            description_ar: `اقرأ مانهوا ${title} بالترجمة العربية المباشرة عبر سيرفر BLACK X 1.`,
+            description_en: `Read ${title} Manhwa on BLACK X 1.`,
+            genres,
+            release_year: 2026,
+            source: 'BLACK X 1',
+            server: 'bx1'
+          };
+        });
+      if (items.length > 0) setCache(cacheKey, items);
+      return items;
+    } catch (err) {
+      console.error('Azorafly catalog error:', err.message);
+      return [];
+    }
+  }
+
+  async searchAzorafly(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const terms = [...new Set([q, normalizeQueryToEnglish(q)])];
+    const results = [];
+    const seen = new Set();
+
+    for (const term of terms) {
+      try {
+        const { data } = await axios.get(
+          `${AZORAFLY_API}/query?page=1&perPage=20&searchTerm=${encodeURIComponent(term)}&orderBy=totalViews&orderDirection=desc`,
+          { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, timeout: 10000 }
+        );
+        const posts = Array.isArray(data?.posts) ? data.posts : [];
+        for (const p of posts) {
+          if (!p?.id || seen.has(p.id) || String(p.seriesType || '').toUpperCase() === 'NOVEL') continue;
+          seen.add(p.id);
+          const id = `az:${p.id}:${p.slug}`;
+          const title = String(p.postTitle || p.slug).trim();
+          const poster = String(p.featuredImage || '').trim();
+          results.push({
+            id,
+            mangalikSlug: id,
+            title,
+            title_ar: title,
+            title_en: title,
+            poster,
+            coverImage: poster,
+            banner: poster,
+            type: 'MANHWA',
+            status: 'ONGOING',
+            rating: 9.6,
+            chapters_count: 80,
+            author: 'سيرفر BLACK X 1 (Azorafly)',
+            description_ar: `${title} — متاح بالترجمة العربية عبر سيرفر BLACK X 1.`,
+            description_en: `${title} on BLACK X 1.`,
+            source: 'BLACK X 1',
+            server: 'bx1'
+          });
+        }
+      } catch (_) {}
+    }
+    return results;
+  }
+
+  async getAzoraflyChapters(azIdentifier) {
+    const clean = String(azIdentifier || '').replace(/^az:/i, '').trim();
+    const parts = clean.split(':');
+    let postId = /^\d+$/.test(parts[0]) ? parts[0] : null;
+    const slug = parts[1] || parts[0];
+
+    const cacheKey = `az:chapters:${clean}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      if (!postId && slug) {
+        const postRes = await axios.get(`${AZORAFLY_API}/post?postSlug=${encodeURIComponent(slug)}`, {
+          headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+          timeout: 10000
+        });
+        postId = postRes.data?.post?.id;
+      }
+      if (!postId) return [];
+
+      const { data } = await axios.get(`${AZORAFLY_API}/chapters?postId=${encodeURIComponent(postId)}`, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+        timeout: 12000
+      });
+      const list = data?.post?.chapters || data?.chapters || [];
+      const chapters = list.map((ch) => ({
+        chapterId: `az:${ch.id}`,
+        chapterNumber: String(ch.number ?? ch.slug ?? 1),
+        slug: String(ch.id),
+        title: ch.title ? `الفصل ${ch.number} — ${ch.title}` : `الفصل ${ch.number}`,
+        releaseDate: ch.createdAt ? String(ch.createdAt).slice(0, 10) : '2026',
+        scanlationGroup: 'سيرفر BLACK X 1 (Azorafly)',
+        server: 'bx1',
+        url: `${AZORAFLY_API}/chapter?chapterId=${ch.id}`
+      }));
+
+      if (chapters.length > 0) setCache(cacheKey, chapters);
+      return chapters;
+    } catch (err) {
+      console.error(`Azorafly chapters error (${clean}):`, err.message);
+      return [];
+    }
+  }
+
+  async getAzoraflyChapterPages(chapterId) {
+    const cleanChId = String(chapterId || '').replace(/^az:/i, '').split(':')[0].trim();
+    if (!cleanChId) return [];
+
+    const cacheKey = `az:pages:${cleanChId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(`${AZORAFLY_API}/chapter?chapterId=${encodeURIComponent(cleanChId)}`, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+        timeout: 12000
+      });
+      const imgs = data?.chapter?.images || data?.images || [];
+      const pages = imgs
+        .map((img, i) => {
+          const url = String(img?.url || img || '').trim().replace(/ /g, '%20');
+          if (!url) return null;
+          return {
+            pageNumber: i + 1,
+            url,
+            directUrl: url,
+            server: 'BLACK X 1'
+          };
+        })
+        .filter(Boolean);
+
+      if (pages.length > 0) setCache(cacheKey, pages);
+      return pages;
+    } catch (err) {
+      console.error(`Azorafly pages error (${cleanChId}):`, err.message);
+      return [];
+    }
+  }
+
+  async getMangaSwatCatalog(page = 1) {
+    const cacheKey = `sw:catalog:${page}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGASWAT_API}/series/?page=${page}&order_by=-followers_count`,
+        { headers: MANGASWAT_HEADERS, timeout: 10000 }
+      );
+      const list = Array.isArray(data?.results) ? data.results : [];
+      const items = list.map((s) => {
+        const seriesId = s.id || s.serie_id;
+        const id = `sw:${seriesId}`;
+        const title = String(s.title || s.slug || '').trim();
+        const poster = String(s.poster?.medium || s.poster?.thumbnail || '').trim();
+        const genres = Array.isArray(s.genres) ? s.genres.map((g) => g.name).filter(Boolean) : ['مانهوا كورية', 'أكشن'];
+        return {
+          id,
+          mangalikSlug: id,
+          title,
+          title_ar: title,
+          title_en: title,
+          poster,
+          coverImage: poster,
+          banner: poster,
+          type: 'MANHWA',
+          status: 'ONGOING',
+          rating: parseFloat(s.rating) > 0 ? +parseFloat(s.rating).toFixed(1) : 9.6,
+          chapters_count: Number(s.chapters_count || 90),
+          author: 'سيرفر BLACK X 2 (MangaSwat — 1,669 عمل)',
+          description_ar: s.description || `اقرأ ${title} بالترجمة العربية المباشرة عبر سيرفر BLACK X 2.`,
+          description_en: s.description || `Read ${title} on BLACK X 2.`,
+          genres,
+          release_year: 2026,
+          source: 'BLACK X 2',
+          server: 'bx2'
+        };
+      });
+      if (items.length > 0) setCache(cacheKey, items);
+      return items;
+    } catch (err) {
+      console.error('MangaSwat catalog error:', err.message);
+      return [];
+    }
+  }
+
+  async searchMangaSwat(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const terms = [...new Set([q, normalizeQueryToEnglish(q)])];
+    const results = [];
+    const seen = new Set();
+
+    for (const term of terms) {
+      try {
+        const { data } = await axios.get(
+          `${MANGASWAT_API}/series/?page=1&search=${encodeURIComponent(term)}`,
+          { headers: MANGASWAT_HEADERS, timeout: 10000 }
+        );
+        const list = Array.isArray(data?.results) ? data.results : [];
+        for (const s of list) {
+          const seriesId = s.id || s.serie_id;
+          if (!seriesId || seen.has(seriesId)) continue;
+          seen.add(seriesId);
+          const id = `sw:${seriesId}`;
+          const title = String(s.title || s.slug || '').trim();
+          const poster = String(s.poster?.medium || s.poster?.thumbnail || '').trim();
+          results.push({
+            id,
+            mangalikSlug: id,
+            title,
+            title_ar: title,
+            title_en: title,
+            poster,
+            coverImage: poster,
+            banner: poster,
+            type: 'MANHWA',
+            status: 'ONGOING',
+            rating: 9.6,
+            chapters_count: 90,
+            author: 'سيرفر BLACK X 2 (MangaSwat)',
+            description_ar: s.description || `${title} — متاح بالترجمة العربية عبر سيرفر BLACK X 2.`,
+            description_en: s.description || `${title} on BLACK X 2.`,
+            source: 'BLACK X 2',
+            server: 'bx2'
+          });
+        }
+      } catch (_) {}
+    }
+    return results;
+  }
+
+  async getMangaSwatChapters(swId) {
+    const cleanId = String(swId || '').replace(/^sw:/i, '').split(':')[0].trim();
+    if (!cleanId) return [];
+    const cacheKey = `sw:chapters:${cleanId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGASWAT_API}/chapters/?serie=${encodeURIComponent(cleanId)}&order_by=order&page_size=300&page=1`,
+        { headers: MANGASWAT_HEADERS, timeout: 12000 }
+      );
+      const list = Array.isArray(data?.results) ? data.results : [];
+      const chapters = list
+        .map((ch, idx) => ({
+          chapterId: `sw:${ch.id}`,
+          chapterNumber: String(ch.chapter || idx + 1),
+          slug: String(ch.id),
+          title: ch.title ? `الفصل ${ch.chapter || idx + 1} — ${ch.title}` : `الفصل ${ch.chapter || idx + 1}`,
+          releaseDate: ch.created_at ? String(ch.created_at).slice(0, 10) : '2026',
+          scanlationGroup: 'سيرفر BLACK X 2 (MangaSwat)',
+          server: 'bx2',
+          url: `${MANGASWAT_API}/chapters/${ch.id}/`
+        }))
+        .reverse();
+
+      if (chapters.length > 0) setCache(cacheKey, chapters);
+      return chapters;
+    } catch (err) {
+      console.error(`MangaSwat chapters error (${cleanId}):`, err.message);
+      return [];
+    }
+  }
+
+  async getMangaSwatChapterPages(chapterId) {
+    const cleanChId = String(chapterId || '').replace(/^sw:/i, '').split(':')[0].trim();
+    if (!cleanChId) return [];
+    const cacheKey = `sw:pages:${cleanChId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(
+        `${MANGASWAT_API}/chapters/${encodeURIComponent(cleanChId)}/`,
+        { headers: MANGASWAT_HEADERS, timeout: 12000 }
+      );
+      const imgs = Array.isArray(data?.images) ? data.images : [];
+      const pages = imgs
+        .map((img, i) => {
+          const url = String(img?.image || img?.url || '').trim();
+          if (!url) return null;
+          return {
+            pageNumber: i + 1,
+            url,
+            directUrl: url,
+            server: 'BLACK X 2'
+          };
+        })
+        .filter(Boolean);
+
+      if (pages.length > 0) setCache(cacheKey, pages);
+      return pages;
+    } catch (err) {
+      console.error(`MangaSwat pages error (${cleanChId}):`, err.message);
+      return [];
+    }
+  }
+
+  async getDilarCatalog(page = 1) {
+    const cacheKey = `dt:catalog:${page}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(`${DILAR_API}/series/?page=${page}`, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+        timeout: 10000
+      });
+      const list = Array.isArray(data?.series) ? data.series : [];
+      const items = list.map((s) => {
+        const id = `dt:${s.id}`;
+        const title = String(s.synonyms?.arabic || s.title || '').trim();
+        const titleEn = String(s.title || title).trim();
+        const cover = String(s.cover || '').trim();
+        const poster = cover.startsWith('http')
+          ? cover
+          : cover
+          ? `https://dilar.tube/uploads/manga/cover/${s.id}/large_${cover.replace(/\.[^.]+$/, '.webp')}`
+          : '';
+        return {
+          id,
+          mangalikSlug: id,
+          title,
+          title_ar: title,
+          title_en: titleEn,
+          poster,
+          coverImage: poster,
+          banner: poster,
+          type: 'MANHWA',
+          status: String(s.story_status || 'ONGOING').toUpperCase(),
+          rating: parseFloat(s.rating) > 0 ? +(parseFloat(s.rating) * 2).toFixed(1) : 9.5,
+          chapters_count: Number(s.chapters_count || 60),
+          author: 'سيرفر BLACK X 2 (Dilar — 9,164 عمل)',
+          description_ar: s.summary || `اقرأ ${title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
+          description_en: s.summary || `Read ${titleEn} on BLACK X 2.`,
+          genres: ['مانهوا', 'مانجا عربية'],
+          release_year: 2026,
+          source: 'BLACK X 2',
+          server: 'bx2'
+        };
+      });
+      if (items.length > 0) setCache(cacheKey, items);
+      return items;
+    } catch (err) {
+      console.error('Dilar catalog error:', err.message);
+      return [];
+    }
+  }
+
+  /* =========================================================================
    * UNIFIED MULTI-SERVER ROUTER (BLACK X 1 + BLACK X 2 + BLACK X 3)
    * ========================================================================= */
 
@@ -992,13 +1655,13 @@ class MangalikService {
       return handles;
     }
 
-    // 2. Check explicit prefixes (`os:`, `asq:`, `wc:`)
-    if (id.startsWith('os:')) {
-      handles.bx1 = id.slice(3);
+    // 2. Check explicit prefixes (`mm:`, `az:`, `sw:`, `dt:`, `os:`, `asq:`, `wc:`)
+    if (id.startsWith('mm:') || id.startsWith('az:') || id.startsWith('os:')) {
+      handles.bx1 = id;
       return handles;
     }
-    if (id.startsWith('asq:')) {
-      handles.bx2 = id.slice(4);
+    if (id.startsWith('sw:') || id.startsWith('dt:') || id.startsWith('asq:')) {
+      handles.bx2 = id;
       return handles;
     }
     if (id.startsWith('wc:')) {
@@ -1030,16 +1693,25 @@ class MangalikService {
   }
 
   /**
-   * Unified search across all 3 BLACK X Manga & Manhwa servers.
+   * Unified search across all 3 BLACK X Manga & Manhwa servers (including MangaMello Plus 14,331 + Azorafly 2,453 + MangaSwat 1,669).
    */
   async searchArabicManga(query, serverFilter = 'all') {
     const q = String(query || '').trim();
     if (!q) return [];
 
     const tasks = [];
-    if (serverFilter === 'all' || serverFilter === 'bx1') tasks.push(this.searchOlympus(q));
-    if (serverFilter === 'all' || serverFilter === 'bx2') tasks.push(this.search3asq(q));
-    if (serverFilter === 'all' || serverFilter === 'bx3') tasks.push(this.searchWeebCentral(q));
+    if (serverFilter === 'all' || serverFilter === 'bx1') {
+      tasks.push(this.searchMangaMello(q));
+      tasks.push(this.searchAzorafly(q));
+      tasks.push(this.searchOlympus(q));
+    }
+    if (serverFilter === 'all' || serverFilter === 'bx2') {
+      tasks.push(this.searchMangaSwat(q));
+      tasks.push(this.search3asq(q));
+    }
+    if (serverFilter === 'all' || serverFilter === 'bx3') {
+      tasks.push(this.searchWeebCentral(q));
+    }
 
     const settled = await Promise.allSettled(tasks);
     const merged = [];
@@ -1069,6 +1741,35 @@ class MangalikService {
     const id = String(mangaId || '').trim();
     if (!id) return [];
 
+    // Direct prefixed IDs from Manga Peak engines
+    if (id.startsWith('mm:')) {
+      return this.getMangaMelloChapters(id.slice(3));
+    }
+    if (id.startsWith('az:')) {
+      return this.getAzoraflyChapters(id.slice(3));
+    }
+    if (id.startsWith('sw:')) {
+      return this.getMangaSwatChapters(id.slice(3));
+    }
+    if (id.startsWith('dt:')) {
+      const dtId = id.slice(3);
+      try {
+        const { data } = await axios.get(`${DILAR_API}/series/${encodeURIComponent(dtId)}`, { timeout: 8000 });
+        const title = data?.title || data?.synonyms?.english || data?.synonyms?.arabic;
+        if (title) {
+          const mmHits = await this.searchMangaMello(title);
+          if (mmHits.length > 0) {
+            return this.getMangaMelloChapters(mmHits[0].id.slice(3));
+          }
+          const swHits = await this.searchMangaSwat(title);
+          if (swHits.length > 0) {
+            return this.getMangaSwatChapters(swHits[0].id.slice(3));
+          }
+        }
+      } catch (_) {}
+      return [];
+    }
+
     // Direct prefixed IDs
     if (id.startsWith('os:') && (!preferredServer || preferredServer === 'bx1')) {
       return this.getOlympusChapters(id.slice(3));
@@ -1095,11 +1796,11 @@ class MangalikService {
 
     for (const srv of order) {
       if (srv === 'bx1' && handles.bx1) {
-        const chs = await this.getOlympusChapters(handles.bx1);
+        const chs = await this.getOlympusChapters(String(handles.bx1).replace(/^os:/, ''));
         if (chs.length > 0) return chs;
       }
       if (srv === 'bx2' && handles.bx2) {
-        const chs = await this.get3asqChapters(handles.bx2);
+        const chs = await this.get3asqChapters(String(handles.bx2).replace(/^asq:/, ''));
         if (chs.length > 0) return chs;
       }
       if (srv === 'bx3' && handles.bx3) {
@@ -1116,7 +1817,10 @@ class MangalikService {
   }
 
   /**
-   * Unified chapter pages fetcher supporting all 3 BLACK X servers:
+   * Unified chapter pages fetcher supporting all BLACK X servers:
+   * - `mm:{mangaId}:{chId}` -> BLACK X 1 (MangaMello Plus)
+   * - `az:{chId}` -> BLACK X 1 (Azorafly)
+   * - `sw:{chId}` -> BLACK X 2 (MangaSwat)
    * - `os:{slug}:{ch}` -> BLACK X 1 (OlympusStaff)
    * - `asq:{slug}:{ch}` -> BLACK X 2 (3asq)
    * - `wc:{chId}` -> BLACK X 3 (WeebCentral)
@@ -1125,6 +1829,29 @@ class MangalikService {
   async getArabicChapterPages(chapterIdentifier, preferredServer = '') {
     const raw = String(chapterIdentifier || '').trim();
     if (!raw) return [];
+
+    // 0a. Explicit MangaMello Plus chapter ID (`mm:{mangaId}:{chId}`)
+    if (raw.startsWith('mm:')) {
+      const parts = raw.split(':');
+      const mmMangaId = parts[1];
+      const mmChId = parts[2];
+      const pages = await this.getMangaMelloChapterPages(mmMangaId, mmChId);
+      if (pages.length > 0) return pages;
+    }
+
+    // 0b. Explicit Azorafly chapter ID (`az:{chId}`)
+    if (raw.startsWith('az:')) {
+      const azChId = raw.slice(3).split(':')[0];
+      const pages = await this.getAzoraflyChapterPages(azChId);
+      if (pages.length > 0) return pages;
+    }
+
+    // 0c. Explicit MangaSwat chapter ID (`sw:{chId}`)
+    if (raw.startsWith('sw:')) {
+      const swChId = raw.slice(3).split(':')[0];
+      const pages = await this.getMangaSwatChapterPages(swChId);
+      if (pages.length > 0) return pages;
+    }
 
     // 1. Explicit OlympusStaff chapter ID (`os:{slug}:{ch}`)
     if (raw.startsWith('os:')) {
@@ -1220,6 +1947,95 @@ class MangalikService {
         genres: f.type === 'MANHWA' ? ['مانهوا كورية', 'أكشن', 'فانتازيا'] : ['مانجا يابانية', 'شونين', 'أكشن'],
         release_year: 2025
       };
+    }
+
+    if (cleanId.startsWith('mm:')) {
+      const details = await this.getMangaMelloDetails(cleanId.slice(3));
+      if (details) return details;
+    }
+
+    if (cleanId.startsWith('az:')) {
+      const parts = cleanId.slice(3).split(':');
+      const slug = parts[1] || parts[0];
+      const catalog = await this.getAzoraflyCatalog(1);
+      const found = catalog.find((it) => it.id === cleanId);
+      if (found) return found;
+      return {
+        id: cleanId,
+        title_ar: slug.replace(/-/g, ' '),
+        title_en: slug.replace(/-/g, ' '),
+        type: 'MANHWA',
+        poster: '',
+        banner: '',
+        status: 'ONGOING',
+        rating: 9.6,
+        chapters_count: 80,
+        author: 'سيرفر BLACK X 1 (Azorafly)',
+        description_ar: 'متاح للقراءة المباشرة بالترجمة العربية عبر سيرفر BLACK X 1.',
+        description_en: 'Available on BLACK X 1 Server.',
+        genres: ['مانهوا كورية', 'أكشن'],
+        release_year: 2026
+      };
+    }
+
+    if (cleanId.startsWith('sw:')) {
+      const seriesId = cleanId.slice(3);
+      try {
+        const { data: s } = await axios.get(`${MANGASWAT_API}/series/${encodeURIComponent(seriesId)}/`, {
+          headers: MANGASWAT_HEADERS,
+          timeout: 10000
+        });
+        if (s?.title) {
+          const poster = String(s.poster?.medium || s.poster?.thumbnail || '').trim();
+          return {
+            id: cleanId,
+            title_ar: s.title,
+            title_en: s.title,
+            type: 'MANHWA',
+            poster,
+            banner: poster,
+            status: 'ONGOING',
+            rating: 9.6,
+            chapters_count: 90,
+            author: 'سيرفر BLACK X 2 (MangaSwat)',
+            description_ar: s.description || `اقرأ ${s.title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
+            description_en: s.description || `Read ${s.title} on BLACK X 2.`,
+            genres: Array.isArray(s.genres) ? s.genres.map((g) => g.name).filter(Boolean) : ['مانهوا كورية', 'أكشن'],
+            release_year: 2026
+          };
+        }
+      } catch (_) {}
+    }
+
+    if (cleanId.startsWith('dt:')) {
+      const dtId = cleanId.slice(3);
+      try {
+        const { data: s } = await axios.get(`${DILAR_API}/series/${encodeURIComponent(dtId)}`, { timeout: 10000 });
+        if (s?.title) {
+          const cover = String(s.cover || '').trim();
+          const poster = cover.startsWith('http')
+            ? cover
+            : cover
+            ? `https://dilar.tube/uploads/manga/cover/${dtId}/large_${cover.replace(/\.[^.]+$/, '.webp')}`
+            : '';
+          return {
+            id: cleanId,
+            title_ar: s.synonyms?.arabic || s.title,
+            title_en: s.title,
+            type: 'MANHWA',
+            poster,
+            banner: poster,
+            status: 'ONGOING',
+            rating: 9.5,
+            chapters_count: 60,
+            author: 'سيرفر BLACK X 2 (Dilar)',
+            description_ar: s.summary || `اقرأ ${s.title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
+            description_en: s.summary || `Read ${s.title} on BLACK X 2.`,
+            genres: ['مانهوا', 'مانجا عربية'],
+            release_year: 2026
+          };
+        }
+      } catch (_) {}
     }
 
     if (cleanId.startsWith('os:')) {

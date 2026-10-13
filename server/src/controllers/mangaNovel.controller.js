@@ -24,7 +24,13 @@ function getUpstreamHeadersForImage(decodedUrl) {
     } else if (host.includes('azorafly') || host.includes('azoramoon')) {
       referer = 'https://azorafly.com/';
     } else if (host.includes('lekmanga') || host.includes('manga-leko')) {
-      referer = 'https://lekmanga.online/';
+      referer = 'https://www.lekmanga.com/';
+    } else if (host.includes('mangamello')) {
+      referer = 'https://plus.mangamello.com/';
+    } else if (host.includes('appswat') || host.includes('meshmanga')) {
+      referer = 'https://meshmanga.com/';
+    } else if (host.includes('dilar.tube')) {
+      referer = 'https://v2.dilar.tube/';
     } else if (host.includes('starzmanga')) {
       referer = 'https://starzmanga.com/';
     } else {

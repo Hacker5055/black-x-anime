@@ -81,37 +81,6 @@ async function syncWebsiteUserToSharedCloud(u) {
         body: JSON.stringify(docBody)
       }).catch(() => {});
     }
-
-    if (payload.email) {
-      const idxRes = await fetch(`${BX_CLOUD_SETTINGS}/google_accounts_index?key=${BX_CLOUD_KEY}`).catch(() => null);
-      let list = [];
-      if (idxRes && idxRes.ok) {
-        const idxDoc = await idxRes.json();
-        if (idxDoc?.fields?.json?.stringValue) {
-          const parsed = JSON.parse(idxDoc.fields.json.stringValue);
-          if (Array.isArray(parsed)) list = parsed;
-        }
-      }
-      const entry = {
-        email: payload.email,
-        username: payload.username,
-        displayName: payload.displayName,
-        photoUrl: payload.photoUrl,
-        role: payload.role,
-        updatedAt: payload.updatedAt
-      };
-      const nextList = [entry, ...list.filter((x) => x.email?.toLowerCase() !== payload.email)].slice(0, 50);
-      await fetch(`${BX_CLOUD_SETTINGS}/google_accounts_index?key=${BX_CLOUD_KEY}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            json: { stringValue: JSON.stringify(nextList) },
-            updatedAt: { stringValue: payload.updatedAt }
-          }
-        })
-      }).catch(() => {});
-    }
   } catch (_) {}
 }
 

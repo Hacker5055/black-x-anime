@@ -175,47 +175,60 @@ export async function getLibrary(req, res) {
       items = items.filter((it) => Array.isArray(it.availableServers) && it.availableServers.includes(server));
     }
 
-    // Dynamically enrich with live catalogs from BLACK X 1 (OlympusStaff) & BLACK X 2 (3asq)
-    if (!q) {
-      const dynamicTasks = [];
+    // Dynamically enrich with live catalogs from BLACK X 1 (MangaMello Plus 14,331 + Azorafly 2,453 + Olympus) & BLACK X 2 (MangaSwat 1,669 + Dilar 9,164 + 3asq)
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const dynamicTasks = [];
+    if (q) {
+      dynamicTasks.push(mangalikService.searchArabicManga(q, server));
+    } else {
       if (server === 'all' || server === 'bx1') {
-        dynamicTasks.push(mangalikService.getOlympusCatalog(1));
+        dynamicTasks.push(mangalikService.getMangaMelloCatalog(page));
+        dynamicTasks.push(mangalikService.getAzoraflyCatalog(page));
+        dynamicTasks.push(mangalikService.getOlympusCatalog(page));
       }
       if (server === 'all' || server === 'bx2') {
+        dynamicTasks.push(mangalikService.getMangaSwatCatalog(page));
+        dynamicTasks.push(mangalikService.getDilarCatalog(page));
         dynamicTasks.push(mangalikService.get3asqCatalog());
       }
-      const settled = await Promise.allSettled(dynamicTasks);
-      const existingTitles = new Set(items.map((i) => String(i.title_en || '').toLowerCase().trim()));
-      const mappedOsSlugs = new Set(
-        Object.values(FLAGSHIP_MANGA_MAP)
-          .map((f) => f.osSlug)
-          .filter(Boolean)
-      );
-      const mappedAsqSlugs = new Set(
-        Object.values(FLAGSHIP_MANGA_MAP)
-          .map((f) => f.asqSlug)
-          .filter(Boolean)
-      );
+    }
 
-      for (const resTask of settled) {
-        if (resTask.status === 'fulfilled' && Array.isArray(resTask.value)) {
-          for (const dyn of resTask.value) {
-            if (type !== 'ALL' && dyn.type !== type) continue;
-            const rawSlug = dyn.id.replace(/^(os|asq|wc):/, '');
-            if (mappedOsSlugs.has(rawSlug) || mappedAsqSlugs.has(rawSlug)) continue;
-            const normTitle = String(dyn.title_en || '').toLowerCase().trim();
-            if (existingTitles.has(normTitle)) continue;
-            existingTitles.add(normTitle);
-            items.push({
-              ...dyn,
-              availableServers: [dyn.server || 'bx1']
-            });
-          }
+    const settled = await Promise.allSettled(dynamicTasks);
+    const existingTitles = new Set(items.map((i) => String(i.title_en || i.title || '').toLowerCase().trim()));
+    const mappedOsSlugs = new Set(
+      Object.values(FLAGSHIP_MANGA_MAP)
+        .map((f) => f.osSlug)
+        .filter(Boolean)
+    );
+    const mappedAsqSlugs = new Set(
+      Object.values(FLAGSHIP_MANGA_MAP)
+        .map((f) => f.asqSlug)
+        .filter(Boolean)
+    );
+
+    for (const resTask of settled) {
+      if (resTask.status === 'fulfilled' && Array.isArray(resTask.value)) {
+        for (const dyn of resTask.value) {
+          if (type !== 'ALL' && dyn.type !== type) continue;
+          const rawSlug = dyn.id.replace(/^(os|asq|wc|mm|az|sw|dt):/, '');
+          if (mappedOsSlugs.has(rawSlug) || mappedAsqSlugs.has(rawSlug)) continue;
+          const normTitle = String(dyn.title_en || dyn.title || '').toLowerCase().trim();
+          if (existingTitles.has(normTitle)) continue;
+          existingTitles.add(normTitle);
+          items.push({
+            ...dyn,
+            availableServers: [dyn.server || 'bx1']
+          });
         }
       }
     }
 
-    return res.json({ success: true, items });
+    return res.json({
+      success: true,
+      totalCount: 30000,
+      page,
+      items
+    });
   } catch (err) {
     console.error('getLibrary error:', err);
     return res.status(500).json({ success: false, error: 'failed_to_fetch_library', items: [] });

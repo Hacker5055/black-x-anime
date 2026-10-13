@@ -187,54 +187,9 @@ export async function syncUserToCloud(userRow, rawPassword = null) {
         signal: AbortSignal.timeout(8000)
       });
     }
-
-    // Also register in google_accounts_index so the APK Google Account Picker shows it immediately
-    if (payloadObj.email) {
-      await registerGoogleAccountInCloudIndex(payloadObj);
-    }
   } catch (err) {
     console.warn('[cloudSync.syncUserToCloud]', err.message);
   }
-}
-
-export async function registerGoogleAccountInCloudIndex(userObj) {
-  if (!userObj?.email) return;
-  try {
-    const res = await fetch(`${BASE_URL}/google_accounts_index?key=${API_KEY}`, {
-      signal: AbortSignal.timeout(6000)
-    });
-    let list = [];
-    if (res.ok) {
-      const doc = await res.json();
-      const raw = doc?.fields?.json?.stringValue;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) list = parsed;
-      }
-    }
-    const summary = {
-      email: String(userObj.email).toLowerCase(),
-      username: String(userObj.username || userObj.email.split('@')[0]).toLowerCase(),
-      displayName: userObj.displayName || userObj.username,
-      photoUrl: userObj.photoUrl || '',
-      role: userObj.role || 'user',
-      updatedAt: new Date().toISOString()
-    };
-    const filtered = list.filter((x) => x.email?.toLowerCase() !== summary.email);
-    const updated = [summary, ...filtered].slice(0, 50);
-
-    await fetch(`${BASE_URL}/google_accounts_index?key=${API_KEY}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: {
-          json: { stringValue: JSON.stringify(updated) },
-          updatedAt: { stringValue: summary.updatedAt }
-        }
-      }),
-      signal: AbortSignal.timeout(6000)
-    });
-  } catch (_) {}
 }
 
 export async function fetchUserFromCloud(identifier) {
