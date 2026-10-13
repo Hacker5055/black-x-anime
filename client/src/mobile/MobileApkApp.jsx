@@ -4815,53 +4815,13 @@ export default function MobileApkApp() {
               </span>
             </div>
             <div style={{ fontSize: '0.63rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
-              {isRtl ? 'إصدار v11.0 الملكي (5 واجهات) • 6,973 أنمي' : 'v11.0 Omni-UI (5-in-1) • 6,973 Anime'}
+              {isRtl ? 'إصدار v12.0 SlothUI الملكي • 6,973 أنمي' : 'v12.0 SlothUI Flagship • 6,973 Anime'}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.42rem' }}>
-          {/* v11.0 4-Mode UI Architecture Switcher (SlothUI -> Waku3D -> AnymeX -> Prime) */}
-          <button
-            type="button"
-            onClick={() => {
-              const modes = ['sloth', 'waku3d', 'anymex', 'prime'];
-              const idx = modes.indexOf(homeDesignMode);
-              const nextMode = modes[(idx + 1) % modes.length];
-              setHomeDesignMode(nextMode);
-              try {
-                localStorage.setItem('bx_mob_home_design', nextMode);
-              } catch (_) {}
-              const labels = {
-                sloth: isRtl ? '🎬 واجهة SlothUI السينمائية الكاملة' : '🎬 SlothUI Full-Bleed Cinema',
-                waku3d: isRtl ? '🃏 واجهة WakuWaku المروحة ثلاثية الأبعاد (3D Fan Deck)' : '🃏 WakuWaku 3D Fan Deck',
-                anymex: isRtl ? '⚡ واجهة AnymeX / Dantotsu الموحدة للأنمي والمانجا' : '⚡ AnymeX / Dantotsu Portal UI',
-                prime: isRtl ? '🖼️ واجهة Prime البطاقات الدائرية الفاخرة' : '🖼️ Prime Luxury Rounded Cards'
-              };
-              showToast(labels[nextMode]);
-            }}
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.09)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              color: '#fff',
-              fontSize: '0.88rem',
-              cursor: 'pointer'
-            }}
-            title={isRtl ? 'تبديل نظام الواجهة (4 أنظمة)' : 'Switch UI Architecture (4 Modes)'}
-          >
-            {homeDesignMode === 'sloth'
-              ? '🎬'
-              : homeDesignMode === 'waku3d'
-              ? '🃏'
-              : homeDesignMode === 'anymex'
-              ? '⚡'
-              : '🖼️'}
-          </button>
-
-          {/* Circular Glass Search Button (Matches Image 3) */}
+          {/* Circular Glass Search Button (Matches SlothUI Image 3) */}
           <button
             type="button"
             onClick={() => {
@@ -5006,62 +4966,8 @@ export default function MobileApkApp() {
             })}
           </div>
 
-          {/* v11.0 4-Mode UI Engine Selector Strip (SlothUI | Waku 3D Deck | AnymeX Portal | Prime Cards) */}
-          <div
-            className="bx-mob-scroll"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '0.35rem',
-              overflowX: 'auto',
-              padding: '0.42rem 1rem',
-              background: '#050507',
-              borderBottom: '1px solid rgba(255,255,255,0.07)'
-            }}
-          >
-            <span style={{ fontSize: '0.66rem', fontWeight: 900, color: 'rgba(255,255,255,0.58)', whiteSpace: 'nowrap' }}>
-              🎨 {isRtl ? 'شكل الواجهة:' : 'UI Style:'}
-            </span>
-            <div style={{ display: 'flex', gap: '0.35rem' }}>
-              {[
-                { id: 'sloth', label: '🎬 SlothUI' },
-                { id: 'waku3d', label: isRtl ? '🃏 مروحة 3D' : '🃏 3D Deck' },
-                { id: 'anymex', label: '⚡ AnymeX' },
-                { id: 'prime', label: '🖼️ Prime' }
-              ].map((m) => {
-                const active = homeDesignMode === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => {
-                      setHomeDesignMode(m.id);
-                      try {
-                        localStorage.setItem('bx_mob_home_design', m.id);
-                      } catch (_) {}
-                    }}
-                    style={{
-                      padding: '0.26rem 0.68rem',
-                      borderRadius: '999px',
-                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: active ? '#000000' : 'rgba(255,255,255,0.82)',
-                      border: active ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
-                      fontSize: '0.66rem',
-                      fontWeight: 900,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* v11.0 Mode 1: SlothUI Full-Bleed Hero (Image 3) */}
-          {heroAnime && homeDesignMode === 'sloth' && (
+          {/* v12.0 Primary Flagship UI: SlothUI Full-Bleed Hero Showcase */}
+          {heroAnime && (
             <section
               style={{
                 position: 'relative',
@@ -8193,86 +8099,176 @@ export default function MobileApkApp() {
               )}
             </div>
           ) : selectedManga ? (
-            <div>
-              {/* Full-Bleed Manhwa Series Hub Header Card */}
+            <div style={{ animation: 'bxSlideUp 0.22s ease-out' }}>
+              {/* ==================== v12.0 SLOTH-UI & SOLO LEVELING LUXURY MANGA SERIES HUB ==================== */}
               <div
                 style={{
                   position: 'relative',
-                  borderRadius: '18px',
+                  borderRadius: '28px',
                   overflow: 'hidden',
                   border: '1px solid rgba(255,255,255,0.16)',
-                  marginBottom: '0.9rem',
-                  background: '#07070b'
+                  marginBottom: '1rem',
+                  background: '#08080c',
+                  boxShadow: '0 22px 55px rgba(0,0,0,0.92)'
                 }}
               >
-                <img
-                  src={selectedManga.poster?.large || selectedManga.poster_uri}
-                  alt={selectedManga.name}
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    filter: 'blur(22px) brightness(0.28)',
-                    transform: 'scale(1.12)'
-                  }}
-                />
-                <div style={{ position: 'relative', zIndex: 2, padding: '0.85rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                {/* Top Ambient Blurred Backdrop Banner */}
+                <div style={{ position: 'relative', height: '165px', overflow: 'hidden' }}>
+                  <img
+                    src={selectedManga.poster?.large || selectedManga.poster_uri}
+                    alt={selectedManga.name}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      filter: 'blur(22px) brightness(0.32)',
+                      transform: 'scale(1.2)'
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, #08080c 100%)'
+                    }}
+                  />
+
+                  {/* Top Floating Circular Back Button & [X] Original Badge */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      left: '12px',
+                      right: '12px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={() => setSelectedManga(null)}
                       style={{
-                        background: 'rgba(255,255,255,0.12)',
-                        color: '#fff',
+                        background: 'rgba(14,14,20,0.82)',
+                        backdropFilter: 'blur(14px)',
+                        color: '#ffffff',
                         border: '1px solid rgba(255,255,255,0.24)',
-                        borderRadius: '99px',
-                        padding: '0.38rem 0.85rem',
+                        borderRadius: '999px',
+                        padding: '0.42rem 0.9rem',
                         fontWeight: 900,
                         fontSize: '0.74rem',
                         cursor: 'pointer'
                       }}
                     >
-                      {isRtl ? '→ مكتبة المانهوا' : '← Back'}
+                      {isRtl ? '→ مكتبة المانجا' : '← Manga Library'}
                     </button>
-                    <span
-                      style={{
-                        padding: '0.22rem 0.6rem',
-                        borderRadius: '99px',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontSize: '0.66rem',
-                        fontWeight: 900
-                      }}
-                    >
-                      ★ {selectedManga.rate || '9.3'} • {selectedManga.type || 'مانهوا'}
-                    </span>
-                  </div>
 
-                  <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.38rem', padding: '0.28rem 0.7rem', borderRadius: '999px', background: 'rgba(14,14,20,0.82)', border: '1px solid rgba(255,255,255,0.22)' }}>
+                      <span
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          background: '#ffffff',
+                          color: '#000000',
+                          fontSize: '0.6rem',
+                          fontWeight: 900,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        X
+                      </span>
+                      <span style={{ fontSize: '0.66rem', fontWeight: 900 }}>
+                        {selectedManga.sourceLabel || 'BLACK X MANGA'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Solo Leveling Floating Cover Art overlapping the Dark Sheet */}
+                <div style={{ position: 'relative', zIndex: 2, padding: '0 1.1rem 1.15rem', marginTop: '-92px', textAlign: 'center' }}>
+                  <div
+                    style={{
+                      width: '136px',
+                      height: '194px',
+                      margin: '0 auto 0.75rem',
+                      borderRadius: '20px',
+                      overflow: 'hidden',
+                      border: '2px solid rgba(255,255,255,0.38)',
+                      boxShadow: '0 18px 42px rgba(0,0,0,0.92)'
+                    }}
+                  >
                     <img
                       src={selectedManga.poster?.large || selectedManga.poster_uri}
                       alt={selectedManga.name}
-                      style={{
-                        width: '104px',
-                        height: '148px',
-                        borderRadius: '12px',
-                        objectFit: 'cover',
-                        border: '1.5px solid rgba(255,255,255,0.32)',
-                        flexShrink: 0
-                      }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.08rem', fontWeight: 900, lineHeight: 1.3 }}>
-                        {selectedManga.name}
-                      </h2>
-                      <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.45rem', fontWeight: 800 }}>
-                        ⚡ {selectedManga.sourceLabel || 'BLACK X 1'} • 📖 {mangaChapters.length} {isRtl ? 'فصل مترجم' : 'Chapters'}
-                      </div>
-                      <p style={{ margin: '0 0 0.5rem', fontSize: '0.73rem', color: 'rgba(255,255,255,0.78)', lineHeight: 1.48 }}>
-                        {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 220)}
-                      </p>
+                  </div>
+
+                  <h2 style={{ margin: '0 0 0.32rem', fontSize: '1.28rem', fontWeight: 900, lineHeight: 1.25 }}>
+                    {selectedManga.name}
+                  </h2>
+
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                    <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.66rem', fontWeight: 800 }}>
+                      {selectedManga.type || (isRtl ? 'مانهوا ملونة' : 'Manhwa')}
+                    </span>
+                    <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.66rem', fontWeight: 800 }}>
+                      ★ {selectedManga.rate || '9.5'}
+                    </span>
+                    <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: '#ffffff', color: '#000000', fontSize: '0.66rem', fontWeight: 900 }}>
+                      120Hz Webtoon
+                    </span>
+                  </div>
+
+                  {/* 4-Column Manga Micro-Stats Strip */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '0.35rem',
+                      padding: '0.6rem 0.4rem',
+                      marginBottom: '0.8rem',
+                      borderRadius: '16px',
+                      background: '#0d0d13',
+                      border: '1px solid rgba(255,255,255,0.12)'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{mangaChapters.length}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'فصل مترجم' : 'Chapters'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>★ {selectedManga.rate || '9.5'}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'التقييم' : 'Rating'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{isRtl ? 'مستمر' : 'Ongoing'}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'الحالة' : 'Status'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>FHD</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'الجودة' : 'Quality'}</div>
+                    </div>
+                  </div>
+
+                  {/* Synopsis Box with Audio Narrator (Matches MANGARA & Solo Leveling Description Box) */}
+                  <div
+                    style={{
+                      textAlign: isRtl ? 'right' : 'left',
+                      padding: '0.75rem 0.85rem',
+                      borderRadius: '16px',
+                      background: '#0d0d13',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      marginBottom: '0.85rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900 }}>
+                        📖 {isRtl ? 'القصة والملخص (Description)' : 'Description'}
+                      </span>
                       <button
                         type="button"
                         onClick={() =>
@@ -8281,22 +8277,25 @@ export default function MobileApkApp() {
                           )
                         }
                         style={{
-                          padding: '0.28rem 0.7rem',
+                          padding: '0.2rem 0.6rem',
                           borderRadius: '99px',
                           background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
                           color: ttsSpeaking ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.24)',
-                          fontSize: '0.68rem',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.65rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
                       >
-                        {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen Story'}
+                        {ttsSpeaking ? (isRtl ? '🔇 إيقاف' : '🔇 Stop') : isRtl ? '🔊 استماع' : '🔊 Listen'}
                       </button>
                     </div>
+                    <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
+                      {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || (isRtl ? 'عمل مانهوا ومانجا حصري مترجم بالكامل بجودة عالية عبر سيرفرات BLACK X.' : 'Exclusive translated Manga & Manhwa series on BLACK X.')).slice(0, 280)}
+                    </p>
                   </div>
 
-                  {/* Netflix-Style Giant Primary Read/Resume CTA Button */}
+                  {/* SlothUI Full-Width Pill Primary Read CTA Button */}
                   {mangaChapters.length > 0 && (
                     <button
                       type="button"
@@ -8310,18 +8309,18 @@ export default function MobileApkApp() {
                       }}
                       style={{
                         width: '100%',
-                        marginTop: '0.8rem',
-                        padding: '0.72rem 1rem',
-                        borderRadius: '11px',
+                        padding: '0.82rem 1rem',
+                        borderRadius: '999px',
                         border: 'none',
                         background: '#ffffff',
                         color: '#000000',
                         fontWeight: 900,
-                        fontSize: '0.86rem',
+                        fontSize: '0.88rem',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '0.45rem',
+                        gap: '0.5rem',
+                        boxShadow: '0 10px 28px rgba(255,255,255,0.2)',
                         cursor: 'pointer'
                       }}
                     >
@@ -8331,13 +8330,13 @@ export default function MobileApkApp() {
                           const savedHist = mangaHistory.find((mh) => mh.mangaId === selectedManga.objectID);
                           if (savedHist) {
                             return isRtl
-                              ? `متابعة القراءة — الفصل ${savedHist.chapter} (قارئ مستقل)`
-                              : `Continue Reading — Ch. ${savedHist.chapter}`;
+                              ? `متابعة القراءة — الفصل ${savedHist.chapter}`
+                              : `Continue Reading — Chapter ${savedHist.chapter}`;
                           }
                           const firstCh = mangaChapters[mangaChapters.length - 1] || mangaChapters[0];
                           return isRtl
                             ? `ابدأ القراءة الآن — الفصل ${firstCh?.chapter || 1}`
-                            : `Start Reading — Ch. ${firstCh?.chapter || 1}`;
+                            : `Read Now — Chapter ${firstCh?.chapter || 1}`;
                         })()}
                       </span>
                     </button>
@@ -8345,18 +8344,57 @@ export default function MobileApkApp() {
                 </div>
               </div>
 
+              {/* Highlighted "1 New Chapter / أحدث فصل متاح" Quick Banner Card (Matches 19 Tian Reference UI) */}
+              {mangaChapters.length > 0 && (
+                <div
+                  onClick={() => handleReadMangaChapter(mangaChapters[0])}
+                  style={{
+                    padding: '0.8rem 0.95rem',
+                    borderRadius: '18px',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1.5px solid rgba(255,255,255,0.28)',
+                    marginBottom: '0.85rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 900, color: '#ffffff', marginBottom: '2px' }}>
+                      🔥 {isRtl ? 'أحدث فصل مضاف (Latest Release)' : 'Latest Chapter Available'}
+                    </div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>
+                      📖 {isRtl ? `الفصل ${mangaChapters[0].chapter}` : `Chapter ${mangaChapters[0].chapter}`}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      padding: '0.38rem 0.85rem',
+                      borderRadius: '999px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontSize: '0.74rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    {isRtl ? 'اقرأ الفصل ←' : 'Read →'}
+                  </span>
+                </div>
+              )}
+
               {/* Chapter Search & Sort Controls */}
               <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', marginBottom: '0.65rem' }}>
                 <input
                   type="search"
                   value={mangaChSearch}
                   onChange={(e) => setMangaChSearch(e.target.value)}
-                  placeholder={isRtl ? 'ابحث برقم الفصل...' : 'Search chapter #...'}
+                  placeholder={isRtl ? '🔍 ابحث برقم الفصل...' : '🔍 Search chapter #...'}
                   style={{
                     flex: 1,
-                    padding: '0.48rem 0.75rem',
-                    borderRadius: '10px',
-                    background: '#0b0b0f',
+                    padding: '0.56rem 0.9rem',
+                    borderRadius: '999px',
+                    background: '#0d0d12',
                     border: '1px solid rgba(255,255,255,0.18)',
                     color: '#ffffff',
                     fontSize: '0.76rem',
@@ -8368,8 +8406,8 @@ export default function MobileApkApp() {
                   type="button"
                   onClick={() => setMangaChAsc((v) => !v)}
                   style={{
-                    padding: '0.48rem 0.75rem',
-                    borderRadius: '10px',
+                    padding: '0.56rem 0.85rem',
+                    borderRadius: '999px',
                     background: 'rgba(255,255,255,0.08)',
                     border: '1px solid rgba(255,255,255,0.2)',
                     color: '#ffffff',
@@ -8383,44 +8421,88 @@ export default function MobileApkApp() {
                 </button>
               </div>
 
-              <h3 style={{ fontSize: '0.88rem', fontWeight: 900, marginBottom: '0.55rem' }}>
-                📖 {isRtl ? `قائمة الفصول (${displayedMangaChapters.length})` : `Chapters (${displayedMangaChapters.length})`}
-              </h3>
+              {/* MANGARA Table Header Row: Chapter Name <-> Status */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.35rem 0.5rem',
+                  marginBottom: '0.45rem',
+                  borderBottom: '1px solid rgba(255,255,255,0.12)',
+                  fontSize: '0.74rem',
+                  fontWeight: 900,
+                  color: 'rgba(255,255,255,0.68)'
+                }}
+              >
+                <span>📖 {isRtl ? `قائمة الفصول (${displayedMangaChapters.length})` : `Chapter Name (${displayedMangaChapters.length})`}</span>
+                <span>{isRtl ? 'الحالة / القراءة' : 'Status'}</span>
+              </div>
+
               {mangaChaptersLoading ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? '⏳ جاري جلب جميع الفصول المترجمة...' : '⏳ Loading chapters...'}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                   {displayedMangaChapters.map((ch) => {
                     const isRead = mangaHistory.some(
                       (mh) => mh.mangaId === selectedManga.objectID && String(mh.chapter) === String(ch.chapter)
                     );
+                    const isOffline = offlineChapters.some((x) => x.id === ch.id);
                     return (
                       <button
                         key={ch.id}
                         type="button"
                         onClick={() => handleReadMangaChapter(ch)}
                         style={{
-                          padding: '0.65rem 0.75rem',
-                          borderRadius: '11px',
-                          background: isRead ? 'rgba(255,255,255,0.06)' : '#0c0c10',
-                          border: isRead ? '1px solid rgba(255,255,255,0.28)' : '1px solid rgba(255,255,255,0.14)',
+                          padding: '0.75rem 0.9rem',
+                          borderRadius: '16px',
+                          background: isRead ? 'rgba(255,255,255,0.04)' : '#0c0c11',
+                          border: isRead ? '1px solid rgba(255,255,255,0.22)' : '1px solid rgba(255,255,255,0.12)',
                           color: '#fff',
                           textAlign: 'start',
                           fontWeight: 800,
-                          fontSize: '0.78rem',
+                          fontSize: '0.82rem',
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           cursor: 'pointer'
                         }}
                       >
-                        <span>
-                          📖 {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                          <span
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              background: isRead ? 'rgba(255,255,255,0.12)' : '#ffffff',
+                              color: isRead ? '#ffffff' : '#000000',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.68rem',
+                              fontWeight: 900
+                            }}
+                          >
+                            {isRead ? '✓' : '📖'}
+                          </span>
+                          <span>
+                            {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}
+                            {ch.title ? ` — ${ch.title}` : ''}
+                          </span>
                         </span>
-                        <span style={{ opacity: 0.72, fontSize: '0.65rem', fontWeight: 900 }}>
-                          {isRead ? '✓ مقروء' : (ch.lang || 'AR').toUpperCase()}
+                        <span
+                          style={{
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '99px',
+                            background: isOffline ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                            color: isOffline ? '#000000' : 'rgba(255,255,255,0.78)',
+                            fontSize: '0.65rem',
+                            fontWeight: 900
+                          }}
+                        >
+                          {isOffline ? '📥 بدون نت' : isRead ? (isRtl ? 'مقروء' : 'Read') : isRtl ? 'قراءة ❯' : 'Read ❯'}
                         </span>
                       </button>
                     );
@@ -8430,40 +8512,278 @@ export default function MobileApkApp() {
             </div>
           ) : (
             <>
+              {/* ==================== v12.0 SLOTH-UI & MANGARA MANGA DISCOVERY STUDIO ==================== */}
+              {/* Top Rounded Pill Search Bar */}
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
-                  background: '#0b0b0e',
+                  gap: '0.55rem',
+                  background: '#111116',
                   border: '1px solid rgba(255,255,255,0.18)',
-                  borderRadius: '14px',
-                  padding: '0.6rem 0.9rem',
-                  marginBottom: '0.65rem'
+                  borderRadius: '999px',
+                  padding: '0.68rem 1.05rem',
+                  marginBottom: '0.7rem'
                 }}
               >
-                <span>📖</span>
+                <span>🔍</span>
                 <input
                   type="search"
                   value={mangaQuery}
                   onChange={(e) => setMangaQuery(e.target.value)}
-                  placeholder={isRtl ? 'ابحث في +30,000 مانجا ومانهوا مترجمة عبر سيرفرات BLACK X...' : 'Search 30,000+ BLACK X Manga & Manhwa...'}
+                  placeholder={isRtl ? 'ابحث في +30,000 مانجا ومانهوا مترجمة (مثال: Solo Leveling)...' : 'Search 30,000+ Manga & Manhwa...'}
                   style={{
                     flex: 1,
                     background: 'transparent',
                     border: 'none',
                     outline: 'none',
                     color: '#fff',
-                    fontSize: '0.85rem',
+                    fontSize: '0.84rem',
                     fontWeight: 700
                   }}
                 />
+                {mangaQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setMangaQuery('')}
+                    style={{ background: 'none', border: 'none', color: '#fff', fontSize: '0.9rem', cursor: 'pointer' }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
+
+              {/* Popular Manga Search Pills (Matches Reference UI 3 "Popular search") */}
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginBottom: '0.85rem', paddingBottom: '0.15rem' }}>
+                {['Solo Leveling', 'One Piece', 'Berserk', 'Blue Lock', 'Jujutsu Kaisen', 'Omniscient Reader', 'Chainsaw Man', 'Attack on Titan'].map((tag) => {
+                  const active = mangaQuery.toLowerCase() === tag.toLowerCase();
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setMangaQuery(active ? '' : tag)}
+                      style={{
+                        padding: '0.3rem 0.72rem',
+                        borderRadius: '999px',
+                        background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
+                        color: active ? '#000000' : 'rgba(255,255,255,0.82)',
+                        border: active ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.18)',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* SlothUI & MANGARA Featured Spotlight Hero Banner ("New Release! / Trending Today") */}
+              {!mangaLoading && mangaList.length > 0 && !mangaQuery && (
+                <div
+                  onClick={() => handleOpenManga(mangaList[0])}
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '225px',
+                    borderRadius: '26px',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    boxShadow: '0 18px 44px rgba(0,0,0,0.9)',
+                    marginBottom: '1rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <img
+                    src={mangaList[0].poster?.large || mangaList[0].poster_uri}
+                    alt={mangaList[0].name}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      objectPosition: 'center 22%',
+                      filter: 'brightness(0.68) contrast(1.12)'
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'linear-gradient(180deg, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.18) 35%, rgba(0,0,0,0.95) 100%)'
+                    }}
+                  />
+
+                  {/* Top-Left [X] BLACK X MANGA ORIGINAL Seal */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      left: '14px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.38rem',
+                      padding: '0.24rem 0.65rem',
+                      borderRadius: '999px',
+                      background: 'rgba(10,10,15,0.82)',
+                      backdropFilter: 'blur(12px)',
+                      border: '1px solid rgba(255,255,255,0.22)'
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.6rem',
+                        fontWeight: 900,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      X
+                    </span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.03em' }}>
+                      {isRtl ? 'مانهوا الأسبوع المميزة' : 'FEATURED MANHWA'}
+                    </span>
+                  </div>
+
+                  {/* Top-Right Star Rating Pill */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '14px',
+                      padding: '0.24rem 0.62rem',
+                      borderRadius: '999px',
+                      background: 'rgba(10,10,15,0.82)',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      fontSize: '0.68rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    ★ {mangaList[0].rate || '9.8'}
+                  </div>
+
+                  {/* Bottom Title + 50/50 Dual SlothUI Pill Buttons */}
+                  <div style={{ position: 'absolute', bottom: '14px', left: '14px', right: '14px' }}>
+                    <h2
+                      style={{
+                        margin: '0 0 0.55rem',
+                        fontSize: '1.22rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        textShadow: '0 4px 16px #000'
+                      }}
+                    >
+                      {mangaList[0].name}
+                    </h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenManga(mangaList[0]);
+                        }}
+                        style={{
+                          padding: '0.58rem 0.8rem',
+                          borderRadius: '999px',
+                          background: '#ffffff',
+                          color: '#000000',
+                          border: 'none',
+                          fontWeight: 900,
+                          fontSize: '0.78rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📖 {isRtl ? 'اقرأ الآن' : 'Read Now'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenManga(mangaList[0]);
+                        }}
+                        style={{
+                          padding: '0.58rem 0.8rem',
+                          borderRadius: '999px',
+                          background: 'rgba(22,22,30,0.85)',
+                          backdropFilter: 'blur(12px)',
+                          color: '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.24)',
+                          fontWeight: 900,
+                          fontSize: '0.76rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⓘ {isRtl ? 'الفصول والقصة' : 'Chapters'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Continue Reading Progress Strip inside Manga Tab (Matches Reference UI 3 "Continue reading") */}
+              {mangaHistory.length > 0 && !mangaQuery && (
+                <div style={{ marginBottom: '0.95rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                    <span style={{ fontWeight: 900, fontSize: '0.88rem' }}>
+                      📖 {isRtl ? 'متابعة القراءة (Continue Reading)' : 'Continue Reading'}
+                    </span>
+                    <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
+                      {mangaHistory.length} {isRtl ? 'عمل' : 'Series'}
+                    </span>
+                  </div>
+                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                    {mangaHistory.slice(0, 8).map((mh, idx) => (
+                      <div
+                        key={`mhist-${idx}`}
+                        onClick={() => handleOpenManga(mh)}
+                        style={{
+                          minWidth: '175px',
+                          maxWidth: '175px',
+                          padding: '0.5rem',
+                          borderRadius: '16px',
+                          background: '#0c0c12',
+                          border: '1px solid rgba(255,255,255,0.14)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.55rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <img
+                          src={mh.poster_uri}
+                          alt={mh.name}
+                          style={{ width: '44px', height: '62px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.74rem', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {mh.name}
+                          </div>
+                          <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.68)', fontWeight: 800, margin: '2px 0 6px' }}>
+                            {isRtl ? `الفصل ${mh.lastChapter || mh.chapter || 1}` : `Ch. ${mh.lastChapter || mh.chapter || 1}`}
+                          </div>
+                          <div style={{ height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}>
+                            <div style={{ width: '68%', height: '100%', background: '#ffffff' }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* BLACK X Multi-Engine Source Selector Tabs (All Named BLACK X) */}
               <div
                 className="bx-mob-scroll"
-                style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.5rem', paddingBottom: '0.15rem' }}
+                style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.55rem', paddingBottom: '0.15rem' }}
               >
                 {[
                   { id: 'all', ar: '🔥 مكتبة BLACK X الشاملة (+30,000)', en: '🔥 BLACK X All (30,000+)' },
@@ -8480,9 +8800,9 @@ export default function MobileApkApp() {
                       type="button"
                       onClick={() => setMangaSource(srv.id)}
                       style={{
-                        padding: '0.4rem 0.8rem',
-                        borderRadius: '99px',
-                        fontSize: '0.73rem',
+                        padding: '0.4rem 0.82rem',
+                        borderRadius: '999px',
+                        fontSize: '0.72rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer',
@@ -8498,7 +8818,7 @@ export default function MobileApkApp() {
               </div>
 
               {/* Manga vs Manhwa Filter Chips */}
-              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.8rem' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.85rem' }}>
                 {[
                   { id: 'ALL', ar: '🌟 الكل', en: '🌟 All' },
                   { id: 'MANHWA', ar: '⚡ مانهوا كورية وصينية', en: '⚡ Manhwa' },
@@ -8511,14 +8831,14 @@ export default function MobileApkApp() {
                       type="button"
                       onClick={() => setMangaFilterType(ft.id)}
                       style={{
-                        padding: '0.32rem 0.75rem',
-                        borderRadius: '9px',
+                        padding: '0.34rem 0.8rem',
+                        borderRadius: '999px',
                         fontSize: '0.7rem',
                         fontWeight: 800,
                         cursor: 'pointer',
-                        background: active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)',
+                        background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.04)',
                         color: '#fff',
-                        border: active ? '1px solid #fff' : '1px solid rgba(255,255,255,0.1)'
+                        border: active ? '1.5px solid #fff' : '1px solid rgba(255,255,255,0.12)'
                       }}
                     >
                       {isRtl ? ft.ar : ft.en}
@@ -8533,7 +8853,83 @@ export default function MobileApkApp() {
                 </div>
               ) : (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
+                  {/* Horizontal "Latest Updates" Compact Row Strip (Matches Reference UI 1 Left Screen) */}
+                  {!mangaQuery && mangaList.length > 4 && (
+                    <div style={{ marginBottom: '1.05rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+                        <span style={{ fontWeight: 900, fontSize: '0.9rem' }}>
+                          ⚡ {isRtl ? 'أحدث الفصول المضافة (Latest Updates)' : 'Latest Updates'}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
+                          120Hz FHD
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {mangaList.slice(1, 4).map((m) => (
+                          <div
+                            key={`latest-row-${m.objectID}`}
+                            onClick={() => handleOpenManga(m)}
+                            style={{
+                              padding: '0.55rem 0.7rem',
+                              borderRadius: '18px',
+                              background: '#0b0b10',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '0.7rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0, flex: 1 }}>
+                              <img
+                                src={m.poster?.large || m.poster_uri}
+                                alt={m.name}
+                                loading="lazy"
+                                style={{ width: '52px', height: '70px', borderRadius: '12px', objectFit: 'cover', flexShrink: 0 }}
+                              />
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontWeight: 900, fontSize: '0.82rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {m.name}
+                                </div>
+                                <div style={{ fontSize: '0.66rem', color: '#ffffff', fontWeight: 800, marginTop: '2px' }}>
+                                  🟢 {isRtl ? 'فصل جديد متاح الآن' : 'New Chapter'} • ★ {m.rate || '9.4'}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.3rem', marginTop: '4px' }}>
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.6rem', fontWeight: 800 }}>
+                                    {m.type || 'مانهوا'}
+                                  </span>
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.6rem', fontWeight: 800 }}>
+                                    {m.sourceLabel || 'BLACK X'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                width: '34px',
+                                height: '34px',
+                                borderRadius: '50%',
+                                background: '#ffffff',
+                                color: '#000000',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.78rem',
+                                fontWeight: 900,
+                                flexShrink: 0
+                              }}
+                            >
+                              📖
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SlothUI 3-Column Rounded 18px Manga Poster Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.68rem' }}>
                     {mangaList
                       .filter((m) => {
                         if (mangaFilterType === 'MANHWA') return String(m.type || '').includes('مانهوا');
@@ -8551,10 +8947,10 @@ export default function MobileApkApp() {
                             style={{
                               position: 'relative',
                               aspectRatio: '2 / 2.9',
-                              borderRadius: '12px',
+                              borderRadius: '18px',
                               overflow: 'hidden',
                               background: '#0b0b0e',
-                              border: '1px solid rgba(255,255,255,0.12)'
+                              border: '1px solid rgba(255,255,255,0.15)'
                             }}
                           >
                             <img
@@ -8563,18 +8959,54 @@ export default function MobileApkApp() {
                               loading="lazy"
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
+                            {/* Top-Left Circular [X] Seal */}
+                            <span
+                              style={{
+                                position: 'absolute',
+                                top: '6px',
+                                left: '6px',
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                background: '#ffffff',
+                                color: '#000000',
+                                fontSize: '0.58rem',
+                                fontWeight: 900,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              X
+                            </span>
+                            {/* Top-Right Rating Pill */}
+                            <span
+                              style={{
+                                position: 'absolute',
+                                top: '6px',
+                                right: '6px',
+                                background: 'rgba(0,0,0,0.84)',
+                                color: '#fff',
+                                fontSize: '0.58rem',
+                                fontWeight: 900,
+                                padding: '0.1rem 0.34rem',
+                                borderRadius: '6px'
+                              }}
+                            >
+                              ★ {m.rate || '9.4'}
+                            </span>
                             {m.sourceLabel && (
                               <span
                                 style={{
                                   position: 'absolute',
-                                  bottom: '5px',
-                                  left: '5px',
+                                  bottom: '6px',
+                                  left: '6px',
                                   background: 'rgba(0,0,0,0.85)',
                                   color: '#fff',
-                                  fontSize: '0.56rem',
+                                  fontSize: '0.55rem',
                                   fontWeight: 900,
-                                  padding: '0.1rem 0.34rem',
-                                  borderRadius: '5px'
+                                  padding: '0.1rem 0.36rem',
+                                  borderRadius: '6px'
                                 }}
                               >
                                 {m.sourceLabel}
@@ -8583,8 +9015,8 @@ export default function MobileApkApp() {
                           </div>
                           <div
                             style={{
-                              marginTop: '0.32rem',
-                              fontSize: '0.73rem',
+                              marginTop: '0.34rem',
+                              fontSize: '0.74rem',
                               fontWeight: 800,
                               lineHeight: 1.28,
                               display: '-webkit-box',
@@ -9074,29 +9506,354 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 5: FULL USER PROFILE, BADGES & PERSONAL LIBRARY STUDIO (v7.0 CLEAN OBSIDIAN SUB-TABS) ==================== */}
+      {/* ==================== TAB 5: v12.0 SLOTH-UI & APPLE-AIRLINE LUXURY MONOCHROME PROFILE STUDIO ==================== */}
       {activeTab === 'profile' && !selectedAnime && (
-        <main style={{ padding: '1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
-          {/* Clean Obsidian 4-Pill Profile Sub-Tab Bar */}
+        <main style={{ padding: '0.85rem 1rem 1.5rem', animation: 'bxSlideUp 0.2s ease-out' }}>
+          {/* ==================== LUXURY CURVED WAVE PROFILE HERO CARD (MATCHES PROFILE REFERENCE UI 1, 2 & 3) ==================== */}
+          <div
+            style={{
+              position: 'relative',
+              borderRadius: '28px',
+              overflow: 'hidden',
+              background: '#08080c',
+              border: '1px solid rgba(255,255,255,0.16)',
+              boxShadow: '0 22px 55px rgba(0,0,0,0.92)',
+              padding: '1rem 1.1rem 1.15rem',
+              marginBottom: '0.95rem',
+              textAlign: 'center'
+            }}
+          >
+            {/* Top Subtle Ambient Wave Gradient */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '115px',
+                background: 'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.14) 0%, rgba(0,0,0,0) 75%)',
+                pointerEvents: 'none'
+              }}
+            />
+
+            {/* Top Action Row: < back <-> Profile <-> Sync/Settings (Matches Profile UI 1) */}
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.65rem'
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setActiveTab('home')}
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#ffffff',
+                  borderRadius: '999px',
+                  padding: '0.34rem 0.78rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {isRtl ? '→ الرئيسية' : '‹ back'}
+              </button>
+
+              <span style={{ fontSize: '0.76rem', fontWeight: 900, letterSpacing: '0.06em', color: 'rgba(255,255,255,0.85)' }}>
+                {isRtl ? 'الملف الشخصي الملكي' : 'SOVEREIGN PROFILE'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setProfileSubTab((t) => (t === 'appearance' ? 'account' : 'appearance'))}
+                style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#ffffff',
+                  fontSize: '0.82rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+                title={isRtl ? 'إعدادات المظهر' : 'Settings'}
+              >
+                ⚙
+              </button>
+            </div>
+
+            {/* Centered 90x90 Circular Avatar with Top-Right Status Badge (Matches Profile UI 1 & UI 3) */}
+            <div style={{ position: 'relative', width: '90px', height: '90px', margin: '0 auto 0.65rem', zIndex: 2 }}>
+              {user?.photoUrl ? (
+                <img
+                  src={user.photoUrl}
+                  alt={user.displayName}
+                  style={{
+                    width: '90px',
+                    height: '90px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '2.5px solid #ffffff',
+                    boxShadow: '0 10px 28px rgba(0,0,0,0.85)'
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '90px',
+                    height: '90px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '2.1rem',
+                    fontWeight: 900,
+                    border: '3px solid rgba(255,255,255,0.35)',
+                    boxShadow: '0 10px 28px rgba(255,255,255,0.18)'
+                  }}
+                >
+                  {(user?.displayName?.[0] || 'X').toUpperCase()}
+                </div>
+              )}
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  right: '2px',
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: '2px solid #08080c',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.74rem',
+                  fontWeight: 900
+                }}
+              >
+                {userVipTier !== 'free' || isDeveloper ? '👑' : '⚡'}
+              </span>
+            </div>
+
+            {/* Name & Sovereign Rank Subtitle */}
+            <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.22rem', fontWeight: 900 }}>
+              {user ? user.displayName : isRtl ? 'زائر BLACK X الملكي' : 'BLACK X Guest Monarch'}
+            </h2>
+            <div style={{ fontSize: '0.73rem', fontWeight: 800, color: 'rgba(255,255,255,0.62)', marginBottom: '0.85rem', letterSpacing: '0.03em' }}>
+              {selectedSovereignTitle} • {user ? `@${user.username}` : isRtl ? 'سجّل دخولك للمزامنة السحابية' : 'Sign in for Cloud Sync'}
+            </div>
+
+            {/* 3-Column Big Counter Strip (Matches Profile UI 2: 149 | 201k | 2020) */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1px 1fr 1px 1fr',
+                alignItems: 'center',
+                padding: '0.65rem 0',
+                marginBottom: '0.9rem',
+                borderTop: '1px solid rgba(255,255,255,0.1)',
+                borderBottom: '1px solid rgba(255,255,255,0.1)'
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900 }}>{watchHistory.length + mangaHistory.length}</div>
+                <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
+                  {isRtl ? 'سجل المشاهدة' : 'Watched'}
+                </div>
+              </div>
+              <div style={{ height: '24px', background: 'rgba(255,255,255,0.14)' }} />
+              <div>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900 }}>{favorites.length + Object.keys(watchlistMap).length}</div>
+                <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
+                  {isRtl ? 'المفضلة ومكتبتي' : 'Saved'}
+                </div>
+              </div>
+              <div style={{ height: '24px', background: 'rgba(255,255,255,0.14)' }} />
+              <div>
+                <div style={{ fontSize: '1.08rem', fontWeight: 900 }}>{userXp.toLocaleString()}</div>
+                <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
+                  {isRtl ? 'نقاط الخبرة XP' : 'XP Score'}
+                </div>
+              </div>
+            </div>
+
+            {/* Airline-Class "ACCOUNT INFORMATIONS" Structured Card (Exact Match to Profile UI 3 Left Screen) */}
+            <div style={{ textAlign: isRtl ? 'right' : 'left', marginBottom: user ? '0.85rem' : '0.2rem' }}>
+              <div style={{ fontSize: '0.64rem', fontWeight: 900, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.48)', marginBottom: '0.4rem', padding: '0 0.25rem' }}>
+                {isRtl ? 'معلومات العضوية الملكية • ACCOUNT INFORMATIONS' : 'ACCOUNT INFORMATIONS'}
+              </div>
+              <div
+                style={{
+                  borderRadius: '18px',
+                  background: '#0d0d13',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  overflow: 'hidden'
+                }}
+              >
+                {[
+                  {
+                    k: isRtl ? 'رقم العضوية (Member N°)' : 'Member N°',
+                    v: `BX-${String(user?.uid || user?.username || '88492011').slice(0, 8).toUpperCase()}`
+                  },
+                  {
+                    k: isRtl ? 'المستوى ونقاط الخبرة (XP Collected)' : 'XP Collected',
+                    v: `Lv.${Math.floor(userXp / 100) + 1} • ${userXp.toLocaleString()} XP`
+                  },
+                  {
+                    k: isRtl ? 'فئة العضوية (Member Class)' : 'Member Class',
+                    v: isDeveloper
+                      ? isRtl
+                        ? '👑 مطور المنصة (Founder)'
+                        : '👑 Founder'
+                      : userVipTier === 'vip_monarch'
+                      ? isRtl
+                        ? '👑 باقة الملك (Monarch VIP)'
+                        : '👑 Monarch VIP'
+                      : userVipTier === 'vip_basic'
+                      ? isRtl
+                        ? '⚡ الباقة الأساسية (Basic VIP)'
+                        : '⚡ Basic VIP'
+                      : isRtl
+                      ? 'عضوية مجانية (Standard)'
+                      : 'Standard'
+                  }
+                ].map((row, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.68rem 0.9rem',
+                      borderBottom: '1px solid rgba(255,255,255,0.07)',
+                      fontSize: '0.76rem'
+                    }}
+                  >
+                    <span style={{ color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>{row.k}</span>
+                    <span style={{ color: '#ffffff', fontWeight: 900, fontFamily: idx === 0 ? 'monospace' : 'inherit' }}>{row.v}</span>
+                  </div>
+                ))}
+
+                {/* Clickable Membership Card Row (Matches "Membership Card >" in Profile UI 3) */}
+                <button
+                  type="button"
+                  onClick={handleGenerateOtakuIdCard}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.72rem 0.9rem',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '0.76rem',
+                    fontWeight: 900,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>🪪 {isRtl ? 'بطاقة هوية الأوتاكو الملكية (Membership Card)' : 'Membership Card (Otaku ID)'}</span>
+                  <span>{isRtl ? 'تحميل البطاقة ❯' : 'Download ❯'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* User Action Pill Strip when signed in */}
+            {user && (
+              <div style={{ display: 'flex', gap: '0.45rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditDisplayName(user.displayName || '');
+                    setEditBio(user.bio || '');
+                    setEditPhotoUrl(user.photoUrl || '');
+                    setEditingProfile((v) => !v);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.65rem',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    fontWeight: 900,
+                    fontSize: '0.76rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✏️ {isRtl ? 'تعديل البروفايل' : 'Edit Profile'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => syncUserStateToCloud(user, favorites, watchHistory).then(() => showToast('✓ تمت المزامنة السحابية مع الموقع!'))}
+                  style={{
+                    flex: 1,
+                    padding: '0.65rem',
+                    borderRadius: '999px',
+                    border: 'none',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontWeight: 900,
+                    fontSize: '0.76rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 {isRtl ? 'مزامنة سحابية' : 'Sync Cloud'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUser(null);
+                    localStorage.removeItem('bx_mob_user');
+                    showToast(isRtl ? 'تم تسجيل الخروج' : 'Signed out');
+                  }}
+                  style={{
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'transparent',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🚪
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* SlothUI Segmented Pill Profile Sub-Tab Bar (Matches Profile UI 2 Segmented Switcher) */}
           <div
             className="bx-mob-scroll"
             style={{
               display: 'flex',
               gap: '0.4rem',
               overflowX: 'auto',
-              marginBottom: '0.9rem',
+              marginBottom: '0.95rem',
               padding: '0.35rem',
-              borderRadius: '14px',
-              background: '#08080c',
-              border: '1px solid rgba(255,255,255,0.14)'
+              borderRadius: '999px',
+              background: '#09090e',
+              border: '1px solid rgba(255,255,255,0.16)'
             }}
           >
             {[
-              { id: 'account', ar: '👤 حسابي والألقاب', en: '👤 Account & Titles' },
-              { id: 'appearance', ar: '🎨 المظهر والأمان', en: '🎨 Theme & Security' },
-              { id: 'vault', ar: '💾 الخزنة ومكتبتي', en: '💾 Vault & Library' },
+              { id: 'account', ar: '👑 الحساب والـ VIP', en: '👑 Account & VIP' },
+              { id: 'vault', ar: '💾 مكتبتي والتنزيلات', en: '💾 My Library' },
+              { id: 'appearance', ar: '🎨 المظهر والأمان', en: '🎨 Settings' },
               ...(isDeveloper
-                ? [{ id: 'developer', ar: `🛡️ قيادة المطور (${cloudUserRequests.length})`, en: '🛡️ Dev Command' }]
+                ? [{ id: 'developer', ar: `🛡️ المطور (${cloudUserRequests.length})`, en: '🛡️ Dev' }]
                 : [])
             ].map((tb) => {
               const active = profileSubTab === tb.id;
@@ -9107,8 +9864,8 @@ export default function MobileApkApp() {
                   onClick={() => setProfileSubTab(tb.id)}
                   style={{
                     flex: 1,
-                    padding: '0.52rem 0.75rem',
-                    borderRadius: '10px',
+                    padding: '0.55rem 0.8rem',
+                    borderRadius: '999px',
                     background: active ? '#ffffff' : 'transparent',
                     color: active ? '#000000' : 'rgba(255,255,255,0.78)',
                     border: 'none',
@@ -9128,179 +9885,19 @@ export default function MobileApkApp() {
             <>
               <div
                 style={{
-                  padding: '1.15rem',
-                  borderRadius: '18px',
+                  display: profileSubTab === 'account' && editingProfile ? 'block' : 'none',
+                  padding: '1rem',
+                  borderRadius: '20px',
                   background: '#0a0a0e',
                   border: '1px solid rgba(255,255,255,0.16)',
-                  textAlign: 'center',
-                  marginBottom: '1rem',
-                  display: profileSubTab === 'account' ? 'block' : 'none'
+                  marginBottom: '1rem'
                 }}
               >
-                {user.photoUrl ? (
-                  <img
-                    src={user.photoUrl}
-                    alt={user.displayName}
-                    style={{
-                      width: '76px',
-                      height: '76px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: '2px solid #ffffff',
-                      margin: '0 auto 0.65rem',
-                      display: 'block'
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: '74px',
-                      height: '74px',
-                      borderRadius: '50%',
-                      background: '#ffffff',
-                      color: '#000000',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '1.75rem',
-                      fontWeight: 900,
-                      margin: '0 auto 0.65rem'
-                    }}
-                  >
-                    {(user.displayName?.[0] || 'X').toUpperCase()}
-                  </div>
-                )}
-
-                <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.15rem', fontWeight: 900 }}>{user.displayName}</h2>
-                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>
-                  @{user.username} • {user.email}
-                </div>
-                {user.bio && (
-                  <p style={{ margin: '0 0 0.65rem', fontSize: '0.76rem', color: 'rgba(255,255,255,0.82)' }}>{user.bio}</p>
-                )}
-
-                {/* Badges Strip */}
-                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
-                  <span style={{ padding: '0.18rem 0.55rem', borderRadius: '99px', background: '#ffffff', color: '#000000', fontSize: '0.66rem', fontWeight: 900 }}>
-                    {selectedSovereignTitle}
-                  </span>
-                  <span style={{ padding: '0.18rem 0.55rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', fontSize: '0.66rem', fontWeight: 800 }}>
-                    ⚡ Lv.{Math.floor(userXp / 100) + 1} ({userXp} XP)
-                  </span>
-                  {user.role === 'developer' && (
-                    <span style={{ padding: '0.18rem 0.55rem', borderRadius: '99px', background: '#ffffff', color: '#000000', fontSize: '0.66rem', fontWeight: 900 }}>
-                      🛠️ مطور المنصة
-                    </span>
-                  )}
-                </div>
-
-                {/* Stats Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.45rem', marginBottom: '0.9rem' }}>
-                  <div style={{ padding: '0.55rem 0.3rem', borderRadius: '11px', background: 'rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 900 }}>{favorites.length}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)' }}>{isRtl ? 'المفضلة' : 'Favorites'}</div>
-                  </div>
-                  <div style={{ padding: '0.55rem 0.3rem', borderRadius: '11px', background: 'rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 900 }}>{watchHistory.length}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)' }}>{isRtl ? 'حلقات' : 'Episodes'}</div>
-                  </div>
-                  <div style={{ padding: '0.55rem 0.3rem', borderRadius: '11px', background: 'rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 900 }}>{mangaHistory.length}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)' }}>{isRtl ? 'مانجا' : 'Manga'}</div>
-                  </div>
-                  <div style={{ padding: '0.55rem 0.3rem', borderRadius: '11px', background: 'rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 900 }}>{Object.keys(watchlistMap).length}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)' }}>{isRtl ? 'مكتبتي' : 'Lists'}</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.45rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditDisplayName(user.displayName || '');
-                      setEditBio(user.bio || '');
-                      setEditPhotoUrl(user.photoUrl || '');
-                      setEditingProfile((v) => !v);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '0.65rem',
-                      borderRadius: '11px',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      background: 'rgba(255,255,255,0.08)',
-                      color: '#fff',
-                      fontWeight: 900,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ✏️ {isRtl ? 'تعديل الحساب' : 'Edit Profile'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => syncUserStateToCloud(user, favorites, watchHistory).then(() => showToast('✓ تمت المزامنة السحابية مع الموقع!'))}
-                    style={{
-                      flex: 1,
-                      padding: '0.65rem',
-                      borderRadius: '11px',
-                      border: 'none',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontWeight: 900,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🔄 {isRtl ? 'مزامنة مع الموقع' : 'Sync Cloud'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleGenerateOtakuIdCard}
-                    style={{
-                      padding: '0.65rem 0.75rem',
-                      borderRadius: '11px',
-                      border: '1px solid rgba(255,255,255,0.28)',
-                      background: 'rgba(255,255,255,0.1)',
-                      color: '#fff',
-                      fontWeight: 900,
-                      fontSize: '0.76rem',
-                      cursor: 'pointer'
-                    }}
-                    title="تحميل بطاقة الهوية الملكية"
-                  >
-                    🪪 ID
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUser(null);
-                      localStorage.removeItem('bx_mob_user');
-                      showToast(isRtl ? 'تم تسجيل الخروج' : 'Signed out');
-                    }}
-                    style={{
-                      padding: '0.65rem 0.8rem',
-                      borderRadius: '11px',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      background: 'transparent',
-                      color: '#fff',
-                      fontWeight: 800,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🚪
-                  </button>
-                </div>
-
                 {/* Inline Profile Editor */}
                 {editingProfile && (
                   <form
                     onSubmit={handleSaveProfileEdit}
                     style={{
-                      marginTop: '0.85rem',
-                      paddingTop: '0.85rem',
-                      borderTop: '1px solid rgba(255,255,255,0.12)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '0.55rem',
@@ -13989,31 +14586,14 @@ export default function MobileApkApp() {
                   }
                 },
                 {
-                  icon: '🎨',
-                  label:
-                    homeDesignMode === 'sloth'
-                      ? isRtl
-                        ? 'الواجهة: SlothUI (اضغط للتبديل)'
-                        : 'UI: SlothUI (Tap to Switch)'
-                      : homeDesignMode === 'waku3d'
-                      ? isRtl
-                        ? 'الواجهة: Waku 3D Deck (اضغط للتبديل)'
-                        : 'UI: Waku 3D Deck (Tap to Switch)'
-                      : homeDesignMode === 'anymex'
-                      ? isRtl
-                        ? 'الواجهة: AnymeX Portal (اضغط للتبديل)'
-                        : 'UI: AnymeX Portal (Tap to Switch)'
-                      : isRtl
-                      ? 'الواجهة: Prime Cards (اضغط للتبديل)'
-                      : 'UI: Prime Cards (Tap to Switch)',
-                  badge: homeDesignMode.toUpperCase(),
+                  icon: '📖',
+                  label: isRtl ? 'استوديو المانجا والمانهوا (+30,000)' : 'Manga & Manhwa Studio (30K+)',
+                  badge: mangaHistory.length || '30K',
                   onClick: () => {
-                    const modes = ['sloth', 'waku3d', 'anymex', 'prime'];
-                    const next = modes[(modes.indexOf(homeDesignMode) + 1) % modes.length];
-                    setHomeDesignMode(next);
-                    try {
-                      localStorage.setItem('bx_mob_home_design', next);
-                    } catch (_) {}
+                    setCommandMenuOpen(false);
+                    setSelectedAnime(null);
+                    setActiveEpisode(null);
+                    setActiveTab('manga');
                   }
                 },
                 {
