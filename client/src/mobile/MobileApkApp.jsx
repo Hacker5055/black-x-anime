@@ -784,6 +784,15 @@ export default function MobileApkApp() {
   const [universalMangaHits, setUniversalMangaHits] = useState([]);
   const [homeCategoryFilter, setHomeCategoryFilter] = useState('all'); // 'all' | 'series' | 'movies' | 'simulcast'
 
+  // ==================== v9.0 SOVEREIGN CINEMA OS & STANDALONE PLAYER STATES ====================
+  const [playerMinimized, setPlayerMinimized] = useState(false); // Floating Mini-Player vs Dedicated Standalone Player Page
+  const [epLayoutMode, setEpLayoutMode] = useState('cards'); // 'cards' (Crunchyroll Horizontal Cards) | 'grid' (Fast Number Grid)
+  const [epRangeChunk, setEpRangeChunk] = useState(-1); // -1 = All, 0 = 1..50, 1 = 51..100, etc.
+  const [storyPreviewAnime, setStoryPreviewAnime] = useState(null); // Fullscreen Vertical Story / Highlight Modal
+  const [mangaChSearch, setMangaChSearch] = useState(''); // Search chapters inside Manhwa Series Hub
+  const [mangaChAsc, setMangaChAsc] = useState(false); // Sort chapters ascending vs descending
+  const pendingAutoPlayEpRef = useRef(null);
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -928,9 +937,12 @@ export default function MobileApkApp() {
   const lastBackPressRef = useRef(0);
   useEffect(() => {
     navRef.current = {
+      storyPreviewAnime,
+      quickPeekAnime,
       videoFullscreen,
       heroTrailerOpen,
       activeEpisode,
+      playerMinimized,
       selectedAnime,
       activeMangaChapter,
       selectedManga,
@@ -939,9 +951,12 @@ export default function MobileApkApp() {
       activeTab
     };
   }, [
+    storyPreviewAnime,
+    quickPeekAnime,
     videoFullscreen,
     heroTrailerOpen,
     activeEpisode,
+    playerMinimized,
     selectedAnime,
     activeMangaChapter,
     selectedManga,
@@ -953,9 +968,11 @@ export default function MobileApkApp() {
   // Push a browser history entry whenever the user navigates deeper so WebView gesture back also triggers popstate
   useEffect(() => {
     if (
+      storyPreviewAnime ||
+      quickPeekAnime ||
       videoFullscreen ||
       heroTrailerOpen ||
-      activeEpisode ||
+      (activeEpisode && !playerMinimized) ||
       selectedAnime ||
       activeMangaChapter ||
       selectedManga ||
@@ -967,9 +984,12 @@ export default function MobileApkApp() {
       } catch (_) {}
     }
   }, [
+    storyPreviewAnime,
+    quickPeekAnime,
     videoFullscreen,
     heroTrailerOpen,
     activeEpisode,
+    playerMinimized,
     selectedAnime,
     activeMangaChapter,
     selectedManga,
@@ -980,6 +1000,14 @@ export default function MobileApkApp() {
   useEffect(() => {
     const handleStepBack = () => {
       const s = navRef.current;
+      if (s.storyPreviewAnime) {
+        setStoryPreviewAnime(null);
+        return true;
+      }
+      if (s.quickPeekAnime) {
+        setQuickPeekAnime(null);
+        return true;
+      }
       if (s.videoFullscreen) {
         setVideoFullscreen(false);
         return true;
@@ -992,7 +1020,7 @@ export default function MobileApkApp() {
         setVipGateShowLogin(false);
         return true;
       }
-      if (s.activeEpisode) {
+      if (s.activeEpisode && !s.playerMinimized) {
         setActiveEpisode(null);
         setPlayingVideoUrl('');
         return true;
@@ -3353,12 +3381,20 @@ export default function MobileApkApp() {
   }, [completeVerifiedGoogleLogin, showToast, lang]);
 
   // Open an Anime Detail Sheet & fetch its episodes, characters/seiyuu, related seasons, and cloud reviews
-  const handleOpenAnime = useCallback(async (anime) => {
+  const handleOpenAnime = useCallback(async (anime, autoPlayEpNum = null) => {
     if (!anime?.objectID) return;
     setSelectedAnime(anime);
     setDetailTab('episodes');
-    setActiveEpisode(null);
-    setPlayingVideoUrl('');
+    setEpRangeChunk(-1);
+    if (autoPlayEpNum !== null && autoPlayEpNum !== undefined) {
+      pendingAutoPlayEpRef.current = { animeId: anime.objectID, epNum: Number(autoPlayEpNum) || 1 };
+    } else {
+      pendingAutoPlayEpRef.current = null;
+      if (!playerMinimized) {
+        setActiveEpisode(null);
+        setPlayingVideoUrl('');
+      }
+    }
     setEpSearchQuery('');
     setStoryExpanded(false);
     setEpisodesLoading(true);
@@ -3531,6 +3567,8 @@ export default function MobileApkApp() {
         `⚔️ الحلقة ${epObj.number} · ضربة سيف الكاتانا 120Hz`,
         `⚔️ EPISODE ${epObj.number} · KATANA X-SLASH 120Hz`
       );
+      setSelectedAnime(anime);
+      setPlayerMinimized(false);
       setActiveEpisode(epObj);
       setEpisodeServers([]);
       setPlayingVideoUrl('');
@@ -3679,6 +3717,25 @@ export default function MobileApkApp() {
     },
     [user, favorites, syncUserStateToCloud, handleSelectServer]
   );
+
+  // Auto-open Standalone Video Player Page when user tapped "▶ تشغيل الآن" from Home Hero / Continue Watching / Quick Peek
+  useEffect(() => {
+    if (
+      pendingAutoPlayEpRef.current &&
+      selectedAnime &&
+      selectedAnime.objectID === pendingAutoPlayEpRef.current.animeId &&
+      animeEpisodes.length > 0 &&
+      !episodesLoading
+    ) {
+      const targetNum = pendingAutoPlayEpRef.current.epNum;
+      pendingAutoPlayEpRef.current = null;
+      const targetEp =
+        animeEpisodes.find((e) => Number(e.number) === Number(targetNum)) || animeEpisodes[0];
+      if (targetEp) {
+        handlePlayEpisode(selectedAnime, targetEp);
+      }
+    }
+  }, [selectedAnime, animeEpisodes, episodesLoading, handlePlayEpisode]);
 
   // Toggle Anime in Favorites (Synced with Website)
   const toggleFavorite = useCallback(
@@ -4364,7 +4421,7 @@ export default function MobileApkApp() {
     [communityPosts, replyText, user, showToast, lang]
   );
 
-  // Filtered & sorted episodes inside Anime Detail Sheet
+  // Filtered & sorted episodes inside Anime Detail Sheet (with 50-episode range chunking support)
   const displayedEpisodes = useMemo(() => {
     let list = [...animeEpisodes];
     if (hideFiller) {
@@ -4378,10 +4435,28 @@ export default function MobileApkApp() {
           ep.name.toLowerCase().includes(q) ||
           (ep.titleAr || '').toLowerCase().includes(q)
       );
+    } else if (epRangeChunk >= 0 && animeEpisodes.length > 50) {
+      const start = epRangeChunk * 50;
+      list = list.slice(start, start + 50);
     }
     if (!epAscending) list.reverse();
     return list;
-  }, [animeEpisodes, hideFiller, epSearchQuery, epAscending]);
+  }, [animeEpisodes, hideFiller, epSearchQuery, epAscending, epRangeChunk]);
+
+  // Filtered & sorted chapters inside Manhwa Series Hub
+  const displayedMangaChapters = useMemo(() => {
+    let list = [...mangaChapters];
+    if (mangaChSearch.trim()) {
+      const q = mangaChSearch.trim().toLowerCase();
+      list = list.filter(
+        (ch) => String(ch.chapter).toLowerCase().includes(q) || String(ch.title || '').toLowerCase().includes(q)
+      );
+    }
+    if (mangaChAsc) {
+      list.reverse();
+    }
+    return list;
+  }, [mangaChapters, mangaChSearch, mangaChAsc]);
 
   const handleVideoDoubleTap = (side) => {
     if (!videoRef.current) return;
@@ -5074,7 +5149,7 @@ export default function MobileApkApp() {
 
                   <button
                     type="button"
-                    onClick={() => handleOpenAnime(heroAnime)}
+                    onClick={() => handleOpenAnime(heroAnime, 1)}
                     style={{
                       padding: '0.68rem 1.1rem',
                       borderRadius: '8px',
@@ -5344,6 +5419,79 @@ export default function MobileApkApp() {
             )}
           </section>
 
+          {/* ==================== v9.0 NETFLIX MOBILE / STORIES CIRCULAR PREVIEWS STRIP ==================== */}
+          {popularList.length > 0 && (
+            <section style={{ padding: '0.65rem 1rem 0.15rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <h2 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 900, letterSpacing: '0.01em' }}>
+                  ⚡ {isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}
+                </h2>
+                <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>
+                  {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
+                </span>
+              </div>
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
+                {popularList.slice(0, 12).map((item, idx) => (
+                  <div
+                    key={`story-${item.objectID}`}
+                    className="bx-mob-card"
+                    onClick={() => setStoryPreviewAnime({ item, index: idx })}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      minWidth: '68px',
+                      maxWidth: '68px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '50%',
+                        padding: '2.5px',
+                        background: idx < 3 ? '#ffffff' : 'rgba(255,255,255,0.45)',
+                        boxShadow: idx < 3 ? '0 0 14px rgba(255,255,255,0.22)' : 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <img
+                        src={item.poster}
+                        alt={item.titleEn}
+                        loading="lazy"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '2px solid #000000'
+                        }}
+                      />
+                    </div>
+                    <span
+                      style={{
+                        marginTop: '0.28rem',
+                        fontSize: '0.64rem',
+                        fontWeight: 800,
+                        color: 'rgba(255,255,255,0.88)',
+                        maxWidth: '66px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {item.titleEn}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Netflix-Style Continue Watching Strip (With Play Overlay + Bottom Progress Bar) */}
           {watchHistory.length > 0 && (
             <section style={{ padding: '0.9rem 1rem 0.2rem' }}>
@@ -5352,7 +5500,7 @@ export default function MobileApkApp() {
                   ▶ {isRtl ? 'متابعة المشاهدة' : 'Continue Watching'}
                 </h2>
                 <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
-                  {isRtl ? 'مزامنة سحابية' : 'Cloud Synced'}
+                  {isRtl ? 'تشغيل في المشغل المستقل' : 'Standalone Player'}
                 </span>
               </div>
               <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
@@ -5361,18 +5509,21 @@ export default function MobileApkApp() {
                     key={`${h.objectID}-${i}`}
                     className="bx-mob-card"
                     onClick={() =>
-                      handleOpenAnime({
-                        objectID: h.objectID,
-                        slug: h.slug,
-                        titleEn: h.titleEn,
-                        titleAr: h.titleAr,
-                        poster: h.poster,
-                        banner: h.poster,
-                        rating: '9.1',
-                        type: 'مسلسل',
-                        state: 'مستمر',
-                        storyAr: ''
-                      })
+                      handleOpenAnime(
+                        {
+                          objectID: h.objectID,
+                          slug: h.slug,
+                          titleEn: h.titleEn,
+                          titleAr: h.titleAr,
+                          poster: h.poster,
+                          banner: h.poster,
+                          rating: '9.1',
+                          type: 'مسلسل',
+                          state: 'مستمر',
+                          storyAr: ''
+                        },
+                        h.episode || 1
+                      )
                     }
                     style={{
                       minWidth: '116px',
@@ -6945,63 +7096,197 @@ export default function MobileApkApp() {
             </div>
           ) : selectedManga ? (
             <div>
-              <button
-                type="button"
-                onClick={() => setSelectedManga(null)}
+              {/* Full-Bleed Manhwa Series Hub Header Card */}
+              <div
                 style={{
-                  marginBottom: '0.75rem',
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  borderRadius: '10px',
-                  padding: '0.45rem 0.9rem',
-                  fontWeight: 800,
-                  fontSize: '0.78rem',
-                  cursor: 'pointer'
+                  position: 'relative',
+                  borderRadius: '18px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  marginBottom: '0.9rem',
+                  background: '#07070b'
                 }}
               >
-                {isRtl ? '→ العودة لمكتبة المانجا والمانهوا' : '← Back to Manga Library'}
-              </button>
-
-              <div style={{ display: 'flex', gap: '0.85rem', marginBottom: '1rem' }}>
                 <img
                   src={selectedManga.poster?.large || selectedManga.poster_uri}
                   alt={selectedManga.name}
-                  style={{ width: '100px', height: '142px', borderRadius: '12px', objectFit: 'cover' }}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    filter: 'blur(22px) brightness(0.28)',
+                    transform: 'scale(1.12)'
+                  }}
                 />
-                <div>
-                  <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.05rem', fontWeight: 900 }}>{selectedManga.name}</h2>
-                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginBottom: '0.4rem' }}>
-                    {selectedManga.type || 'مانهوا'} • {selectedManga.sourceLabel || 'BLACK X 1'} • ★ {selectedManga.rate || '9.3'}
+                <div style={{ position: 'relative', zIndex: 2, padding: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedManga(null)}
+                      style={{
+                        background: 'rgba(255,255,255,0.12)',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.24)',
+                        borderRadius: '99px',
+                        padding: '0.38rem 0.85rem',
+                        fontWeight: 900,
+                        fontSize: '0.74rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? '→ مكتبة المانهوا' : '← Back'}
+                    </button>
+                    <span
+                      style={{
+                        padding: '0.22rem 0.6rem',
+                        borderRadius: '99px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.66rem',
+                        fontWeight: 900
+                      }}
+                    >
+                      ★ {selectedManga.rate || '9.3'} • {selectedManga.type || 'مانهوا'}
+                    </span>
                   </div>
-                  <p style={{ margin: '0 0 0.45rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45 }}>
-                    {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 220)}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleToggleSpeakText(
-                        selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || selectedManga.name
-                      )
-                    }
-                    style={{
-                      padding: '0.28rem 0.7rem',
-                      borderRadius: '99px',
-                      background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                      color: ttsSpeaking ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      fontSize: '0.68rem',
-                      fontWeight: 900,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen Story'}
-                  </button>
+
+                  <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+                    <img
+                      src={selectedManga.poster?.large || selectedManga.poster_uri}
+                      alt={selectedManga.name}
+                      style={{
+                        width: '104px',
+                        height: '148px',
+                        borderRadius: '12px',
+                        objectFit: 'cover',
+                        border: '1.5px solid rgba(255,255,255,0.32)',
+                        flexShrink: 0
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.08rem', fontWeight: 900, lineHeight: 1.3 }}>
+                        {selectedManga.name}
+                      </h2>
+                      <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.45rem', fontWeight: 800 }}>
+                        ⚡ {selectedManga.sourceLabel || 'BLACK X 1'} • 📖 {mangaChapters.length} {isRtl ? 'فصل مترجم' : 'Chapters'}
+                      </div>
+                      <p style={{ margin: '0 0 0.5rem', fontSize: '0.73rem', color: 'rgba(255,255,255,0.78)', lineHeight: 1.48 }}>
+                        {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 220)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleToggleSpeakText(
+                            selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || selectedManga.name
+                          )
+                        }
+                        style={{
+                          padding: '0.28rem 0.7rem',
+                          borderRadius: '99px',
+                          background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                          color: ttsSpeaking ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.24)',
+                          fontSize: '0.68rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen Story'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Netflix-Style Giant Primary Read/Resume CTA Button */}
+                  {mangaChapters.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const savedHist = mangaHistory.find((mh) => mh.mangaId === selectedManga.objectID);
+                        const targetCh =
+                          (savedHist && mangaChapters.find((c) => c.id === savedHist.chapterId || String(c.chapter) === String(savedHist.chapter))) ||
+                          mangaChapters[mangaChapters.length - 1] ||
+                          mangaChapters[0];
+                        if (targetCh) handleReadMangaChapter(targetCh);
+                      }}
+                      style={{
+                        width: '100%',
+                        marginTop: '0.8rem',
+                        padding: '0.72rem 1rem',
+                        borderRadius: '11px',
+                        border: 'none',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.86rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.45rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>📖</span>
+                      <span>
+                        {(() => {
+                          const savedHist = mangaHistory.find((mh) => mh.mangaId === selectedManga.objectID);
+                          if (savedHist) {
+                            return isRtl
+                              ? `متابعة القراءة — الفصل ${savedHist.chapter} (قارئ مستقل)`
+                              : `Continue Reading — Ch. ${savedHist.chapter}`;
+                          }
+                          const firstCh = mangaChapters[mangaChapters.length - 1] || mangaChapters[0];
+                          return isRtl
+                            ? `ابدأ القراءة الآن — الفصل ${firstCh?.chapter || 1}`
+                            : `Start Reading — Ch. ${firstCh?.chapter || 1}`;
+                        })()}
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 900, marginBottom: '0.6rem' }}>
-                📖 {isRtl ? `قائمة الفصول (${mangaChapters.length})` : `Chapters (${mangaChapters.length})`}
+              {/* Chapter Search & Sort Controls */}
+              <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', marginBottom: '0.65rem' }}>
+                <input
+                  type="search"
+                  value={mangaChSearch}
+                  onChange={(e) => setMangaChSearch(e.target.value)}
+                  placeholder={isRtl ? 'ابحث برقم الفصل...' : 'Search chapter #...'}
+                  style={{
+                    flex: 1,
+                    padding: '0.48rem 0.75rem',
+                    borderRadius: '10px',
+                    background: '#0b0b0f',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    color: '#ffffff',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMangaChAsc((v) => !v)}
+                  style={{
+                    padding: '0.48rem 0.75rem',
+                    borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#ffffff',
+                    fontSize: '0.73rem',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {mangaChAsc ? (isRtl ? '⬆ الأقدم أولاً' : '⬆ Oldest') : isRtl ? '⬇ الأحدث أولاً' : '⬇ Newest'}
+                </button>
+              </div>
+
+              <h3 style={{ fontSize: '0.88rem', fontWeight: 900, marginBottom: '0.55rem' }}>
+                📖 {isRtl ? `قائمة الفصول (${displayedMangaChapters.length})` : `Chapters (${displayedMangaChapters.length})`}
               </h3>
               {mangaChaptersLoading ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
@@ -7009,27 +7294,39 @@ export default function MobileApkApp() {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                  {mangaChapters.map((ch) => (
-                    <button
-                      key={ch.id}
-                      type="button"
-                      onClick={() => handleReadMangaChapter(ch)}
-                      style={{
-                        padding: '0.65rem 0.75rem',
-                        borderRadius: '11px',
-                        background: '#0c0c10',
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        color: '#fff',
-                        textAlign: 'start',
-                        fontWeight: 800,
-                        fontSize: '0.78rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      📖 {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}{' '}
-                      <span style={{ opacity: 0.6, fontSize: '0.68rem' }}>({(ch.lang || 'AR').toUpperCase()})</span>
-                    </button>
-                  ))}
+                  {displayedMangaChapters.map((ch) => {
+                    const isRead = mangaHistory.some(
+                      (mh) => mh.mangaId === selectedManga.objectID && String(mh.chapter) === String(ch.chapter)
+                    );
+                    return (
+                      <button
+                        key={ch.id}
+                        type="button"
+                        onClick={() => handleReadMangaChapter(ch)}
+                        style={{
+                          padding: '0.65rem 0.75rem',
+                          borderRadius: '11px',
+                          background: isRead ? 'rgba(255,255,255,0.06)' : '#0c0c10',
+                          border: isRead ? '1px solid rgba(255,255,255,0.28)' : '1px solid rgba(255,255,255,0.14)',
+                          color: '#fff',
+                          textAlign: 'start',
+                          fontWeight: 800,
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <span>
+                          📖 {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}
+                        </span>
+                        <span style={{ opacity: 0.72, fontSize: '0.65rem', fontWeight: 900 }}>
+                          {isRead ? '✓ مقروء' : (ch.lang || 'AR').toUpperCase()}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -9764,7 +10061,7 @@ export default function MobileApkApp() {
             </button>
           </div>
 
-          {/* Built-In 120Hz Cinema Video Player (Supports 100% True Fullscreen + 20:9 Screen Cover/Fit) */}
+          {/* ==================== v9.0 DEDICATED STANDALONE 120Hz CINEMA VIDEO PLAYER PAGE + FLOATING MINI-PLAYER ==================== */}
           {activeEpisode && (
             <div
               style={
@@ -9780,13 +10077,131 @@ export default function MobileApkApp() {
                       flexDirection: 'column',
                       justifyContent: 'center'
                     }
+                  : playerMinimized
+                  ? {
+                      position: 'fixed',
+                      left: '10px',
+                      right: '10px',
+                      bottom: '16px',
+                      zIndex: 520,
+                      background: 'rgba(8, 8, 12, 0.96)',
+                      backdropFilter: 'blur(26px)',
+                      WebkitBackdropFilter: 'blur(26px)',
+                      border: '1.5px solid rgba(255, 255, 255, 0.32)',
+                      borderRadius: '18px',
+                      padding: '0.45rem 0.65rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      boxShadow: '0 20px 48px rgba(0, 0, 0, 0.96)'
+                    }
                   : {
+                      position: 'fixed',
+                      inset: 0,
+                      zIndex: 500,
                       background: '#000000',
-                      borderBottom: '1px solid rgba(255,255,255,0.14)',
-                      paddingBottom: '0.85rem'
+                      overflowY: 'auto',
+                      paddingBottom: '90px',
+                      animation: 'bxSlideUp 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
                     }
               }
             >
+              {/* Sticky Top Navigation Header for Dedicated Standalone Video Player Page */}
+              {!videoFullscreen && !playerMinimized && (
+                <div
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 35,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.5rem',
+                    padding: '0.65rem 0.9rem',
+                    background: 'rgba(0,0,0,0.92)',
+                    backdropFilter: 'blur(20px)',
+                    borderBottom: '1px solid rgba(255,255,255,0.12)'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveEpisode(null);
+                      setPlayingVideoUrl('');
+                      setVideoFullscreen(false);
+                    }}
+                    style={{
+                      padding: '0.42rem 0.8rem',
+                      borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.1)',
+                      border: '1px solid rgba(255,255,255,0.24)',
+                      color: '#ffffff',
+                      fontWeight: 900,
+                      fontSize: '0.75rem',
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isRtl ? '→ صفحة الأنمي' : '← Show Hub'}
+                  </button>
+
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: '0.8rem',
+                        color: '#ffffff',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {selectedAnime.titleEn}
+                    </div>
+                    <div style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>
+                      🎬 {activeEpisode.name} • 120Hz CINEMA ROOM
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPlayerMinimized(true)}
+                      style={{
+                        padding: '0.4rem 0.65rem',
+                        borderRadius: '10px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.24)',
+                        color: '#ffffff',
+                        fontWeight: 900,
+                        fontSize: '0.72rem',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🗕 {isRtl ? 'تصغير' : 'Mini'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVideoFullscreen(true)}
+                      style={{
+                        padding: '0.4rem 0.65rem',
+                        borderRadius: '10px',
+                        background: '#ffffff',
+                        border: 'none',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.72rem',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⛶
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Floating Top Bar when in Fullscreen Anime Mode */}
               {videoFullscreen && (
                 <div
@@ -9973,12 +10388,25 @@ export default function MobileApkApp() {
               )}
 
               <div
-                onTouchStart={handleVideoTouchStart}
-                onTouchMove={handleVideoTouchMove}
-                onTouchEnd={handleVideoTouchEnd}
+                onClick={playerMinimized ? () => setPlayerMinimized(false) : undefined}
+                onTouchStart={playerMinimized ? undefined : handleVideoTouchStart}
+                onTouchMove={playerMinimized ? undefined : handleVideoTouchMove}
+                onTouchEnd={playerMinimized ? undefined : handleVideoTouchEnd}
                 style={
                   videoFullscreen
                     ? { position: 'relative', width: '100vw', height: '100vh', background: '#000000' }
+                    : playerMinimized
+                    ? {
+                        position: 'relative',
+                        width: '112px',
+                        height: '64px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        background: '#050507',
+                        border: '1px solid rgba(255,255,255,0.24)',
+                        flexShrink: 0,
+                        cursor: 'pointer'
+                      }
                     : { position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#050507' }
                 }
               >
@@ -9994,19 +10422,21 @@ export default function MobileApkApp() {
                       gap: '0.5rem'
                     }}
                   >
-                    <div style={{ fontSize: '1.5rem' }}>⚡</div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>
-                      {isRtl
-                        ? `جاري استخراج البث المباشر (${selectedServer?.quality || '1080p'})...`
-                        : 'Extracting direct MP4 stream...'}
-                    </div>
+                    <div style={{ fontSize: playerMinimized ? '1rem' : '1.5rem' }}>⚡</div>
+                    {!playerMinimized && (
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>
+                        {isRtl
+                          ? `جاري استخراج البث المباشر (${selectedServer?.quality || '1080p'})...`
+                          : 'Extracting direct MP4 stream...'}
+                      </div>
+                    )}
                   </div>
                 ) : playingVideoUrl ? (
                   <>
                     <video
                       ref={videoRef}
                       src={playingVideoUrl}
-                      controls={!videoTouchLocked}
+                      controls={!videoTouchLocked && !playerMinimized}
                       autoPlay
                       playsInline
                       referrerPolicy="no-referrer"
@@ -10214,8 +10644,73 @@ export default function MobileApkApp() {
                 )}
               </div>
 
+              {/* Floating Mini-Player Info & Controls (When playerMinimized is true) */}
+              {!videoFullscreen && playerMinimized && (
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                  <div
+                    onClick={() => setPlayerMinimized(false)}
+                    style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: '0.78rem',
+                        color: '#ffffff',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {selectedAnime.titleEn}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'rgba(255,255,255,0.68)', marginTop: '2px' }}>
+                      🎬 {activeEpisode.name} • {isRtl ? 'اضغط للتكبير' : 'Tap to expand'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onClick={() => setPlayerMinimized(false)}
+                      style={{
+                        padding: '0.38rem 0.65rem',
+                        borderRadius: '10px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '0.72rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⛶ {isRtl ? 'فتح' : 'Open'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveEpisode(null);
+                        setPlayingVideoUrl('');
+                        setPlayerMinimized(false);
+                      }}
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.12)',
+                        color: '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontWeight: 900,
+                        fontSize: '0.74rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Cinema Controls Strip (Fullscreen Button, Fit Mode, Prev/Next Ep, Auto-Next, PiP, Speed, Download) */}
-              {!videoFullscreen && (
+              {!videoFullscreen && !playerMinimized && (
                 <div style={{ padding: '0.65rem 1rem 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.86rem' }}>
@@ -10866,186 +11361,325 @@ export default function MobileApkApp() {
                       )}
                     </div>
                   )}
+
+                  {/* In-Player Quick Episode Switcher Strip inside Dedicated Standalone Video Player Page */}
+                  {animeEpisodes.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: '0.8rem',
+                        padding: '0.75rem',
+                        borderRadius: '14px',
+                        background: '#08080c',
+                        border: '1px solid rgba(255,255,255,0.14)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontWeight: 900, fontSize: '0.78rem' }}>
+                          🎞️ {isRtl ? `تنقل فوري بين الحلقات (${animeEpisodes.length})` : `Quick Episode Switcher (${animeEpisodes.length})`}
+                        </span>
+                        <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
+                          {isRtl ? 'داخل المشغل المستقل' : 'In-Player'}
+                        </span>
+                      </div>
+                      <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.45rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
+                        {animeEpisodes.slice(0, 120).map((ep) => {
+                          const active = activeEpisode?.docId === ep.docId;
+                          return (
+                            <button
+                              key={`inplayer-${ep.docId}`}
+                              type="button"
+                              onClick={() => handlePlayEpisode(selectedAnime, ep)}
+                              style={{
+                                padding: '0.45rem 0.75rem',
+                                borderRadius: '10px',
+                                background: active ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                                color: active ? '#000000' : '#ffffff',
+                                border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                                fontWeight: 900,
+                                fontSize: '0.74rem',
+                                whiteSpace: 'nowrap',
+                                cursor: 'pointer',
+                                flexShrink: 0
+                              }}
+                            >
+                              {active ? '▶ ' : ''}{isRtl ? `ح ${ep.number}` : `E${ep.number}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Anime Header Info (Banner + Poster + Metadata Grid + Watchlist Status Selector) */}
-          <div style={{ position: 'relative', padding: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'flex-start' }}>
-              <img
-                src={selectedAnime.poster}
-                alt={selectedAnime.titleEn}
-                style={{
-                  width: '110px',
-                  height: '158px',
-                  borderRadius: '14px',
-                  objectFit: 'cover',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  flexShrink: 0
-                }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
-                  <span
-                    style={{
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontSize: '0.68rem',
-                      fontWeight: 900,
-                      padding: '0.14rem 0.5rem',
-                      borderRadius: '6px'
-                    }}
-                  >
-                    ★ {selectedAnime.rating} BLACK X
-                  </span>
-                  <span
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      padding: '0.14rem 0.5rem',
-                      borderRadius: '6px'
-                    }}
-                  >
-                    {selectedAnime.state}
-                  </span>
-                  <span
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      padding: '0.14rem 0.5rem',
-                      borderRadius: '6px'
-                    }}
-                  >
-                    {selectedAnime.age}
-                  </span>
-                </div>
-
-                <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.08rem', fontWeight: 900, lineHeight: 1.3 }}>
-                  {selectedAnime.titleEn}
-                </h1>
-
-                <div style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.6 }}>
-                  <div>🎬 {isRtl ? 'الاستوديو:' : 'Studio:'} {selectedAnime.studio}</div>
-                  <div>📅 {isRtl ? 'الموسم:' : 'Season:'} {selectedAnime.season} ({selectedAnime.year})</div>
-                  <div>📼 {isRtl ? 'عدد الحلقات:' : 'Episodes:'} {animeEpisodes.length} {selectedAnime.duration ? `• ⏱ ${selectedAnime.duration}` : ''}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Watchlist Status Bar (Watching / Completed / Plan to Watch / Dropped) */}
-            <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginTop: '0.85rem' }}>
-              {[
-                { id: 'watching', label: '🔥 أشاهد حالياً' },
-                { id: 'completed', label: '✔ مكتمل' },
-                { id: 'planned', label: '📌 أخطط لمشاهدته' },
-                { id: 'dropped', label: '⏸ متوقف' }
-              ].map((st) => {
-                const currentStatus = watchlistMap[selectedAnime.objectID]?.status;
-                const active = currentStatus === st.id;
-                return (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => handleSetWatchlistStatus(selectedAnime, st.id)}
-                    style={{
-                      padding: '0.38rem 0.75rem',
-                      borderRadius: '10px',
-                      fontSize: '0.71rem',
-                      fontWeight: 900,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer',
-                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: active ? '#000000' : '#ffffff',
-                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
-                    }}
-                  >
-                    {st.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Genre Tags */}
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-              {(selectedAnime.tags || []).map((t, idx) => (
-                <span
-                  key={idx}
-                  onClick={() => {
-                    setSelectedAnime(null);
-                    setCatalogGenre(t);
-                    setActiveTab('catalog');
-                  }}
-                  style={{
-                    padding: '0.24rem 0.65rem',
-                    borderRadius: '99px',
-                    background: 'rgba(255,255,255,0.07)',
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    fontSize: '0.7rem',
-                    fontWeight: 800,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-
-            {/* Expandable Arabic Story + v7.0 Arabic TTS Story Narrator */}
-            <div
-              onClick={() => setStoryExpanded((v) => !v)}
+          {/* ==================== v9.0 NETFLIX / CRUNCHYROLL FULL-BLEED ANIME SHOW HUB HEADER ==================== */}
+          <div style={{ position: 'relative', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+            {/* Blurred Obsidian Cinema Backdrop */}
+            <img
+              src={selectedAnime.banner || selectedAnime.poster}
+              alt={selectedAnime.titleEn}
               style={{
-                marginTop: '0.75rem',
-                padding: '0.75rem',
-                borderRadius: '13px',
-                background: '#0a0a0d',
-                border: '1px solid rgba(255,255,255,0.1)',
-                cursor: 'pointer'
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                filter: 'blur(26px) brightness(0.28)',
+                transform: 'scale(1.15)',
+                pointerEvents: 'none'
               }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <div style={{ fontSize: '0.76rem', fontWeight: 900 }}>
-                  📖 {isRtl ? 'قصة الأنمي بالعربية (اضغط للتوسيع)' : 'Synopsis'}
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleSpeakText(selectedAnime.storyAr);
-                  }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.82) 70%, #000000 100%)',
+                pointerEvents: 'none'
+              }}
+            />
+
+            <div style={{ position: 'relative', zIndex: 2, padding: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'flex-start' }}>
+                <img
+                  src={selectedAnime.poster}
+                  alt={selectedAnime.titleEn}
                   style={{
-                    padding: '0.24rem 0.65rem',
-                    borderRadius: '99px',
-                    background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
-                    color: ttsSpeaking ? '#000000' : '#ffffff',
-                    border: '1px solid rgba(255,255,255,0.22)',
-                    fontSize: '0.68rem',
-                    fontWeight: 900,
-                    cursor: 'pointer'
+                    width: '112px',
+                    height: '162px',
+                    borderRadius: '14px',
+                    objectFit: 'cover',
+                    border: '1.5px solid rgba(255,255,255,0.32)',
+                    boxShadow: '0 14px 32px rgba(0,0,0,0.85)',
+                    flexShrink: 0
                   }}
-                >
-                  {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen'}
-                </button>
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>
+                    <span
+                      style={{
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.66rem',
+                        fontWeight: 900,
+                        padding: '0.14rem 0.5rem',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      🧬 {getDnaMatchScore(selectedAnime)}% {isRtl ? 'تطابق' : 'Match'}
+                    </span>
+                    <span
+                      style={{
+                        background: 'rgba(255,255,255,0.14)',
+                        fontSize: '0.66rem',
+                        fontWeight: 900,
+                        padding: '0.14rem 0.5rem',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      ★ {selectedAnime.rating}
+                    </span>
+                    <span
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        fontSize: '0.66rem',
+                        fontWeight: 800,
+                        padding: '0.14rem 0.5rem',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      {selectedAnime.state}
+                    </span>
+                    <span
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        fontSize: '0.66rem',
+                        fontWeight: 900,
+                        padding: '0.14rem 0.5rem',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.28)'
+                      }}
+                    >
+                      4K 120Hz
+                    </span>
+                  </div>
+
+                  <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.12rem', fontWeight: 900, lineHeight: 1.28 }}>
+                    {selectedAnime.titleEn}
+                  </h1>
+
+                  <div style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.6, fontWeight: 700 }}>
+                    <div>🎬 {isRtl ? 'الاستوديو:' : 'Studio:'} {selectedAnime.studio}</div>
+                    <div>📅 {isRtl ? 'الموسم:' : 'Season:'} {selectedAnime.season} ({selectedAnime.year})</div>
+                    <div>📼 {isRtl ? 'الحلقات:' : 'Episodes:'} {animeEpisodes.length} {selectedAnime.duration ? `• ⏱ ${selectedAnime.duration}` : ''}</div>
+                  </div>
+                </div>
               </div>
-              <p
+
+              {/* Netflix Giant Primary Play / Resume CTA Button -> Opens Dedicated Standalone Video Player Page */}
+              <button
+                type="button"
+                disabled={episodesLoading || animeEpisodes.length === 0}
+                onClick={() => {
+                  const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                  const targetEp =
+                    (savedHist && animeEpisodes.find((e) => Number(e.number) === Number(savedHist.episode))) ||
+                    animeEpisodes[0];
+                  if (targetEp) {
+                    handlePlayEpisode(selectedAnime, targetEp);
+                  }
+                }}
                 style={{
-                  margin: 0,
-                  fontSize: '0.76rem',
-                  color: 'rgba(255,255,255,0.78)',
-                  lineHeight: 1.55,
-                  display: storyExpanded ? 'block' : '-webkit-box',
-                  WebkitLineClamp: storyExpanded ? 'unset' : 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden'
+                  width: '100%',
+                  marginTop: '0.9rem',
+                  padding: '0.78rem 1rem',
+                  borderRadius: '11px',
+                  border: 'none',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontWeight: 900,
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  boxShadow: '0 10px 28px rgba(255,255,255,0.18)',
+                  cursor: 'pointer'
                 }}
               >
-                {selectedAnime.storyAr}
-              </p>
-            </div>
+                <span>▶</span>
+                <span>
+                  {(() => {
+                    if (episodesLoading) {
+                      return isRtl ? 'جاري تجهيز المشغل المستقل...' : 'Preparing Standalone Player...';
+                    }
+                    const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                    if (savedHist) {
+                      return isRtl
+                        ? `متابعة المشاهدة — الحلقة ${savedHist.episode} (مشغل مستقل)`
+                        : `Resume Episode ${savedHist.episode} (Standalone Player)`;
+                    }
+                    return isRtl
+                      ? 'تشغيل الآن — الحلقة 1 (في مشغل مستقل)'
+                      : 'Play Episode 1 (Standalone Player)';
+                  })()}
+                </span>
+              </button>
 
+              {/* Watchlist Status Bar (Watching / Completed / Plan to Watch / Dropped) */}
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginTop: '0.75rem' }}>
+                {[
+                  { id: 'watching', label: '🔥 أشاهد حالياً' },
+                  { id: 'completed', label: '✔ مكتمل' },
+                  { id: 'planned', label: '📌 أخطط لمشاهدته' },
+                  { id: 'dropped', label: '⏸ متوقف' }
+                ].map((st) => {
+                  const currentStatus = watchlistMap[selectedAnime.objectID]?.status;
+                  const active = currentStatus === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => handleSetWatchlistStatus(selectedAnime, st.id)}
+                      style={{
+                        padding: '0.38rem 0.75rem',
+                        borderRadius: '10px',
+                        fontSize: '0.71rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                        color: active ? '#000000' : '#ffffff',
+                        border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
+                      }}
+                    >
+                      {st.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Genre Tags */}
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+                {(selectedAnime.tags || []).map((t, idx) => (
+                  <span
+                    key={idx}
+                    onClick={() => {
+                      setSelectedAnime(null);
+                      setCatalogGenre(t);
+                      setActiveTab('catalog');
+                    }}
+                    style={{
+                      padding: '0.24rem 0.65rem',
+                      borderRadius: '99px',
+                      background: 'rgba(255,255,255,0.07)',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      fontSize: '0.7rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+
+              {/* Expandable Arabic Story + v7.0 Arabic TTS Story Narrator */}
+              <div
+                onClick={() => setStoryExpanded((v) => !v)}
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.75rem',
+                  borderRadius: '13px',
+                  background: '#0a0a0d',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <div style={{ fontSize: '0.76rem', fontWeight: 900 }}>
+                    📖 {isRtl ? 'قصة الأنمي بالعربية (اضغط للتوسيع)' : 'Synopsis'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleSpeakText(selectedAnime.storyAr);
+                    }}
+                    style={{
+                      padding: '0.24rem 0.65rem',
+                      borderRadius: '99px',
+                      background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                      color: ttsSpeaking ? '#000000' : '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      fontSize: '0.68rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen'}
+                  </button>
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.76rem',
+                    color: 'rgba(255,255,255,0.78)',
+                    lineHeight: 1.55,
+                    display: storyExpanded ? 'block' : '-webkit-box',
+                    WebkitLineClamp: storyExpanded ? 'unset' : 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {selectedAnime.storyAr}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: '0 1rem 1rem' }}>
             {/* 4-Tab Detail Studio Switcher (Episodes | Characters & VA | Trailer & Related | Reviews) */}
             <div
               className="bx-mob-scroll"
@@ -11091,6 +11725,57 @@ export default function MobileApkApp() {
             {/* SUB-TAB 1: EPISODES & DIRECT STREAMING */}
             {detailTab === 'episodes' && (
               <>
+                {/* 50-Episode Range Chunk Selector for Long-Running Anime (> 50 episodes) */}
+                {animeEpisodes.length > 50 && (
+                  <div
+                    className="bx-mob-scroll"
+                    style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginBottom: '0.55rem', paddingBottom: '0.15rem' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setEpRangeChunk(-1)}
+                      style={{
+                        padding: '0.34rem 0.7rem',
+                        borderRadius: '99px',
+                        background: epRangeChunk === -1 ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                        color: epRangeChunk === -1 ? '#000000' : '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? `الكل (${animeEpisodes.length})` : `All (${animeEpisodes.length})`}
+                    </button>
+                    {Array.from({ length: Math.ceil(animeEpisodes.length / 50) }).map((_, cIdx) => {
+                      const startNum = cIdx * 50 + 1;
+                      const endNum = Math.min(animeEpisodes.length, (cIdx + 1) * 50);
+                      const active = epRangeChunk === cIdx;
+                      return (
+                        <button
+                          key={`chunk-${cIdx}`}
+                          type="button"
+                          onClick={() => setEpRangeChunk(cIdx)}
+                          style={{
+                            padding: '0.34rem 0.7rem',
+                            borderRadius: '99px',
+                            background: active ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                            color: active ? '#000000' : '#ffffff',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            fontSize: '0.7rem',
+                            fontWeight: 900,
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {startNum} - {endNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div
                   style={{
                     display: 'flex',
@@ -11108,7 +11793,7 @@ export default function MobileApkApp() {
                     placeholder={isRtl ? 'ابحث برقم الحلقة...' : 'Search Ep #...'}
                     style={{
                       flex: 1,
-                      minWidth: '110px',
+                      minWidth: '105px',
                       padding: '0.4rem 0.65rem',
                       borderRadius: '9px',
                       background: '#0b0b0e',
@@ -11117,6 +11802,22 @@ export default function MobileApkApp() {
                       fontSize: '0.75rem'
                     }}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setEpLayoutMode((m) => (m === 'cards' ? 'grid' : 'cards'))}
+                    style={{
+                      padding: '0.4rem 0.65rem',
+                      borderRadius: '9px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: 'none',
+                      fontSize: '0.72rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {epLayoutMode === 'cards' ? (isRtl ? '🔢 شبكة أرقام' : '🔢 Grid') : isRtl ? '☰ بطاقات' : '☰ Cards'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setHideFiller((v) => !v)}
@@ -11155,12 +11856,46 @@ export default function MobileApkApp() {
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
                     {isRtl ? '⏳ جاري جلب قائمة الحلقات والسيرفرات...' : '⏳ Loading episodes...'}
                   </div>
+                ) : epLayoutMode === 'grid' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '0.45rem' }}>
+                    {displayedEpisodes.map((ep) => {
+                      const isPlaying = activeEpisode?.docId === ep.docId;
+                      const isWatched = watchHistory.some(
+                        (h) => h.objectID === selectedAnime.objectID && Number(h.episode || h.epNum) === Number(ep.number)
+                      );
+                      return (
+                        <button
+                          key={ep.docId}
+                          type="button"
+                          onClick={() => handlePlayEpisode(selectedAnime, ep)}
+                          style={{
+                            padding: '0.65rem 0.3rem',
+                            borderRadius: '11px',
+                            background: isPlaying ? '#ffffff' : isWatched ? 'rgba(255,255,255,0.06)' : '#0b0b10',
+                            color: isPlaying ? '#000000' : '#ffffff',
+                            border: isPlaying
+                              ? '1.5px solid #ffffff'
+                              : isWatched
+                              ? '1px solid rgba(255,255,255,0.28)'
+                              : '1px solid rgba(255,255,255,0.12)',
+                            fontWeight: 900,
+                            fontSize: '0.8rem',
+                            textAlign: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div>{ep.number}</div>
+                          {isWatched && <div style={{ fontSize: '0.54rem', opacity: 0.72 }}>✓</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                     {displayedEpisodes.map((ep) => {
                       const isPlaying = activeEpisode?.docId === ep.docId;
                       const isWatched = watchHistory.some(
-                        (h) => h.objectID === selectedAnime.objectID && Number(h.epNum) === Number(ep.number)
+                        (h) => h.objectID === selectedAnime.objectID && Number(h.episode || h.epNum) === Number(ep.number)
                       );
                       return (
                         <div
@@ -11602,13 +12337,13 @@ export default function MobileApkApp() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', marginTop: '0.9rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.45rem', marginTop: '0.9rem' }}>
               <button
                 type="button"
                 onClick={() => {
                   const target = quickPeekAnime;
                   setQuickPeekAnime(null);
-                  handleOpenAnime(target);
+                  handleOpenAnime(target, 1);
                 }}
                 style={{
                   padding: '0.68rem',
@@ -11617,33 +12352,53 @@ export default function MobileApkApp() {
                   color: '#000000',
                   border: 'none',
                   fontWeight: 900,
-                  fontSize: '0.82rem',
+                  fontSize: '0.8rem',
                   cursor: 'pointer'
                 }}
               >
-                ▶ {isRtl ? 'تشغيل ومشاهدة الحلقات' : 'Play & Episodes'}
+                ▶ {isRtl ? 'تشغيل الآن' : 'Play Now'}
               </button>
               <button
                 type="button"
-                onClick={() => toggleFavorite(quickPeekAnime)}
+                onClick={() => {
+                  const target = quickPeekAnime;
+                  setQuickPeekAnime(null);
+                  handleOpenAnime(target);
+                }}
                 style={{
-                  padding: '0.68rem 0.9rem',
+                  padding: '0.68rem 0.75rem',
                   borderRadius: '10px',
                   background: 'rgba(255,255,255,0.1)',
                   color: '#ffffff',
                   border: '1px solid rgba(255,255,255,0.22)',
                   fontWeight: 900,
-                  fontSize: '0.76rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer'
                 }}
               >
-                {favorites.some((f) => f.objectID === quickPeekAnime.objectID) ? '✓ قائمتي' : '＋ قائمتي'}
+                🏛️ {isRtl ? 'الحلقات' : 'Hub'}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleFavorite(quickPeekAnime)}
+                style={{
+                  padding: '0.68rem 0.75rem',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {favorites.some((f) => f.objectID === quickPeekAnime.objectID) ? '✓' : '＋'}
               </button>
               <button
                 type="button"
                 onClick={() => handleToggleSpeakText(quickPeekAnime.storyAr || quickPeekAnime.titleEn)}
                 style={{
-                  padding: '0.68rem 0.8rem',
+                  padding: '0.68rem 0.75rem',
                   borderRadius: '10px',
                   background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.1)',
                   color: ttsSpeaking ? '#000000' : '#ffffff',
@@ -11654,6 +12409,245 @@ export default function MobileApkApp() {
                 }}
               >
                 🔊
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== v9.0 FULL-SCREEN VERTICAL STORY / HIGHLIGHT PREVIEW MODAL ==================== */}
+      {storyPreviewAnime?.item && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9880,
+            background: '#000000',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Full-Bleed Vertical Story Poster */}
+          <img
+            src={storyPreviewAnime.item.poster}
+            alt={storyPreviewAnime.item.titleEn}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              filter: 'brightness(0.72) contrast(1.08)'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.88) 75%, #000000 100%)',
+              pointerEvents: 'none'
+            }}
+          />
+
+          {/* Top Segmented Story Progress Bars & Header */}
+          <div style={{ position: 'relative', zIndex: 5, padding: '0.75rem 1rem' }}>
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '0.65rem' }}>
+              {popularList.slice(0, 12).map((_, sIdx) => (
+                <div
+                  key={`sbar-${sIdx}`}
+                  onClick={() => setStoryPreviewAnime({ item: popularList[sIdx], index: sIdx })}
+                  style={{
+                    flex: 1,
+                    height: '3px',
+                    borderRadius: '99px',
+                    background:
+                      sIdx <= (storyPreviewAnime.index || 0) ? '#ffffff' : 'rgba(255,255,255,0.26)',
+                    cursor: 'pointer'
+                  }}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <img
+                  src={storyPreviewAnime.item.poster}
+                  alt={storyPreviewAnime.item.titleEn}
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '1.5px solid #ffffff'
+                  }}
+                />
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '0.8rem' }}>{storyPreviewAnime.item.titleEn}</div>
+                  <div style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.7)', fontWeight: 800 }}>
+                    ⚡ BLACK X PREVIEW #{(storyPreviewAnime.index || 0) + 1} • ★ {storyPreviewAnime.item.rating}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setStoryPreviewAnime(null)}
+                style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.15)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  color: '#ffffff',
+                  fontWeight: 900,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Middle Invisible Left/Right Tap Zones to Cycle Stories */}
+          <div style={{ position: 'relative', zIndex: 4, flex: 1, display: 'flex' }}>
+            <div
+              onClick={() => {
+                const pool = popularList.slice(0, 12);
+                const prevIdx = ((storyPreviewAnime.index || 0) - 1 + pool.length) % pool.length;
+                setStoryPreviewAnime({ item: pool[prevIdx], index: prevIdx });
+              }}
+              style={{ flex: 1, cursor: 'pointer' }}
+            />
+            <div
+              onClick={() => {
+                const pool = popularList.slice(0, 12);
+                const nextIdx = ((storyPreviewAnime.index || 0) + 1) % pool.length;
+                setStoryPreviewAnime({ item: pool[nextIdx], index: nextIdx });
+              }}
+              style={{ flex: 1, cursor: 'pointer' }}
+            />
+          </div>
+
+          {/* Bottom Story Details & Instant Action Deck */}
+          <div style={{ position: 'relative', zIndex: 5, padding: '1rem 1.15rem 1.8rem' }}>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <span
+                style={{
+                  padding: '0.18rem 0.55rem',
+                  borderRadius: '6px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.68rem',
+                  fontWeight: 900
+                }}
+              >
+                🧬 {getDnaMatchScore(storyPreviewAnime.item)}% Match
+              </span>
+              <span
+                style={{
+                  padding: '0.18rem 0.55rem',
+                  borderRadius: '6px',
+                  background: 'rgba(255,255,255,0.14)',
+                  fontSize: '0.68rem',
+                  fontWeight: 900
+                }}
+              >
+                {storyPreviewAnime.item.type} • {storyPreviewAnime.item.state}
+              </span>
+              <span
+                style={{
+                  padding: '0.18rem 0.55rem',
+                  borderRadius: '6px',
+                  background: 'rgba(255,255,255,0.14)',
+                  fontSize: '0.68rem',
+                  fontWeight: 900
+                }}
+              >
+                4K 120Hz
+              </span>
+            </div>
+
+            <h2 style={{ margin: '0 0 0.4rem', fontSize: '1.25rem', fontWeight: 900, lineHeight: 1.25 }}>
+              {storyPreviewAnime.item.titleEn}
+            </h2>
+
+            <p
+              style={{
+                margin: '0 0 1rem',
+                fontSize: '0.76rem',
+                color: 'rgba(255,255,255,0.82)',
+                lineHeight: 1.55,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden'
+              }}
+            >
+              {storyPreviewAnime.item.storyAr}
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = storyPreviewAnime.item;
+                  setStoryPreviewAnime(null);
+                  handleOpenAnime(target, 1);
+                }}
+                style={{
+                  padding: '0.78rem 1rem',
+                  borderRadius: '12px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ▶ {isRtl ? 'تشغيل في المشغل المستقل' : 'Play in Standalone Player'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const target = storyPreviewAnime.item;
+                  setStoryPreviewAnime(null);
+                  handleOpenAnime(target);
+                }}
+                style={{
+                  padding: '0.78rem 0.9rem',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.12)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.26)',
+                  fontWeight: 900,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🏛️ {isRtl ? 'صفحة العمل' : 'Show Hub'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleFavorite(storyPreviewAnime.item)}
+                style={{
+                  padding: '0.78rem 0.85rem',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.12)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.26)',
+                  fontWeight: 900,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {favorites.some((f) => f.objectID === storyPreviewAnime.item.objectID) ? '✓' : '＋'}
               </button>
             </div>
           </div>
