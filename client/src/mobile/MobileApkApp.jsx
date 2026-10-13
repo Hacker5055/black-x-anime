@@ -1026,6 +1026,12 @@ export default function MobileApkApp() {
         }
 
         setVipRedeemCode('');
+        window.triggerBlackXMotion?.(
+          'monarch',
+          2400,
+          `👑 مبروك! تم تفعيل ${newStatus} · عرش إمبراطور الظلال`,
+          `👑 ${newStatus} ACTIVATED · MONARCH SOVEREIGN`
+        );
         showToast(
           lang === 'ar'
             ? `🎉 مبروك! تم تفعيل باقة ${newStatus} بنجاح وفتح جميع مزايا التطبيق!`
@@ -1876,6 +1882,12 @@ export default function MobileApkApp() {
   const handlePlayEpisode = useCallback(
     async (anime, epObj) => {
       if (!anime || !epObj) return;
+      window.triggerBlackXMotion?.(
+        'katana',
+        1350,
+        `⚔️ الحلقة ${epObj.number} · ضربة سيف الكاتانا 120Hz`,
+        `⚔️ EPISODE ${epObj.number} · KATANA X-SLASH 120Hz`
+      );
       setActiveEpisode(epObj);
       setEpisodeServers([]);
       setPlayingVideoUrl('');
@@ -2228,6 +2240,12 @@ export default function MobileApkApp() {
 
   const handleReadMangaChapter = useCallback(
     async (ch) => {
+      window.triggerBlackXMotion?.(
+        'eclipse',
+        1350,
+        `🕳️ الفصل ${ch.chapter} · كسوف الثقب الأسود 120Hz`,
+        `🕳️ CHAPTER ${ch.chapter} · ECLIPSE SINGULARITY 120Hz`
+      );
       setActiveMangaChapter(ch);
       setCurrentPageIdx(0);
       setAutoScrollSpeed(0);
@@ -2800,6 +2818,30 @@ export default function MobileApkApp() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+          {/* 5-Motion Graphics Studio Trigger */}
+          <button
+            type="button"
+            onClick={() => window.triggerBlackXMotion?.(undefined, 4000)}
+            title={isRtl ? 'استوديو الموشن جرافيك (5 حركات 120Hz)' : '5-Motion Graphics Studio (120Hz)'}
+            style={{
+              height: '36px',
+              padding: '0 0.6rem',
+              borderRadius: '11px',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.24)',
+              color: '#fff',
+              fontSize: '0.72rem',
+              fontWeight: 900,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.28rem',
+              cursor: 'pointer'
+            }}
+          >
+            <span>🎬</span>
+            <span>5</span>
+          </button>
+
           {/* Instant Search Trigger */}
           <button
             type="button"

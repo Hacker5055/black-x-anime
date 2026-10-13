@@ -1,21 +1,99 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
+export const BLACK_X_MOTION_THEMES = [
+  {
+    id: 'random',
+    icon: '🎲',
+    nameAr: 'تبديل عشوائي (الكل)',
+    nameEn: 'Auto-Rotate (All 5)',
+    subAr: 'يشغّل موشن مختلف من الـ 5 في كل مرة',
+    subEn: 'Plays a different motion graphic every launch'
+  },
+  {
+    id: 'vortex',
+    icon: '🌌',
+    nameAr: '1. بوابة الظلال',
+    nameEn: '1. Shadow Vortex',
+    subAr: 'دوامة جزيئات ثلاثية الأبعاد وموجات صدمة ضوئية',
+    subEn: '3D Particle Singularity & Shockwaves'
+  },
+  {
+    id: 'katana',
+    icon: '⚔️',
+    nameAr: '2. ضربة سيف الكاتانا',
+    nameEn: '2. Katana X-Slash',
+    subAr: 'ضربتا سيف أنمي خاطفتان مع شرارات الفولاذ الأبيض',
+    subEn: 'Dual Supersonic Anime Blade Slashes & Sparks'
+  },
+  {
+    id: 'cyber',
+    icon: '⚡',
+    nameAr: '3. مصفوفة الغليتش 120Hz',
+    nameEn: '3. Cyber Matrix Glitch',
+    subAr: 'مطر رقمي وشبكة ثلاثية الأبعاد وغليتش سايبربانك',
+    subEn: 'Digital Rain, 3D Wireframe Grid & Glitch Lock'
+  },
+  {
+    id: 'eclipse',
+    icon: '🕳️',
+    nameAr: '4. كسوف الثقب الأسود',
+    nameEn: '4. Eclipse Singularity',
+    subAr: 'أفق الحدث وحلقة الفوتونات وانحناء الضوء الكوني',
+    subEn: 'Relativistic Accretion Disk & Photon Ring'
+  },
+  {
+    id: 'monarch',
+    icon: '👑',
+    nameAr: '5. عرش إمبراطور الظلال',
+    nameEn: '5. Monarch Sovereign',
+    subAr: 'تاج الملك الماسي وأعمدة لهب الظلال البيضاء',
+    subEn: 'Sovereign Crown Forging & Ascending Light Pillars'
+  }
+];
+
+const CONCRETE_MODES = ['vortex', 'katana', 'cyber', 'eclipse', 'monarch'];
+
+function resolveInitialMode(requestedMode) {
+  const saved = requestedMode || localStorage.getItem('bx_motion_pref') || 'random';
+  if (saved === 'random' || !CONCRETE_MODES.includes(saved)) {
+    const lastIdx = Number(sessionStorage.getItem('bx_motion_rot_idx') || 0);
+    const nextIdx = (lastIdx + 1) % CONCRETE_MODES.length;
+    try {
+      sessionStorage.setItem('bx_motion_rot_idx', String(nextIdx));
+    } catch (_) {}
+    return CONCRETE_MODES[nextIdx];
+  }
+  return saved;
+}
+
 /**
- * BLACK X — 120Hz Shadow Vortex Motion Graphics Splash Screen (بوابة الظلال والجزيئات)
- * Pure Monochrome (#000000 & #FFFFFF) · 4.0s Cinematic Timeline · Web Audio API Procedural SFX
+ * BLACK X — 5-Engine 120Hz Motion Graphics Suite (Pure Monochrome #000000 & #FFFFFF)
+ * Engines:
+ *  1. vortex  — Shadow Vortex Singularity (بوابة الظلال والجزيئات)
+ *  2. katana  — Katana X-Slash (ضربة سيف الكاتانا الأسطورية)
+ *  3. cyber   — Cyber Matrix Glitch 120Hz (مصفوفة السايبربانك والغليتش)
+ *  4. eclipse — Eclipse Singularity (كسوف الثقب الأسود وأفق الحدث)
+ *  5. monarch — Monarch Sovereign Crown (عرش إمبراطور الظلال VIP)
  */
 export default function BlackXSplashVortex({
   durationMs = 4000,
+  initialMode,
+  customSubtitleAr,
+  customSubtitleEn,
   onComplete,
   lang = 'ar',
   enableSound = true
 }) {
   const canvasRef = useRef(null);
+  const [prefMode, setPrefMode] = useState(() => localStorage.getItem('bx_motion_pref') || 'random');
+  const [activeMode, setActiveMode] = useState(() => resolveInitialMode(initialMode));
+  const [runKey, setRunKey] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState(0); // 0: vortex, 1: implosion/slash, 2: logo lock, 3: exit portal
+  const [phase, setPhase] = useState(0); // 0: intro, 1: climax, 2: logo lock, 3: portal exit
   const [exiting, setExiting] = useState(false);
   const [measuredHz, setMeasuredHz] = useState(120);
   const [soundMuted, setSoundMuted] = useState(!enableSound);
+
   const audioCtxRef = useRef(null);
   const soundPlayedRef = useRef(false);
   const impactPlayedRef = useRef(false);
@@ -23,117 +101,172 @@ export default function BlackXSplashVortex({
 
   const isRtl = lang === 'ar';
 
-  // Procedural Web Audio API Cinematic Sound Engine (Dark Vortex -> Implosion -> Crystal Impact)
-  const triggerVortexAudio = useCallback(() => {
-    if (soundMuted || soundPlayedRef.current) return;
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = audioCtxRef.current || new AudioCtx();
-      audioCtxRef.current = ctx;
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
-      soundPlayedRef.current = true;
+  // Ensure AudioContext is ready
+  const getAudioCtx = useCallback(() => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+      audioCtxRef.current = new AudioCtx();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    return audioCtxRef.current;
+  }, []);
 
-      const now = ctx.currentTime;
+  // Mode-Specific Procedural Web Audio API Sound Design (5 Distinct Soundscapes)
+  const triggerIntroAudio = useCallback(
+    (mode) => {
+      if (soundMuted || soundPlayedRef.current) return;
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        soundPlayedRef.current = true;
+        const now = ctx.currentTime;
+        const scale = Math.max(0.35, durationMs / 4000);
 
-      // 1. Deep Sub-Bass Vortex Drone (0.0s -> 2.0s)
-      const subOsc = ctx.createOscillator();
-      const subGain = ctx.createGain();
-      subOsc.type = 'sine';
-      subOsc.frequency.setValueAtTime(36, now);
-      subOsc.frequency.exponentialRampToValueAtTime(92, now + 1.8);
-      subOsc.frequency.exponentialRampToValueAtTime(32, now + 2.4);
+        if (mode === 'vortex') {
+          // 1. Deep Sub-Bass Vortex Drone + Swirling Bandpass Wind
+          const sub = ctx.createOscillator();
+          const gain = ctx.createGain();
+          sub.type = 'sine';
+          sub.frequency.setValueAtTime(36, now);
+          sub.frequency.exponentialRampToValueAtTime(94, now + 1.8 * scale);
+          sub.frequency.exponentialRampToValueAtTime(32, now + 2.6 * scale);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.32, now + 0.45 * scale);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 3.5 * scale);
+          sub.connect(gain);
+          gain.connect(ctx.destination);
+          sub.start(now);
+          sub.stop(now + 3.55 * scale);
+        } else if (mode === 'katana') {
+          // 2. Metallic Katana Unsheathe ("Shiiing") + Dual Air-Slice Whooshes
+          const ring = ctx.createOscillator();
+          const ringGain = ctx.createGain();
+          ring.type = 'sine';
+          ring.frequency.setValueAtTime(1480, now);
+          ring.frequency.exponentialRampToValueAtTime(3120, now + 0.55 * scale);
+          ringGain.gain.setValueAtTime(0.001, now);
+          ringGain.gain.linearRampToValueAtTime(0.12, now + 0.12 * scale);
+          ringGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9 * scale);
+          ring.connect(ringGain);
+          ringGain.connect(ctx.destination);
+          ring.start(now);
+          ring.stop(now + 0.95 * scale);
 
-      subGain.gain.setValueAtTime(0.001, now);
-      subGain.gain.linearRampToValueAtTime(0.28, now + 0.45);
-      subGain.gain.linearRampToValueAtTime(0.36, now + 1.75);
-      subGain.gain.exponentialRampToValueAtTime(0.001, now + 3.6);
+          // Two high-velocity blade slashes at 0.65s and 1.15s
+          [0.62 * scale, 1.12 * scale].forEach((slashTime, idx) => {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(idx === 0 ? 680 : 880, now + slashTime);
+            osc.frequency.exponentialRampToValueAtTime(95, now + slashTime + 0.28);
+            g.gain.setValueAtTime(0.24, now + slashTime);
+            g.gain.exponentialRampToValueAtTime(0.001, now + slashTime + 0.3);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(now + slashTime);
+            osc.stop(now + slashTime + 0.32);
+          });
+        } else if (mode === 'cyber') {
+          // 3. High-Speed Digital Arpeggio Telemetry Pulses
+          const notes = [220, 330, 440, 660, 880, 660, 990, 1320];
+          notes.forEach((freq, i) => {
+            const t = now + i * 0.16 * scale;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, t);
+            g.gain.setValueAtTime(0.06, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.12 * scale);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.13 * scale);
+          });
+        } else if (mode === 'eclipse') {
+          // 4. Cosmic Gravitational Sub-Harmonic Chord
+          [44, 66, 132].forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = i === 0 ? 'sine' : 'triangle';
+            osc.frequency.setValueAtTime(freq, now);
+            osc.frequency.exponentialRampToValueAtTime(freq * 1.35, now + 1.8 * scale);
+            g.gain.setValueAtTime(0.001, now);
+            g.gain.linearRampToValueAtTime(0.18 / (i + 1), now + 0.9 * scale);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 3.4 * scale);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 3.45 * scale);
+          });
+        } else if (mode === 'monarch') {
+          // 5. Royal Sovereign Ascending Brass/Crystalline Fanfare
+          [196, 246.94, 293.66, 392, 587.33].forEach((freq, i) => {
+            const t = now + i * 0.25 * scale;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, t);
+            g.gain.setValueAtTime(0.001, t);
+            g.gain.linearRampToValueAtTime(0.14, t + 0.08);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 1.2 * scale);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 1.25 * scale);
+          });
+        }
+      } catch (_) {}
+    },
+    [soundMuted, durationMs, getAudioCtx]
+  );
 
-      subOsc.connect(subGain);
-      subGain.connect(ctx.destination);
-      subOsc.start(now);
-      subOsc.stop(now + 3.65);
+  const triggerClimaxImpactAudio = useCallback(
+    (mode) => {
+      if (soundMuted || impactPlayedRef.current) return;
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        impactPlayedRef.current = true;
+        const now = ctx.currentTime;
 
-      // 2. Swirling Dark Wind Noise Whoosh (Filtered White Noise)
-      const bufferSize = ctx.sampleRate * 3.5;
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-      }
-      const whiteNoise = ctx.createBufferSource();
-      whiteNoise.buffer = noiseBuffer;
+        const impactOsc = ctx.createOscillator();
+        const impactGain = ctx.createGain();
+        impactOsc.type = 'triangle';
+        impactOsc.frequency.setValueAtTime(mode === 'katana' ? 190 : 150, now);
+        impactOsc.frequency.exponentialRampToValueAtTime(28, now + 1.2);
+        impactGain.gain.setValueAtTime(0.42, now);
+        impactGain.gain.exponentialRampToValueAtTime(0.001, now + 1.35);
+        impactOsc.connect(impactGain);
+        impactGain.connect(ctx.destination);
+        impactOsc.start(now);
+        impactOsc.stop(now + 1.4);
 
-      const bandpass = ctx.createBiquadFilter();
-      bandpass.type = 'bandpass';
-      bandpass.frequency.setValueAtTime(140, now);
-      bandpass.frequency.exponentialRampToValueAtTime(1400, now + 1.8);
-      bandpass.frequency.exponentialRampToValueAtTime(220, now + 3.4);
-      bandpass.Q.setValueAtTime(3.2, now);
-
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.001, now);
-      noiseGain.gain.linearRampToValueAtTime(0.14, now + 0.8);
-      noiseGain.gain.linearRampToValueAtTime(0.24, now + 1.8);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 3.5);
-
-      whiteNoise.connect(bandpass);
-      bandpass.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
-      whiteNoise.start(now);
-      whiteNoise.stop(now + 3.5);
-    } catch (_) {}
-  }, [soundMuted]);
-
-  const triggerImpactBoom = useCallback(() => {
-    if (soundMuted || impactPlayedRef.current) return;
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = audioCtxRef.current || new AudioCtx();
-      audioCtxRef.current = ctx;
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
-      impactPlayedRef.current = true;
-
-      const now = ctx.currentTime;
-
-      // Cinematic Impact Boom + Harmonic Shimmer Chord
-      const impactOsc = ctx.createOscillator();
-      const impactGain = ctx.createGain();
-      impactOsc.type = 'triangle';
-      impactOsc.frequency.setValueAtTime(150, now);
-      impactOsc.frequency.exponentialRampToValueAtTime(28, now + 1.2);
-
-      impactGain.gain.setValueAtTime(0.42, now);
-      impactGain.gain.exponentialRampToValueAtTime(0.001, now + 1.35);
-
-      impactOsc.connect(impactGain);
-      impactGain.connect(ctx.destination);
-      impactOsc.start(now);
-      impactOsc.stop(now + 1.4);
-
-      // Metallic Crystalline Harmonics (Monochrome Sci-Fi/Anime Chime)
-      [528, 792, 1056].forEach((freq, idx) => {
-        const chime = ctx.createOscillator();
-        const chimeGain = ctx.createGain();
-        chime.type = 'sine';
-        chime.frequency.setValueAtTime(freq, now);
-        chime.frequency.exponentialRampToValueAtTime(freq * 0.995, now + 1.6);
-
-        chimeGain.gain.setValueAtTime(0.08 / (idx + 1), now);
-        chimeGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.6);
-
-        chime.connect(chimeGain);
-        chimeGain.connect(ctx.destination);
-        chime.start(now);
-        chime.stop(now + 1.65);
-      });
-    } catch (_) {}
-  }, [soundMuted]);
+        const chord =
+          mode === 'monarch'
+            ? [587.33, 880, 1174.66]
+            : mode === 'cyber'
+            ? [440, 880, 1320]
+            : [528, 792, 1056];
+        chord.forEach((freq, idx) => {
+          const chime = ctx.createOscillator();
+          const chimeGain = ctx.createGain();
+          chime.type = 'sine';
+          chime.frequency.setValueAtTime(freq, now);
+          chime.frequency.exponentialRampToValueAtTime(freq * 0.996, now + 1.5);
+          chimeGain.gain.setValueAtTime(0.085 / (idx + 1), now);
+          chimeGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.55);
+          chime.connect(chimeGain);
+          chimeGain.connect(ctx.destination);
+          chime.start(now);
+          chime.stop(now + 1.6);
+        });
+      } catch (_) {}
+    },
+    [soundMuted, getAudioCtx]
+  );
 
   const finishSplash = useCallback(() => {
     if (completedRef.current) return;
@@ -146,23 +279,43 @@ export default function BlackXSplashVortex({
         }
       } catch (_) {}
       onComplete?.();
-    }, 340);
+    }, 320);
   }, [onComplete]);
 
-  useEffect(() => {
-    triggerVortexAudio();
-    const unlockAudio = () => {
-      if (!soundPlayedRef.current) triggerVortexAudio();
-    };
-    window.addEventListener('pointerdown', unlockAudio, { once: true });
-    window.addEventListener('keydown', unlockAudio, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
-    };
-  }, [triggerVortexAudio]);
+  // Switch Motion Mode live from the HUD selector
+  const handleSelectMode = (modeId) => {
+    try {
+      localStorage.setItem('bx_motion_pref', modeId);
+    } catch (_) {}
+    setPrefMode(modeId);
+    const nextConcrete =
+      modeId === 'random'
+        ? CONCRETE_MODES[(CONCRETE_MODES.indexOf(activeMode) + 1) % CONCRETE_MODES.length]
+        : modeId;
+    soundPlayedRef.current = false;
+    impactPlayedRef.current = false;
+    completedRef.current = false;
+    setExiting(false);
+    setPhase(0);
+    setProgress(0);
+    setActiveMode(nextConcrete);
+    setRunKey((k) => k + 1);
+  };
 
-  // 120Hz High-Precision Canvas Vortex & Particle Singularity Engine
+  useEffect(() => {
+    triggerIntroAudio(activeMode);
+    const unlock = () => {
+      if (!soundPlayedRef.current) triggerIntroAudio(activeMode);
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [activeMode, runKey, triggerIntroAudio]);
+
+  // 120Hz Multi-Engine Canvas Renderer
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -184,32 +337,68 @@ export default function BlackXSplashVortex({
     resize();
     window.addEventListener('resize', resize);
 
-    // Create 380 Vortex Particles in 3D Cylindrical Spiral Coordinates
-    const PARTICLE_COUNT = 380;
     const maxRadius = Math.hypot(width, height) * 0.68;
-    const particles = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-      const arm = i % 4; // 4 spiral arms forming the X-vortex symmetry
+
+    // 1. Vortex & Eclipse Particles (360 particles)
+    const particles = Array.from({ length: 360 }, (_, i) => {
+      const arm = i % 4;
       const baseAngle = (arm * Math.PI) / 2 + Math.random() * 0.9;
       const distRatio = Math.pow(Math.random(), 0.72);
       return {
         angle: baseAngle + distRatio * Math.PI * 3.2,
         radius: 18 + distRatio * maxRadius,
         initialRadius: 18 + distRatio * maxRadius,
-        z: Math.random() * 2 - 1,
         speed: 1.4 + (1 - distRatio) * 3.8 + Math.random() * 0.8,
         size: 1.0 + Math.random() * 2.4,
         alpha: 0.25 + Math.random() * 0.75,
         trailLen: 0.06 + Math.random() * 0.14,
-        burstVx: (Math.random() - 0.5) * 2,
-        burstVy: (Math.random() - 0.5) * 2
+        inclination: (Math.random() - 0.5) * 0.38
       };
     });
 
-    // Shockwave rings triggered at t = 1.8s (Implosion climax)
+    // 2. Katana Sparks (240 steel sparks)
+    const katanaSparks = Array.from({ length: 240 }, (_, i) => {
+      const along = (Math.random() - 0.5) * Math.min(width, height) * 0.95;
+      const diag = i % 2 === 0 ? 1 : -1;
+      const angle = (diag === 1 ? Math.PI / 4 : (3 * Math.PI) / 4) + (Math.random() - 0.5) * 1.4;
+      const speed = 90 + Math.random() * 520;
+      return {
+        x0: along * 0.7,
+        y0: along * 0.7 * diag,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 1.1 + Math.random() * 2.6,
+        alpha: 0.5 + Math.random() * 0.5,
+        diag
+      };
+    });
+
+    // 3. Cyber Matrix Columns (64 high-speed columns)
+    const colCount = Math.max(28, Math.floor(width / 22));
+    const matrixCols = Array.from({ length: colCount }, (_, i) => ({
+      x: (i + 0.5) * (width / colCount),
+      y: Math.random() * height,
+      speed: 260 + Math.random() * 440,
+      len: 6 + Math.floor(Math.random() * 14),
+      chars: Array.from({ length: 16 }, () =>
+        'BLACKX120HZ01ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿ'[Math.floor(Math.random() * 28)]
+      )
+    }));
+
+    // 4. Monarch Sovereign Ascending Flame Shards (180 shards)
+    const monarchShards = Array.from({ length: 180 }, () => ({
+      x: (Math.random() - 0.5) * width * 0.9,
+      y: height * 0.55 + Math.random() * height * 0.5,
+      vy: 180 + Math.random() * 420,
+      size: 2 + Math.random() * 5.5,
+      alpha: 0.3 + Math.random() * 0.7,
+      spin: (Math.random() - 0.5) * 6
+    }));
+
     const shockwaves = [
-      { radius: 0, maxR: Math.max(width, height) * 0.75, speed: 950, width: 3.5, alpha: 0.95, delay: 0 },
-      { radius: 0, maxR: Math.max(width, height) * 0.55, speed: 640, width: 1.8, alpha: 0.65, delay: 0.12 },
-      { radius: 0, maxR: Math.max(width, height) * 0.4, speed: 420, width: 1.0, alpha: 0.45, delay: 0.24 }
+      { maxR: Math.max(width, height) * 0.75, speed: 950, width: 3.5, alpha: 0.95, delay: 0 },
+      { maxR: Math.max(width, height) * 0.55, speed: 640, width: 1.8, alpha: 0.65, delay: 0.12 },
+      { maxR: Math.max(width, height) * 0.4, speed: 420, width: 1.0, alpha: 0.45, delay: 0.24 }
     ];
 
     const startTime = performance.now();
@@ -218,11 +407,13 @@ export default function BlackXSplashVortex({
     let fpsTimer = startTime;
     let rafId;
 
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+
     const render = (now) => {
       const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
       lastFrameTime = now;
 
-      // Measure real display Hz (60 / 90 / 120 / 144Hz)
       frameCounter++;
       if (now - fpsTimer >= 450) {
         const currentFps = Math.round((frameCounter * 1000) / (now - fpsTimer));
@@ -233,18 +424,18 @@ export default function BlackXSplashVortex({
 
       const elapsed = now - startTime;
       const tNorm = Math.min(elapsed / durationMs, 1);
-      const tSec = elapsed / 1000;
+      // Normalized 4-second choreographed clock (so 1.5s quick transitions play the full 4s choreography at faster pace!)
+      const tSec = tNorm * 4.0;
 
       setProgress(Math.round(tNorm * 100));
 
-      // Timeline Phase Updates
       if (tSec < 1.35) {
         setPhase(0);
       } else if (tSec < 1.95) {
         setPhase(1);
       } else if (tSec < 3.45) {
         setPhase(2);
-        if (!impactPlayedRef.current) triggerImpactBoom();
+        if (!impactPlayedRef.current) triggerClimaxImpactAudio(activeMode);
       } else {
         setPhase(3);
       }
@@ -252,106 +443,273 @@ export default function BlackXSplashVortex({
       const cx = width / 2;
       const cy = height / 2 - 18;
 
-      // Motion-blur pitch-black clear
-      ctx.fillStyle = tSec < 1.8 ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.36)';
+      // Clear with motion trail
+      ctx.fillStyle = activeMode === 'katana' ? 'rgba(0, 0, 0, 0.38)' : 'rgba(0, 0, 0, 0.30)';
       ctx.fillRect(0, 0, width, height);
 
-      // Subtle radial core luminance (Monochrome white/silver only)
-      const coreIntensity =
-        tSec < 1.8
-          ? Math.min(0.22, (tSec / 1.8) * 0.22)
-          : tSec < 2.15
-          ? 0.55 - ((tSec - 1.8) / 0.35) * 0.35
-          : 0.18;
-      const coreRadius =
-        tSec < 1.8
-          ? 70 + (1 - tSec / 1.8) * 140
-          : tSec < 2.2
-          ? 240
-          : 170 + Math.sin(tSec * 5) * 12;
-
-      const radialGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreRadius);
-      radialGrad.addColorStop(0, `rgba(255, 255, 255, ${coreIntensity})`);
-      radialGrad.addColorStop(0.45, `rgba(255, 255, 255, ${coreIntensity * 0.28})`);
-      radialGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = radialGrad;
-      ctx.beginPath();
-      ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Rotating Dimensional Vortex Rings (Sacred Monochrome Geometry)
-      ctx.save();
-      ctx.translate(cx, cy);
-      const ringCount = 3;
-      for (let r = 0; r < ringCount; r++) {
-        const ringBaseR = 64 + r * 38;
-        const squeeze =
-          tSec < 1.8
-            ? 1 - Math.pow(tSec / 1.8, 2.2) * 0.68
-            : Math.min(1.08, 0.32 + (tSec - 1.8) * 1.4);
-        const currentR = ringBaseR * squeeze;
-        const rot = tSec * (r % 2 === 0 ? 2.4 : -3.1) * (1 + r * 0.35);
+      // ==================== ENGINE 1: SHADOW VORTEX ====================
+      if (activeMode === 'vortex') {
+        const coreIntensity =
+          tSec < 1.8 ? Math.min(0.24, (tSec / 1.8) * 0.24) : tSec < 2.15 ? 0.55 - ((tSec - 1.8) / 0.35) * 0.35 : 0.18;
+        const coreRadius = tSec < 1.8 ? 70 + (1 - tSec / 1.8) * 140 : 190 + Math.sin(tSec * 5) * 12;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreRadius);
+        grad.addColorStop(0, `rgba(255,255,255,${coreIntensity})`);
+        grad.addColorStop(0.5, `rgba(255,255,255,${coreIntensity * 0.28})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
+        ctx.fill();
 
         ctx.save();
-        ctx.rotate(rot);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.14 - r * 0.03})`;
-        ctx.lineWidth = 1.1;
-        ctx.setLineDash([14 + r * 8, 10 + r * 6]);
-        ctx.beginPath();
-        ctx.arc(0, 0, Math.max(4, currentR), 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      ctx.restore();
-
-      // Update & Draw 380 Spiraling Vortex Particles
-      ctx.lineCap = 'round';
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        const p = particles[i];
-
-        if (tSec < 1.8) {
-          // Spiraling inward into the Shadow Singularity
-          const pullFactor = 1 + Math.pow(tSec / 1.8, 2.4) * 5.2;
-          p.angle += p.speed * pullFactor * dt;
-          const targetCollapse = Math.max(2, p.initialRadius * (1 - Math.pow(tSec / 1.8, 1.85)));
-          p.radius = targetCollapse;
-
-          const x1 = cx + Math.cos(p.angle) * p.radius;
-          const y1 = cy + Math.sin(p.angle) * p.radius;
-          const prevAngle = p.angle - p.trailLen * pullFactor * 0.45;
-          const prevRadius = p.radius + 8 * (tSec / 1.8);
-          const x0 = cx + Math.cos(prevAngle) * prevRadius;
-          const y0 = cy + Math.sin(prevAngle) * prevRadius;
-
-          ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, p.alpha * (0.4 + (tSec / 1.8) * 0.7))})`;
-          ctx.lineWidth = p.size;
+        ctx.translate(cx, cy);
+        for (let r = 0; r < 3; r++) {
+          const ringBaseR = 64 + r * 38;
+          const squeeze =
+            tSec < 1.8 ? 1 - Math.pow(tSec / 1.8, 2.2) * 0.68 : Math.min(1.08, 0.32 + (tSec - 1.8) * 1.4);
+          ctx.save();
+          ctx.rotate(tSec * (r % 2 === 0 ? 2.4 : -3.1) * (1 + r * 0.35));
+          ctx.strokeStyle = `rgba(255,255,255,${0.15 - r * 0.03})`;
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([14 + r * 8, 10 + r * 6]);
           ctx.beginPath();
-          ctx.moveTo(x0, y0);
-          ctx.lineTo(x1, y1);
+          ctx.arc(0, 0, Math.max(4, ringBaseR * squeeze), 0, Math.PI * 2);
           ctx.stroke();
-        } else {
-          // Post-implosion: Crisp orbital halo + X-diagonal energy filaments
-          const postT = tSec - 1.8;
-          p.angle += p.speed * 0.45 * dt;
-          const expansionR = 46 + (p.initialRadius * 0.62) * Math.min(1, Math.pow(postT / 0.55, 0.58));
-          p.radius = expansionR + Math.sin(tSec * 3 + i) * 4;
+          ctx.restore();
+        }
+        ctx.restore();
 
-          const x = cx + Math.cos(p.angle) * p.radius;
-          const y = cy + Math.sin(p.angle) * p.radius;
-
-          const fadeOut = tSec > 3.4 ? Math.max(0, 1 - (tSec - 3.4) / 0.6) : 1;
-          ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha * 0.68 * fadeOut})`;
-          ctx.beginPath();
-          ctx.arc(x, y, p.size * 0.75, 0, Math.PI * 2);
-          ctx.fill();
+        ctx.lineCap = 'round';
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          if (tSec < 1.8) {
+            const pull = 1 + Math.pow(tSec / 1.8, 2.4) * 5.2;
+            p.angle += p.speed * pull * dt;
+            p.radius = Math.max(2, p.initialRadius * (1 - Math.pow(tSec / 1.8, 1.85)));
+            const x1 = cx + Math.cos(p.angle) * p.radius;
+            const y1 = cy + Math.sin(p.angle) * p.radius;
+            const prevA = p.angle - p.trailLen * pull * 0.45;
+            const prevR = p.radius + 8 * (tSec / 1.8);
+            ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, p.alpha * (0.4 + (tSec / 1.8) * 0.7))})`;
+            ctx.lineWidth = p.size;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(prevA) * prevR, cy + Math.sin(prevA) * prevR);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+          } else {
+            const postT = tSec - 1.8;
+            p.angle += p.speed * 0.45 * dt;
+            p.radius = 46 + p.initialRadius * 0.62 * Math.min(1, Math.pow(postT / 0.55, 0.58));
+            ctx.fillStyle = `rgba(255,255,255,${p.alpha * 0.68})`;
+            ctx.beginPath();
+            ctx.arc(cx + Math.cos(p.angle) * p.radius, cy + Math.sin(p.angle) * p.radius, p.size * 0.75, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
 
-      // At t >= 1.8s: Render Expanding Monochrome Shockwaves & X-Blade Light Streaks
+      // ==================== ENGINE 2: KATANA X-SLASH ====================
+      else if (activeMode === 'katana') {
+        const span = Math.max(width, height) * 0.75;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // Slash 1 (\) at tSec >= 0.55
+        if (tSec >= 0.55) {
+          const p1 = Math.min(1, (tSec - 0.55) / 0.22);
+          const fade1 = tSec < 1.9 ? 1 : Math.max(0.18, 1 - (tSec - 1.9) * 0.5);
+          ctx.strokeStyle = `rgba(255,255,255,${fade1})`;
+          ctx.lineWidth = tSec < 0.85 ? 6.5 : 2.4;
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 28;
+          ctx.beginPath();
+          ctx.moveTo(-span, -span);
+          ctx.lineTo(-span + span * 2 * p1, -span + span * 2 * p1);
+          ctx.stroke();
+        }
+
+        // Slash 2 (/) at tSec >= 1.05
+        if (tSec >= 1.05) {
+          const p2 = Math.min(1, (tSec - 1.05) / 0.22);
+          const fade2 = tSec < 1.9 ? 1 : Math.max(0.18, 1 - (tSec - 1.9) * 0.5);
+          ctx.strokeStyle = `rgba(255,255,255,${fade2})`;
+          ctx.lineWidth = tSec < 1.35 ? 6.5 : 2.4;
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 28;
+          ctx.beginPath();
+          ctx.moveTo(span, -span);
+          ctx.lineTo(span - span * 2 * p2, -span + span * 2 * p2);
+          ctx.stroke();
+        }
+
+        // High-velocity steel sparks erupting along both blade trajectories
+        ctx.shadowBlur = 0;
+        for (let i = 0; i < katanaSparks.length; i++) {
+          const sp = katanaSparks[i];
+          const triggerT = sp.diag === 1 ? 0.62 : 1.12;
+          if (tSec >= triggerT) {
+            const st = tSec - triggerT;
+            const x = sp.x0 + sp.vx * st;
+            const y = sp.y0 + sp.vy * st + 140 * st * st;
+            const alpha = Math.max(0, sp.alpha * (1 - st / 1.8));
+            if (alpha > 0.02) {
+              ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+              ctx.lineWidth = sp.size;
+              ctx.beginPath();
+              ctx.moveTo(x, y);
+              ctx.lineTo(x - sp.vx * 0.035, y - sp.vy * 0.035);
+              ctx.stroke();
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      // ==================== ENGINE 3: CYBER MATRIX GLITCH 120Hz ====================
+      else if (activeMode === 'cyber') {
+        // 1. Monochrome Digital Rain Columns
+        ctx.font = '900 12px monospace';
+        for (let i = 0; i < matrixCols.length; i++) {
+          const col = matrixCols[i];
+          col.y += col.speed * dt * (tSec < 1.8 ? 1.35 : 0.55);
+          if (col.y > height + 180) col.y = -120;
+          for (let j = 0; j < col.len; j++) {
+            const cyChar = col.y - j * 15;
+            if (cyChar < -20 || cyChar > height + 20) continue;
+            const isHead = j === 0;
+            const alpha = isHead ? 0.92 : Math.max(0, (1 - j / col.len) * 0.32);
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.fillText(col.chars[(j + Math.floor(tSec * 12)) % col.chars.length], col.x, cyChar);
+          }
+        }
+
+        // 2. 3D Perspective Wireframe Horizon Grid
+        const horizonY = cy + 68;
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = 1;
+        for (let gx = -12; gx <= 12; gx++) {
+          ctx.beginPath();
+          ctx.moveTo(cx + gx * 18, horizonY);
+          ctx.lineTo(cx + gx * 145, height);
+          ctx.stroke();
+        }
+        const gridOffset = (tSec * 3.5) % 1;
+        for (let gz = 1; gz <= 8; gz++) {
+          const zNorm = (gz + gridOffset) / 9;
+          const yLine = horizonY + Math.pow(zNorm, 2.1) * (height - horizonY);
+          ctx.strokeStyle = `rgba(255,255,255,${zNorm * 0.35})`;
+          ctx.beginPath();
+          ctx.moveTo(0, yLine);
+          ctx.lineTo(width, yLine);
+          ctx.stroke();
+        }
+
+        // 3. Monochrome Glitch Slice Bars during Climax (1.2s -> 2.1s)
+        if (tSec >= 1.15 && tSec <= 2.25) {
+          for (let b = 0; b < 7; b++) {
+            if (Math.random() > 0.45) {
+              const by = cy - 110 + Math.random() * 220;
+              const bh = 2 + Math.random() * 12;
+              const bw = 90 + Math.random() * 260;
+              ctx.fillStyle = 'rgba(255,255,255,0.75)';
+              ctx.fillRect(cx - bw / 2 + (Math.random() - 0.5) * 60, by, bw, bh);
+            }
+          }
+        }
+      }
+
+      // ==================== ENGINE 4: ECLIPSE SINGULARITY (BLACK HOLE) ====================
+      else if (activeMode === 'eclipse') {
+        const bhRadius = tSec < 1.8 ? 44 + (tSec / 1.8) * 24 : 58;
+
+        // Relativistic Accretion Disk (Tilted Orbital Rings)
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-0.26);
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          p.angle += p.speed * (tSec < 1.8 ? 1.8 : 0.9) * dt;
+          const orbitR = bhRadius * 1.18 + (p.initialRadius * 0.58) * (tSec < 1.8 ? 1 - (tSec / 1.8) * 0.35 : 0.78);
+          const x = Math.cos(p.angle) * orbitR;
+          const y = Math.sin(p.angle) * orbitR * (0.28 + Math.abs(p.inclination));
+          // Relativistic Doppler beaming (brighter on approaching side)
+          const doppler = 0.55 + 0.45 * Math.cos(p.angle);
+          ctx.fillStyle = `rgba(255,255,255,${Math.min(1, p.alpha * doppler)})`;
+          ctx.beginPath();
+          ctx.arc(x, y, p.size * 0.85, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Blazing White Photon Ring + Pitch-Black Event Horizon Core
+        ctx.save();
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = tSec >= 1.8 ? 42 : 24;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = tSec >= 1.8 ? 3.8 : 2.4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, bhRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(cx, cy, bhRadius - 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ==================== ENGINE 5: MONARCH SOVEREIGN CROWN ====================
+      else if (activeMode === 'monarch') {
+        // Ascending Royal Shadow-Light Shards
+        for (let i = 0; i < monarchShards.length; i++) {
+          const s = monarchShards[i];
+          s.y -= s.vy * dt * (tSec < 1.8 ? 1.3 : 0.65);
+          if (s.y < -height * 0.55) s.y = height * 0.55;
+          const sx = cx + s.x * (tSec < 1.8 ? 1 - (tSec / 1.8) * 0.45 : 0.85);
+          const sy = cy + s.y;
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.rotate(tSec * s.spin);
+          ctx.fillStyle = `rgba(255,255,255,${s.alpha * 0.78})`;
+          ctx.beginPath();
+          ctx.moveTo(0, -s.size);
+          ctx.lineTo(s.size * 0.65, 0);
+          ctx.lineTo(0, s.size);
+          ctx.lineTo(-s.size * 0.65, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Sovereign Geometric Crown forged above the Emblem
+        const crownProgress = Math.min(1, Math.max(0, (tSec - 0.55) / 1.1));
+        if (crownProgress > 0.02) {
+          ctx.save();
+          ctx.translate(cx, cy - 92);
+          ctx.scale(crownProgress, crownProgress);
+          ctx.strokeStyle = '#ffffff';
+          ctx.fillStyle = 'rgba(255,255,255,0.14)';
+          ctx.lineWidth = 2.2;
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 22;
+          ctx.beginPath();
+          ctx.moveTo(-48, 16);
+          ctx.lineTo(-56, -18);
+          ctx.lineTo(-26, 2);
+          ctx.lineTo(0, -34);
+          ctx.lineTo(26, 2);
+          ctx.lineTo(56, -18);
+          ctx.lineTo(48, 16);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Universal Climax Shockwave Rings & X-Beams at tSec >= 1.8
       if (tSec >= 1.8) {
         const postT = tSec - 1.8;
-
-        // Expanding Shockwave Rings
         for (const sw of shockwaves) {
           const swTime = postT - sw.delay;
           if (swTime > 0) {
@@ -366,31 +724,6 @@ export default function BlackXSplashVortex({
               ctx.stroke();
             }
           }
-        }
-
-        // Diagonal X-Slash Light Beams across the Vortex Core
-        const slashAlpha = postT < 0.35 ? 1 - postT / 0.35 : Math.max(0, 0.22 - (postT - 0.35) * 0.12);
-        if (slashAlpha > 0.01) {
-          const slashLen = Math.min(Math.max(width, height) * 0.55, postT * 2600);
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.strokeStyle = `rgba(255, 255, 255, ${slashAlpha})`;
-          ctx.lineWidth = postT < 0.18 ? 4.5 : 2.0;
-          ctx.shadowColor = '#ffffff';
-          ctx.shadowBlur = 24;
-
-          // Blade 1 (\)
-          ctx.beginPath();
-          ctx.moveTo(-slashLen * 0.7, -slashLen * 0.7);
-          ctx.lineTo(slashLen * 0.7, slashLen * 0.7);
-          ctx.stroke();
-
-          // Blade 2 (/)
-          ctx.beginPath();
-          ctx.moveTo(slashLen * 0.7, -slashLen * 0.7);
-          ctx.lineTo(-slashLen * 0.7, slashLen * 0.7);
-          ctx.stroke();
-          ctx.restore();
         }
       }
 
@@ -407,11 +740,12 @@ export default function BlackXSplashVortex({
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
     };
-  }, [durationMs, finishSplash, triggerImpactBoom]);
+  }, [activeMode, runKey, durationMs, finishSplash, triggerClimaxImpactAudio]);
 
   const logoVisible = phase >= 1;
   const textVisible = phase >= 2;
   const portalZoom = phase === 3 || exiting;
+  const activeMeta = BLACK_X_MOTION_THEMES.find((m) => m.id === activeMode) || BLACK_X_MOTION_THEMES[1];
 
   return (
     <div
@@ -429,11 +763,11 @@ export default function BlackXSplashVortex({
         userSelect: 'none',
         WebkitUserSelect: 'none',
         opacity: exiting ? 0 : 1,
-        transform: portalZoom ? 'scale(1.45)' : 'scale(1)',
-        transition: 'opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1), transform 0.52s cubic-bezier(0.16, 1, 0.3, 1)'
+        transform: portalZoom ? 'scale(1.42)' : 'scale(1)',
+        transition: 'opacity 0.34s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
       }}
     >
-      {/* 120Hz Vortex Particle Canvas */}
+      {/* 120Hz Motion Graphics Canvas */}
       <canvas
         ref={canvasRef}
         style={{
@@ -445,20 +779,20 @@ export default function BlackXSplashVortex({
         }}
       />
 
-      {/* Top HUD Telemetry Bar (120Hz Engine + Sound Toggle + Instant Skip) */}
+      {/* Top HUD Bar: 120Hz Telemetry + Sound + Instant Skip */}
       <div
         style={{
           position: 'absolute',
-          top: 'max(1rem, env(safe-area-inset-top, 1rem))',
-          left: '1.1rem',
-          right: '1.1rem',
+          top: 'max(0.9rem, env(safe-area-inset-top, 0.9rem))',
+          left: '1rem',
+          right: '1rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          zIndex: 5
+          zIndex: 6,
+          gap: '0.5rem'
         }}
       >
-        {/* 120Hz Telemetry Pill */}
         <div
           style={{
             display: 'inline-flex',
@@ -466,12 +800,12 @@ export default function BlackXSplashVortex({
             gap: '0.45rem',
             padding: '0.32rem 0.75rem',
             borderRadius: '999px',
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.22)',
             backdropFilter: 'blur(10px)',
-            fontSize: '0.68rem',
+            fontSize: '0.66rem',
             fontWeight: 900,
-            letterSpacing: '0.08em',
+            letterSpacing: '0.07em',
             fontFamily: 'monospace'
           }}
         >
@@ -484,24 +818,26 @@ export default function BlackXSplashVortex({
               boxShadow: '0 0 10px #ffffff'
             }}
           />
-          <span>{measuredHz}Hz VORTEX ENGINE</span>
+          <span>
+            {measuredHz}Hz · {activeMeta.icon} {isRtl ? activeMeta.nameAr : activeMeta.nameEn}
+          </span>
         </div>
 
-        {/* Sound & Skip Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
           <button
             type="button"
             onClick={() => {
               const nextMuted = !soundMuted;
               setSoundMuted(nextMuted);
               if (!nextMuted) {
-                triggerVortexAudio();
+                soundPlayedRef.current = false;
+                triggerIntroAudio(activeMode);
               }
             }}
             style={{
               padding: '0.34rem 0.65rem',
               borderRadius: '999px',
-              background: 'rgba(255,255,255,0.07)',
+              background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.22)',
               color: '#ffffff',
               fontSize: '0.7rem',
@@ -518,9 +854,9 @@ export default function BlackXSplashVortex({
             style={{
               padding: '0.34rem 0.85rem',
               borderRadius: '999px',
-              background: 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,255,255,0.28)',
-              color: '#ffffff',
+              background: '#ffffff',
+              border: '1px solid #ffffff',
+              color: '#000000',
               fontSize: '0.72rem',
               fontWeight: 900,
               cursor: 'pointer',
@@ -546,7 +882,6 @@ export default function BlackXSplashVortex({
           pointerEvents: 'none'
         }}
       >
-        {/* 3D Precision Vector X Monolith Emblem */}
         <div
           style={{
             position: 'relative',
@@ -555,14 +890,13 @@ export default function BlackXSplashVortex({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: '1.35rem',
+            marginBottom: '1.3rem',
             transform: logoVisible ? 'scale(1) rotate(0deg)' : 'scale(0.18) rotate(-135deg)',
             opacity: logoVisible ? 1 : 0,
             transition:
-              'transform 0.68s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1)'
+              'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
-          {/* Outer Rotating Diamond Frame */}
           <svg
             viewBox="0 0 140 140"
             style={{
@@ -571,21 +905,17 @@ export default function BlackXSplashVortex({
               width: '140px',
               height: '140px',
               overflow: 'visible',
-              filter: 'drop-shadow(0 0 22px rgba(255,255,255,0.55))'
+              filter: 'drop-shadow(0 0 24px rgba(255,255,255,0.6))'
             }}
           >
-            {/* Outer Precision Octagon / Vortex Shield */}
             <polygon
               points="70,4 120,20 136,70 120,120 70,136 20,120 4,70 20,20"
-              fill="rgba(0,0,0,0.82)"
+              fill="rgba(0,0,0,0.85)"
               stroke="#ffffff"
               strokeWidth="1.8"
               strokeDasharray={textVisible ? '420' : '90 30'}
-              style={{
-                transition: 'stroke-dasharray 0.7s ease'
-              }}
+              style={{ transition: 'stroke-dasharray 0.7s ease' }}
             />
-            {/* Inner Geometric Ring */}
             <circle
               cx="70"
               cy="70"
@@ -595,22 +925,19 @@ export default function BlackXSplashVortex({
               strokeWidth="1"
               strokeDasharray="6 6"
             />
-            {/* Iconic Razor-Sharp BLACK X Vector Blades */}
             <path
               d="M34 28 L52 28 L70 55 L88 28 L106 28 L80 70 L108 112 L90 112 L70 83 L50 112 L32 112 L60 70 Z"
               fill="#ffffff"
             />
-            {/* Center Core Cutout Line */}
             <circle cx="70" cy="70" r="3.2" fill="#000000" />
           </svg>
         </div>
 
-        {/* Kinetic Brand Title: BLACK X */}
         <div
           style={{
             opacity: textVisible ? 1 : 0,
             transform: textVisible ? 'translateY(0) scale(1)' : 'translateY(18px) scale(0.92)',
-            transition: 'all 0.55s cubic-bezier(0.16, 1, 0.3, 1)'
+            transition: 'all 0.52s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
           <div
@@ -622,104 +949,138 @@ export default function BlackXSplashVortex({
               color: '#ffffff',
               textShadow: '0 0 28px rgba(255,255,255,0.65)',
               lineHeight: 1.05,
-              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-              transition: 'letter-spacing 0.75s cubic-bezier(0.16, 1, 0.3, 1)'
+              transition: 'letter-spacing 0.72s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
           >
             BLACK X
           </div>
 
-          {/* Bilingual Cinematic Subtitle */}
           <div
             style={{
-              marginTop: '0.6rem',
+              marginTop: '0.58rem',
               fontSize: '0.84rem',
               fontWeight: 800,
-              color: 'rgba(255,255,255,0.85)',
-              letterSpacing: '0.06em'
+              color: 'rgba(255,255,255,0.88)',
+              letterSpacing: '0.04em'
             }}
           >
-            {isRtl
-              ? 'بوابة الأنمي والمانهوا · سرعة 120Hz الفائقة'
-              : 'UNLIMITED ANIME & MANHWA · 120Hz ENGINE'}
+            {customSubtitleAr || customSubtitleEn
+              ? isRtl
+                ? customSubtitleAr || customSubtitleEn
+                : customSubtitleEn || customSubtitleAr
+              : isRtl
+              ? activeMeta.subAr
+              : activeMeta.subEn}
           </div>
 
           <div
             style={{
-              marginTop: '0.32rem',
-              fontSize: '0.66rem',
+              marginTop: '0.3rem',
+              fontSize: '0.64rem',
               fontWeight: 700,
               color: 'rgba(255,255,255,0.48)',
-              letterSpacing: '0.22em',
+              letterSpacing: '0.2em',
               fontFamily: 'monospace'
             }}
           >
-            SHADOW VORTEX · MONOCHROME EDITION
+            {activeMeta.nameEn.toUpperCase()} · 120Hz ENGINE
           </div>
         </div>
       </div>
 
-      {/* Bottom Cinematic Loader Bar & Phase Status */}
+      {/* Bottom Interactive 5-Motion Switcher & Progress Bar */}
       <div
         style={{
           position: 'absolute',
-          bottom: 'max(1.8rem, env(safe-area-inset-bottom, 1.8rem))',
+          bottom: 'max(1.25rem, env(safe-area-inset-bottom, 1.25rem))',
           left: '50%',
           transform: 'translateX(-50%)',
-          width: 'min(320px, 82vw)',
-          zIndex: 5,
+          width: 'min(520px, 94vw)',
+          zIndex: 6,
           display: 'flex',
           flexDirection: 'column',
-          gap: '0.45rem'
+          gap: '0.6rem'
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '0.68rem',
-            fontWeight: 800,
-            color: 'rgba(255,255,255,0.72)',
-            fontFamily: 'monospace'
-          }}
-        >
-          <span>
-            {phase === 0
-              ? isRtl
-                ? '⚡ فتح بوابة الظلال...'
-                : '⚡ OPENING SHADOW VORTEX...'
-              : phase === 1
-              ? isRtl
-                ? '⚔️ تجميع طاقة السيرفرات...'
-                : '⚔️ CONVERGING CORE...'
-              : isRtl
-              ? '👑 جاهز للانطلاق بسرعة 120Hz'
-              : '👑 120Hz ENGINE LOCKED'}
-          </span>
-          <span>{progress}%</span>
-        </div>
-
-        {/* Ultra-Sleek Monochrome Progress Track */}
-        <div
-          style={{
-            width: '100%',
-            height: '3px',
-            borderRadius: '999px',
-            background: 'rgba(255,255,255,0.14)',
-            overflow: 'hidden',
-            position: 'relative'
-          }}
-        >
+        {/* 5-Motion Theme Switcher Pills */}
+        {durationMs >= 2500 && (
           <div
             style={{
-              width: `${progress}%`,
-              height: '100%',
-              background: '#ffffff',
-              boxShadow: '0 0 14px #ffffff',
-              transition: 'width 0.06s linear'
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.32rem',
+              flexWrap: 'wrap'
             }}
-          />
+          >
+            {BLACK_X_MOTION_THEMES.map((m) => {
+              const isSelected =
+                prefMode === m.id || (prefMode !== 'random' && activeMode === m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleSelectMode(m.id)}
+                  style={{
+                    padding: '0.28rem 0.58rem',
+                    borderRadius: '999px',
+                    background: isSelected ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                    color: isSelected ? '#000000' : '#ffffff',
+                    border: isSelected
+                      ? '1px solid #ffffff'
+                      : '1px solid rgba(255,255,255,0.2)',
+                    fontSize: '0.66rem',
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {m.icon} {isRtl ? m.nameAr : m.nameEn}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Progress Status & Track */}
+        <div style={{ maxWidth: '340px', width: '100%', margin: '0 auto' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.66rem',
+              fontWeight: 800,
+              color: 'rgba(255,255,255,0.75)',
+              fontFamily: 'monospace',
+              marginBottom: '0.32rem'
+            }}
+          >
+            <span>
+              { activeMeta.icon } { isRtl ? activeMeta.nameAr : activeMeta.nameEn }
+            </span>
+            <span>{progress}%</span>
+          </div>
+
+          <div
+            style={{
+              width: '100%',
+              height: '3px',
+              borderRadius: '999px',
+              background: 'rgba(255,255,255,0.14)',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              style={{
+                width: `${progress}%`,
+                height: '100%',
+                background: '#ffffff',
+                boxShadow: '0 0 14px #ffffff',
+                transition: 'width 0.05s linear'
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

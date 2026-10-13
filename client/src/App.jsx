@@ -150,19 +150,47 @@ export default function App() {
     import.meta.env.VITE_BUILD_TARGET === 'apk' ||
     (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('apk_ui') === '1');
 
-  const [showSplash, setShowSplash] = useState(() => {
+  const [splashConfig, setSplashConfig] = useState(() => {
     try {
-      if (isApkRuntime) return true;
-      return sessionStorage.getItem('bx_splash_played') !== '1';
+      const shouldShow = isApkRuntime || sessionStorage.getItem('bx_splash_played') !== '1';
+      return {
+        active: shouldShow,
+        mode: undefined,
+        durationMs: 4000,
+        subtitleAr: '',
+        subtitleEn: ''
+      };
     } catch {
-      return true;
+      return { active: true, mode: undefined, durationMs: 4000, subtitleAr: '', subtitleEn: '' };
     }
   });
 
   useEffect(() => {
-    const handleReplay = () => setShowSplash(true);
+    const handleReplay = (e) => {
+      const detail = e?.detail || {};
+      setSplashConfig({
+        active: true,
+        mode: detail.mode || undefined,
+        durationMs: detail.durationMs || 4000,
+        subtitleAr: detail.subtitleAr || '',
+        subtitleEn: detail.subtitleEn || ''
+      });
+    };
+    window.triggerBlackXMotion = (mode, durationMs = 1500, subtitleAr = '', subtitleEn = '') => {
+      setSplashConfig({
+        active: true,
+        mode: mode || undefined,
+        durationMs: Number(durationMs) || 1500,
+        subtitleAr: subtitleAr || '',
+        subtitleEn: subtitleEn || ''
+      });
+    };
     window.addEventListener('bx_replay_splash', handleReplay);
-    return () => window.removeEventListener('bx_replay_splash', handleReplay);
+    window.addEventListener('bx_trigger_motion', handleReplay);
+    return () => {
+      window.removeEventListener('bx_replay_splash', handleReplay);
+      window.removeEventListener('bx_trigger_motion', handleReplay);
+    };
   }, []);
 
   useEffect(() => {
@@ -179,15 +207,18 @@ export default function App() {
     try {
       sessionStorage.setItem('bx_splash_played', '1');
     } catch {}
-    setShowSplash(false);
+    setSplashConfig((prev) => ({ ...prev, active: false }));
   };
 
   if (isApkRuntime) {
     return (
       <MobileErrorBoundary>
-        {showSplash && (
+        {splashConfig.active && (
           <BlackXSplashVortex
-            durationMs={4000}
+            durationMs={splashConfig.durationMs}
+            initialMode={splashConfig.mode}
+            customSubtitleAr={splashConfig.subtitleAr}
+            customSubtitleEn={splashConfig.subtitleEn}
             lang={lang || 'ar'}
             enableSound={true}
             onComplete={handleSplashDone}
@@ -200,9 +231,12 @@ export default function App() {
 
   return (
     <>
-      {showSplash && (
+      {splashConfig.active && (
         <BlackXSplashVortex
-          durationMs={4000}
+          durationMs={splashConfig.durationMs}
+          initialMode={splashConfig.mode}
+          customSubtitleAr={splashConfig.subtitleAr}
+          customSubtitleEn={splashConfig.subtitleEn}
           lang={lang || 'ar'}
           enableSound={true}
           onComplete={handleSplashDone}

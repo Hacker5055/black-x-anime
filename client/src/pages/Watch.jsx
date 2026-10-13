@@ -30,7 +30,14 @@ export default function Watch({ onOpenAuth }) {
   useEffect(() => {
     if (!ep || ep === 'undefined' || ep === 'NaN' || !(Number(ep) > 0)) {
       navigate(`/watch/${slug}/${episode}${srcSuffix}`, { replace: true });
+      return;
     }
+    window.triggerBlackXMotion?.(
+      'katana',
+      1350,
+      `⚔️ الحلقة ${episode} · ضربة سيف الكاتانا 120Hz`,
+      `⚔️ EPISODE ${episode} · KATANA X-SLASH 120Hz`
+    );
   }, [ep, slug, episode, srcSuffix, navigate]);
 
   const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}${srcSuffix}`), [slug, srcSuffix]);
