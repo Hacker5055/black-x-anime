@@ -18,7 +18,14 @@ const fmt = (s) => {
     : `${m}:${String(sec).padStart(2, '0')}`;
 };
 
-const proxied = (url) => (url ? resolveApiUrl(`/api/stream/proxy?url=${encodeURIComponent(url)}`) : url);
+const proxied = (url) => {
+  if (!url) return url;
+  const s = String(url);
+  if (s.startsWith('/api/stream/proxy') || s.includes('/api/stream/proxy?url=')) {
+    return resolveApiUrl(s);
+  }
+  return resolveApiUrl(`/api/stream/proxy?url=${encodeURIComponent(s)}`);
+};
 
 /**
  * BLACK X custom player — liquid glass chrome over an HTML5 <video>,
@@ -284,13 +291,14 @@ export default function VideoPlayer({
           />
         ) : (
           <video
-            key={active?.id || 'none'}
+            key={`${active?.id || 'none'}-${activeSource?.directUrl || ''}`}
             ref={videoRef}
             className="player-video"
             src={activeSource ? proxied(activeSource.directUrl) : undefined}
             playsInline
-            preload="metadata"
-            onPlay={() => { setPlaying(true); setEnded(false); wake(); }}
+            autoPlay
+            preload="auto"
+            onPlay={() => { setPlaying(true); setEnded(false); setBuffering(false); wake(); }}
             onPause={() => { setPlaying(false); setShowControls(true); save(true); }}
             onTimeUpdate={(e) => {
               const v = e.target;
@@ -305,15 +313,28 @@ export default function VideoPlayer({
               }
             }}
             onLoadedMetadata={(e) => {
+              setBuffering(false);
               setDuration(e.target.duration || 0);
               if (startTime > 0 && e.target.currentTime < 1 && showResume) {
                 e.target.currentTime = startTime;
+              } else {
+                e.target.play?.().catch(() => {});
               }
             }}
             onWaiting={() => setBuffering(true)}
             onPlaying={() => setBuffering(false)}
+            onCanPlay={() => setBuffering(false)}
             onEnded={() => { setEnded(true); setPlaying(false); setShowControls(true); save(true); onEnded?.(); }}
-            onError={() => setBuffering(false)}
+            onError={() => {
+              setBuffering(false);
+              if (entries.length > 1 && active) {
+                const curIdx = entries.findIndex((x) => x.id === active.id);
+                const nextEntry = entries[curIdx + 1];
+                if (nextEntry) {
+                  pickSource(nextEntry);
+                }
+              }
+            }}
           />
         )}
 

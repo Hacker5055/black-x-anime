@@ -639,6 +639,16 @@ router.post('/resolve', async (req, res) => {
           }
         }
       } else {
+        const awEp = await fetchWitcherEpisode(String(slug), ep).catch(() => null);
+        const awFirst = awEp?.entries?.[0];
+        if (awFirst && (awFirst.directUrl || awFirst.embedUrl)) {
+          return res.json({
+            source: {
+              embedUrl: awFirst.embedUrl || null,
+              directUrl: awFirst.directUrl || null
+            }
+          });
+        }
         const bx2Ep = await anime3rbService.getEpisode(String(slug).replace(/^a3rb-/, ''), ep).catch(() => null);
         if (bx2Ep?.entries?.[0]?.embedUrl || bx2Ep?.entries?.[0]?.directUrl) {
           return res.json({
@@ -918,6 +928,8 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
 /* ------------------------- video stream proxy ------------------------- */
 const ALLOWED_HOSTS = [
   'pixeldrain.com',
+  'pixeldrain.dev',
+  'pixeldrain.net',
   'firestream.to',
   'streamtape.com',
   'tapecontent.net',
@@ -976,8 +988,31 @@ const ALLOWED_HOSTS = [
   'dramahot.top',
   'zokoanime.video',
   'hianime.at',
-  'allanimenews.com'
+  'allanimenews.com',
+  'fast4speed.rsvp',
+  'wixmp.com'
 ];
+
+function unwrapProxyUrl(raw) {
+  let u = String(raw || '').trim();
+  for (let i = 0; i < 3; i += 1) {
+    if (u.startsWith('/api/stream/proxy?url=') || u.includes('/api/stream/proxy?url=')) {
+      const idx = u.indexOf('url=');
+      if (idx !== -1) {
+        try {
+          u = decodeURIComponent(u.slice(idx + 4).split('&')[0]);
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+  return u;
+}
 
 function hostAllowed(hostname) {
   const h = hostname.toLowerCase();
@@ -991,7 +1026,7 @@ function hostAllowed(hostname) {
 router.get('/download', optionalAuth, async (req, res) => {
   let target;
   try {
-    target = new URL(String(req.query.url || ''));
+    target = new URL(unwrapProxyUrl(req.query.url));
   } catch {
     return res.status(400).json({ error: 'bad_url', message: 'Invalid url' });
   }
@@ -1093,7 +1128,7 @@ router.get('/download', optionalAuth, async (req, res) => {
 router.get('/proxy', optionalAuth, async (req, res) => {
   let target;
   try {
-    target = new URL(String(req.query.url || ''));
+    target = new URL(unwrapProxyUrl(req.query.url));
   } catch {
     return res.status(400).json({ error: 'bad_url', message: 'Invalid url' });
   }
@@ -1105,17 +1140,27 @@ router.get('/proxy', optionalAuth, async (req, res) => {
   }
 
   try {
-    // Hotlink-protected hosts (mp4upload et al.) demand a same-brand Referer
-    // (e.g. https://www.mp4upload.com/ for a4.mp4upload.com:183).
     const labels = target.hostname.split('.');
     const brand = labels.length >= 2 ? labels.slice(-2).join('.') : target.hostname;
     const isAh = target.hostname.includes('animeheaven.me');
+    const isPd = target.hostname.includes('pixeldrain.');
+    const isMf = target.hostname.includes('mediafire.');
+    const isFs = target.hostname.includes('firestream.');
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-      Accept: '*/*',
-      Referer: isAh ? 'https://animeheaven.me/' : `https://www.${brand}/`,
-      Origin: isAh ? 'https://animeheaven.me' : `https://www.${brand}`
+      Accept: '*/*'
     };
+    if (isAh) {
+      headers.Referer = 'https://animeheaven.me/';
+      headers.Origin = 'https://animeheaven.me';
+    } else if (isMf) {
+      headers.Referer = 'https://www.mediafire.com/';
+    } else if (isFs) {
+      headers.Referer = 'https://firestream.to/';
+    } else if (!isPd) {
+      headers.Referer = `https://www.${brand}/`;
+      headers.Origin = `https://www.${brand}`;
+    }
     if (req.headers.range) headers.Range = req.headers.range;
 
     const upstream = await fetch(target.href, {

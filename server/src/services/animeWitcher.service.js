@@ -443,8 +443,10 @@ export async function fetchWitcherShow(slugOrObjectId) {
           const thumb = f.thumb_uri?.stringValue || '';
           const filler = Boolean(f.filler?.booleanValue);
 
+          const validEpNum = Number.isFinite(epNum) && epNum > 0 ? epNum : idx + 1;
           return {
-            number: Number.isFinite(epNum) && epNum > 0 ? epNum : idx + 1,
+            episode: validEpNum,
+            number: validEpNum,
             docId,
             title: titleAr ? `${rawName} — ${titleAr}` : rawName,
             titleAr: titleAr || rawName,
@@ -452,7 +454,15 @@ export async function fetchWitcherShow(slugOrObjectId) {
             isFiller: filler
           };
         })
-        .sort((a, b) => a.number - b.number);
+        .sort((a, b) => a.episode - b.episode || b.docId.length - a.docId.length);
+
+      // Deduplicate episodes with the same episode number (e.g. docId '0001' vs '1'), keeping the padded docId
+      const seenEps = new Set();
+      episodes = episodes.filter((ep) => {
+        if (seenEps.has(ep.episode)) return false;
+        seenEps.add(ep.episode);
+        return true;
+      });
     }
   } catch (err) {
     console.warn('[animeWitcher.fetchWitcherShow] Firestore episodes_summery error:', err.message);
@@ -478,10 +488,10 @@ export async function fetchWitcherShow(slugOrObjectId) {
 
   const show = {
     ...baseInfo,
-    episodeCount: episodes.length,
+    episodeCount: episodes.length || 1,
     episodes: episodes.length
       ? episodes
-      : [{ number: 1, docId: '001', title: 'الحلقة 1', titleAr: 'الحلقة 1' }],
+      : [{ episode: 1, number: 1, docId: '001', title: 'الحلقة 1', titleAr: 'الحلقة 1' }],
     source: 'witanime',
     sourceName: 'سيرفر BLACK X 1',
     sourceLabel: 'سيرفر BLACK X 1'
@@ -672,57 +682,58 @@ export async function fetchWitcherEpisode(slugOrObjectId, episodeNumber) {
 
   for (const docId of candidateDocIds) {
     const encEp = encodeURIComponent(docId);
-    // 1. Try servers2/all_servers (single document containing all servers array)
-    try {
-      const srv2Url = `${FIRESTORE_BASE}/anime_list/${encId}/episodes/${encEp}/servers2/all_servers?key=${FIRESTORE_API_KEY}`;
-      const r2 = await fetch(srv2Url, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(10000)
-      });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        const vals = d2?.fields?.servers?.arrayValue?.values || [];
-        if (vals.length > 0) {
-          activeDocId = docId;
-          rawServers = vals.map((v) => {
-            const f = v?.mapValue?.fields || {};
-            return {
-              name: f.name?.stringValue || 'PD',
-              quality: f.quality?.stringValue || '1080p',
-              link: f.link?.stringValue || '',
-              visible: f.visible?.booleanValue !== false
-            };
-          });
-          break;
-        }
-      }
-    } catch (_) {}
+    const srv2Url = `${FIRESTORE_BASE}/anime_list/${encId}/episodes/${encEp}/servers2/all_servers?key=${FIRESTORE_API_KEY}`;
+    const srv1Url = `${FIRESTORE_BASE}/anime_list/${encId}/episodes/${encEp}/servers?key=${FIRESTORE_API_KEY}`;
 
-    // 2. Fallback to /servers subcollection
-    try {
-      const srv1Url = `${FIRESTORE_BASE}/anime_list/${encId}/episodes/${encEp}/servers?key=${FIRESTORE_API_KEY}`;
-      const r1 = await fetch(srv1Url, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(10000)
-      });
-      if (r1.ok) {
-        const d1 = await r1.json();
-        const docs = d1?.documents || [];
-        if (docs.length > 0) {
-          activeDocId = docId;
-          rawServers = docs.map((doc) => {
-            const f = doc?.fields || {};
-            return {
-              name: f.name?.stringValue || 'PD',
-              quality: f.quality?.stringValue || '1080p',
-              link: f.link?.stringValue || '',
-              visible: f.visible?.booleanValue !== false
-            };
+    const [r2, r1] = await Promise.all([
+      fetch(srv2Url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }).catch(() => null),
+      fetch(srv1Url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }).catch(() => null)
+    ]);
+
+    const combined = [];
+    if (r2 && r2.ok) {
+      const d2 = await r2.json().catch(() => null);
+      const vals = d2?.fields?.servers?.arrayValue?.values || [];
+      for (const v of vals) {
+        const f = v?.mapValue?.fields || {};
+        if (f.link?.stringValue && f.name?.stringValue) {
+          combined.push({
+            name: f.name.stringValue.toUpperCase().trim(),
+            quality: f.quality?.stringValue || '1080p',
+            link: f.link.stringValue.trim(),
+            visible: f.visible?.booleanValue !== false
           });
-          break;
         }
       }
-    } catch (_) {}
+    }
+
+    if (r1 && r1.ok) {
+      const d1 = await r1.json().catch(() => null);
+      const docs = d1?.documents || [];
+      for (const doc of docs) {
+        const f = doc?.fields || {};
+        if (f.link?.stringValue && f.name?.stringValue) {
+          combined.push({
+            name: f.name.stringValue.toUpperCase().trim(),
+            quality: f.quality?.stringValue || '1080p',
+            link: f.link.stringValue.trim(),
+            visible: f.visible?.booleanValue !== false
+          });
+        }
+      }
+    }
+
+    if (combined.length > 0) {
+      activeDocId = docId;
+      const seenLinks = new Set();
+      rawServers = combined.filter((s) => {
+        const k = `${s.name}|${s.quality}|${s.link}`;
+        if (seenLinks.has(k)) return false;
+        seenLinks.add(k);
+        return true;
+      });
+      break;
+    }
   }
 
   // Filter out empty or non-direct hosts if better ones exist
@@ -800,20 +811,20 @@ export async function fetchWitcherEpisode(slugOrObjectId, episodeNumber) {
     };
     downloads.push(dlObj);
 
-    // PixelDrain resolves synchronously in 0ms; resolve top SF/MF servers eagerly too
-    if (code === 'PD' || eagerTasks.length < 4) {
+    // PixelDrain resolves synchronously in 0ms; resolve all SF/MF servers eagerly too
+    if (code === 'PD' || eagerTasks.length < 12) {
       eagerTasks.push(
         resolveWitcherDirectVideoUrl(code, srv.link).then((directMp4) => {
           if (!directMp4) return;
-          const proxiedMp4 = `/api/stream/proxy?url=${encodeURIComponent(directMp4)}`;
           const mp4PlayerUrl = `/api/stream/mp4-player?url=${encodeURIComponent(directMp4)}`;
           const dlProxyUrl = `/api/stream/download?url=${encodeURIComponent(directMp4)}&filename=${encodeURIComponent(safeFile)}`;
 
+          // Keep directUrl as raw https:// MP4 URL because VideoPlayer.jsx wraps directUrl in /api/stream/proxy?url=...
           entryObj.embedUrl = mp4PlayerUrl;
-          entryObj.directUrl = proxiedMp4;
+          entryObj.directUrl = directMp4;
           resolved[entryId] = {
             embedUrl: mp4PlayerUrl,
-            directUrl: proxiedMp4
+            directUrl: directMp4
           };
 
           dlObj.downloadUrl = dlProxyUrl;
@@ -829,8 +840,12 @@ export async function fetchWitcherEpisode(slugOrObjectId, episodeNumber) {
 
   await Promise.all(eagerTasks);
 
+  // Filter out entries whose eager resolution failed (e.g. dead MediaFire file) if resolved ones exist
+  const workingEntries = entries.filter((e) => e.directUrl || e.embedUrl);
+  const finalEntries = workingEntries.length > 0 ? workingEntries : entries;
+
   // Put already-resolved entries first (1080p -> 720p -> 480p) so first entry always plays immediately
-  entries.sort((a, b) => {
+  finalEntries.sort((a, b) => {
     const aRes = Boolean(a.directUrl || a.embedUrl);
     const bRes = Boolean(b.directUrl || b.embedUrl);
     if (aRes !== bRes) return bRes ? 1 : -1;
@@ -851,7 +866,7 @@ export async function fetchWitcherEpisode(slugOrObjectId, episodeNumber) {
     totalEpisodes: show.episodeCount || show.episodes?.length || epNum,
     prevEpisode: epNum > 1 ? epNum - 1 : null,
     nextEpisode: epNum < (show.episodeCount || 0) ? epNum + 1 : null,
-    entries,
+    entries: finalEntries,
     resolved,
     downloads,
     resolvedDownloads,
@@ -884,12 +899,11 @@ export async function resolveWitcherEntry(slugOrObjectId, episodeNumber, entryId
   const directMp4 = await resolveWitcherDirectVideoUrl(entry.serverCode, entry.rawLink);
   if (!directMp4) return null;
 
-  const proxiedMp4 = `/api/stream/proxy?url=${encodeURIComponent(directMp4)}`;
   const mp4PlayerUrl = `/api/stream/mp4-player?url=${encodeURIComponent(directMp4)}`;
-  const source = { embedUrl: mp4PlayerUrl, directUrl: proxiedMp4 };
+  const source = { embedUrl: mp4PlayerUrl, directUrl: directMp4 };
 
   entry.embedUrl = mp4PlayerUrl;
-  entry.directUrl = proxiedMp4;
+  entry.directUrl = directMp4;
   epData.resolved[entryId] = source;
   return source;
 }

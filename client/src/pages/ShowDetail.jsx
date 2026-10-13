@@ -106,7 +106,11 @@ export default function ShowDetail({ onOpenAuth }) {
 
   const title = (lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn;
   const otherTitle = lang === 'ar' ? show.titleEn : show.titleAr;
-  const eps = show.episodes || [];
+  const eps = (show.episodes || []).map((e, idx) => ({
+    ...e,
+    episode: Number(e.episode ?? e.number) > 0 ? Number(e.episode ?? e.number) : idx + 1,
+    number: Number(e.number ?? e.episode) > 0 ? Number(e.number ?? e.episode) : idx + 1
+  }));
   const continueEp = eps.find((e) => progress[e.episode] && !progress[e.episode].completed) || eps[0];
 
   return (

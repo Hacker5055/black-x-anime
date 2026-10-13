@@ -22,10 +22,16 @@ export default function Watch({ onOpenAuth }) {
   const [searchParams] = useSearchParams();
   const sourceParam = (searchParams.get('source') || '').toLowerCase();
   const srcSuffix = sourceParam ? `?source=${sourceParam}` : '';
-  const episode = Number(ep) || 1;
+  const episode = Number(ep) > 0 ? Number(ep) : 1;
   const navigate = useNavigate();
   const { t, lang, formatNumber } = useI18n();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (!ep || ep === 'undefined' || ep === 'NaN' || !(Number(ep) > 0)) {
+      navigate(`/watch/${slug}/${episode}${srcSuffix}`, { replace: true });
+    }
+  }, [ep, slug, episode, srcSuffix, navigate]);
 
   const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}${srcSuffix}`), [slug, srcSuffix]);
   const [episodeData, setEpisodeData] = useState(null); // { entries, downloads, resolved, resolvedDownloads }
@@ -200,7 +206,11 @@ export default function Watch({ onOpenAuth }) {
   };
 
   /* ------------------------------ nav ------------------------------ */
-  const episodes = show?.episodes || [];
+  const episodes = (show?.episodes || []).map((e, i) => ({
+    ...e,
+    episode: Number(e.episode ?? e.number) > 0 ? Number(e.episode ?? e.number) : i + 1,
+    number: Number(e.number ?? e.episode) > 0 ? Number(e.number ?? e.episode) : i + 1
+  }));
   const idx = episodes.findIndex((e) => e.episode === episode);
   const prevEp = idx > 0 ? episodes[idx - 1] : null;
   const nextEp = idx >= 0 && idx < episodes.length - 1 ? episodes[idx + 1] : null;
