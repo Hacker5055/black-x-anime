@@ -714,6 +714,28 @@ export default function MobileApkApp() {
   const [devGrantDays, setDevGrantDays] = useState(30);
   const [devGrantBusy, setDevGrantBusy] = useState(false);
 
+  // ==================== v5.0 SOVEREIGN ENGINE STATES ====================
+  // 1. Live Cloud Watch Party & Timed Scene Comments (Danmaku)
+  const [watchPartyRoom, setWatchPartyRoom] = useState(null); // { roomCode, isHost, animeId, animeTitle, epDocId, epName, currentTime, paused, chat: [] }
+  const [watchPartyModalOpen, setWatchPartyModalOpen] = useState(false);
+  const [watchPartyJoinInput, setWatchPartyJoinInput] = useState('');
+  const [watchPartyChatInput, setWatchPartyChatInput] = useState('');
+  const [timedComments, setTimedComments] = useState([]);
+  const [timedCommentsEnabled, setTimedCommentsEnabled] = useState(true);
+  const [newTimedCommentText, setNewTimedCommentText] = useState('');
+  const [activeDanmakuComment, setActiveDanmakuComment] = useState(null);
+
+  // 2. Smart DNA Matcher, Mood Filter, & Spin Wheel
+  const [activeMoodFilter, setActiveMoodFilter] = useState('all'); // 'all' | 'zero_to_hero' | 'mind_games' | 'dark_battles' | 'monarch'
+  const [moodResults, setMoodResults] = useState([]);
+  const [moodLoading, setMoodLoading] = useState(false);
+  const [spinningWheel, setSpinningWheel] = useState(false);
+
+  // 3. Pro Subtitle Styler & Background Audio Mode
+  const [subStyleMode, setSubStyleMode] = useState('white_lg'); // 'white_lg' | 'yellow_xl' | 'red_bx'
+  const [bgAudioMode, setBgAudioMode] = useState(false);
+  const backupFileInputRef = useRef(null);
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -1600,6 +1622,496 @@ export default function MobileApkApp() {
     }, 1000);
     return () => clearInterval(t);
   }, [sleepTimerRemainingSec, showToast]);
+
+  // ==================== v5.0 SOVEREIGN CONTROLLERS ====================
+
+  // 1. Live Cloud Watch Party (Create Room, Join Room, Sync Playback, & Live Room Chat)
+  const pushWatchPartyState = useCallback(async (roomObj) => {
+    if (!roomObj?.roomCode) return;
+    try {
+      await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', roomObj.roomCode)}?key=${BX_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            json: { stringValue: JSON.stringify(roomObj) },
+            updatedAt: { stringValue: new Date().toISOString() }
+          }
+        })
+      });
+    } catch (_) {}
+  }, []);
+
+  const handleCreateWatchParty = useCallback(async () => {
+    if (!selectedAnime || !activeEpisode) return;
+    const code = `BX-${Math.floor(1000 + Math.random() * 9000)}`;
+    const curSec = Math.floor(videoRef.current?.currentTime || 0);
+    const isPaused = Boolean(videoRef.current?.paused);
+    const roomObj = {
+      roomCode: code,
+      hostName: user?.displayName || 'مضيف الغرفة',
+      animeId: selectedAnime.objectID,
+      animeTitle: selectedAnime.titleEn,
+      epDocId: activeEpisode.docId,
+      epName: activeEpisode.name,
+      currentTime: curSec,
+      paused: isPaused,
+      updatedAt: Date.now(),
+      chat: [
+        {
+          id: `sys_${Date.now()}`,
+          author: 'BLACK X',
+          text: `🍿 تم إنشاء غرفة المشاهدة الجماعية (${code}) — شارك الكود مع أصدقائك للمشاهدة معاً في نفس الثانية!`,
+          time: 'الآن'
+        }
+      ]
+    };
+    setWatchPartyRoom({ ...roomObj, isHost: true });
+    await pushWatchPartyState(roomObj);
+    showToast(`🍿 تم إنشاء غرفة المشاهدة الجماعية بكود: ${code}`);
+  }, [selectedAnime, activeEpisode, user, pushWatchPartyState, showToast]);
+
+  const handleJoinWatchParty = useCallback(async () => {
+    const cleanCode = String(watchPartyJoinInput || '').trim().toUpperCase();
+    if (!cleanCode) {
+      showToast(lang === 'ar' ? 'أدخل كود الغرفة أولاً (مثال: BX-4821)' : 'Enter room code first');
+      return;
+    }
+    try {
+      const res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', cleanCode)}?key=${BX_KEY}`);
+      if (!res.ok) {
+        showToast(lang === 'ar' ? '❌ لم يتم العثور على غرفة بهذا الكود' : '❌ Room not found');
+        return;
+      }
+      const doc = await res.json();
+      const raw = doc?.fields?.json?.stringValue;
+      if (!raw) return;
+      const remoteRoom = JSON.parse(raw);
+      const joinMsg = {
+        id: `join_${Date.now()}`,
+        author: user?.displayName || 'عضو BLACK X',
+        text: 'انضم إلى غرفة المشاهدة الجماعية! 🔥',
+        time: 'الآن'
+      };
+      const updatedRoom = {
+        ...remoteRoom,
+        chat: [...(remoteRoom.chat || []), joinMsg].slice(-40)
+      };
+      setWatchPartyRoom({ ...updatedRoom, isHost: false });
+      setWatchPartyJoinInput('');
+      await pushWatchPartyState(updatedRoom);
+      if (videoRef.current && typeof remoteRoom.currentTime === 'number') {
+        videoRef.current.currentTime = remoteRoom.currentTime;
+      }
+      showToast(`🍿 انضممت إلى غرفة ${cleanCode} وتمت مزامنة الثانية!`);
+    } catch (_) {
+      showToast(lang === 'ar' ? 'تعذر الانضمام للغرفة' : 'Failed to join room');
+    }
+  }, [watchPartyJoinInput, user, pushWatchPartyState, showToast, lang]);
+
+  const handleSendWatchPartyChat = useCallback(
+    async (e) => {
+      if (e?.preventDefault) e.preventDefault();
+      if (!watchPartyRoom || !watchPartyChatInput.trim()) return;
+      const msg = {
+        id: `msg_${Date.now()}`,
+        author: user?.displayName || 'أوتاكو BLACK X',
+        text: watchPartyChatInput.trim(),
+        time: 'الآن'
+      };
+      const nextRoom = {
+        ...watchPartyRoom,
+        currentTime: Math.floor(videoRef.current?.currentTime || watchPartyRoom.currentTime || 0),
+        paused: Boolean(videoRef.current?.paused),
+        updatedAt: Date.now(),
+        chat: [...(watchPartyRoom.chat || []), msg].slice(-40)
+      };
+      setWatchPartyRoom(nextRoom);
+      setWatchPartyChatInput('');
+      await pushWatchPartyState(nextRoom);
+    },
+    [watchPartyRoom, watchPartyChatInput, user, pushWatchPartyState]
+  );
+
+  // Poll Watch Party Room every 2.5s to keep playback and chat synchronized
+  useEffect(() => {
+    if (!watchPartyRoom?.roomCode) return;
+    const timer = setInterval(async () => {
+      try {
+        if (watchPartyRoom.isHost && videoRef.current) {
+          const cur = Math.floor(videoRef.current.currentTime || 0);
+          const isPaused = Boolean(videoRef.current.paused);
+          const res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', watchPartyRoom.roomCode)}?key=${BX_KEY}`);
+          let remoteChat = watchPartyRoom.chat || [];
+          if (res.ok) {
+            const doc = await res.json();
+            const raw = doc?.fields?.json?.stringValue;
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed.chat)) remoteChat = parsed.chat;
+            }
+          }
+          const updated = {
+            ...watchPartyRoom,
+            currentTime: cur,
+            paused: isPaused,
+            updatedAt: Date.now(),
+            chat: remoteChat
+          };
+          setWatchPartyRoom(updated);
+          await pushWatchPartyState(updated);
+        } else {
+          const res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', watchPartyRoom.roomCode)}?key=${BX_KEY}`);
+          if (!res.ok) return;
+          const doc = await res.json();
+          const raw = doc?.fields?.json?.stringValue;
+          if (!raw) return;
+          const remote = JSON.parse(raw);
+          setWatchPartyRoom({ ...remote, isHost: false });
+          if (videoRef.current && typeof remote.currentTime === 'number') {
+            if (Math.abs((videoRef.current.currentTime || 0) - remote.currentTime) > 4) {
+              videoRef.current.currentTime = remote.currentTime;
+            }
+            if (remote.paused && !videoRef.current.paused) {
+              videoRef.current.pause();
+            } else if (!remote.paused && videoRef.current.paused) {
+              videoRef.current.play().catch(() => {});
+            }
+          }
+        }
+      } catch (_) {}
+    }, 2600);
+    return () => clearInterval(timer);
+  }, [watchPartyRoom, pushWatchPartyState]);
+
+  // 2. Timed Scene Comments / Danmaku (التعليقات الزمنية التفاعلية على مشاهد الحلقة)
+  useEffect(() => {
+    if (!selectedAnime?.objectID || !activeEpisode?.docId) {
+      setTimedComments([]);
+      setActiveDanmakuComment(null);
+      return;
+    }
+    let alive = true;
+    const dKey = cleanCloudKey('danmaku', `${selectedAnime.objectID}_${activeEpisode.docId}`);
+    fetch(`${BX_SETTINGS_BASE}/${dKey}?key=${BX_KEY}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((doc) => {
+        if (!alive) return;
+        const raw = doc?.fields?.json?.stringValue;
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTimedComments(parsed);
+            return;
+          }
+        }
+        setTimedComments([
+          { id: 'd1', sec: 12, author: 'ShadowMonarch', text: '🔥 بداية أسطورية للحلقة كالعادة على BLACK X!' },
+          { id: 'd2', sec: 92, author: 'OtakuKing', text: '⚔️ التحريك في هذا المشهد 120Hz خيالي!' },
+          { id: 'd3', sec: 185, author: 'AnimeLegend', text: '👑 هذه اللقطة للتاريخ!!' }
+        ]);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [selectedAnime?.objectID, activeEpisode?.docId]);
+
+  const handlePostTimedComment = useCallback(
+    async (e) => {
+      if (e?.preventDefault) e.preventDefault();
+      if (!selectedAnime || !activeEpisode || !newTimedCommentText.trim()) return;
+      const curSec = Math.floor(videoRef.current?.currentTime || 15);
+      const newComment = {
+        id: `tc_${Date.now()}`,
+        sec: curSec,
+        author: user?.displayName || 'أوتاكو BLACK X',
+        text: newTimedCommentText.trim()
+      };
+      const updated = [newComment, ...timedComments].slice(0, 80);
+      setTimedComments(updated);
+      setNewTimedCommentText('');
+      setActiveDanmakuComment(newComment);
+      const nextXp = userXp + 15;
+      setUserXp(nextXp);
+      localStorage.setItem('bx_mob_xp', String(nextXp));
+      const mm = Math.floor(curSec / 60);
+      const ss = String(curSec % 60).padStart(2, '0');
+      showToast(`💬 تم تثبيت تعليقك عند الدقيقة ${mm}:${ss} (+15 XP)!`);
+      try {
+        const dKey = cleanCloudKey('danmaku', `${selectedAnime.objectID}_${activeEpisode.docId}`);
+        await fetch(`${BX_SETTINGS_BASE}/${dKey}?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(updated) },
+              updatedAt: { stringValue: new Date().toISOString() }
+            }
+          })
+        });
+      } catch (_) {}
+    },
+    [selectedAnime, activeEpisode, newTimedCommentText, timedComments, user, userXp, showToast]
+  );
+
+  // 3. Smart DNA Matcher, Mood Filter, & Tonight's Spin Wheel ("اختر لي سهرة الليلة")
+  const getDnaMatchScore = useCallback(
+    (item) => {
+      if (!item) return 96;
+      const str = String(item.objectID || item.titleEn || '');
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) % 100;
+      const favBoost = favorites.some((f) => f.objectID === item.objectID) ? 4 : 0;
+      return Math.min(99, 91 + (hash % 8) + favBoost);
+    },
+    [favorites]
+  );
+
+  const handleSelectMood = useCallback(async (moodId) => {
+    setActiveMoodFilter(moodId);
+    if (moodId === 'all') {
+      setMoodResults([]);
+      return;
+    }
+    setMoodLoading(true);
+    const moodTagMap = {
+      zero_to_hero: 'اكشن',
+      mind_games: 'غموض',
+      dark_battles: 'شونين',
+      monarch: 'خيال'
+    };
+    const tag = moodTagMap[moodId] || 'اكشن';
+    try {
+      const res = await queryAlgolia('series_fav_count_desc', {
+        query: '',
+        hitsPerPage: 14,
+        facetFilters: [[`tags:${tag}`]]
+      });
+      setMoodResults((res.hits || []).map(formatAnimeHit).filter(Boolean));
+    } catch (_) {
+    } finally {
+      setMoodLoading(false);
+    }
+  }, []);
+
+  const handleSpinWheelTonight = useCallback(() => {
+    if (spinningWheel) return;
+    const pool = [...popularList, ...topRankedList, ...airingList].filter(Boolean);
+    if (!pool.length) return;
+    setSpinningWheel(true);
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    window.triggerBlackXMotion?.(
+      'vortex',
+      1450,
+      `🎲 اختيار سهرة الليلة: ${pick.titleEn}`,
+      `🎲 TONIGHT'S SOVEREIGN PICK: ${pick.titleEn}`
+    );
+    setTimeout(() => {
+      setSpinningWheel(false);
+      handleOpenAnime(pick);
+      showToast(`🎲 تم اختيار سهرة الليلة (${pick.titleEn}) بنسبة تطابق ${getDnaMatchScore(pick)}%!`);
+    }, 950);
+  }, [spinningWheel, popularList, topRankedList, airingList, handleOpenAnime, getDnaMatchScore, showToast]);
+
+  // 4. Pro Subtitle Styler & Background Audio MediaSession
+  const handleCycleSubtitleStyle = useCallback(() => {
+    const order = ['white_lg', 'yellow_xl', 'red_bx'];
+    const next = order[(order.indexOf(subStyleMode) + 1) % order.length];
+    setSubStyleMode(next);
+    const labels = {
+      white_lg: '🔤 ستايل الترجمة: أبيض نقي سينمائي (كبير)',
+      yellow_xl: '🔤 ستايل الترجمة: أصفر احترافي (كبير جداً)',
+      red_bx: '🔤 ستايل الترجمة: أحمر BLACK X الملكي'
+    };
+    showToast(labels[next]);
+  }, [subStyleMode, showToast]);
+
+  useEffect(() => {
+    if (!bgAudioMode || !selectedAnime || !activeEpisode) return;
+    try {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new window.MediaMetadata({
+          title: `${selectedAnime.titleEn} - ${activeEpisode.name}`,
+          artist: 'BLACK X Mobile 120Hz',
+          album: 'BLACK X Cinema',
+          artwork: selectedAnime.poster ? [{ src: selectedAnime.poster, sizes: '512x512', type: 'image/jpeg' }] : []
+        });
+        navigator.mediaSession.setActionHandler('play', () => videoRef.current?.play().catch(() => {}));
+        navigator.mediaSession.setActionHandler('pause', () => videoRef.current?.pause());
+      }
+    } catch (_) {}
+    const onVisChange = () => {
+      if (document.hidden && bgAudioMode && videoRef.current && videoRef.current.paused) {
+        videoRef.current.play().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => document.removeEventListener('visibilitychange', onVisChange);
+  }, [bgAudioMode, selectedAnime, activeEpisode]);
+
+  // 5. Developer Revoke User VIP & Delete Cloud VIP Code
+  const handleDevRevokeUserVip = useCallback(async () => {
+    if (!isDeveloper) return;
+    const target = String(devGrantTarget || '').trim().toLowerCase();
+    if (!target) {
+      showToast('يرجى كتابة اسم المستخدم أو البريد الإلكتروني لسحب الاشتراك');
+      return;
+    }
+    setDevGrantBusy(true);
+    try {
+      const isEmailTarget = target.includes('@');
+      const primaryKey = isEmailTarget ? cleanCloudKey('email', target) : cleanCloudKey('user', target);
+      let existingUser = null;
+      const getRes = await fetch(`${BX_SETTINGS_BASE}/${primaryKey}?key=${BX_KEY}`);
+      if (getRes.ok) {
+        const doc = await getRes.json();
+        const raw = doc?.fields?.json?.stringValue;
+        if (raw) existingUser = JSON.parse(raw);
+      }
+      const baseUsername = existingUser?.username || (isEmailTarget ? target.split('@')[0] : target);
+      const baseEmail = existingUser?.email || (isEmailTarget ? target : '');
+      const revokedUser = {
+        ...(existingUser || { username: baseUsername, email: baseEmail, role: 'user' }),
+        vipTier: 'free',
+        vipStatus: 'Free Tier',
+        vipExpiresAt: null
+      };
+      const body = {
+        fields: {
+          json: { stringValue: JSON.stringify(revokedUser) },
+          username: { stringValue: String(baseUsername).toLowerCase() },
+          email: { stringValue: String(baseEmail).toLowerCase() },
+          updatedAt: { stringValue: new Date().toISOString() }
+        }
+      };
+      await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('user', baseUsername)}?key=${BX_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (baseEmail) {
+        await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('email', baseEmail)}?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }
+      setDevGrantTarget('');
+      showToast(`🚫 تم سحب وإلغاء اشتراك VIP من (${target}) وإعادته للباقة المجانية فوراً!`);
+    } catch (_) {
+      showToast('تعذر سحب الاشتراك عبر السحابة');
+    } finally {
+      setDevGrantBusy(false);
+    }
+  }, [isDeveloper, devGrantTarget, showToast]);
+
+  const handleDevDeleteVipCode = useCallback(
+    async (codeToDelete) => {
+      if (!isDeveloper) return;
+      const updatedCodes = cloudVipCodes.filter((c) => c.code !== codeToDelete);
+      setCloudVipCodes(updatedCodes);
+      try {
+        const payload = {
+          enforced: globalVipEnforced,
+          updatedAt: new Date().toISOString(),
+          updatedBy: user?.email || 'developer',
+          codes: updatedCodes,
+          broadcastMsg: globalBroadcastMsg
+        };
+        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(payload) },
+              enforced: { booleanValue: globalVipEnforced },
+              updatedAt: { stringValue: payload.updatedAt }
+            }
+          })
+        });
+        showToast(`🗑️ تم حذف الكود (${codeToDelete}) من السحابة نهائياً`);
+      } catch (_) {}
+    },
+    [isDeveloper, cloudVipCodes, globalVipEnforced, user, globalBroadcastMsg, showToast]
+  );
+
+  // 6. 1-Tap Full Vault Backup & Restore (تصدير واستيراد الخزنة الكاملة)
+  const handleExportVaultBackup = useCallback(() => {
+    try {
+      const backupPayload = {
+        app: 'BLACK X Mobile 120Hz v5.0 Sovereign',
+        exportedAt: new Date().toISOString(),
+        favorites,
+        watchlistMap,
+        watchHistory,
+        mangaHistory,
+        offlineChapters,
+        savedPanels,
+        userXp,
+        motionPref
+      };
+      const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `BLACK-X-Vault-Backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('💾 تم تصدير وتحميل النسخة الاحتياطية الشاملة لخزنتك بنجاح!');
+    } catch (_) {
+      showToast('تعذر تصدير النسخة الاحتياطية');
+    }
+  }, [favorites, watchlistMap, watchHistory, mangaHistory, offlineChapters, savedPanels, userXp, motionPref, showToast]);
+
+  const handleImportVaultBackup = useCallback(
+    (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const parsed = JSON.parse(String(ev.target?.result || '{}'));
+          if (Array.isArray(parsed.favorites)) {
+            setFavorites(parsed.favorites);
+            localStorage.setItem('bx_mob_favorites', JSON.stringify(parsed.favorites));
+          }
+          if (parsed.watchlistMap && typeof parsed.watchlistMap === 'object') {
+            setWatchlistMap(parsed.watchlistMap);
+            localStorage.setItem('bx_mob_watchlist_map', JSON.stringify(parsed.watchlistMap));
+          }
+          if (Array.isArray(parsed.watchHistory)) {
+            setWatchHistory(parsed.watchHistory);
+            localStorage.setItem('bx_mob_history', JSON.stringify(parsed.watchHistory));
+          }
+          if (Array.isArray(parsed.mangaHistory)) {
+            setMangaHistory(parsed.mangaHistory);
+            localStorage.setItem('bx_mob_manga_history', JSON.stringify(parsed.mangaHistory));
+          }
+          if (Array.isArray(parsed.offlineChapters)) {
+            setOfflineChapters(parsed.offlineChapters);
+            localStorage.setItem('bx_mob_offline_chapters', JSON.stringify(parsed.offlineChapters));
+          }
+          if (Array.isArray(parsed.savedPanels)) {
+            setSavedPanels(parsed.savedPanels);
+            localStorage.setItem('bx_mob_saved_panels', JSON.stringify(parsed.savedPanels));
+          }
+          if (typeof parsed.userXp === 'number') {
+            setUserXp(parsed.userXp);
+            localStorage.setItem('bx_mob_xp', String(parsed.userXp));
+          }
+          showToast('🎉 تمت استعادة جميع بيانات خزنتك ومفضلاتك وسجل مشاهداتك بنجاح!');
+        } catch (_) {
+          showToast('❌ ملف النسخة الاحتياطية غير صالح');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    },
+    [showToast]
+  );
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
   useEffect(() => {
@@ -3837,6 +4349,18 @@ export default function MobileApkApp() {
                     </span>
                     <span
                       style={{
+                        background: 'rgba(255,255,255,0.18)',
+                        color: '#ffffff',
+                        fontSize: '0.66rem',
+                        fontWeight: 900,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      🧬 {isRtl ? `تطابق ${getDnaMatchScore(heroAnime)}%` : `${getDnaMatchScore(heroAnime)}% Match`}
+                    </span>
+                    <span
+                      style={{
                         background: 'rgba(255,255,255,0.14)',
                         color: '#ffffff',
                         fontSize: '0.66rem',
@@ -3988,6 +4512,95 @@ export default function MobileApkApp() {
               </div>
             </div>
           )}
+
+          {/* ==================== v5.0 SMART DNA MOOD MATCHER & TONIGHT'S SPIN WHEEL ==================== */}
+          <section style={{ padding: '0.85rem 1rem 0.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
+              <div style={{ fontWeight: 900, fontSize: '0.88rem' }}>
+                🧬 {isRtl ? 'مستشار المزاج والتطابق الذكي' : 'Smart DNA & Mood Matcher'}
+              </div>
+              <button
+                type="button"
+                disabled={spinningWheel}
+                onClick={handleSpinWheelTonight}
+                style={{
+                  padding: '0.36rem 0.75rem',
+                  borderRadius: '99px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                🎲 {spinningWheel ? (isRtl ? 'جاري السحب...' : 'Spinning...') : isRtl ? 'اختر لي سهرة الليلة' : 'Spin Tonight'}
+              </button>
+            </div>
+            <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
+              {[
+                { id: 'all', ar: '🧬 الكل (تطابق ذوقك)', en: '🧬 All (DNA Match)' },
+                { id: 'zero_to_hero', ar: '⚔️ بطل يتطور من الصفر', en: '⚔️ Zero to Hero' },
+                { id: 'mind_games', ar: '🧠 دهاء وتخطيط', en: '🧠 Mind Games' },
+                { id: 'dark_battles', ar: '🩸 قتالات دموية مظلمة', en: '🩸 Dark Battles' },
+                { id: 'monarch', ar: '👑 إمبراطور السيادة', en: '👑 Sovereign Monarch' }
+              ].map((m) => {
+                const active = activeMoodFilter === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleSelectMood(m.id)}
+                    style={{
+                      padding: '0.42rem 0.8rem',
+                      borderRadius: '99px',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                      color: active ? '#000000' : '#ffffff',
+                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                      fontWeight: 900,
+                      fontSize: '0.72rem',
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isRtl ? m.ar : m.en}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeMoodFilter !== 'all' && (
+              <div style={{ marginTop: '0.5rem' }}>
+                {moodLoading ? (
+                  <div style={{ padding: '1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                    {isRtl ? '⏳ جاري تحليل ذوقك واستخراج أقوى الترشيحات...' : '⏳ Matching your DNA taste...'}
+                  </div>
+                ) : (
+                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.7rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
+                    {moodResults.map((item) => (
+                      <div
+                        key={item.objectID}
+                        className="bx-mob-card"
+                        onClick={() => handleOpenAnime(item)}
+                        style={{ minWidth: '118px', maxWidth: '118px', cursor: 'pointer' }}
+                      >
+                        <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', aspectRatio: '2/2.85', border: '1px solid rgba(255,255,255,0.18)' }}>
+                          <img src={item.poster} alt={item.titleEn} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <span style={{ position: 'absolute', top: '6px', right: '6px', background: '#ffffff', color: '#000000', fontSize: '0.6rem', fontWeight: 900, padding: '0.1rem 0.38rem', borderRadius: '5px' }}>
+                            🧬 {getDnaMatchScore(item)}%
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.73rem', fontWeight: 900, marginTop: '0.3rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.titleEn}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
           {/* Continue Watching Strip (Synced with Website) */}
           {watchHistory.length > 0 && (
@@ -6377,14 +6990,10 @@ export default function MobileApkApp() {
                     </button>
 
                     {cloudVipCodes.length > 0 && (
-                      <div style={{ marginTop: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '150px', overflowY: 'auto' }}>
-                        {cloudVipCodes.slice(0, 6).map((c) => (
+                      <div style={{ marginTop: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '165px', overflowY: 'auto' }}>
+                        {cloudVipCodes.slice(0, 10).map((c) => (
                           <div
                             key={c.code}
-                            onClick={() => {
-                              navigator.clipboard?.writeText(c.code);
-                              showToast(`✓ تم نسخ الكود: ${c.code}`);
-                            }}
                             style={{
                               display: 'flex',
                               justifyContent: 'space-between',
@@ -6393,14 +7002,36 @@ export default function MobileApkApp() {
                               borderRadius: '8px',
                               background: 'rgba(255,255,255,0.06)',
                               border: '1px solid rgba(255,255,255,0.14)',
-                              fontSize: '0.72rem',
-                              cursor: 'pointer'
+                              fontSize: '0.72rem'
                             }}
                           >
-                            <span style={{ fontFamily: 'monospace', fontWeight: 900 }}>{c.code}</span>
-                            <span style={{ color: 'rgba(255,255,255,0.65)' }}>
-                              {c.planId === 'vip_monarch' ? '👑 الملك' : '⚡ أساسية'} • اضغط للنسخ
+                            <span
+                              onClick={() => {
+                                navigator.clipboard?.writeText(c.code);
+                                showToast(`✓ تم نسخ الكود: ${c.code}`);
+                              }}
+                              style={{ fontFamily: 'monospace', fontWeight: 900, cursor: 'pointer', flex: 1 }}
+                            >
+                              {c.code}
                             </span>
+                            <span style={{ color: 'rgba(255,255,255,0.65)', marginLeft: '0.4rem', marginRight: '0.4rem' }}>
+                              {(c.tier || c.planId) === 'vip_monarch' ? '👑 الملك' : '⚡ أساسية'} ({c.usedCount || 0}/{c.maxUses || 1})
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDevDeleteVipCode(c.code)}
+                              style={{
+                                background: 'rgba(255,255,255,0.12)',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                color: '#fff',
+                                borderRadius: '6px',
+                                padding: '0.18rem 0.45rem',
+                                fontSize: '0.68rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              🗑️
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -6531,28 +7162,48 @@ export default function MobileApkApp() {
                         <option value={3650}>مدى الحياة</option>
                       </select>
                     </div>
-                    <button
-                      type="button"
-                      disabled={devGrantBusy}
-                      onClick={handleDevDirectGrantUserVip}
-                      style={{
-                        width: '100%',
-                        padding: '0.65rem',
-                        borderRadius: '10px',
-                        border: 'none',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 900,
-                        fontSize: '0.78rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {devGrantBusy
-                        ? '⏳ جاري ترقية الحساب...'
-                        : isRtl
-                        ? '👑 ترقية حساب العضو فوراً في السحابة'
-                        : '👑 Grant VIP Immediately'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.45rem' }}>
+                      <button
+                        type="button"
+                        disabled={devGrantBusy}
+                        onClick={handleDevDirectGrantUserVip}
+                        style={{
+                          flex: 1,
+                          padding: '0.65rem',
+                          borderRadius: '10px',
+                          border: 'none',
+                          background: '#ffffff',
+                          color: '#000000',
+                          fontWeight: 900,
+                          fontSize: '0.76rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {devGrantBusy
+                          ? '⏳...'
+                          : isRtl
+                          ? '👑 ترقية حساب العضو فوراً'
+                          : '👑 Grant VIP Now'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={devGrantBusy}
+                        onClick={handleDevRevokeUserVip}
+                        style={{
+                          padding: '0.65rem 0.75rem',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(255,255,255,0.28)',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: '#ffffff',
+                          fontWeight: 900,
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        🚫 {isRtl ? 'سحب VIP' : 'Revoke'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -6926,8 +7577,8 @@ export default function MobileApkApp() {
               </div>
               <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
                 {isRtl
-                  ? 'الإصدار الحالي: BLACK X Mobile v4.0 Ultimate (120Hz Full Edition)'
-                  : 'Current Version: BLACK X Mobile v4.0 Ultimate (120Hz Full Edition)'}
+                  ? 'الإصدار الحالي: BLACK X Mobile v5.0 Sovereign (120Hz Full Edition)'
+                  : 'Current Version: BLACK X Mobile v5.0 Sovereign (120Hz Full Edition)'}
               </div>
             </div>
             <a
@@ -6937,8 +7588,8 @@ export default function MobileApkApp() {
               onClick={() =>
                 showToast(
                   isRtl
-                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v4.0 Ultimate المباشرة...'
-                    : '✓ Downloading latest BLACK X Mobile v4.0 Ultimate APK...'
+                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v5.0 Sovereign المباشرة...'
+                    : '✓ Downloading latest BLACK X Mobile v5.0 Sovereign APK...'
                 )
               }
               style={{
@@ -6954,6 +7605,69 @@ export default function MobileApkApp() {
             >
               ⬇ {isRtl ? 'تحديث مباشر الآن' : 'Update APK Now'}
             </a>
+          </div>
+
+          {/* 1-Tap Full Vault Backup & Restore (تصدير واستيراد الخزنة الكاملة بضغطة واحدة) */}
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.3rem' }}>
+              💾 {isRtl ? 'النسخ الاحتياطي الشامل للخزنة (Vault Backup & Restore)' : 'Full Vault Backup & Restore'}
+            </div>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+              {isRtl
+                ? 'احفظ نسخة احتياطية شاملة لكل مفضلاتك، سجل مشاهداتك، لقطاتك، وفصولك بدون نت في ملف واحد واستعدها على أي هاتف فوراً:'
+                : 'Export or restore all your favorites, history, offline chapters, and snapshots in one tap:'}
+            </p>
+            <input
+              ref={backupFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportVaultBackup}
+              style={{ display: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={handleExportVaultBackup}
+                style={{
+                  flex: 1,
+                  padding: '0.58rem',
+                  borderRadius: '10px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 900,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                💾 {isRtl ? 'تصدير الخزنة (Backup)' : 'Export Backup'}
+              </button>
+              <button
+                type="button"
+                onClick={() => backupFileInputRef.current?.click()}
+                style={{
+                  flex: 1,
+                  padding: '0.58rem',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                📂 {isRtl ? 'استعادة الخزنة (Restore)' : 'Restore Backup'}
+              </button>
+            </div>
           </div>
 
           {/* Privacy & Security Suite: Incognito Mode + 4-Digit App PIN Lock */}
@@ -7721,6 +8435,12 @@ export default function MobileApkApp() {
                             e.currentTarget.currentTime = loopPointA;
                             return;
                           }
+                          if (timedCommentsEnabled && timedComments.length > 0) {
+                            const hit = timedComments.find((tc) => Math.abs(cur - Number(tc.sec || 0)) <= 2);
+                            setActiveDanmakuComment(hit || null);
+                          } else if (activeDanmakuComment) {
+                            setActiveDanmakuComment(null);
+                          }
                           if (cur > 5 && cur % 3 === 0) {
                             localStorage.setItem(`bx_ep_sec_${activeEpisode.docId}`, String(cur));
                           }
@@ -7806,6 +8526,38 @@ export default function MobileApkApp() {
                         }}
                       >
                         ⚡ 2.0x {isRtl ? 'سرعة مضاعفة' : 'Fast Forward'}
+                      </div>
+                    )}
+                    {/* Timed Scene Comment (Danmaku) Floating Banner */}
+                    {timedCommentsEnabled && activeDanmakuComment && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '18%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          maxWidth: '88%',
+                          background: 'rgba(0,0,0,0.82)',
+                          border: '1px solid rgba(255,255,255,0.28)',
+                          padding: '0.35rem 0.85rem',
+                          borderRadius: '99px',
+                          fontWeight: 900,
+                          fontSize: subStyleMode === 'yellow_xl' ? '0.88rem' : '0.78rem',
+                          color:
+                            subStyleMode === 'yellow_xl'
+                              ? '#fde047'
+                              : subStyleMode === 'red_bx'
+                              ? '#ef4444'
+                              : '#ffffff',
+                          textShadow: '0 2px 6px #000000',
+                          zIndex: 28,
+                          pointerEvents: 'none',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        💬 {activeDanmakuComment.author}: {activeDanmakuComment.text}
                       </div>
                     )}
                     {skipRipple && (
@@ -8067,6 +8819,69 @@ export default function MobileApkApp() {
                       </button>
                       <button
                         type="button"
+                        onClick={handleCycleSubtitleStyle}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔤 {subStyleMode === 'yellow_xl' ? 'أصفر XL' : subStyleMode === 'red_bx' ? 'أحمر BX' : 'أبيض LG'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !bgAudioMode;
+                          setBgAudioMode(next);
+                          showToast(
+                            next
+                              ? isRtl
+                                ? '🎧 تم تفعيل تشغيل الصوت في الخلفية وقفل الشاشة'
+                                : '🎧 Background Audio Mode ON'
+                              : isRtl
+                              ? '🎧 تم إيقاف الصوت في الخلفية'
+                              : '🎧 Background Audio OFF'
+                          );
+                        }}
+                        style={{
+                          padding: '0.28rem 0.58rem',
+                          borderRadius: '8px',
+                          background: bgAudioMode ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: bgAudioMode ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🎧 {isRtl ? 'صوت بالخلفية' : 'BG Audio'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWatchPartyModalOpen((v) => !v)}
+                        style={{
+                          padding: '0.28rem 0.62rem',
+                          borderRadius: '8px',
+                          background: watchPartyRoom ? '#ffffff' : 'rgba(255,255,255,0.14)',
+                          border: '1px solid rgba(255,255,255,0.28)',
+                          color: watchPartyRoom ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🍿 {watchPartyRoom ? watchPartyRoom.roomCode : isRtl ? 'مشاهدة جماعية' : 'Watch Party'}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           try {
                             if (window.BlackXNativeAuth?.enterPipMode) {
@@ -8148,6 +8963,222 @@ export default function MobileApkApp() {
                       );
                     })}
                   </div>
+
+                  {/* Timed Scene Comment Input Bar (التعليقات الزمنية التفاعلية على مشاهد الحلقة) */}
+                  <form
+                    onSubmit={handlePostTimedComment}
+                    style={{ display: 'flex', gap: '0.4rem', marginTop: '0.55rem', alignItems: 'center' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setTimedCommentsEnabled((v) => !v)}
+                      style={{
+                        padding: '0.45rem 0.6rem',
+                        borderRadius: '9px',
+                        background: timedCommentsEnabled ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                        color: timedCommentsEnabled ? '#000000' : '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        fontSize: '0.68rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💬 {timedCommentsEnabled ? 'ON' : 'OFF'}
+                    </button>
+                    <input
+                      type="text"
+                      value={newTimedCommentText}
+                      onChange={(e) => setNewTimedCommentText(e.target.value)}
+                      placeholder={
+                        isRtl
+                          ? 'اترك تعليقاً يظهر في هذه الثانية من المشهد (+15 XP)...'
+                          : 'Add a timed comment at this second (+15 XP)...'
+                      }
+                      style={{
+                        flex: 1,
+                        padding: '0.45rem 0.7rem',
+                        borderRadius: '9px',
+                        background: '#08080c',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        color: '#ffffff',
+                        fontSize: '0.73rem'
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      style={{
+                        padding: '0.45rem 0.75rem',
+                        borderRadius: '9px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '0.72rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? 'تثبيت' : 'Post'}
+                    </button>
+                  </form>
+
+                  {/* Live Cloud Watch Party Room Panel (غرفة المشاهدة الجماعية السحابية) */}
+                  {(watchPartyModalOpen || watchPartyRoom) && (
+                    <div
+                      style={{
+                        marginTop: '0.65rem',
+                        padding: '0.8rem',
+                        borderRadius: '14px',
+                        background: '#09090d',
+                        border: '1.5px solid #ffffff'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <div style={{ fontWeight: 900, fontSize: '0.8rem' }}>
+                          🍿{' '}
+                          {watchPartyRoom
+                            ? isRtl
+                              ? `غرفة المشاهدة الجماعية (${watchPartyRoom.roomCode})`
+                              : `Watch Party (${watchPartyRoom.roomCode})`
+                            : isRtl
+                            ? 'غرفة المشاهدة الجماعية السحابية'
+                            : 'Live Cloud Watch Party'}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (watchPartyRoom) {
+                              setWatchPartyRoom(null);
+                              showToast(isRtl ? 'غادرت غرفة المشاهدة الجماعية' : 'Left Watch Party');
+                            }
+                            setWatchPartyModalOpen(false);
+                          }}
+                          style={{
+                            background: 'rgba(255,255,255,0.12)',
+                            border: 'none',
+                            color: '#fff',
+                            borderRadius: '6px',
+                            padding: '0.2rem 0.55rem',
+                            fontSize: '0.7rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {watchPartyRoom ? (isRtl ? 'مغادرة ✕' : 'Leave ✕') : '✕'}
+                        </button>
+                      </div>
+
+                      {!watchPartyRoom ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                          <button
+                            type="button"
+                            onClick={handleCreateWatchParty}
+                            style={{
+                              width: '100%',
+                              padding: '0.6rem',
+                              borderRadius: '10px',
+                              background: '#ffffff',
+                              color: '#000000',
+                              border: 'none',
+                              fontWeight: 900,
+                              fontSize: '0.76rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🍿 {isRtl ? 'إنشاء غرفة جديدة ومشاركة الكود مع أصدقائك' : 'Create Watch Party Room'}
+                          </button>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <input
+                              type="text"
+                              value={watchPartyJoinInput}
+                              onChange={(e) => setWatchPartyJoinInput(e.target.value)}
+                              placeholder={isRtl ? 'أو أدخل كود غرفة صديقك (مثال: BX-4821)...' : 'Enter friend room code (BX-XXXX)...'}
+                              style={{
+                                flex: 1,
+                                padding: '0.5rem 0.7rem',
+                                borderRadius: '9px',
+                                background: '#000',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                color: '#fff',
+                                fontSize: '0.74rem'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleJoinWatchParty}
+                              style={{
+                                padding: '0.5rem 0.85rem',
+                                borderRadius: '9px',
+                                background: 'rgba(255,255,255,0.15)',
+                                color: '#fff',
+                                border: '1px solid rgba(255,255,255,0.28)',
+                                fontWeight: 900,
+                                fontSize: '0.74rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {isRtl ? 'انضمام' : 'Join'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div
+                            style={{
+                              maxHeight: '110px',
+                              overflowY: 'auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.3rem',
+                              marginBottom: '0.45rem',
+                              padding: '0.4rem',
+                              borderRadius: '8px',
+                              background: '#040406'
+                            }}
+                          >
+                            {(watchPartyRoom.chat || []).map((m) => (
+                              <div key={m.id} style={{ fontSize: '0.72rem' }}>
+                                <strong style={{ color: '#ffffff' }}>{m.author}: </strong>
+                                <span style={{ color: 'rgba(255,255,255,0.82)' }}>{m.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <form onSubmit={handleSendWatchPartyChat} style={{ display: 'flex', gap: '0.4rem' }}>
+                            <input
+                              type="text"
+                              value={watchPartyChatInput}
+                              onChange={(e) => setWatchPartyChatInput(e.target.value)}
+                              placeholder={isRtl ? 'اكتب رسالة لأصدقائك في الغرفة...' : 'Message party...'}
+                              style={{
+                                flex: 1,
+                                padding: '0.45rem 0.65rem',
+                                borderRadius: '8px',
+                                background: '#000',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                color: '#fff',
+                                fontSize: '0.73rem'
+                              }}
+                            />
+                            <button
+                              type="submit"
+                              style={{
+                                padding: '0.45rem 0.75rem',
+                                borderRadius: '8px',
+                                background: '#ffffff',
+                                color: '#000000',
+                                border: 'none',
+                                fontWeight: 900,
+                                fontSize: '0.72rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {isRtl ? 'إرسال' : 'Send'}
+                            </button>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
