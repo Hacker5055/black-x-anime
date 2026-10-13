@@ -16,6 +16,8 @@ import Rankings from './pages/Rankings.jsx';
 import Community from './pages/Community.jsx';
 import AnimeDiscover from './components/AnimeDiscover.jsx';
 import MobileApkApp from './mobile/MobileApkApp.jsx';
+import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
+import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 
 function ScrollToTop() {
@@ -64,6 +66,7 @@ function Footer() {
 
 export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
+  const { user } = useAuth();
   const openAuth = (mode = 'login') => setAuthModal(mode);
   const isApkRuntime =
     isNativeApk() ||
@@ -117,6 +120,7 @@ export default function App() {
         </main>
         <Footer />
       </div>
+      <GlobalVipEnforcementGate user={user} onOpenAuth={openAuth} />
       <Toasts />
       {authModal && <AuthModal initialMode={authModal} onClose={() => setAuthModal(null)} />}
     </>

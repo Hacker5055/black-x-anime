@@ -141,14 +141,14 @@ const DEFAULT_PREDICTIONS = [
 ];
 
 const SERVER_LABELS = {
-  PD_DEV: { nameAr: '👑 PixelDrain Ultra', nameEn: '👑 PixelDrain Ultra', badge: 'أسرع سيرفر • مضاد للحجب', fast: true },
-  PD_NET: { nameAr: '⚡ PixelDrain Mirror', nameEn: '⚡ PixelDrain Mirror', badge: 'سيرفر بديل فائق السرعة', fast: true },
-  SF: { nameAr: '🔥 FireStream CDN', nameEn: '🔥 FireStream CDN', badge: 'بث سحابي مباشر MP4', fast: true },
-  AA: { nameAr: '⚡ BLACK X Cloud', nameEn: '⚡ BLACK X Cloud', badge: 'سيرفر عالمي مباشر', fast: true },
-  PD: { nameAr: '🌐 PixelDrain Global', nameEn: '🌐 PixelDrain Global', badge: 'مباشر • MP4', fast: true },
-  MF2: { nameAr: '🚀 MediaFire Pro', nameEn: '🚀 MediaFire Pro', badge: 'مباشر • MP4', fast: true },
-  MF: { nameAr: '🚀 MediaFire Cloud', nameEn: '🚀 MediaFire Cloud', badge: 'مباشر • MP4', fast: true },
-  ST: { nameAr: '🎬 StreamTape HD', nameEn: '🎬 StreamTape HD', badge: 'احتياطي HD', fast: false }
+  PD_DEV: { nameAr: '👑 BLACK X 1 Ultra', nameEn: '👑 BLACK X 1 Ultra', badge: 'أسرع سيرفر • مضاد للحجب', fast: true },
+  PD_NET: { nameAr: '⚡ BLACK X 2 Mirror', nameEn: '⚡ BLACK X 2 Mirror', badge: 'سيرفر بديل فائق السرعة', fast: true },
+  SF: { nameAr: '🔥 BLACK X 3 Turbo', nameEn: '🔥 BLACK X 3 Turbo', badge: 'بث سحابي مباشر MP4', fast: true },
+  AA: { nameAr: '💎 BLACK X 4 Cloud', nameEn: '💎 BLACK X 4 Cloud', badge: 'سيرفر عالمي مباشر', fast: true },
+  PD: { nameAr: '🌐 BLACK X 5 Direct', nameEn: '🌐 BLACK X 5 Direct', badge: 'مباشر • MP4', fast: true },
+  MF2: { nameAr: '🚀 BLACK X 6 Pro', nameEn: '🚀 BLACK X 6 Pro', badge: 'مباشر • MP4', fast: true },
+  MF: { nameAr: '🚀 BLACK X 7 Plus', nameEn: '🚀 BLACK X 7 Plus', badge: 'مباشر • MP4', fast: true },
+  ST: { nameAr: '🎬 BLACK X 8 HD', nameEn: '🎬 BLACK X 8 HD', badge: 'احتياطي HD', fast: false }
 };
 
 const SERVER_PRIORITY = { PD_DEV: 1, SF: 2, PD_NET: 3, AA: 4, MF2: 5, MF: 6, PD: 7, ST: 8 };
@@ -527,17 +527,19 @@ export default function MobileApkApp() {
   const [resolvingVideo, setResolvingVideo] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [autoNextEp, setAutoNextEp] = useState(true);
+  const [videoFullscreen, setVideoFullscreen] = useState(false);
+  const [videoFitMode, setVideoFitMode] = useState('cover'); // 'cover' (full 20:9 screen) | 'contain' (16:9) | 'fill'
   const [skipRipple, setSkipRipple] = useState(null); // 'left' | 'right'
   const videoRef = useRef(null);
 
-  // Manga States (30,000+ Arabic Manga & Manhwa from Manga Peak Engines + MangaDex)
+  // Manga States (30,000+ Arabic Manga & Manhwa from BLACK X Engines)
   const [mangaList, setMangaList] = useState([]);
   const [mangaSource, setMangaSource] = useState('all'); // 'all' | 'mello' | 'azora' | 'swat' | 'dilar' | 'mangadex'
   const [mangaFilterType, setMangaFilterType] = useState('ALL'); // 'ALL' | 'MANHWA' | 'MANGA'
   const [mangaPage, setMangaPage] = useState(1);
   const [mangaQuery, setMangaQuery] = useState('');
   const [mangaLoading, setMangaLoading] = useState(false);
-  const [loadingMoreManga, setLoadingMoreManga] = useState(false);
+  const [loadingMoreManga, setLoadingMoreManga, ] = useState(false);
   const [selectedManga, setSelectedManga] = useState(null);
   const [mangaChapters, setMangaChapters] = useState([]);
   const [mangaChaptersLoading, setMangaChaptersLoading] = useState(false);
@@ -548,7 +550,8 @@ export default function MobileApkApp() {
   const [currentPageIdx, setCurrentPageIdx] = useState(0);
   const [readerZoom, setReaderZoom] = useState(100);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0); // 0 | 1 | 2 | 3
-  const [readerFullscreen, setReaderFullscreen] = useState(false);
+  const [readerFullscreen, setReaderFullscreen] = useState(true);
+  const [readerHudVisible, setReaderHudVisible] = useState(true);
   const [mangaHistory, setMangaHistory] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('bx_mob_manga_history') || '[]');
@@ -560,7 +563,19 @@ export default function MobileApkApp() {
   // Shared User Auth, Favorites, Watchlist, Watch History, Predictions & Community States
   const [user, setUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('bx_mob_user') || 'null');
+      const saved = JSON.parse(localStorage.getItem('bx_mob_user') || 'null');
+      if (saved) {
+        const isDevAcc =
+          saved.role === 'developer' ||
+          (saved.email || '').toLowerCase() === 'mz0970mmz@gmail.com' ||
+          (saved.username || '').toLowerCase() === 'developer' ||
+          (saved.username || '').toLowerCase() === 'mz0970mmz';
+        if (!isDevAcc && !localStorage.getItem('bx_mob_redeemed_vip_code')) {
+          saved.vipTier = 'free';
+          saved.vipStatus = 'Free Tier';
+        }
+      }
+      return saved;
     } catch {
       return null;
     }
@@ -619,12 +634,409 @@ export default function MobileApkApp() {
   const oauthSessionIdRef = useRef('');
   const [toastMsg, setToastMsg] = useState('');
 
+  // Global Cloud-Synced VIP Enforcement & Developer Master Switch States
+  const [globalVipEnforced, setGlobalVipEnforced] = useState(() => {
+    const cached = localStorage.getItem('bx_mob_global_vip_enforced');
+    return cached === null ? true : cached === 'true';
+  });
+  const [cloudVipCodes, setCloudVipCodes] = useState([]);
+  const [vipBillingCycle, setVipBillingCycle] = useState('monthly'); // 'monthly' | 'quarterly' | 'yearly'
+  const [vipRedeemCode, setVipRedeemCode] = useState('');
+  const [vipRedeemBusy, setVipRedeemBusy] = useState(false);
+  const [vipGateShowLogin, setVipGateShowLogin] = useState(false);
+  const [devToggleBusy, setDevToggleBusy] = useState(false);
+  const [devGenTier, setDevGenTier] = useState('vip_monarch');
+  const [devGenDays, setDevGenDays] = useState(30);
+  const [devGenUses, setDevGenUses] = useState(1);
+  const [devGenBusy, setDevGenBusy] = useState(false);
+  const [lastGenCode, setLastGenCode] = useState('');
+
+  const isDeveloper = useMemo(() => {
+    if (!user) return false;
+    const em = String(user.email || '').toLowerCase().trim();
+    const un = String(user.username || '').toLowerCase().trim();
+    return user.role === 'developer' || em === 'mz0970mmz@gmail.com' || un === 'developer' || un === 'mz0970mmz';
+  }, [user]);
+
+  const userVipTier = useMemo(() => {
+    if (isDeveloper) return 'vip_monarch';
+    const redeemedLocal = localStorage.getItem('bx_mob_redeemed_vip_tier');
+    if (redeemedLocal === 'vip_monarch' || user?.vipTier === 'vip_monarch') return 'vip_monarch';
+    if (redeemedLocal === 'vip_basic' || user?.vipTier === 'vip_basic') return 'vip_basic';
+    return 'free';
+  }, [isDeveloper, user]);
+
   const showToast = useCallback((msg) => {
     setToastMsg(msg);
     setTimeout(() => {
       setToastMsg((prev) => (prev === msg ? '' : prev));
     }, 3200);
   }, []);
+
+  // Sync Native Immersive Fullscreen & Landscape Orientation whenever videoFullscreen or activeMangaChapter changes
+  useEffect(() => {
+    try {
+      if (videoFullscreen && activeEpisode) {
+        window.BlackXNativeAuth?.setFullscreen?.(true, true);
+      } else if (activeMangaChapter) {
+        window.BlackXNativeAuth?.setFullscreen?.(true, false);
+      } else {
+        window.BlackXNativeAuth?.setFullscreen?.(false, false);
+      }
+    } catch (_) {}
+  }, [videoFullscreen, activeEpisode, activeMangaChapter]);
+
+  // Complete Phone Back Button & Gesture Navigation Engine (Never exits the app unexpectedly!)
+  const navRef = useRef({});
+  const lastBackPressRef = useRef(0);
+  useEffect(() => {
+    navRef.current = {
+      videoFullscreen,
+      heroTrailerOpen,
+      activeEpisode,
+      selectedAnime,
+      activeMangaChapter,
+      selectedManga,
+      editingProfile,
+      vipGateShowLogin,
+      activeTab
+    };
+  }, [
+    videoFullscreen,
+    heroTrailerOpen,
+    activeEpisode,
+    selectedAnime,
+    activeMangaChapter,
+    selectedManga,
+    editingProfile,
+    vipGateShowLogin,
+    activeTab
+  ]);
+
+  // Push a browser history entry whenever the user navigates deeper so WebView gesture back also triggers popstate
+  useEffect(() => {
+    if (
+      videoFullscreen ||
+      heroTrailerOpen ||
+      activeEpisode ||
+      selectedAnime ||
+      activeMangaChapter ||
+      selectedManga ||
+      editingProfile ||
+      activeTab !== 'home'
+    ) {
+      try {
+        window.history.pushState({ bxDepth: Date.now() }, '');
+      } catch (_) {}
+    }
+  }, [
+    videoFullscreen,
+    heroTrailerOpen,
+    activeEpisode,
+    selectedAnime,
+    activeMangaChapter,
+    selectedManga,
+    editingProfile,
+    activeTab
+  ]);
+
+  useEffect(() => {
+    const handleStepBack = () => {
+      const s = navRef.current;
+      if (s.videoFullscreen) {
+        setVideoFullscreen(false);
+        return true;
+      }
+      if (s.heroTrailerOpen) {
+        setHeroTrailerOpen(false);
+        return true;
+      }
+      if (s.vipGateShowLogin) {
+        setVipGateShowLogin(false);
+        return true;
+      }
+      if (s.activeEpisode) {
+        setActiveEpisode(null);
+        setPlayingVideoUrl('');
+        return true;
+      }
+      if (s.selectedAnime) {
+        setSelectedAnime(null);
+        return true;
+      }
+      if (s.activeMangaChapter) {
+        setAutoScrollSpeed(0);
+        setActiveMangaChapter(null);
+        return true;
+      }
+      if (s.selectedManga) {
+        setSelectedManga(null);
+        return true;
+      }
+      if (s.editingProfile) {
+        setEditingProfile(false);
+        return true;
+      }
+      if (s.activeTab && s.activeTab !== 'home') {
+        setActiveTab('home');
+        return true;
+      }
+      // User is already on Home root: require double back press within 2.2s to exit app
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2200) {
+        try {
+          window.BlackXNativeAuth?.exitApp?.();
+        } catch (_) {}
+      } else {
+        lastBackPressRef.current = now;
+        showToast(lang === 'ar' ? 'اضغط زر الرجوع مرة أخرى للخروج من تطبيق BLACK X' : 'Press back again to exit BLACK X');
+      }
+      return true;
+    };
+
+    window.__bxHardwareBack = handleStepBack;
+    const onPopState = () => {
+      handleStepBack();
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [showToast, lang]);
+
+  // Real-Time Polling of Global Cloud VIP System (`settings/global_vip_system`) across all connected APK & Website instances
+  const fetchGlobalVipState = useCallback(async () => {
+    try {
+      const res = await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`);
+      if (!res.ok) return;
+      const doc = await res.json();
+      const raw = doc?.fields?.json?.stringValue;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.enforced === 'boolean') {
+          setGlobalVipEnforced(parsed.enforced);
+          localStorage.setItem('bx_mob_global_vip_enforced', String(parsed.enforced));
+        }
+        if (Array.isArray(parsed.codes)) {
+          setCloudVipCodes(parsed.codes);
+        }
+      } else if (typeof doc?.fields?.enforced?.booleanValue === 'boolean') {
+        const enf = doc.fields.enforced.booleanValue;
+        setGlobalVipEnforced(enf);
+        localStorage.setItem('bx_mob_global_vip_enforced', String(enf));
+      }
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    fetchGlobalVipState();
+    const timer = setInterval(fetchGlobalVipState, 5000);
+    return () => clearInterval(timer);
+  }, [fetchGlobalVipState]);
+
+  // Developer Only: Toggle Global VIP Enforcement for ALL users across all APK & Website instances
+  const handleDevToggleGlobalVip = useCallback(async () => {
+    if (!isDeveloper) return;
+    setDevToggleBusy(true);
+    const nextEnforced = !globalVipEnforced;
+    try {
+      const payload = {
+        enforced: nextEnforced,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.email || 'developer',
+        codes: cloudVipCodes
+      };
+      await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            json: { stringValue: JSON.stringify(payload) },
+            enforced: { booleanValue: nextEnforced },
+            updatedAt: { stringValue: payload.updatedAt }
+          }
+        })
+      });
+      setGlobalVipEnforced(nextEnforced);
+      localStorage.setItem('bx_mob_global_vip_enforced', String(nextEnforced));
+      showToast(
+        nextEnforced
+          ? '🔴 تم تنشيط وفرض خطط الـ VIP على جميع المستخدمين في كل نسخ التطبيق والموقع فوراً!'
+          : '🟢 تم إلغاء فرض الـ VIP وفتح التطبيق مجاناً لجميع المستخدمين في كل النسخ فوراً!'
+      );
+    } catch (_) {
+      showToast('تعذر الاتصال بالسحابة لتحديث حالة الـ VIP');
+    } finally {
+      setDevToggleBusy(false);
+    }
+  }, [isDeveloper, globalVipEnforced, user, cloudVipCodes, showToast]);
+
+  // Developer Only: Generate a Cloud VIP Code directly from the Developer Account on Mobile
+  const handleDevGenerateVipCode = useCallback(async () => {
+    if (!isDeveloper) return;
+    setDevGenBusy(true);
+    try {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let p1 = '';
+      let p2 = '';
+      for (let i = 0; i < 4; i++) {
+        p1 += chars[Math.floor(Math.random() * chars.length)];
+        p2 += chars[Math.floor(Math.random() * chars.length)];
+      }
+      const prefix = devGenTier === 'vip_monarch' ? 'BX-MONARCH' : 'BX-BASIC';
+      const newCodeStr = `${prefix}-${p1}-${p2}`;
+      const priceEgp =
+        devGenTier === 'vip_monarch'
+          ? devGenDays >= 365
+            ? 1499
+            : devGenDays >= 90
+            ? 499
+            : 199
+          : devGenDays >= 365
+          ? 799
+          : devGenDays >= 90
+          ? 249
+          : 99;
+      const newCodeObj = {
+        id: Date.now(),
+        code: newCodeStr,
+        tier: devGenTier,
+        durationDays: Number(devGenDays),
+        maxUses: Number(devGenUses),
+        usedCount: 0,
+        priceEgp,
+        isActive: 1,
+        redeemedBy: [],
+        createdAt: new Date().toISOString()
+      };
+      const updatedCodes = [newCodeObj, ...cloudVipCodes].slice(0, 150);
+      const payload = {
+        enforced: globalVipEnforced,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.email || 'developer',
+        codes: updatedCodes
+      };
+      await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            json: { stringValue: JSON.stringify(payload) },
+            enforced: { booleanValue: globalVipEnforced },
+            updatedAt: { stringValue: payload.updatedAt }
+          }
+        })
+      });
+      setCloudVipCodes(updatedCodes);
+      setLastGenCode(newCodeStr);
+      showToast(`🔑 تم توليد الكود السحابي: ${newCodeStr}`);
+    } catch (_) {
+      showToast('تعذر توليد الكود السحابي');
+    } finally {
+      setDevGenBusy(false);
+    }
+  }, [isDeveloper, devGenTier, devGenDays, devGenUses, cloudVipCodes, globalVipEnforced, user, showToast]);
+
+  // Redeem a VIP Subscription Code (Unlocks VIP Basic / VIP Monarch across App & Website)
+  const handleRedeemVipCode = useCallback(
+    async (e) => {
+      if (e?.preventDefault) e.preventDefault();
+      const clean = String(vipRedeemCode || '').trim().toUpperCase();
+      if (!clean) {
+        showToast(lang === 'ar' ? 'يرجى إدخال كود اشتراك VIP أولاً' : 'Please enter a VIP code');
+        return;
+      }
+      setVipRedeemBusy(true);
+      try {
+        const res = await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`);
+        let codesList = [...cloudVipCodes];
+        let currentEnforced = globalVipEnforced;
+        if (res.ok) {
+          const doc = await res.json();
+          const raw = doc?.fields?.json?.stringValue;
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.codes)) codesList = parsed.codes;
+            if (typeof parsed.enforced === 'boolean') currentEnforced = parsed.enforced;
+          }
+        }
+        const matchIdx = codesList.findIndex((c) => String(c.code || '').toUpperCase() === clean);
+        if (matchIdx === -1) {
+          showToast(lang === 'ar' ? '❌ كود الاشتراك غير صحيح أو غير مسجل' : '❌ Invalid VIP code');
+          setVipRedeemBusy(false);
+          return;
+        }
+        const codeObj = codesList[matchIdx];
+        if ((codeObj.usedCount || 0) >= (codeObj.maxUses || 1)) {
+          showToast(lang === 'ar' ? '⚠️ هذا الكود وصل للحد الأقصى من الاستخدام' : '⚠️ Code max uses reached');
+          setVipRedeemBusy(false);
+          return;
+        }
+        const newTier = String(codeObj.tier || '').includes('monarch') ? 'vip_monarch' : 'vip_basic';
+        const newStatus = newTier === 'vip_monarch' ? 'VIP Monarch' : 'VIP Basic';
+        const days = Number(codeObj.durationDays) || 30;
+        const expiresAt = new Date(Date.now() + days * 86400 * 1000).toISOString();
+
+        // Update code usage in Cloud Firestore
+        const updatedCode = {
+          ...codeObj,
+          usedCount: (codeObj.usedCount || 0) + 1,
+          redeemedBy: [
+            ...(Array.isArray(codeObj.redeemedBy) ? codeObj.redeemedBy : []),
+            { username: user?.username || 'mobile_user', at: new Date().toISOString() }
+          ]
+        };
+        const updatedCodes = [...codesList];
+        updatedCodes[matchIdx] = updatedCode;
+        setCloudVipCodes(updatedCodes);
+
+        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: {
+                stringValue: JSON.stringify({
+                  enforced: currentEnforced,
+                  updatedAt: new Date().toISOString(),
+                  codes: updatedCodes
+                })
+              },
+              enforced: { booleanValue: currentEnforced },
+              updatedAt: { stringValue: new Date().toISOString() }
+            }
+          })
+        }).catch(() => {});
+
+        localStorage.setItem('bx_mob_redeemed_vip_code', clean);
+        localStorage.setItem('bx_mob_redeemed_vip_tier', newTier);
+        localStorage.setItem('blackx.vipTier', newTier);
+
+        if (user) {
+          const updatedUser = {
+            ...user,
+            vipTier: newTier,
+            vipStatus: newStatus,
+            vipExpiresAt: expiresAt
+          };
+          setUser(updatedUser);
+          localStorage.setItem('bx_mob_user', JSON.stringify(updatedUser));
+        }
+
+        setVipRedeemCode('');
+        showToast(
+          lang === 'ar'
+            ? `🎉 مبروك! تم تفعيل باقة ${newStatus} بنجاح وفتح جميع مزايا التطبيق!`
+            : `🎉 ${newStatus} activated successfully!`
+        );
+      } catch (_) {
+        showToast(lang === 'ar' ? 'حدث خطأ أثناء التحقق من الكود' : 'Error verifying code');
+      } finally {
+        setVipRedeemBusy(false);
+      }
+    },
+    [vipRedeemCode, cloudVipCodes, globalVipEnforced, user, showToast, lang]
+  );
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
   useEffect(() => {
@@ -782,7 +1194,7 @@ export default function MobileApkApp() {
     return () => clearInterval(id);
   }, [activeMangaChapter, autoScrollSpeed]);
 
-  // Fetch Manga & Manhwa from Manga Peak Engines (MangaMello Plus 14,331 + Dilar 9,164 + Azorafly 2,453 + Swat 1,669 + Algolia 2,965 + MangaDex)
+  // Fetch Manga & Manhwa from BLACK X Engines (30,000+ Arabic Manga & Manhwa)
   const fetchMangaPeakPage = useCallback(async (srcMode, qStr, pageNum = 1) => {
     const q = String(qStr || '').trim();
     const fetchMello = async () => {
@@ -794,12 +1206,12 @@ export default function MobileApkApp() {
         return (json?.data || []).map((item) => ({
           objectID: `mm:${item.id}`,
           source: 'mello',
-          sourceLabel: 'Mello Plus',
+          sourceLabel: 'BLACK X 1',
           sourceId: String(item.id),
           name: item.title || `Manga #${item.id}`,
           poster_uri: rewriteLegacyMangaImageUrl(item.img),
           type: Number(item.type_id) === 1 ? 'مانجا' : 'مانهوا',
-          story_ar: item.summary || 'مانجا ومانهوا مترجمة للعربية بجودة عالية عبر سيرفر Mello Plus.',
+          story_ar: item.summary || 'مانجا ومانهوا مترجمة للعربية بجودة عالية عبر سيرفر BLACK X 1.',
           rate: item.rate ? Number(item.rate).toFixed(1) : '9.2'
         }));
       } catch (_) {
@@ -814,13 +1226,13 @@ export default function MobileApkApp() {
         return (json?.posts || []).map((post) => ({
           objectID: `az:${post.slug}`,
           source: 'azora',
-          sourceLabel: 'Azora Moon',
+          sourceLabel: 'BLACK X 3',
           slug: post.slug,
           postId: post.id,
           name: post.postTitle || post.slug,
           poster_uri: post.featuredImage || '',
           type: post.seriesType === 'MANGA' ? 'مانجا' : 'مانهوا',
-          story_ar: (post.postContent || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة فائقة عبر سيرفر Azora.',
+          story_ar: (post.postContent || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة فائقة عبر سيرفر BLACK X 3.',
           rate: post.averageRating ? Number(post.averageRating).toFixed(1) : '9.4'
         }));
       } catch (_) {
@@ -837,13 +1249,13 @@ export default function MobileApkApp() {
         return (json?.results || []).map((item) => ({
           objectID: `sw:${item.id}`,
           source: 'swat',
-          sourceLabel: 'Manga Swat',
+          sourceLabel: 'BLACK X 4',
           sourceId: String(item.id),
           slug: item.slug || String(item.id),
           name: item.title || `Manhwa #${item.id}`,
           poster_uri: item.poster?.medium || item.poster?.thumbnail || '',
           type: 'مانهوا',
-          story_ar: (item.story || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة عالية عبر سيرفر Manga Swat.',
+          story_ar: (item.story || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة عالية عبر سيرفر BLACK X 4.',
           rate: item.rating ? Number(item.rating).toFixed(1) : '9.3'
         }));
       } catch (_) {
@@ -869,12 +1281,12 @@ export default function MobileApkApp() {
             return rows.map((row) => ({
               objectID: `dt:${row.id}`,
               source: 'dilar',
-              sourceLabel: 'Dilar Tube',
+              sourceLabel: 'BLACK X 2',
               sourceId: String(row.id),
               name: row.title || row.english || `Manga #${row.id}`,
               poster_uri: row.cover ? `https://dilar.tube/uploads/manga/cover/${row.id}/large_${row.cover}.webp` : '',
               type: 'مانهوا / مانجا',
-              story_ar: row.summary || 'عمل مترجم للعربية من مكتبة Dilar Tube الشاملة.',
+              story_ar: row.summary || 'عمل مترجم للعربية من مكتبة BLACK X 2 الشاملة.',
               rate: '9.2'
             }));
           }
@@ -885,12 +1297,12 @@ export default function MobileApkApp() {
         return (json?.series || []).map((item) => ({
           objectID: `dt:${item.id}`,
           source: 'dilar',
-          sourceLabel: 'Dilar Tube',
+          sourceLabel: 'BLACK X 2',
           sourceId: String(item.id),
           name: item.title || `Series #${item.id}`,
           poster_uri: item.cover ? `https://dilar.tube/uploads/manga/cover/${item.id}/large_${item.cover}.webp` : '',
           type: 'مانهوا / مانجا',
-          story_ar: item.summary || 'عمل مترجم للعربية من مكتبة Dilar Tube الشاملة (9,164 عمل).',
+          story_ar: item.summary || 'عمل مترجم للعربية من مكتبة BLACK X 2 الشاملة (9,164 عمل).',
           rate: item.rating ? Number(item.rating).toFixed(1) : '9.2'
         }));
       } catch (_) {
@@ -909,7 +1321,7 @@ export default function MobileApkApp() {
           ...m,
           objectID: `awm:${m.objectID}`,
           source: 'algolia',
-          sourceLabel: 'BLACK X Cloud',
+          sourceLabel: 'BLACK X 5',
           poster_uri: m.poster?.large || m.poster_uri || '',
           story_ar: m.story?.ar || m.story_en || '',
           rate: '9.1'
@@ -1172,6 +1584,13 @@ export default function MobileApkApp() {
               ]
             : watchHistory;
 
+        const isDevRole = isDev || cloudUser?.role === 'developer' || baseUsername === 'developer';
+        const effectiveTier = isDevRole
+          ? 'vip_monarch'
+          : cloudUser?.vipTier === 'vip_monarch' || cloudUser?.vipTier === 'vip_basic'
+          ? cloudUser.vipTier
+          : localStorage.getItem('bx_mob_redeemed_vip_tier') || 'free';
+
         const loggedUser = {
           id: idpData.localId || cloudUser?.id || `google_${Date.now()}`,
           username: baseUsername,
@@ -1179,13 +1598,20 @@ export default function MobileApkApp() {
           displayName: idpData.displayName || idpData.fullName || cloudUser?.displayName || verifiedEmail.split('@')[0],
           photoUrl: idpData.photoUrl || cloudUser?.photoUrl || '',
           avatarColor: cloudUser?.avatarColor || '#ffffff',
-          role: isDev || cloudUser?.role === 'developer' ? 'developer' : 'user',
-          vipStatus: 'VIP Monarch',
+          role: isDevRole ? 'developer' : 'user',
+          vipTier: effectiveTier,
+          vipStatus:
+            effectiveTier === 'vip_monarch'
+              ? 'VIP Monarch'
+              : effectiveTier === 'vip_basic'
+              ? 'VIP Basic'
+              : 'Free Tier',
           isGoogleAccount: true
         };
 
         setUser(loggedUser);
         localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
+        setVipGateShowLogin(false);
         setFavorites(mergedFavs);
         localStorage.setItem('bx_mob_favorites', JSON.stringify(mergedFavs));
         setWatchHistory(mergedHist);
@@ -2022,6 +2448,17 @@ export default function MobileApkApp() {
           if (raw) {
             const cloudUser = JSON.parse(raw);
             if (!cloudUser.passSha256 || cloudUser.passSha256 === passHash) {
+              const isDevAcc =
+                cloudUser.role === 'developer' ||
+                cleanId === 'mz0970mmz@gmail.com' ||
+                cleanId === 'developer' ||
+                cleanId === 'mz0970mmz';
+              const redeemedTier = localStorage.getItem('bx_mob_redeemed_vip_tier');
+              const tier = isDevAcc
+                ? 'vip_monarch'
+                : cloudUser.vipTier === 'vip_monarch' || cloudUser.vipTier === 'vip_basic'
+                ? cloudUser.vipTier
+                : redeemedTier || 'free';
               const loggedUser = {
                 id: cloudUser.id || `u_${Date.now()}`,
                 username: cloudUser.username || cleanId.split('@')[0],
@@ -2029,12 +2466,14 @@ export default function MobileApkApp() {
                 displayName: cloudUser.displayName || cloudUser.username || cleanId,
                 photoUrl: cloudUser.photoUrl || '',
                 avatarColor: cloudUser.avatarColor || '#ffffff',
-                role: cloudUser.role || (cleanId === 'mz0970mmz@gmail.com' ? 'developer' : 'user'),
-                vipStatus: cloudUser.vipStatus || 'VIP Monarch',
+                role: isDevAcc ? 'developer' : 'user',
+                vipTier: tier,
+                vipStatus: tier === 'vip_monarch' ? 'VIP Monarch' : tier === 'vip_basic' ? 'VIP Basic' : 'Free Tier',
                 passSha256: passHash
               };
               setUser(loggedUser);
               localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
+              setVipGateShowLogin(false);
               if (Array.isArray(cloudUser.favorites) && cloudUser.favorites.length) {
                 setFavorites(cloudUser.favorites);
                 localStorage.setItem('bx_mob_favorites', JSON.stringify(cloudUser.favorites));
@@ -2058,10 +2497,35 @@ export default function MobileApkApp() {
             }
           }
         }
+        // Fallback for Developer login if developer doc was not initialized yet
+        if (cleanId === 'mz0970mmz@gmail.com' || cleanId === 'developer' || cleanId === 'mz0970mmz') {
+          const devUser = {
+            id: 'dev_master',
+            username: 'developer',
+            email: 'mz0970mmz@gmail.com',
+            displayName: 'Developer MZ 👑',
+            photoUrl: '',
+            avatarColor: '#ffffff',
+            role: 'developer',
+            vipTier: 'vip_monarch',
+            vipStatus: 'VIP Monarch',
+            passSha256: passHash
+          };
+          setUser(devUser);
+          localStorage.setItem('bx_mob_user', JSON.stringify(devUser));
+          setVipGateShowLogin(false);
+          await syncUserStateToCloud(devUser, favorites, watchHistory);
+          showToast('👑 تم تسجيل الدخول بحساب مطور المنصة الرسمي!');
+          setAuthBusy(false);
+          return;
+        }
         showToast(lang === 'ar' ? 'الحساب غير موجود، يمكنك إنشاؤه الآن!' : 'Account not found, please register!');
       } else {
         const uname = (authUsername || cleanId.split('@')[0]).toLowerCase().replace(/[^a-z0-9_.-]/g, '');
         const uemail = (authEmail || `${uname}@blackx.app`).toLowerCase();
+        const isDevAcc = uemail === 'mz0970mmz@gmail.com' || uname === 'developer' || uname === 'mz0970mmz';
+        const redeemedTier = localStorage.getItem('bx_mob_redeemed_vip_tier');
+        const tier = isDevAcc ? 'vip_monarch' : redeemedTier || 'free';
         const newUser = {
           id: `bx_${Date.now()}`,
           username: uname,
@@ -2069,12 +2533,14 @@ export default function MobileApkApp() {
           displayName: authDisplayName || uname,
           photoUrl: '',
           avatarColor: '#ffffff',
-          role: uemail === 'mz0970mmz@gmail.com' ? 'developer' : 'user',
-          vipStatus: 'VIP Monarch',
+          role: isDevAcc ? 'developer' : 'user',
+          vipTier: tier,
+          vipStatus: tier === 'vip_monarch' ? 'VIP Monarch' : tier === 'vip_basic' ? 'VIP Basic' : 'Free Tier',
           passSha256: passHash
         };
         setUser(newUser);
         localStorage.setItem('bx_mob_user', JSON.stringify(newUser));
+        setVipGateShowLogin(false);
         await syncUserStateToCloud(newUser, favorites, watchHistory);
         showToast(lang === 'ar' ? '🎉 تم إنشاء حسابك ومزامنته مع الموقع بنجاح!' : '🎉 Account created & synced with Website!');
       }
@@ -2467,7 +2933,7 @@ export default function MobileApkApp() {
                         borderRadius: '6px'
                       }}
                     >
-                      ★ {heroAnime.rating} MAL
+                      ★ {heroAnime.rating} BLACK X
                     </span>
                     <span
                       style={{
@@ -2768,8 +3234,8 @@ export default function MobileApkApp() {
               sortKey: 'series_fav_count_desc'
             },
             {
-              titleAr: '⭐ أساطير الأنمي الأعلى تقييماً (MAL Top)',
-              titleEn: '⭐ Highest Rated on MAL',
+              titleAr: '⭐ أساطير الأنمي الأعلى تقييماً في BLACK X',
+              titleEn: '⭐ Highest Rated on BLACK X',
               items: topRankedList,
               sortKey: 'best_mal_ranked'
             },
@@ -3379,134 +3845,141 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 3: MANGA & MANHWA (30,000+ MANGA PEAK ENGINES + PRO 120Hz READER) ==================== */}
+      {/* ==================== TAB 3: MANGA & MANHWA (30,000+ BLACK X ENGINES + 100% FULLSCREEN 120Hz READER) ==================== */}
       {activeTab === 'manga' && !selectedAnime && (
-        <main style={{ padding: readerFullscreen && activeMangaChapter ? '0' : '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
+        <main style={{ padding: activeMangaChapter ? '0' : '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
           {activeMangaChapter ? (
-            <div>
-              {/* Pro Manga/Webtoon Reader Control Bar */}
-              <div
-                style={{
-                  position: 'sticky',
-                  top: readerFullscreen ? 0 : '54px',
-                  zIndex: 80,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.45rem',
-                  marginBottom: '0.65rem',
-                  padding: '0.6rem 0.75rem',
-                  borderRadius: readerFullscreen ? '0' : '13px',
-                  background: 'rgba(8, 8, 12, 0.95)',
-                  backdropFilter: 'blur(18px)',
-                  border: '1px solid rgba(255,255,255,0.16)'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAutoScrollSpeed(0);
-                      setReaderFullscreen(false);
-                      setActiveMangaChapter(null);
-                    }}
-                    style={{
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '0.35rem 0.7rem',
-                      fontWeight: 900,
-                      fontSize: '0.74rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isRtl ? '→ الفصول' : '← Chapters'}
-                  </button>
-
-                  {/* Quick Chapter Jump Dropdown */}
-                  <select
-                    value={activeMangaChapter.id}
-                    onChange={(e) => {
-                      const target = mangaChapters.find((c) => c.id === e.target.value);
-                      if (target) handleReadMangaChapter(target);
-                    }}
-                    style={{
-                      flex: 1,
-                      maxWidth: '180px',
-                      padding: '0.32rem 0.5rem',
-                      borderRadius: '8px',
-                      background: '#000',
-                      color: '#fff',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      fontWeight: 800,
-                      fontSize: '0.74rem'
-                    }}
-                  >
-                    {mangaChapters.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {isRtl ? `الفصل ${c.chapter}` : `Ch. ${c.chapter}`}
-                      </option>
-                    ))}
-                  </select>
-
-                  <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', fontWeight: 800 }}>
-                    {mangaPages.length} {isRtl ? 'صفحة' : 'p'}
-                  </span>
-                </div>
-
-                {/* Reader Tools: Webtoon/Page Mode, Zoom, Auto-Scroll, Prev/Next Chapter */}
-                <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto' }}>
-                  <button
-                    type="button"
-                    onClick={() => setReaderMode((m) => (m === 'webtoon' ? 'page' : 'webtoon'))}
-                    style={{
-                      padding: '0.3rem 0.65rem',
-                      borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.1)',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      color: '#fff',
-                      fontSize: '0.7rem',
-                      fontWeight: 900,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {readerMode === 'webtoon'
-                      ? isRtl
-                        ? '📜 وضع عمودي (Webtoon)'
-                        : '📜 Webtoon Mode'
-                      : isRtl
-                      ? '📄 وضع صفحات'
-                      : '📄 Page Mode'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : 100))}
-                    style={{
-                      padding: '0.3rem 0.65rem',
-                      borderRadius: '8px',
-                      background: readerZoom > 100 ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                      color: readerZoom > 100 ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      fontSize: '0.7rem',
-                      fontWeight: 900,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🔍 {readerZoom}%
-                  </button>
-
-                  {readerMode === 'webtoon' && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                width: '100vw',
+                height: '100vh',
+                zIndex: 9500,
+                background: '#000000',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                padding: 0,
+                margin: 0
+              }}
+            >
+              {/* Floating Auto-Hiding Pro Manga/Webtoon Reader Control Bar (Tap page once to toggle HUD) */}
+              {readerHudVisible && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 9600,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.42rem',
+                    padding: '0.65rem 0.8rem',
+                    background: 'rgba(0, 0, 0, 0.92)',
+                    backdropFilter: 'blur(20px)',
+                    borderBottom: '1px solid rgba(255,255,255,0.16)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
                     <button
                       type="button"
-                      onClick={() => setAutoScrollSpeed((s) => (s + 1) % 4)}
+                      onClick={() => {
+                        setAutoScrollSpeed(0);
+                        setActiveMangaChapter(null);
+                      }}
+                      style={{
+                        background: '#ffffff',
+                        color: '#000000',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '0.35rem 0.75rem',
+                        fontWeight: 900,
+                        fontSize: '0.74rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? '→ الفصول' : '← Chapters'}
+                    </button>
+
+                    {/* Quick Chapter Jump Dropdown */}
+                    <select
+                      value={activeMangaChapter.id}
+                      onChange={(e) => {
+                        const target = mangaChapters.find((c) => c.id === e.target.value);
+                        if (target) handleReadMangaChapter(target);
+                      }}
+                      style={{
+                        flex: 1,
+                        maxWidth: '185px',
+                        padding: '0.32rem 0.5rem',
+                        borderRadius: '8px',
+                        background: '#000',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        fontWeight: 800,
+                        fontSize: '0.74rem'
+                      }}
+                    >
+                      {mangaChapters.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {isRtl ? `الفصل ${c.chapter}` : `Ch. ${c.chapter}`}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => setReaderHudVisible(false)}
+                      style={{
+                        padding: '0.3rem 0.6rem',
+                        borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.12)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⛶ {isRtl ? 'إخفاء الشريط' : 'Hide Bar'}
+                    </button>
+                  </div>
+
+                  {/* Reader Tools: Webtoon/Page Mode, Zoom, Auto-Scroll */}
+                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReaderMode((m) => (m === 'webtoon' ? 'page' : 'webtoon'))}
                       style={{
                         padding: '0.3rem 0.65rem',
                         borderRadius: '8px',
-                        background: autoScrollSpeed > 0 ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                        color: autoScrollSpeed > 0 ? '#000000' : '#ffffff',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {readerMode === 'webtoon'
+                        ? isRtl
+                          ? '📜 وضع عمودي (Webtoon)'
+                          : '📜 Webtoon Mode'
+                        : isRtl
+                        ? '📄 وضع صفحات'
+                        : '📄 Page Mode'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : 100))}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '8px',
+                        background: readerZoom > 100 ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                        color: readerZoom > 100 ? '#000000' : '#ffffff',
                         border: '1px solid rgba(255,255,255,0.2)',
                         fontSize: '0.7rem',
                         fontWeight: 900,
@@ -3514,46 +3987,53 @@ export default function MobileApkApp() {
                         cursor: 'pointer'
                       }}
                     >
-                      ⏬ {autoScrollSpeed === 0 ? (isRtl ? 'تمرير تلقائي' : 'Auto-Scroll') : `Auto ${autoScrollSpeed}x`}
+                      🔍 {readerZoom}%
                     </button>
-                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setReaderFullscreen((v) => !v)}
-                    style={{
-                      padding: '0.3rem 0.65rem',
-                      borderRadius: '8px',
-                      background: readerFullscreen ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                      color: readerFullscreen ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      fontSize: '0.7rem',
-                      fontWeight: 900,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ⛶ {isRtl ? 'ملء الشاشة' : 'Fullscreen'}
-                  </button>
+                    {readerMode === 'webtoon' && (
+                      <button
+                        type="button"
+                        onClick={() => setAutoScrollSpeed((s) => (s + 1) % 4)}
+                        style={{
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: '8px',
+                          background: autoScrollSpeed > 0 ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          color: autoScrollSpeed > 0 ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⏬ {autoScrollSpeed === 0 ? (isRtl ? 'تمرير تلقائي' : 'Auto-Scroll') : `Auto ${autoScrollSpeed}x`}
+                      </button>
+                    )}
+
+                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800, alignSelf: 'center', whiteSpace: 'nowrap' }}>
+                      {isRtl ? '💡 اضغط على الصورة لإخفاء/إظهار الشريط' : '💡 Tap page to toggle HUD'}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {mangaPagesLoading ? (
-                <div style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? '⏳ جاري تحميل صفحات الفصل بدقة عالية...' : '⏳ Loading chapter pages...'}
+                <div style={{ textAlign: 'center', padding: '6rem 1.5rem', color: 'rgba(255,255,255,0.6)' }}>
+                  {isRtl ? '⏳ جاري تحميل صفحات الفصل بشاشة كاملة...' : '⏳ Loading fullscreen chapter pages...'}
                 </div>
               ) : readerMode === 'page' && mangaPages.length > 0 ? (
-                <div style={{ textAlign: 'center' }}>
+                <div style={{ textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ overflowX: 'auto' }}>
                     <img
                       src={mangaPages[currentPageIdx]}
                       alt={`Page ${currentPageIdx + 1}`}
                       onClick={() => {
                         if (currentPageIdx + 1 < mangaPages.length) setCurrentPageIdx((p) => p + 1);
+                        else setReaderHudVisible((v) => !v);
                       }}
                       style={{
                         width: `${readerZoom}%`,
-                        maxWidth: readerZoom === 100 ? '100%' : 'none',
+                        maxWidth: readerZoom === 100 ? '100vw' : 'none',
                         height: 'auto',
                         display: 'block',
                         margin: '0 auto',
@@ -3561,7 +4041,7 @@ export default function MobileApkApp() {
                       }}
                     />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 0.75rem' }}>
                     <button
                       type="button"
                       disabled={currentPageIdx === 0}
@@ -3600,7 +4080,10 @@ export default function MobileApkApp() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', overflowX: 'auto' }}>
+                <div
+                  onClick={() => setReaderHudVisible((v) => !v)}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 0, width: '100vw', overflowX: 'auto' }}
+                >
                   {mangaPages.map((pg, idx) => (
                     <img
                       key={idx}
@@ -3609,7 +4092,7 @@ export default function MobileApkApp() {
                       loading="lazy"
                       style={{
                         width: `${readerZoom}%`,
-                        maxWidth: readerZoom === 100 ? '100%' : 'none',
+                        maxWidth: readerZoom === 100 ? '100vw' : 'none',
                         height: 'auto',
                         display: 'block',
                         margin: '0 auto'
@@ -3621,7 +4104,7 @@ export default function MobileApkApp() {
 
               {/* Bottom Next / Previous Chapter Navigation Bar */}
               {!mangaPagesLoading && mangaChapters.length > 1 && (
-                <div style={{ display: 'flex', gap: '0.6rem', padding: '1rem 0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.6rem', padding: '1rem 0.75rem 2.5rem', background: '#000' }}>
                   {(() => {
                     const idx = mangaChapters.findIndex((c) => c.id === activeMangaChapter.id);
                     const prevCh = idx > 0 ? mangaChapters[idx - 1] : null;
@@ -3707,7 +4190,7 @@ export default function MobileApkApp() {
                 <div>
                   <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.05rem', fontWeight: 900 }}>{selectedManga.name}</h2>
                   <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginBottom: '0.4rem' }}>
-                    {selectedManga.type || 'مانهوا'} • {selectedManga.sourceLabel || 'BLACK X'} • ★ {selectedManga.rate || '9.3'}
+                    {selectedManga.type || 'مانهوا'} • {selectedManga.sourceLabel || 'BLACK X 1'} • ★ {selectedManga.rate || '9.3'}
                   </div>
                   <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45 }}>
                     {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 220)}
@@ -3767,7 +4250,7 @@ export default function MobileApkApp() {
                   type="search"
                   value={mangaQuery}
                   onChange={(e) => setMangaQuery(e.target.value)}
-                  placeholder={isRtl ? 'ابحث في +30,000 مانجا ومانهوا مترجمة...' : 'Search 30,000+ Manga & Manhwa...'}
+                  placeholder={isRtl ? 'ابحث في +30,000 مانجا ومانهوا مترجمة عبر سيرفرات BLACK X...' : 'Search 30,000+ BLACK X Manga & Manhwa...'}
                   style={{
                     flex: 1,
                     background: 'transparent',
@@ -3780,18 +4263,18 @@ export default function MobileApkApp() {
                 />
               </div>
 
-              {/* Manga Peak Multi-Engine Source Selector Tabs */}
+              {/* BLACK X Multi-Engine Source Selector Tabs (All Named BLACK X) */}
               <div
                 className="bx-mob-scroll"
                 style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.5rem', paddingBottom: '0.15rem' }}
               >
                 {[
-                  { id: 'all', ar: '🔥 الكل (+30,000)', en: '🔥 All (30,000+)' },
-                  { id: 'mello', ar: '📚 Mello Plus (14,331)', en: '📚 Mello Plus (14,331)' },
-                  { id: 'dilar', ar: '👑 Dilar (9,164)', en: '👑 Dilar (9,164)' },
-                  { id: 'azora', ar: '⚡ Azora مانهوا (2,453)', en: '⚡ Azora (2,453)' },
-                  { id: 'swat', ar: '🗡️ Swat مانهوا (1,669)', en: '🗡️ Swat (1,669)' },
-                  { id: 'mangadex', ar: '🌐 المكتبة العالمية', en: '🌐 Global Cloud' }
+                  { id: 'all', ar: '🔥 مكتبة BLACK X الشاملة (+30,000)', en: '🔥 BLACK X All (30,000+)' },
+                  { id: 'mello', ar: '⚡ سيرفر BLACK X 1 (14,331)', en: '⚡ BLACK X Server 1 (14,331)' },
+                  { id: 'dilar', ar: '👑 سيرفر BLACK X 2 (9,164)', en: '👑 BLACK X Server 2 (9,164)' },
+                  { id: 'azora', ar: '💎 سيرفر BLACK X 3 مانهوا (2,453)', en: '💎 BLACK X Server 3 (2,453)' },
+                  { id: 'swat', ar: '🗡️ سيرفر BLACK X 4 مانهوا (1,669)', en: '🗡️ BLACK X Server 4 (1,669)' },
+                  { id: 'mangadex', ar: '🌐 سيرفر BLACK X 5 العالمي', en: '🌐 BLACK X Server 5 Global' }
                 ].map((srv) => {
                   const active = mangaSource === srv.id;
                   return (
@@ -4622,6 +5105,201 @@ export default function MobileApkApp() {
                   </form>
                 )}
               </div>
+
+              {/* ==================== DEVELOPER EXCLUSIVE MASTER VIP CONTROL PANEL (حساب المطور فقط) ==================== */}
+              {isDeveloper && (
+                <div
+                  style={{
+                    marginTop: '1rem',
+                    padding: '1.1rem',
+                    borderRadius: '18px',
+                    background: 'linear-gradient(145deg, #111116 0%, #050507 100%)',
+                    border: '2px solid #ffffff',
+                    boxShadow: '0 12px 34px rgba(255,255,255,0.14)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.92rem' }}>
+                      👑 {isRtl ? 'لوحة تحكم المطور المركزية (VIP Global Control)' : 'Developer Master VIP Control'}
+                    </div>
+                    <span
+                      style={{
+                        padding: '0.2rem 0.55rem',
+                        borderRadius: '99px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.66rem',
+                        fontWeight: 900
+                      }}
+                    >
+                      DEV MASTER
+                    </span>
+                  </div>
+
+                  <p style={{ margin: '0 0 0.8rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
+                    {isRtl
+                      ? 'تحكم في فرض أو إلغاء اشتراكات الـ VIP على جميع المستخدمين في تطبيق الـ APK والموقع في نفس اللحظة عبر السحابة الموحدة:'
+                      : 'Control global VIP subscription enforcement across all APK and Website instances in real time:'}
+                  </p>
+
+                  {/* Master Global VIP Switch Button */}
+                  <div
+                    style={{
+                      padding: '0.85rem',
+                      borderRadius: '14px',
+                      background: globalVipEnforced ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
+                      border: globalVipEnforced ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.2)',
+                      marginBottom: '0.9rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 900 }}>
+                        {isRtl ? 'حالة فرض اشتراك VIP على كل النسخ:' : 'Global VIP Gate Status:'}
+                      </span>
+                      <span
+                        style={{
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '8px',
+                          background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                          color: globalVipEnforced ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900
+                        }}
+                      >
+                        {globalVipEnforced
+                          ? isRtl
+                            ? '🔒 مفعل ومفروض على الجميع'
+                            : '🔒 ENFORCED ON ALL USERS'
+                          : isRtl
+                          ? '🔓 ملغي (مجاني للجميع)'
+                          : '🔓 UNLOCKED FOR ALL'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={vipToggleBusy}
+                      onClick={() => handleDevToggleGlobalVip(!globalVipEnforced)}
+                      style={{
+                        width: '100%',
+                        padding: '0.8rem',
+                        borderRadius: '12px',
+                        border: 'none',
+                        background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.18)',
+                        color: globalVipEnforced ? '#000000' : '#ffffff',
+                        fontWeight: 900,
+                        fontSize: '0.84rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {vipToggleBusy
+                        ? isRtl
+                          ? '⏳ جاري تعميم الأمر على جميع النسخ...'
+                          : '⏳ Syncing across all instances...'
+                        : globalVipEnforced
+                        ? isRtl
+                          ? '🔓 اضغط لإلغاء فرض الـ VIP وفتح التطبيق مجاناً لكل المستخدمين'
+                          : '🔓 Disable Global VIP Enforcement (Unlock for All)'
+                        : isRtl
+                        ? '🔒 اضغط لتفعيل وفرض خطط الـ VIP على جميع المستخدمين فوراً'
+                        : '🔒 Enable Global VIP Enforcement on All Users'}
+                    </button>
+                  </div>
+
+                  {/* Cloud VIP Code Generator inside APK */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                      🔑 {isRtl ? 'توليد أكواد تفعيل VIP سحابية فورية (تعمل في الموقع والتطبيق):' : 'Generate Cloud VIP Activation Codes:'}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                      <select
+                        value={devGenPlan}
+                        onChange={(e) => setDevGenPlan(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem',
+                          borderRadius: '10px',
+                          background: '#000',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.74rem',
+                          fontWeight: 800
+                        }}
+                      >
+                        <option value="vip_monarch">👑 باقة الملك (199 ج.م)</option>
+                        <option value="vip_basic">⚡ الباقة الأساسية (99 ج.م)</option>
+                      </select>
+                      <select
+                        value={devGenDays}
+                        onChange={(e) => setDevGenDays(Number(e.target.value))}
+                        style={{
+                          width: '110px',
+                          padding: '0.5rem',
+                          borderRadius: '10px',
+                          background: '#000',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.74rem',
+                          fontWeight: 800
+                        }}
+                      >
+                        <option value={30}>30 يوم</option>
+                        <option value={90}>90 يوم</option>
+                        <option value={365}>سنة كاملة</option>
+                        <option value={3650}>مدى الحياة</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={devCodeBusy}
+                      onClick={handleDevGenerateVipCode}
+                      style={{
+                        width: '100%',
+                        padding: '0.68rem',
+                        borderRadius: '11px',
+                        border: 'none',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {devCodeBusy ? '⏳ جاري التوليد...' : '⚡ توليد كود VIP جديد وحفظه بالسحابة'}
+                    </button>
+
+                    {cloudVipCodes.length > 0 && (
+                      <div style={{ marginTop: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '150px', overflowY: 'auto' }}>
+                        {cloudVipCodes.slice(0, 6).map((c) => (
+                          <div
+                            key={c.code}
+                            onClick={() => {
+                              navigator.clipboard?.writeText(c.code);
+                              showToast(`✓ تم نسخ الكود: ${c.code}`);
+                            }}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '0.42rem 0.65rem',
+                              borderRadius: '8px',
+                              background: 'rgba(255,255,255,0.06)',
+                              border: '1px solid rgba(255,255,255,0.14)',
+                              fontSize: '0.72rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <span style={{ fontFamily: 'monospace', fontWeight: 900 }}>{c.code}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+                              {c.planId === 'vip_monarch' ? '👑 الملك' : '⚡ أساسية'} • اضغط للنسخ
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <form
@@ -4821,6 +5499,78 @@ export default function MobileApkApp() {
               </button>
             </form>
           )}
+
+          {/* VIP Subscription Status & Code Redemption Box inside Profile */}
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.88rem' }}>
+                💎 {isRtl ? 'حالة اشتراك BLACK X VIP الخاص بك:' : 'Your BLACK X VIP Status:'}
+              </span>
+              <span
+                style={{
+                  padding: '0.2rem 0.65rem',
+                  borderRadius: '99px',
+                  background: userVipTier !== 'free' ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                  color: userVipTier !== 'free' ? '#000000' : '#ffffff',
+                  fontSize: '0.7rem',
+                  fontWeight: 900
+                }}
+              >
+                {isDeveloper
+                  ? '👑 مطور المنصة (MONARCH)'
+                  : userVipTier === 'vip_monarch'
+                  ? '👑 باقة الملك (VIP MONARCH)'
+                  : userVipTier === 'vip_basic'
+                  ? '⚡ الباقة الأساسية (VIP BASIC)'
+                  : isRtl
+                  ? 'مجاني (غير مشترك)'
+                  : 'Free Tier'}
+              </span>
+            </div>
+
+            <form onSubmit={handleRedeemVipCode} style={{ display: 'flex', gap: '0.45rem', marginTop: '0.5rem' }}>
+              <input
+                type="text"
+                value={vipCodeInput}
+                onChange={(e) => setVipCodeInput(e.target.value)}
+                placeholder={isRtl ? 'أدخل كود تفعيل VIP (مثال: BX-XXXX-XXXX)...' : 'Enter VIP Activation Code...'}
+                style={{
+                  flex: 1,
+                  padding: '0.6rem 0.8rem',
+                  borderRadius: '10px',
+                  background: '#050507',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff',
+                  fontSize: '0.78rem',
+                  fontFamily: 'monospace'
+                }}
+              />
+              <button
+                type="submit"
+                disabled={vipCodeBusy}
+                style={{
+                  padding: '0 0.95rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontWeight: 900,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {vipCodeBusy ? '⏳' : isRtl ? 'تفعيل' : 'Activate'}
+              </button>
+            </form>
+          </div>
 
           {/* 6-Tab Personal Library Manager (Favorites, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
           <div style={{ marginTop: '1.15rem' }}>
@@ -5053,16 +5803,104 @@ export default function MobileApkApp() {
             </button>
           </div>
 
-          {/* Built-In 120Hz Cinema Video Player (when an episode is tapped) */}
+          {/* Built-In 120Hz Cinema Video Player (Supports 100% True Fullscreen + 20:9 Screen Cover/Fit) */}
           {activeEpisode && (
             <div
-              style={{
-                background: '#000000',
-                borderBottom: '1px solid rgba(255,255,255,0.14)',
-                paddingBottom: '0.85rem'
-              }}
+              style={
+                videoFullscreen
+                  ? {
+                      position: 'fixed',
+                      inset: 0,
+                      width: '100vw',
+                      height: '100vh',
+                      zIndex: 9800,
+                      background: '#000000',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center'
+                    }
+                  : {
+                      background: '#000000',
+                      borderBottom: '1px solid rgba(255,255,255,0.14)',
+                      paddingBottom: '0.85rem'
+                    }
+              }
             >
-              <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#050507' }}>
+              {/* Floating Top Bar when in Fullscreen Anime Mode */}
+              {videoFullscreen && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 9900,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.6rem 0.9rem',
+                    background: 'linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)',
+                    pointerEvents: 'auto'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setVideoFullscreen(false)}
+                    style={{
+                      padding: '0.38rem 0.8rem',
+                      borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.16)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      color: '#fff',
+                      fontWeight: 900,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✕ {isRtl ? 'خروج من ملء الشاشة' : 'Exit Fullscreen'}
+                  </button>
+                  <span style={{ fontWeight: 900, fontSize: '0.8rem', color: '#fff', textShadow: '0 2px 6px #000' }}>
+                    {selectedAnime.titleEn} • {activeEpisode.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVideoFitMode((m) => (m === 'cover' ? 'contain' : m === 'contain' ? 'fill' : 'cover'))
+                    }
+                    style={{
+                      padding: '0.38rem 0.8rem',
+                      borderRadius: '10px',
+                      background: '#ffffff',
+                      border: 'none',
+                      color: '#000',
+                      fontWeight: 900,
+                      fontSize: '0.74rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📐{' '}
+                    {videoFitMode === 'cover'
+                      ? isRtl
+                        ? 'ملء الشاشة (Cover)'
+                        : 'Full Cover'
+                      : videoFitMode === 'fill'
+                      ? isRtl
+                        ? 'تمديد كامل (Fill)'
+                        : 'Stretch Fill'
+                      : isRtl
+                      ? 'أبعاد أصلية (16:9)'
+                      : 'Original 16:9'}
+                  </button>
+                </div>
+              )}
+
+              <div
+                style={
+                  videoFullscreen
+                    ? { position: 'relative', width: '100vw', height: '100vh', background: '#000000' }
+                    : { position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#050507' }
+                }
+              >
                 {resolvingVideo ? (
                   <div
                     style={{
@@ -5099,16 +5937,21 @@ export default function MobileApkApp() {
                           handlePlayEpisode(selectedAnime, animeEpisodes[idx + 1]);
                         }
                       }}
-                      style={{ width: '100%', height: '100%', background: '#000' }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: videoFullscreen ? videoFitMode : 'contain',
+                        background: '#000'
+                      }}
                     />
                     {/* Left/Right Double-Tap ±10s Zones */}
                     <div
                       onDoubleClick={() => handleVideoDoubleTap('left')}
-                      style={{ position: 'absolute', top: '15%', bottom: '28%', left: 0, width: '28%' }}
+                      style={{ position: 'absolute', top: '18%', bottom: '28%', left: 0, width: '28%' }}
                     />
                     <div
                       onDoubleClick={() => handleVideoDoubleTap('right')}
-                      style={{ position: 'absolute', top: '15%', bottom: '28%', right: 0, width: '28%' }}
+                      style={{ position: 'absolute', top: '18%', bottom: '28%', right: 0, width: '28%' }}
                     />
                     {skipRipple && (
                       <div
@@ -5144,170 +5987,192 @@ export default function MobileApkApp() {
                 )}
               </div>
 
-              {/* Cinema Controls Strip (Prev/Next Ep, Auto-Next, PiP, Fullscreen, Speed, Direct MP4 Download) */}
-              <div style={{ padding: '0.65rem 1rem 0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  <div style={{ fontWeight: 900, fontSize: '0.86rem' }}>
-                    🎬 {activeEpisode.name} {activeEpisode.titleAr ? `— ${activeEpisode.titleAr}` : ''}
-                  </div>
-                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto' }}>
-                    {(() => {
-                      const idx = animeEpisodes.findIndex((e) => e.docId === activeEpisode.docId);
-                      const prevEp = idx > 0 ? animeEpisodes[idx - 1] : null;
-                      const nextEp = idx !== -1 && idx + 1 < animeEpisodes.length ? animeEpisodes[idx + 1] : null;
-                      return (
-                        <>
-                          {prevEp && (
-                            <button
-                              type="button"
-                              onClick={() => handlePlayEpisode(selectedAnime, prevEp)}
-                              style={{
-                                padding: '0.28rem 0.55rem',
-                                borderRadius: '8px',
-                                background: 'rgba(255,255,255,0.1)',
-                                border: '1px solid rgba(255,255,255,0.2)',
-                                color: '#fff',
-                                fontSize: '0.7rem',
-                                fontWeight: 900,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              ⏮ {isRtl ? 'السابقة' : 'Prev'}
-                            </button>
-                          )}
-                          {nextEp && (
-                            <button
-                              type="button"
-                              onClick={() => handlePlayEpisode(selectedAnime, nextEp)}
-                              style={{
-                                padding: '0.28rem 0.55rem',
-                                borderRadius: '8px',
-                                background: '#ffffff',
-                                border: 'none',
-                                color: '#000',
-                                fontSize: '0.7rem',
-                                fontWeight: 900,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              ⏭ {isRtl ? 'التالية' : 'Next'}
-                            </button>
-                          )}
-                        </>
-                      );
-                    })()}
-                    <button
-                      type="button"
-                      onClick={() => setAutoNextEp((v) => !v)}
-                      style={{
-                        padding: '0.28rem 0.55rem',
-                        borderRadius: '8px',
-                        background: autoNextEp ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.7rem',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🔁 {autoNextEp ? 'تلقائي ON' : 'تلقائي OFF'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const speeds = [1, 1.25, 1.5, 2, 0.75];
-                        const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
-                        setPlaybackSpeed(next);
-                        if (videoRef.current) videoRef.current.playbackRate = next;
-                      }}
-                      style={{
-                        padding: '0.28rem 0.55rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ⚡ {playbackSpeed}x
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (videoRef.current?.requestPictureInPicture) {
-                          videoRef.current.requestPictureInPicture().catch(() => {});
-                        }
-                      }}
-                      style={{
-                        padding: '0.28rem 0.55rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      📺 PiP
-                    </button>
-                    {playingVideoUrl && (
-                      <a
-                        href={playingVideoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download
+              {/* Cinema Controls Strip (Fullscreen Button, Fit Mode, Prev/Next Ep, Auto-Next, PiP, Speed, Download) */}
+              {!videoFullscreen && (
+                <div style={{ padding: '0.65rem 1rem 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.86rem' }}>
+                      🎬 {activeEpisode.name} {activeEpisode.titleAr ? `— ${activeEpisode.titleAr}` : ''}
+                    </div>
+                    <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto' }}>
+                      <button
+                        type="button"
+                        onClick={() => setVideoFullscreen(true)}
                         style={{
-                          padding: '0.28rem 0.65rem',
+                          padding: '0.32rem 0.7rem',
                           borderRadius: '8px',
                           background: '#ffffff',
+                          border: 'none',
                           color: '#000000',
-                          fontSize: '0.7rem',
+                          fontSize: '0.72rem',
                           fontWeight: 900,
-                          textDecoration: 'none'
-                        }}
-                      >
-                        ⬇ {isRtl ? 'تحميل MP4' : 'Download MP4'}
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {/* Anime Witcher-Style Server & Quality Selector Pills */}
-                <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, marginBottom: '0.35rem' }}>
-                  {isRtl
-                    ? 'اختر سيرفر وجودة المشاهدة المباشرة (بدون مشغل خارجي وبدون إعلانات):'
-                    : 'Select Direct Stream Server & Quality (Built-in Player, No Ads):'}
-                </div>
-                <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.45rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-                  {episodeServers.map((srv, idx) => {
-                    const meta = SERVER_LABELS[srv.name] || { nameAr: srv.name, nameEn: srv.name };
-                    const active = selectedServer === srv;
-                    return (
-                      <button
-                        key={`${srv.name}-${srv.quality}-${idx}`}
-                        type="button"
-                        onClick={() => handleSelectServer(srv, episodeServers)}
-                        style={{
-                          padding: '0.45rem 0.8rem',
-                          borderRadius: '11px',
-                          background: active ? '#ffffff' : '#0d0d12',
-                          color: active ? '#000000' : '#ffffff',
-                          border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
-                          fontWeight: 900,
-                          fontSize: '0.74rem',
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
                         }}
                       >
-                        {isRtl ? meta.nameAr : meta.nameEn} • {srv.quality}
+                        ⛶ {isRtl ? 'ملء الشاشة بالكامل' : 'Full Screen'}
                       </button>
-                    );
-                  })}
+                      {(() => {
+                        const idx = animeEpisodes.findIndex((e) => e.docId === activeEpisode.docId);
+                        const prevEp = idx > 0 ? animeEpisodes[idx - 1] : null;
+                        const nextEp = idx !== -1 && idx + 1 < animeEpisodes.length ? animeEpisodes[idx + 1] : null;
+                        return (
+                          <>
+                            {prevEp && (
+                              <button
+                                type="button"
+                                onClick={() => handlePlayEpisode(selectedAnime, prevEp)}
+                                style={{
+                                  padding: '0.28rem 0.55rem',
+                                  borderRadius: '8px',
+                                  background: 'rgba(255,255,255,0.1)',
+                                  border: '1px solid rgba(255,255,255,0.2)',
+                                  color: '#fff',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 900,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ⏮ {isRtl ? 'السابقة' : 'Prev'}
+                              </button>
+                            )}
+                            {nextEp && (
+                              <button
+                                type="button"
+                                onClick={() => handlePlayEpisode(selectedAnime, nextEp)}
+                                style={{
+                                  padding: '0.28rem 0.55rem',
+                                  borderRadius: '8px',
+                                  background: '#ffffff',
+                                  border: 'none',
+                                  color: '#000',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 900,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ⏭ {isRtl ? 'التالية' : 'Next'}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setAutoNextEp((v) => !v)}
+                        style={{
+                          padding: '0.28rem 0.55rem',
+                          borderRadius: '8px',
+                          background: autoNextEp ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          fontSize: '0.7rem',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔁 {autoNextEp ? 'تلقائي ON' : 'تلقائي OFF'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const speeds = [1, 1.25, 1.5, 2, 0.75];
+                          const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
+                          setPlaybackSpeed(next);
+                          if (videoRef.current) videoRef.current.playbackRate = next;
+                        }}
+                        style={{
+                          padding: '0.28rem 0.55rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚡ {playbackSpeed}x
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (videoRef.current?.requestPictureInPicture) {
+                            videoRef.current.requestPictureInPicture().catch(() => {});
+                          }
+                        }}
+                        style={{
+                          padding: '0.28rem 0.55rem',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📺 PiP
+                      </button>
+                      {playingVideoUrl && (
+                        <a
+                          href={playingVideoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download
+                          style={{
+                            padding: '0.28rem 0.65rem',
+                            borderRadius: '8px',
+                            background: '#ffffff',
+                            color: '#000000',
+                            fontSize: '0.7rem',
+                            fontWeight: 900,
+                            textDecoration: 'none'
+                          }}
+                        >
+                          ⬇ {isRtl ? 'تحميل MP4' : 'Download MP4'}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* BLACK X Exclusive Server & Quality Selector Pills */}
+                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, marginBottom: '0.35rem' }}>
+                    {isRtl
+                      ? 'اختر سيرفر BLACK X وجودة المشاهدة المباشرة (بدون إعلانات):'
+                      : 'Select Direct BLACK X Stream Server & Quality (No Ads):'}
+                  </div>
+                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.45rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                    {episodeServers.map((srv, idx) => {
+                      const meta = SERVER_LABELS[srv.name] || {
+                        nameAr: `🎬 BLACK X ${idx + 1}`,
+                        nameEn: `🎬 BLACK X ${idx + 1}`
+                      };
+                      const active = selectedServer === srv;
+                      return (
+                        <button
+                          key={`${srv.name}-${srv.quality}-${idx}`}
+                          type="button"
+                          onClick={() => handleSelectServer(srv, episodeServers)}
+                          style={{
+                            padding: '0.45rem 0.8rem',
+                            borderRadius: '11px',
+                            background: active ? '#ffffff' : '#0d0d12',
+                            color: active ? '#000000' : '#ffffff',
+                            border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                            fontWeight: 900,
+                            fontSize: '0.74rem',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isRtl ? meta.nameAr : meta.nameEn} • {srv.quality}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -5338,7 +6203,7 @@ export default function MobileApkApp() {
                       borderRadius: '6px'
                     }}
                   >
-                    ★ {selectedAnime.rating} MAL
+                    ★ {selectedAnime.rating} BLACK X
                   </span>
                   <span
                     style={{
@@ -5941,6 +6806,385 @@ export default function MobileApkApp() {
           );
         })}
       </nav>
+
+      {/* ==================== GLOBAL MANDATORY VIP SUBSCRIPTION & ACTIVATION GATE (مربوط سحابياً بكل النسخ وبحساب المطور) ==================== */}
+      {globalVipEnforced && userVipTier === 'free' && !isDeveloper && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9950,
+            background: '#000000',
+            color: '#ffffff',
+            overflowY: 'auto',
+            padding: '1.2rem 1rem 3rem'
+          }}
+        >
+          <div style={{ maxWidth: '540px', margin: '0 auto' }}>
+            {/* Header Badge */}
+            <div style={{ textAlign: 'center', marginBottom: '1.1rem' }}>
+              <div
+                style={{
+                  width: '54px',
+                  height: '54px',
+                  margin: '0 auto 0.65rem',
+                  borderRadius: '16px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 900,
+                  fontSize: '1.65rem',
+                  boxShadow: '0 0 28px rgba(255,255,255,0.35)'
+                }}
+              >
+                X
+              </div>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '0.25rem 0.85rem',
+                  borderRadius: '99px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  fontSize: '0.72rem',
+                  fontWeight: 900,
+                  marginBottom: '0.45rem'
+                }}
+              >
+                👑 BLACK X VIP PREMIERE ACCESS
+              </span>
+              <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.25rem', fontWeight: 900 }}>
+                {isRtl ? 'اشترك في باقات BLACK X VIP للمتابعة' : 'BLACK X VIP Subscription Required'}
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.55 }}>
+                {isRtl
+                  ? 'التطبيق يعمل حالياً بنظام العضوية المدفوعة الموحد مع الموقع الرسمي. اختر باقتك أو أدخل كود التفعيل الفوري، أو سجّل دخولك إذا كنت مشتركاً بالفعل.'
+                  : 'VIP membership is currently enforced across all platforms. Redeem your VIP code or sign in to continue.'}
+              </p>
+            </div>
+
+            {/* Instant VIP Code Activation Box */}
+            <form
+              onSubmit={handleRedeemVipCode}
+              style={{
+                padding: '1rem',
+                borderRadius: '16px',
+                background: '#0b0b0f',
+                border: '1.5px solid #ffffff',
+                marginBottom: '1rem',
+                boxShadow: '0 10px 30px rgba(255,255,255,0.08)'
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.45rem' }}>
+                🔑 {isRtl ? 'لديك كود تفعيل VIP؟ أدخله هنا للفتح الفوري:' : 'Have a VIP Activation Code? Redeem Instantly:'}
+              </div>
+              <div style={{ display: 'flex', gap: '0.45rem' }}>
+                <input
+                  type="text"
+                  value={vipCodeInput}
+                  onChange={(e) => setVipCodeInput(e.target.value)}
+                  placeholder="BX-XXXX-XXXX-XXXX"
+                  style={{
+                    flex: 1,
+                    padding: '0.7rem 0.85rem',
+                    borderRadius: '11px',
+                    background: '#000000',
+                    border: '1px solid rgba(255,255,255,0.28)',
+                    color: '#ffffff',
+                    fontFamily: 'monospace',
+                    fontWeight: 900,
+                    fontSize: '0.84rem'
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={vipCodeBusy}
+                  style={{
+                    padding: '0 1.15rem',
+                    borderRadius: '11px',
+                    border: 'none',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {vipCodeBusy ? '⏳' : isRtl ? 'تفعيل الآن' : 'Activate'}
+                </button>
+              </div>
+            </form>
+
+            {/* The 2 Official BLACK X VIP Plans (Matches Website 100%) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.8rem', marginBottom: '1rem' }}>
+              {/* Plan 1: Monarch VIP 199 EGP */}
+              <div
+                style={{
+                  padding: '1.05rem',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(145deg, #121218 0%, #07070a 100%)',
+                  border: '1.5px solid #ffffff',
+                  position: 'relative'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.96rem' }}>
+                    👑 {isRtl ? 'باقة الملك (MONARCH VIP)' : 'Monarch VIP Plan'}
+                  </span>
+                  <span
+                    style={{
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '8px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontWeight: 900,
+                      fontSize: '0.82rem'
+                    }}
+                  >
+                    199 {isRtl ? 'ج.م / شهرياً' : 'EGP / mo'}
+                  </span>
+                </div>
+                <ul style={{ margin: '0 0 0.75rem', paddingInlineStart: '1.1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.82)', lineHeight: 1.6 }}>
+                  <li>{isRtl ? 'فتح جميع سيرفرات BLACK X 1..8 بجودة 4K & 1080p سرعة 120Hz' : 'All BLACK X 1..8 servers in 4K & 1080p 120Hz'}</li>
+                  <li>{isRtl ? 'فتح مكتبة +30,000 مانجا ومانهوا كاملة بشاشة كاملة وتحميل مباشر' : 'Full 30,000+ Manga & Manhwa library + Direct Download'}</li>
+                  <li>{isRtl ? 'تعمل على الموقع الرسمي وتطبيق الهاتف بنفس الحساب' : 'Works on both Website and Mobile APK'}</li>
+                </ul>
+
+                <div
+                  style={{
+                    padding: '0.65rem 0.8rem',
+                    borderRadius: '11px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '0.55rem'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)' }}>
+                      📱 {isRtl ? 'رقم محفظة فودافون كاش للتحويل:' : 'Vodafone Cash Wallet:'}
+                    </div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '0.95rem', letterSpacing: '0.05em' }}>
+                      01094965378
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText('01094965378');
+                      showToast('✓ تم نسخ رقم فودافون كاش: 01094965378');
+                    }}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '8px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: 'none',
+                      fontWeight: 900,
+                      fontSize: '0.72rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📋 {isRtl ? 'نسخ الرقم' : 'Copy'}
+                  </button>
+                </div>
+
+                <a
+                  href={`https://wa.me/201094965378?text=${encodeURIComponent(
+                    'مرحباً إدارة BLACK X، قمت بتحويل 199 ج.م على فودافون كاش 01094965378 للاشتراك في باقة الملك MONARCH VIP وأريد استلام كود التفعيل الفوري.'
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'block',
+                    textAlign: 'center',
+                    padding: '0.68rem',
+                    borderRadius: '11px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontWeight: 900,
+                    fontSize: '0.8rem',
+                    textDecoration: 'none'
+                  }}
+                >
+                  💬 {isRtl ? 'إرسال إيصال التحويل واستلام كود VIP فوراً' : 'Send Transfer Receipt & Get VIP Code'}
+                </a>
+              </div>
+
+              {/* Plan 2: Basic VIP 99 EGP */}
+              <div
+                style={{
+                  padding: '0.95rem',
+                  borderRadius: '16px',
+                  background: '#0a0a0e',
+                  border: '1px solid rgba(255,255,255,0.22)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.9rem' }}>
+                    ⚡ {isRtl ? 'الباقة الأساسية (BASIC VIP)' : 'Basic VIP Plan'}
+                  </span>
+                  <span
+                    style={{
+                      padding: '0.18rem 0.55rem',
+                      borderRadius: '8px',
+                      background: 'rgba(255,255,255,0.14)',
+                      color: '#ffffff',
+                      fontWeight: 900,
+                      fontSize: '0.78rem'
+                    }}
+                  >
+                    99 {isRtl ? 'ج.م / شهرياً' : 'EGP / mo'}
+                  </span>
+                </div>
+                <p style={{ margin: '0 0 0.55rem', fontSize: '0.73rem', color: 'rgba(255,255,255,0.72)' }}>
+                  {isRtl
+                    ? 'مشاهدة جميع الأنميات والمانهوا بجودة 1080p بدون إعلانات عبر سيرفرات BLACK X.'
+                    : 'Full 1080p Anime & Manhwa streaming across BLACK X servers.'}
+                </p>
+                <a
+                  href={`https://wa.me/201094965378?text=${encodeURIComponent(
+                    'مرحباً إدارة BLACK X، قمت بتحويل 99 ج.م على فودافون كاش 01094965378 للاشتراك في الباقة الأساسية BASIC VIP وأريد استلام كود التفعيل.'
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'block',
+                    textAlign: 'center',
+                    padding: '0.58rem',
+                    borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.25)',
+                    color: '#ffffff',
+                    fontWeight: 900,
+                    fontSize: '0.76rem',
+                    textDecoration: 'none'
+                  }}
+                >
+                  💬 {isRtl ? 'طلب كود الباقة الأساسية (99 ج.م)' : 'Request Basic VIP Code (99 EGP)'}
+                </a>
+              </div>
+            </div>
+
+            {/* Sign-In Section for Existing Subscribers or Developer Account */}
+            <div
+              style={{
+                padding: '1rem',
+                borderRadius: '16px',
+                background: '#0a0a0e',
+                border: '1px solid rgba(255,255,255,0.18)'
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.5rem' }}>
+                🔐 {isRtl ? 'مشترك بالفعل أو صاحب حساب المطور؟ سجّل دخولك:' : 'Already VIP or Developer? Sign In:'}
+              </div>
+
+              {user ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ fontSize: '0.76rem' }}>
+                    {isRtl ? 'مسجل حالياً باسم:' : 'Signed in as:'} <strong>{user.displayName || user.email}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUser(null);
+                      localStorage.removeItem('bx_mob_user');
+                    }}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '8px',
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.24)',
+                      color: '#fff',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isRtl ? 'تبديل الحساب' : 'Switch Account'}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  <button
+                    type="button"
+                    disabled={authBusy}
+                    onClick={handleRealGoogleOAuthLogin}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '11px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: 'none',
+                      fontWeight: 900,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    G {isRtl ? 'تسجيل الدخول بحساب Google الرسمي' : 'Sign in with Google Account'}
+                  </button>
+
+                  <form onSubmit={handleAuthSubmit} style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      value={authUsername}
+                      onChange={(e) => setAuthUsername(e.target.value)}
+                      placeholder={isRtl ? 'البريد أو اسم المستخدم' : 'Email / Username'}
+                      style={{
+                        flex: 1,
+                        minWidth: '130px',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: '10px',
+                        background: '#000',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        fontSize: '0.76rem'
+                      }}
+                    />
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder={isRtl ? 'كلمة المرور' : 'Password'}
+                      style={{
+                        flex: 1,
+                        minWidth: '110px',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: '10px',
+                        background: '#000',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        fontSize: '0.76rem'
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={authBusy}
+                      style={{
+                        padding: '0.6rem 0.95rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: 'rgba(255,255,255,0.18)',
+                        color: '#fff',
+                        fontWeight: 900,
+                        fontSize: '0.76rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? 'دخول' : 'Login'}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,16 +27,23 @@ export const EGP_PRICING = {
 };
 
 export function resolveUserVipTier(user, referralData) {
+  const savedLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('blackx.vipTier') : null;
+  if (savedLocal === 'vip_monarch' || savedLocal === 'vip_basic') {
+    return savedLocal;
+  }
   if (!user) return 'free';
-  if (user.role === 'developer' || user.isDeveloper || (user.email || '').toLowerCase() === 'mz0970mmz@gmail.com') {
+  if (
+    user.role === 'developer' ||
+    user.isDeveloper ||
+    (user.email || '').toLowerCase() === 'mz0970mmz@gmail.com' ||
+    (user.username || '').toLowerCase() === 'developer'
+  ) {
     return 'vip_monarch';
   }
-  const savedLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('blackx.vipTier') : null;
   if (
     user.vipTier === 'vip_monarch' ||
     user.vipStatus === 'VIP Monarch' ||
-    user.vip_status === 'VIP Monarch' ||
-    savedLocal === 'vip_monarch'
+    user.vip_status === 'VIP Monarch'
   ) {
     return 'vip_monarch';
   }
@@ -44,7 +51,6 @@ export function resolveUserVipTier(user, referralData) {
     user.vipTier === 'vip_basic' ||
     user.vipStatus === 'VIP Basic' ||
     user.vip_status === 'VIP Basic' ||
-    savedLocal === 'vip_basic' ||
     referralData?.isVipUnlocked ||
     (user.badges || []).includes('gold_vip')
   ) {
@@ -70,12 +76,31 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
     if (!clean) return;
     setRedeeming(true);
     try {
-      const res = await api.post('/api/dev/vip/redeem', { code: clean });
-      const newTier = res.tier || 'vip_basic';
+      let newTier = null;
+      let expiresAt = null;
+      try {
+        const res = await api.post('/api/dev/vip/redeem', { code: clean });
+        newTier = res.tier || 'vip_basic';
+        expiresAt = res.expiresAt;
+      } catch (apiErr) {
+        // Check Cloud Firestore settings/global_vip_system so codes generated in APK or Web work everywhere
+        const cloudUrl =
+          'https://firestore.googleapis.com/v1/projects/spry-oxide-1h7sp/databases/ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c/documents/settings/global_vip_system?key=AIzaSyD4yG_ljN1S8TfwC33E4Z0o499MYC71eUE';
+        const cRes = await fetch(cloudUrl);
+        if (cRes.ok) {
+          const cDoc = await cRes.json();
+          const codes = JSON.parse(cDoc?.fields?.codes_json?.stringValue || '[]');
+          const match = codes.find((c) => String(c.code || '').toUpperCase() === clean && c.active !== false);
+          if (match) {
+            newTier = match.planId || 'vip_monarch';
+          }
+        }
+        if (!newTier) throw apiErr;
+      }
+
       try {
         localStorage.setItem('blackx.vipTier', newTier);
-        if (res.expiresAt) localStorage.setItem('blackx.vipExpiresAt', res.expiresAt);
-        // Unlock the 5 exclusive VIP ornaments automatically
+        if (expiresAt) localStorage.setItem('blackx.vipExpiresAt', expiresAt);
         const existingOwned = JSON.parse(localStorage.getItem('blackx.ownedShopItems') || '[]');
         const unlocked =
           newTier === 'vip_monarch'
@@ -85,7 +110,7 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
       } catch {}
 
       setRedeemCode('');
-      onVipUpdated?.(res.user || { ...user, vipTier: newTier, vipExpiresAt: res.expiresAt });
+      onVipUpdated?.({ ...(user || {}), vipTier: newTier, vipExpiresAt: expiresAt });
       pushToast(
         lang === 'ar'
           ? `🎉 مبروك! تم تفعيل باقة ${newTier === 'vip_monarch' ? '🔮 VIP Monarch (إمبراطور الظلال)' : '⚡ VIP Basic (صياد النخبة)'} بنجاح وفتح الإطارات والسيرفرات الحصرية!`
@@ -751,6 +776,8 @@ export function DevVipCodeGenerator() {
   const [stats, setStats] = useState({ totalCodes: 0, activeCodes: 0, totalRedemptions: 0, totalValueEgp: 0 });
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [globalVipEnforced, setGlobalVipEnforced] = useState(true);
+  const [togglingGlobalVip, setTogglingGlobalVip] = useState(false);
 
   // Generator form state
   const [tier, setTier] = useState('vip_monarch');
@@ -762,11 +789,33 @@ export function DevVipCodeGenerator() {
   const [note, setNote] = useState('');
   const [lastGenerated, setLastGenerated] = useState([]);
 
+  const GLOBAL_VIP_URL =
+    'https://firestore.googleapis.com/v1/projects/spry-oxide-1h7sp/databases/ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c/documents/settings/global_vip_system?key=AIzaSyD4yG_ljN1S8TfwC33E4Z0o499MYC71eUE';
+
   const fetchCodes = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/dev/vip-codes');
-      if (res?.codes) setCodes(res.codes);
+      const [res, cloudRes] = await Promise.all([
+        api.get('/api/dev/vip-codes').catch(() => null),
+        fetch(GLOBAL_VIP_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      ]);
+      let cloudData = null;
+      if (cloudRes?.fields?.json?.stringValue) {
+        try {
+          cloudData = JSON.parse(cloudRes.fields.json.stringValue);
+          if (typeof cloudData.enforced === 'boolean') setGlobalVipEnforced(cloudData.enforced);
+        } catch {}
+      }
+      const localCodes = res?.codes || [];
+      const cloudCodes = Array.isArray(cloudData?.codes) ? cloudData.codes : [];
+      const seen = new Set();
+      const merged = [];
+      for (const c of [...cloudCodes, ...localCodes]) {
+        if (!c?.code || seen.has(c.code)) continue;
+        seen.add(c.code);
+        merged.push(c);
+      }
+      setCodes(merged);
       if (res?.stats) setStats(res.stats);
     } catch {
       /* fallback */
@@ -774,6 +823,41 @@ export function DevVipCodeGenerator() {
       setLoading(false);
     }
   }, []);
+
+  const handleToggleGlobalVipEnforcement = async () => {
+    setTogglingGlobalVip(true);
+    const nextState = !globalVipEnforced;
+    try {
+      const payload = {
+        enforced: nextState,
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'developer',
+        codes
+      };
+      await fetch(GLOBAL_VIP_URL, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            json: { stringValue: JSON.stringify(payload) },
+            enforced: { booleanValue: nextState },
+            updatedAt: { stringValue: payload.updatedAt }
+          }
+        })
+      });
+      setGlobalVipEnforced(nextState);
+      pushToast(
+        nextState
+          ? '🔴 تم تنشيط وفرض خطط اشتراكات الـ VIP على جميع المستخدمين في الموقع وجميع نسخ تطبيق الـ APK فوراً!'
+          : '🟢 تم إلغاء فرض اشتراكات الـ VIP وفتح الموقع والتطبيق مجاناً لجميع المستخدمين في كل النسخ فوراً!',
+        'success'
+      );
+    } catch (err) {
+      pushToast('حدث خطأ أثناء مزامنة حالة الـ VIP السحابية', 'error');
+    } finally {
+      setTogglingGlobalVip(false);
+    }
+  };
 
   useEffect(() => {
     fetchCodes();
@@ -805,10 +889,30 @@ export function DevVipCodeGenerator() {
       });
       if (res?.generated?.length) {
         setLastGenerated(res.generated);
-        setCodes((prev) => [...res.generated, ...prev]);
+        const updatedCodes = [...res.generated, ...codes];
+        setCodes(updatedCodes);
         setNote('');
+        try {
+          const payload = {
+            enforced: globalVipEnforced,
+            updatedAt: new Date().toISOString(),
+            updatedBy: 'developer',
+            codes: updatedCodes.slice(0, 150)
+          };
+          await fetch(GLOBAL_VIP_URL, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                json: { stringValue: JSON.stringify(payload) },
+                enforced: { booleanValue: globalVipEnforced },
+                updatedAt: { stringValue: payload.updatedAt }
+              }
+            })
+          });
+        } catch {}
         pushToast(
-          `🔑 تم توليد ${res.generated.length} كود اشتراك حقيقي (${tier === 'vip_monarch' ? 'VIP Monarch 🔮' : 'VIP Basic ⚡'}) وحفظه في قاعدة البيانات!`,
+          `🔑 تم توليد ${res.generated.length} كود اشتراك حقيقي (${tier === 'vip_monarch' ? 'VIP Monarch 🔮' : 'VIP Basic ⚡'}) ومزامنته مع السحابة وجميع نسخ التطبيق!`,
           'success'
         );
         fetchCodes();
@@ -847,6 +951,54 @@ export function DevVipCodeGenerator() {
         background: 'linear-gradient(180deg, rgba(24, 12, 48, 0.72), rgba(8, 11, 22, 0.95))'
       }}
     >
+      {/* Master Global VIP Enforcement Switch (Synced across Website & all APK installations) */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          padding: '1.25rem 1.5rem',
+          borderRadius: '18px',
+          marginBottom: '1.5rem',
+          background: globalVipEnforced ? 'rgba(220, 38, 38, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+          border: globalVipEnforced ? '2px solid rgba(239, 68, 68, 0.65)' : '2px solid rgba(16, 185, 129, 0.65)'
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 900, fontSize: '1.08rem', color: '#fff', marginBottom: '0.25rem' }}>
+            {globalVipEnforced
+              ? '🔴 فرض خطط اشتراكات الـ VIP مفعّل حالياً على جميع المستخدمين (التطبيق + الموقع)'
+              : '🟢 الوضع المجاني المفتوح مفعّل حالياً لجميع المستخدمين (تم إلغاء فرض الـ VIP)'}
+          </div>
+          <div style={{ fontSize: '0.82rem', color: 'var(--ink-dim)' }}>
+            تحكم مركزي مباشر مرتبط بجميع نسخ تطبيق الأندرويد (APK) والموقع في نفس اللحظة.
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={togglingGlobalVip}
+          onClick={handleToggleGlobalVipEnforcement}
+          style={{
+            padding: '0.8rem 1.5rem',
+            borderRadius: '13px',
+            border: 'none',
+            background: globalVipEnforced ? '#10b981' : '#ef4444',
+            color: '#fff',
+            fontWeight: 900,
+            fontSize: '0.9rem',
+            cursor: 'pointer'
+          }}
+        >
+          {togglingGlobalVip
+            ? '⏳ جارٍ تعميم الأمر على جميع النسخ...'
+            : globalVipEnforced
+            ? '🟢 إلغاء فرض الـ VIP وفتح التطبيق للجميع'
+            : '🔴 تنشيط وفرض خطط الـ VIP على كل المستخدمين'}
+        </button>
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -1146,3 +1298,122 @@ export function DevVipCodeGenerator() {
     </div>
   );
 }
+
+/**
+ * Global Cloud-Synced VIP Enforcement Gate for the Website.
+ * Polls Cloud Firestore `settings/global_vip_system` every 5 seconds so when the Developer
+ * enables or disables VIP enforcement from either the Website or the APK, all Website & APK
+ * instances respond immediately.
+ */
+export function GlobalVipEnforcementGate({ user, onVipUpdated, onOpenAuth }) {
+  const [enforced, setEnforced] = useState(false);
+  const [tierState, setTierState] = useState(() => resolveUserVipTier(user));
+
+  useEffect(() => {
+    setTierState(resolveUserVipTier(user));
+  }, [user]);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkCloud = async () => {
+      try {
+        const res = await fetch(
+          'https://firestore.googleapis.com/v1/projects/spry-oxide-1h7sp/databases/ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c/documents/settings/global_vip_system?key=AIzaSyD4yG_ljN1S8TfwC33E4Z0o499MYC71eUE'
+        );
+        if (!res.ok) return;
+        const doc = await res.json();
+        const isEnforced = doc?.fields?.enforced?.booleanValue !== false;
+        if (mounted) setEnforced(isEnforced);
+      } catch {}
+    };
+    checkCloud();
+    const timer = setInterval(checkCloud, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const isDev =
+    user &&
+    (user.role === 'developer' ||
+      user.isDeveloper ||
+      (user.email || '').toLowerCase() === 'mz0970mmz@gmail.com' ||
+      (user.username || '').toLowerCase() === 'developer');
+
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
+  const isExemptRoute =
+    path.startsWith('/login') ||
+    path.startsWith('/register') ||
+    path.startsWith('/admin') ||
+    path.startsWith('/profile');
+
+  if (!enforced || isDev || tierState !== 'free' || isExemptRoute) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9000,
+        background: 'rgba(0, 0, 0, 0.96)',
+        backdropFilter: 'blur(20px)',
+        overflowY: 'auto',
+        padding: '2rem 1rem 4rem'
+      }}
+    >
+      <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            marginBottom: '1.25rem',
+            padding: '1rem 1.25rem',
+            borderRadius: '16px',
+            background: '#0a0a0f',
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 900, fontSize: '1.05rem', color: '#fff' }}>
+              🔒 نظام عضوية BLACK X VIP مفعل حالياً على جميع النسخ
+            </div>
+            <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.68)' }}>
+              اشترك في إحدى باقات VIP أو أدخل كود التفعيل الفوري، أو سجّل دخولك إذا كنت مشتركاً أو مطور المنصة.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenAuth ? onOpenAuth('login') : (window.location.href = '/profile')}
+            style={{
+              padding: '0.6rem 1.15rem',
+              borderRadius: '11px',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              fontWeight: 900,
+              fontSize: '0.84rem',
+              cursor: 'pointer'
+            }}
+          >
+            🔐 تسجيل الدخول لحسابك / المطور
+          </button>
+        </div>
+
+        <VipPlansSection
+          user={user}
+          onVipUpdated={(u) => {
+            setTierState(resolveUserVipTier(u));
+            onVipUpdated?.(u);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
