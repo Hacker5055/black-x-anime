@@ -650,6 +650,7 @@ export default function MobileApkApp() {
   const [devGenUses, setDevGenUses] = useState(1);
   const [devGenBusy, setDevGenBusy] = useState(false);
   const [lastGenCode, setLastGenCode] = useState('');
+  const [redeemedVipTier, setRedeemedVipTier] = useState(() => localStorage.getItem('bx_mob_redeemed_vip_tier') || '');
 
   const isDeveloper = useMemo(() => {
     if (!user) return false;
@@ -660,11 +661,11 @@ export default function MobileApkApp() {
 
   const userVipTier = useMemo(() => {
     if (isDeveloper) return 'vip_monarch';
-    const redeemedLocal = localStorage.getItem('bx_mob_redeemed_vip_tier');
+    const redeemedLocal = redeemedVipTier || localStorage.getItem('bx_mob_redeemed_vip_tier');
     if (redeemedLocal === 'vip_monarch' || user?.vipTier === 'vip_monarch') return 'vip_monarch';
     if (redeemedLocal === 'vip_basic' || user?.vipTier === 'vip_basic') return 'vip_basic';
     return 'free';
-  }, [isDeveloper, user]);
+  }, [isDeveloper, user, redeemedVipTier]);
 
   const showToast = useCallback((msg) => {
     setToastMsg(msg);
@@ -1011,6 +1012,7 @@ export default function MobileApkApp() {
         localStorage.setItem('bx_mob_redeemed_vip_code', clean);
         localStorage.setItem('bx_mob_redeemed_vip_tier', newTier);
         localStorage.setItem('blackx.vipTier', newTier);
+        setRedeemedVipTier(newTier);
 
         if (user) {
           const updatedUser = {
@@ -5178,7 +5180,7 @@ export default function MobileApkApp() {
 
                     <button
                       type="button"
-                      disabled={vipToggleBusy}
+                      disabled={devToggleBusy}
                       onClick={() => handleDevToggleGlobalVip(!globalVipEnforced)}
                       style={{
                         width: '100%',
@@ -5192,7 +5194,7 @@ export default function MobileApkApp() {
                         cursor: 'pointer'
                       }}
                     >
-                      {vipToggleBusy
+                      {devToggleBusy
                         ? isRtl
                           ? '⏳ جاري تعميم الأمر على جميع النسخ...'
                           : '⏳ Syncing across all instances...'
@@ -5213,8 +5215,8 @@ export default function MobileApkApp() {
                     </div>
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
                       <select
-                        value={devGenPlan}
-                        onChange={(e) => setDevGenPlan(e.target.value)}
+                        value={devGenTier}
+                        onChange={(e) => setDevGenTier(e.target.value)}
                         style={{
                           flex: 1,
                           padding: '0.5rem',
@@ -5251,7 +5253,7 @@ export default function MobileApkApp() {
                     </div>
                     <button
                       type="button"
-                      disabled={devCodeBusy}
+                      disabled={devGenBusy}
                       onClick={handleDevGenerateVipCode}
                       style={{
                         width: '100%',
@@ -5265,7 +5267,7 @@ export default function MobileApkApp() {
                         cursor: 'pointer'
                       }}
                     >
-                      {devCodeBusy ? '⏳ جاري التوليد...' : '⚡ توليد كود VIP جديد وحفظه بالسحابة'}
+                      {devGenBusy ? '⏳ جاري التوليد...' : '⚡ توليد كود VIP جديد وحفظه بالسحابة'}
                     </button>
 
                     {cloudVipCodes.length > 0 && (
@@ -5539,8 +5541,8 @@ export default function MobileApkApp() {
             <form onSubmit={handleRedeemVipCode} style={{ display: 'flex', gap: '0.45rem', marginTop: '0.5rem' }}>
               <input
                 type="text"
-                value={vipCodeInput}
-                onChange={(e) => setVipCodeInput(e.target.value)}
+                value={vipRedeemCode}
+                onChange={(e) => setVipRedeemCode(e.target.value)}
                 placeholder={isRtl ? 'أدخل كود تفعيل VIP (مثال: BX-XXXX-XXXX)...' : 'Enter VIP Activation Code...'}
                 style={{
                   flex: 1,
@@ -5555,7 +5557,7 @@ export default function MobileApkApp() {
               />
               <button
                 type="submit"
-                disabled={vipCodeBusy}
+                disabled={vipRedeemBusy}
                 style={{
                   padding: '0 0.95rem',
                   borderRadius: '10px',
@@ -5567,7 +5569,7 @@ export default function MobileApkApp() {
                   cursor: 'pointer'
                 }}
               >
-                {vipCodeBusy ? '⏳' : isRtl ? 'تفعيل' : 'Activate'}
+                {vipRedeemBusy ? '⏳' : isRtl ? 'تفعيل' : 'Activate'}
               </button>
             </form>
           </div>
@@ -6883,8 +6885,8 @@ export default function MobileApkApp() {
               <div style={{ display: 'flex', gap: '0.45rem' }}>
                 <input
                   type="text"
-                  value={vipCodeInput}
-                  onChange={(e) => setVipCodeInput(e.target.value)}
+                  value={vipRedeemCode}
+                  onChange={(e) => setVipRedeemCode(e.target.value)}
                   placeholder="BX-XXXX-XXXX-XXXX"
                   style={{
                     flex: 1,
@@ -6900,7 +6902,7 @@ export default function MobileApkApp() {
                 />
                 <button
                   type="submit"
-                  disabled={vipCodeBusy}
+                  disabled={vipRedeemBusy}
                   style={{
                     padding: '0 1.15rem',
                     borderRadius: '11px',
@@ -6912,7 +6914,7 @@ export default function MobileApkApp() {
                     cursor: 'pointer'
                   }}
                 >
-                  {vipCodeBusy ? '⏳' : isRtl ? 'تفعيل الآن' : 'Activate'}
+                  {vipRedeemBusy ? '⏳' : isRtl ? 'تفعيل الآن' : 'Activate'}
                 </button>
               </div>
             </form>

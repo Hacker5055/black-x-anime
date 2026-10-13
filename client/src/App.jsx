@@ -64,6 +64,81 @@ function Footer() {
   );
 }
 
+class MobileErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMsg: '' };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMsg: error?.message || String(error) };
+  }
+  componentDidCatch(error, info) {
+    console.error('[MobileApkApp ErrorBoundary]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            minHeight: '100vh',
+            background: '#000000',
+            color: '#ffffff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            textAlign: 'center',
+            fontFamily: 'system-ui, sans-serif'
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              background: '#ffffff',
+              color: '#000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 900,
+              fontSize: '1.6rem',
+              marginBottom: '1rem'
+            }}
+          >
+            X
+          </div>
+          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.15rem', fontWeight: 900 }}>BLACK X MOBILE 120Hz</h2>
+          <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: 'rgba(255,255,255,0.7)' }}>
+            تم اكتشاف خطأ مؤقت في الذاكرة المحلية — اضغط لإعادة تشغيل الواجهة فوراً
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false, errorMsg: '' });
+              window.location.reload();
+            }}
+            style={{
+              padding: '0.75rem 1.5rem',
+              borderRadius: '12px',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              fontWeight: 900,
+              fontSize: '0.86rem',
+              cursor: 'pointer'
+            }}
+          >
+            ⚡ إعادة تحميل التطبيق
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
   const { user } = useAuth();
@@ -84,7 +159,11 @@ export default function App() {
   }, []);
 
   if (isApkRuntime) {
-    return <MobileApkApp />;
+    return (
+      <MobileErrorBoundary>
+        <MobileApkApp />
+      </MobileErrorBoundary>
+    );
   }
 
   return (
