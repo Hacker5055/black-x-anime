@@ -764,6 +764,21 @@ export default function MobileApkApp() {
   const [devPinNoteInput, setDevPinNoteInput] = useState('');
   const [devPinBusy, setDevPinBusy] = useState(false);
 
+  // ==================== v7.0 APEX & CLEAN OBSIDIAN UI STATES ====================
+  const [moodDrawerOpen, setMoodDrawerOpen] = useState(false);
+  const [playerStudioOpen, setPlayerStudioOpen] = useState(false);
+  const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
+  const [profileSubTab, setProfileSubTab] = useState('account'); // 'account' | 'appearance' | 'vault' | 'developer'
+  const [devSubTab, setDevSubTab] = useState('vip'); // 'vip' | 'users' | 'broadcast' | 'requests'
+  const [readingBgmMode, setReadingBgmMode] = useState('off'); // 'off' | 'rain' | 'drone' | 'battle'
+  const bgmCtxRef = useRef(null);
+  const bgmTimerRef = useRef(null);
+  const [ttsSpeaking, setTtsSpeaking] = useState(false);
+  const [userRequestType, setUserRequestType] = useState('anime'); // 'anime' | 'manga' | 'issue'
+  const [userRequestText, setUserRequestText] = useState('');
+  const [userRequestBusy, setUserRequestBusy] = useState(false);
+  const [cloudUserRequests, setCloudUserRequests] = useState([]);
+
   const isDeveloper = useMemo(() => {
     if (!user) return false;
     const em = String(user.email || '').toLowerCase().trim();
@@ -1042,6 +1057,9 @@ export default function MobileApkApp() {
         }
         if (parsed.pinnedRec !== undefined) {
           setGlobalPinnedRec(parsed.pinnedRec || null);
+        }
+        if (Array.isArray(parsed.userRequests)) {
+          setCloudUserRequests(parsed.userRequests);
         }
       } else if (typeof doc?.fields?.enforced?.booleanValue === 'boolean') {
         const enf = doc.fields.enforced.booleanValue;
@@ -2291,6 +2309,231 @@ export default function MobileApkApp() {
       globalBroadcastMsg,
       showToast
     ]
+  );
+
+  // ==================== v7.0 APEX & CLEAN OBSIDIAN CONTROLLERS ====================
+
+  // 1. Built-In WebAudio Reading Ambience & Battle BGM Synth
+  const stopReadingBgm = useCallback(() => {
+    try {
+      if (bgmTimerRef.current) {
+        clearInterval(bgmTimerRef.current);
+        bgmTimerRef.current = null;
+      }
+      if (bgmCtxRef.current) {
+        bgmCtxRef.current.close().catch(() => {});
+        bgmCtxRef.current = null;
+      }
+    } catch (_) {}
+  }, []);
+
+  const handleCycleReadingBgm = useCallback(() => {
+    const order = ['off', 'drone', 'rain', 'battle'];
+    const next = order[(order.indexOf(readingBgmMode) + 1) % order.length];
+    stopReadingBgm();
+    setReadingBgmMode(next);
+    if (next === 'off') {
+      showToast('🔇 تم إيقاف موسيقى القراءة الخلفية');
+      return;
+    }
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      bgmCtxRef.current = ctx;
+
+      if (next === 'drone') {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.type = 'sine';
+        osc2.type = 'triangle';
+        osc1.frequency.value = 65.41; // C2 deep monarch drone
+        osc2.frequency.value = 98.0; // G2 fifth
+        gain.gain.value = 0.045;
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+        osc1.start();
+        osc2.start();
+        showToast('🌌 تم تشغيل موسيقى القراءة: فضاء إمبراطور الظلال (Dark Drone)');
+      } else if (next === 'rain') {
+        const bufferSize = ctx.sampleRate * 2;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99765 * b0 + white * 0.099046;
+          b1 = 0.963 * b1 + white * 0.2965164;
+          b2 = 0.57 * b2 + white * 1.0526913;
+          output[i] = (b0 + b1 + b2 + white * 0.1848) * 0.04;
+        }
+        const whiteNoise = ctx.createBufferSource();
+        whiteNoise.buffer = noiseBuffer;
+        whiteNoise.loop = true;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 950;
+        const gain = ctx.createGain();
+        gain.gain.value = 0.22;
+        whiteNoise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        whiteNoise.start(0);
+        showToast('🌧️ تم تشغيل موسيقى القراءة: مطر ليلي هادئ (Dark Rain Ambience)');
+      } else if (next === 'battle') {
+        const notes = [110, 130.81, 146.83, 164.81, 146.83, 130.81];
+        let step = 0;
+        bgmTimerRef.current = setInterval(() => {
+          try {
+            if (!bgmCtxRef.current) return;
+            const o = bgmCtxRef.current.createOscillator();
+            const g = bgmCtxRef.current.createGain();
+            o.type = 'sawtooth';
+            o.frequency.value = notes[step % notes.length];
+            step++;
+            g.gain.setValueAtTime(0.035, bgmCtxRef.current.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, bgmCtxRef.current.currentTime + 0.32);
+            o.connect(g);
+            g.connect(bgmCtxRef.current.destination);
+            o.start();
+            o.stop(bgmCtxRef.current.currentTime + 0.34);
+          } catch (_) {}
+        }, 380);
+        showToast('⚔️ تم تشغيل موسيقى القراءة: نبض القتال الحماسي (120Hz Battle Pulse)');
+      }
+    } catch (_) {}
+  }, [readingBgmMode, stopReadingBgm, showToast]);
+
+  useEffect(() => {
+    if (!activeMangaChapter && readingBgmMode !== 'off') {
+      stopReadingBgm();
+      setReadingBgmMode('off');
+    }
+  }, [activeMangaChapter, readingBgmMode, stopReadingBgm]);
+
+  // 2. Arabic/English TTS Story Narrator
+  const handleToggleSpeakText = useCallback(
+    (textToRead) => {
+      try {
+        if (!window.speechSynthesis) {
+          showToast('محرك النطق الصوتي غير مدعوم على هذا الجهاز');
+          return;
+        }
+        if (window.speechSynthesis.speaking || ttsSpeaking) {
+          window.speechSynthesis.cancel();
+          setTtsSpeaking(false);
+          showToast('🔇 تم إيقاف القارئ الصوتي للقصة');
+          return;
+        }
+        const cleanText = String(textToRead || '').trim();
+        if (!cleanText) return;
+        const utter = new SpeechSynthesisUtterance(cleanText);
+        utter.lang = /[\u0600-\u06FF]/.test(cleanText) ? 'ar-SA' : 'en-US';
+        utter.rate = 0.98;
+        utter.onend = () => setTtsSpeaking(false);
+        utter.onerror = () => setTtsSpeaking(false);
+        setTtsSpeaking(true);
+        window.speechSynthesis.speak(utter);
+        showToast('🔊 جاري قراءة ملخص القصة صوتياً...');
+      } catch (_) {
+        setTtsSpeaking(false);
+      }
+    },
+    [ttsSpeaking, showToast]
+  );
+
+  // 3. User Direct Request Box & Developer Ticket Center
+  const handleSubmitUserRequest = useCallback(
+    async (e) => {
+      if (e?.preventDefault) e.preventDefault();
+      const clean = String(userRequestText || '').trim();
+      if (!clean) {
+        showToast('يرجى كتابة اسم العمل أو تفاصيل طلبك أولاً');
+        return;
+      }
+      setUserRequestBusy(true);
+      try {
+        const newReq = {
+          id: `req_${Date.now()}`,
+          type: userRequestType,
+          text: clean,
+          author: user?.displayName || user?.username || 'زائر BLACK X',
+          email: user?.email || '',
+          createdAt: new Date().toISOString()
+        };
+        const nextList = [newReq, ...cloudUserRequests].slice(0, 60);
+        const payload = {
+          enforced: globalVipEnforced,
+          updatedAt: new Date().toISOString(),
+          codes: cloudVipCodes,
+          broadcastMsg: globalBroadcastMsg,
+          pinnedRec: globalPinnedRec,
+          userRequests: nextList
+        };
+        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(payload) },
+              enforced: { booleanValue: globalVipEnforced },
+              updatedAt: { stringValue: payload.updatedAt }
+            }
+          })
+        });
+        setCloudUserRequests(nextList);
+        setUserRequestText('');
+        showToast('📩 تم إرسال طلبك مباشرة إلى لوحة قيادة المطور بنجاح!');
+      } catch (_) {
+        showToast('تعذر إرسال الطلب حالياً');
+      } finally {
+        setUserRequestBusy(false);
+      }
+    },
+    [
+      userRequestText,
+      userRequestType,
+      user,
+      cloudUserRequests,
+      globalVipEnforced,
+      cloudVipCodes,
+      globalBroadcastMsg,
+      globalPinnedRec,
+      showToast
+    ]
+  );
+
+  const handleDevDeleteUserRequest = useCallback(
+    async (reqId) => {
+      if (!isDeveloper) return;
+      const nextList = cloudUserRequests.filter((r) => r.id !== reqId);
+      setCloudUserRequests(nextList);
+      try {
+        const payload = {
+          enforced: globalVipEnforced,
+          updatedAt: new Date().toISOString(),
+          codes: cloudVipCodes,
+          broadcastMsg: globalBroadcastMsg,
+          pinnedRec: globalPinnedRec,
+          userRequests: nextList
+        };
+        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              json: { stringValue: JSON.stringify(payload) },
+              enforced: { booleanValue: globalVipEnforced },
+              updatedAt: { stringValue: payload.updatedAt }
+            }
+          })
+        });
+        showToast('✓ تم إنجاز/حذف الطلب من قائمة المطور');
+      } catch (_) {}
+    },
+    [isDeveloper, cloudUserRequests, globalVipEnforced, cloudVipCodes, globalBroadcastMsg, globalPinnedRec, showToast]
   );
 
   // Measure real display refresh rate (60Hz / 90Hz / 120Hz / 144Hz)
@@ -4725,152 +4968,172 @@ export default function MobileApkApp() {
             </div>
           )}
 
-          {/* Official Developer Pinned Spotlight Recommendation Banner */}
-          {globalPinnedRec && (
-            <section style={{ padding: '0.85rem 1rem 0' }}>
-              <div
-                onClick={() => handleOpenAnime(globalPinnedRec)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.7rem',
-                  borderRadius: '16px',
-                  background: '#09090d',
-                  border: '1.5px solid #ffffff',
-                  cursor: 'pointer'
-                }}
-              >
-                <img
-                  src={globalPinnedRec.poster}
-                  alt={globalPinnedRec.titleEn}
-                  style={{ width: '58px', height: '80px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.22rem' }}>
-                    <span
-                      style={{
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontSize: '0.62rem',
-                        fontWeight: 900,
-                        padding: '0.1rem 0.45rem',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      📌 {isRtl ? 'ترشيح المطور الرسمي' : 'Developer Pick'}
-                    </span>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'rgba(255,255,255,0.75)' }}>
-                      ★ {globalPinnedRec.rating}
-                    </span>
-                  </div>
-                  <div style={{ fontWeight: 900, fontSize: '0.86rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {globalPinnedRec.titleEn}
-                  </div>
-                  <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.18rem' }}>
-                    {globalPinnedRec.devNote}
-                  </div>
-                </div>
-                <span
-                  style={{
-                    padding: '0.4rem 0.65rem',
-                    borderRadius: '9px',
-                    background: '#ffffff',
-                    color: '#000000',
-                    fontSize: '0.72rem',
-                    fontWeight: 900,
-                    flexShrink: 0
-                  }}
-                >
-                  ▶
-                </span>
-              </div>
-            </section>
-          )}
-
-          {/* ==================== v5.0 SMART DNA MOOD MATCHER & TONIGHT'S SPIN WHEEL ==================== */}
-          <section style={{ padding: '0.85rem 1rem 0.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
-              <div style={{ fontWeight: 900, fontSize: '0.88rem' }}>
-                🧬 {isRtl ? 'مستشار المزاج والتطابق الذكي' : 'Smart DNA & Mood Matcher'}
-              </div>
+          {/* ==================== v7.0 CLEAN OBSIDIAN SMART QUICK-ACTION DOCK ==================== */}
+          <section style={{ padding: '0.7rem 1rem 0.2rem' }}>
+            <div
+              className="bx-mob-scroll"
+              style={{
+                display: 'flex',
+                gap: '0.45rem',
+                overflowX: 'auto',
+                paddingBottom: '0.3rem',
+                alignItems: 'center'
+              }}
+            >
               <button
                 type="button"
                 disabled={spinningWheel}
                 onClick={handleSpinWheelTonight}
                 style={{
-                  padding: '0.36rem 0.75rem',
+                  padding: '0.46rem 0.85rem',
                   borderRadius: '99px',
                   background: '#ffffff',
                   color: '#000000',
                   border: 'none',
                   fontWeight: 900,
-                  fontSize: '0.72rem',
+                  fontSize: '0.73rem',
                   cursor: 'pointer',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
-                🎲 {spinningWheel ? (isRtl ? 'جاري السحب...' : 'Spinning...') : isRtl ? 'اختر لي سهرة الليلة' : 'Spin Tonight'}
+                🎲 {spinningWheel ? (isRtl ? 'جاري السحب...' : 'Spinning...') : isRtl ? 'سهرة الليلة' : 'Tonight Pick'}
               </button>
-            </div>
-            <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
-              {[
-                { id: 'all', ar: '🧬 الكل (تطابق ذوقك)', en: '🧬 All (DNA Match)' },
-                { id: 'zero_to_hero', ar: '⚔️ بطل يتطور من الصفر', en: '⚔️ Zero to Hero' },
-                { id: 'mind_games', ar: '🧠 دهاء وتخطيط', en: '🧠 Mind Games' },
-                { id: 'dark_battles', ar: '🩸 قتالات دموية مظلمة', en: '🩸 Dark Battles' },
-                { id: 'monarch', ar: '👑 إمبراطور السيادة', en: '👑 Sovereign Monarch' }
-              ].map((m) => {
-                const active = activeMoodFilter === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => handleSelectMood(m.id)}
-                    style={{
-                      padding: '0.42rem 0.8rem',
-                      borderRadius: '99px',
-                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: active ? '#000000' : '#ffffff',
-                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
-                      fontWeight: 900,
-                      fontSize: '0.72rem',
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isRtl ? m.ar : m.en}
-                  </button>
-                );
-              })}
+
+              <button
+                type="button"
+                onClick={() => setMoodDrawerOpen((v) => !v)}
+                style={{
+                  padding: '0.46rem 0.85rem',
+                  borderRadius: '99px',
+                  background: moodDrawerOpen || activeMoodFilter !== 'all' ? '#ffffff' : '#0b0b10',
+                  color: moodDrawerOpen || activeMoodFilter !== 'all' ? '#000000' : '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.73rem',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                🧬 {isRtl ? 'فلتر المزاج الذكي' : 'Mood Matcher'} {moodDrawerOpen ? '▲' : '▼'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRadarModalOpen(true)}
+                style={{
+                  padding: '0.46rem 0.85rem',
+                  borderRadius: '99px',
+                  background: '#0b0b10',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontWeight: 900,
+                  fontSize: '0.73rem',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                📡 {isRtl ? 'رادار الحلقات' : 'Release Radar'}
+              </button>
+
+              {globalPinnedRec && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAnime(globalPinnedRec)}
+                  style={{
+                    padding: '0.46rem 0.85rem',
+                    borderRadius: '99px',
+                    background: '#0b0b10',
+                    color: '#ffffff',
+                    border: '1.5px solid #ffffff',
+                    fontWeight: 900,
+                    fontSize: '0.73rem',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  📌 {isRtl ? `ترشيح الإدارة: ${globalPinnedRec.titleEn}` : `Pinned: ${globalPinnedRec.titleEn}`}
+                </button>
+              )}
             </div>
 
-            {activeMoodFilter !== 'all' && (
-              <div style={{ marginTop: '0.5rem' }}>
-                {moodLoading ? (
-                  <div style={{ padding: '1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                    {isRtl ? '⏳ جاري تحليل ذوقك واستخراج أقوى الترشيحات...' : '⏳ Matching your DNA taste...'}
-                  </div>
-                ) : (
-                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.7rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
-                    {moodResults.map((item) => (
-                      <div
-                        key={item.objectID}
-                        className="bx-mob-card"
-                        onClick={() => handleOpenAnime(item)}
-                        style={{ minWidth: '118px', maxWidth: '118px', cursor: 'pointer' }}
+            {/* Collapsible Mood Drawer (Only visible when opened or active) */}
+            {(moodDrawerOpen || activeMoodFilter !== 'all') && (
+              <div
+                style={{
+                  marginTop: '0.45rem',
+                  padding: '0.7rem',
+                  borderRadius: '14px',
+                  background: '#09090d',
+                  border: '1px solid rgba(255,255,255,0.16)'
+                }}
+              >
+                <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
+                  {[
+                    { id: 'all', ar: '🧬 إخفاء الفلتر', en: '🧬 Clear Filter' },
+                    { id: 'zero_to_hero', ar: '⚔️ بطل يتطور من الصفر', en: '⚔️ Zero to Hero' },
+                    { id: 'mind_games', ar: '🧠 دهاء وتخطيط', en: '🧠 Mind Games' },
+                    { id: 'dark_battles', ar: '🩸 قتالات دموية مظلمة', en: '🩸 Dark Battles' },
+                    { id: 'monarch', ar: '👑 إمبراطور السيادة', en: '👑 Sovereign Monarch' }
+                  ].map((m) => {
+                    const active = activeMoodFilter === m.id && m.id !== 'all';
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          handleSelectMood(m.id);
+                          if (m.id === 'all') setMoodDrawerOpen(false);
+                        }}
+                        style={{
+                          padding: '0.38rem 0.75rem',
+                          borderRadius: '99px',
+                          background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                          color: active ? '#000000' : '#ffffff',
+                          border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+                          fontWeight: 900,
+                          fontSize: '0.71rem',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
                       >
-                        <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', aspectRatio: '2/2.85', border: '1px solid rgba(255,255,255,0.18)' }}>
-                          <img src={item.poster} alt={item.titleEn} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <span style={{ position: 'absolute', top: '6px', right: '6px', background: '#ffffff', color: '#000000', fontSize: '0.6rem', fontWeight: 900, padding: '0.1rem 0.38rem', borderRadius: '5px' }}>
-                            🧬 {getDnaMatchScore(item)}%
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.73rem', fontWeight: 900, marginTop: '0.3rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.titleEn}
-                        </div>
+                        {isRtl ? m.ar : m.en}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {activeMoodFilter !== 'all' && (
+                  <div style={{ marginTop: '0.55rem' }}>
+                    {moodLoading ? (
+                      <div style={{ padding: '0.75rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)' }}>
+                        {isRtl ? '⏳ جاري تحليل ذوقك واستخراج أقوى الترشيحات...' : '⏳ Matching your DNA taste...'}
                       </div>
-                    ))}
+                    ) : (
+                      <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                        {moodResults.map((item) => (
+                          <div
+                            key={item.objectID}
+                            className="bx-mob-card"
+                            onClick={() => handleOpenAnime(item)}
+                            style={{ minWidth: '112px', maxWidth: '112px', cursor: 'pointer' }}
+                          >
+                            <div style={{ position: 'relative', borderRadius: '11px', overflow: 'hidden', aspectRatio: '2/2.85', border: '1px solid rgba(255,255,255,0.18)' }}>
+                              <img src={item.poster} alt={item.titleEn} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <span style={{ position: 'absolute', top: '5px', right: '5px', background: '#ffffff', color: '#000000', fontSize: '0.58rem', fontWeight: 900, padding: '0.1rem 0.35rem', borderRadius: '5px' }}>
+                                🧬 {getDnaMatchScore(item)}%
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.71rem', fontWeight: 900, marginTop: '0.28rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {item.titleEn}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -5727,234 +5990,232 @@ export default function MobileApkApp() {
 
                     <button
                       type="button"
-                      onClick={() => setReaderHudVisible(false)}
+                      onClick={handleCycleReadingBgm}
                       style={{
-                        padding: '0.3rem 0.6rem',
+                        padding: '0.32rem 0.6rem',
                         borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.12)',
+                        background: readingBgmMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.12)',
                         border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ⛶ {isRtl ? 'إخفاء الشريط' : 'Hide Bar'}
-                    </button>
-                  </div>
-
-                  {/* Reader Tools: Webtoon/Page Mode, Zoom, Auto-Scroll */}
-                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto' }}>
-                    <button
-                      type="button"
-                      onClick={() => setReaderMode((m) => (m === 'webtoon' ? 'page' : 'webtoon'))}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
+                        color: readingBgmMode !== 'off' ? '#000' : '#fff',
                         fontSize: '0.7rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
                       }}
                     >
-                      {readerMode === 'webtoon'
-                        ? isRtl
-                          ? '📜 وضع عمودي (Webtoon)'
-                          : '📜 Webtoon Mode'
-                        : isRtl
-                        ? '📄 وضع صفحات'
-                        : '📄 Page Mode'}
+                      🎧 {readingBgmMode === 'drone' ? 'Drone' : readingBgmMode === 'rain' ? 'Rain' : readingBgmMode === 'battle' ? 'Battle' : isRtl ? 'موسيقى' : 'BGM'}
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : z === 150 ? 200 : 100))}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '8px',
-                        background: readerZoom > 100 ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                        color: readerZoom > 100 ? '#000000' : '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🔍 {readerZoom}%
-                    </button>
-
-                    {readerMode === 'page' && (
-                      <button
-                        type="button"
-                        onClick={() => setDualPageSpread((d) => !d)}
-                        style={{
-                          padding: '0.3rem 0.65rem',
-                          borderRadius: '8px',
-                          background: dualPageSpread ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: dualPageSpread ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        📖 {isRtl ? `عرض مزدوج: ${dualPageSpread ? 'صفحتين' : 'صفحة'}` : `Spread: ${dualPageSpread ? '2P' : '1P'}`}
-                      </button>
-                    )}
-
-                    {readerMode === 'webtoon' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const speeds = [0, 0.5, 1, 2, 3.5, 5];
-                          const next = speeds[(speeds.indexOf(autoScrollSpeed) + 1) % speeds.length];
-                          setAutoScrollSpeed(next);
-                        }}
-                        style={{
-                          padding: '0.3rem 0.65rem',
-                          borderRadius: '8px',
-                          background: autoScrollSpeed > 0 ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: autoScrollSpeed > 0 ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ⏬ {autoScrollSpeed === 0 ? (isRtl ? 'تمرير تلقائي' : 'Auto-Scroll') : `Auto ${autoScrollSpeed}x`}
-                      </button>
-                    )}
-
-                    {/* Hardware Volume Keys Scroll Toggle */}
-                    <button
-                      type="button"
-                      onClick={() => setVolumeKeyScroll((v) => !v)}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '8px',
-                        background: volumeKeyScroll ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                        color: volumeKeyScroll ? '#000000' : '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🔊 {isRtl ? `أزرار الصوت: ${volumeKeyScroll ? 'تمرير' : 'صوت'}` : `Vol Keys: ${volumeKeyScroll ? 'Scroll' : 'Off'}`}
-                    </button>
-
-                    {/* AMOLED Eye-Care / Contrast Booster Filter */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setReaderEyeFilter((f) => (f === 'normal' ? 'warm' : f === 'warm' ? 'contrast' : 'normal'))
-                      }
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '8px',
-                        background: readerEyeFilter !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                        color: readerEyeFilter !== 'normal' ? '#000000' : '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {readerEyeFilter === 'normal'
-                        ? isRtl
-                          ? '👁️ ألوان أصلية'
-                          : '👁️ Normal'
-                        : readerEyeFilter === 'warm'
-                        ? isRtl
-                          ? '🌙 حماية العين'
-                          : '🌙 Eye Care'
-                        : isRtl
-                        ? '⚡ تباين فائق'
-                        : '⚡ Contrast+'}
-                    </button>
-
-                    {/* Seamless Webtoon Stitcher Toggle */}
-                    {readerMode === 'webtoon' && (
-                      <button
-                        type="button"
-                        onClick={() => setSeamlessStitch((s) => !s)}
-                        style={{
-                          padding: '0.3rem 0.65rem',
-                          borderRadius: '8px',
-                          background: seamlessStitch ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: seamlessStitch ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✂️ {isRtl ? `دمج الشرائح: ${seamlessStitch ? 'مفعل' : 'عادي'}` : `Stitch: ${seamlessStitch ? 'ON' : 'OFF'}`}
-                      </button>
-                    )}
-
-                    {/* Offline Chapter Caching Button */}
-                    <button
-                      type="button"
-                      disabled={savingOfflineChapter}
-                      onClick={handleSaveChapterOffline}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '8px',
-                        background: offlineChapters.some((x) => x.id === activeMangaChapter.id)
-                          ? '#ffffff'
-                          : 'rgba(255,255,255,0.12)',
-                        color: offlineChapters.some((x) => x.id === activeMangaChapter.id) ? '#000000' : '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.7rem',
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {savingOfflineChapter
-                        ? '⏳...'
-                        : offlineChapters.some((x) => x.id === activeMangaChapter.id)
-                        ? isRtl
-                          ? '✓ محفوظ بدون نت'
-                          : '✓ Offline Saved'
-                        : isRtl
-                        ? '📥 حفظ بدون نت'
-                        : '📥 Save Offline'}
-                    </button>
-
-                    {/* Visual Panel Bookmark Button */}
                     <button
                       type="button"
                       onClick={handleBookmarkCurrentPanel}
                       style={{
-                        padding: '0.3rem 0.65rem',
+                        padding: '0.32rem 0.55rem',
                         borderRadius: '8px',
                         background: 'rgba(255,255,255,0.12)',
-                        color: '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.22)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔖
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReaderSettingsOpen((v) => !v)}
+                      style={{
+                        padding: '0.32rem 0.65rem',
+                        borderRadius: '8px',
+                        background: readerSettingsOpen ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: readerSettingsOpen ? '#000' : '#fff',
                         fontSize: '0.7rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
                       }}
                     >
-                      🔖 {isRtl ? 'حفظ لقطة' : 'Bookmark Panel'}
+                      ⚙️ {isRtl ? 'الإعدادات' : 'Studio'}
                     </button>
-
-                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800, alignSelf: 'center', whiteSpace: 'nowrap' }}>
-                      {isRtl ? '💡 اضغط على الصورة لإخفاء/إظهار الشريط' : '💡 Tap page to toggle HUD'}
-                    </span>
                   </div>
+
+                  {/* Clean Collapsible Reader Studio Drawer (Opens only when ⚙️ الإعدادات is tapped) */}
+                  {readerSettingsOpen && (
+                    <div
+                      style={{
+                        marginTop: '0.35rem',
+                        padding: '0.65rem',
+                        borderRadius: '12px',
+                        background: '#09090d',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                        gap: '0.4rem'
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setReaderMode((m) => (m === 'webtoon' ? 'page' : 'webtoon'))}
+                        style={{
+                          padding: '0.42rem 0.6rem',
+                          borderRadius: '9px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {readerMode === 'webtoon' ? '📜 وضع عمودي (Webtoon)' : '📄 وضع صفحات (Page)'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : z === 150 ? 200 : 100))}
+                        style={{
+                          padding: '0.42rem 0.6rem',
+                          borderRadius: '9px',
+                          background: readerZoom > 100 ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          color: readerZoom > 100 ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔍 تكبير: {readerZoom}%
+                      </button>
+
+                      {readerMode === 'page' && (
+                        <button
+                          type="button"
+                          onClick={() => setDualPageSpread((d) => !d)}
+                          style={{
+                            padding: '0.42rem 0.6rem',
+                            borderRadius: '9px',
+                            background: dualPageSpread ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                            color: dualPageSpread ? '#000000' : '#ffffff',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            fontSize: '0.7rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📖 {dualPageSpread ? 'عرض: صفحتين' : 'عرض: صفحة واحدة'}
+                        </button>
+                      )}
+
+                      {readerMode === 'webtoon' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const speeds = [0, 0.5, 1, 2, 3.5, 5];
+                            const next = speeds[(speeds.indexOf(autoScrollSpeed) + 1) % speeds.length];
+                            setAutoScrollSpeed(next);
+                          }}
+                          style={{
+                            padding: '0.42rem 0.6rem',
+                            borderRadius: '9px',
+                            background: autoScrollSpeed > 0 ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                            color: autoScrollSpeed > 0 ? '#000000' : '#ffffff',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            fontSize: '0.7rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⏬ {autoScrollSpeed === 0 ? 'تمرير تلقائي: إيقاف' : `تمرير تلقائي: ${autoScrollSpeed}x`}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setVolumeKeyScroll((v) => !v)}
+                        style={{
+                          padding: '0.42rem 0.6rem',
+                          borderRadius: '9px',
+                          background: volumeKeyScroll ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          color: volumeKeyScroll ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔊 أزرار الصوت: {volumeKeyScroll ? 'تمرير' : 'صوت'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReaderEyeFilter((f) => (f === 'normal' ? 'warm' : f === 'warm' ? 'contrast' : 'normal'))
+                        }
+                        style={{
+                          padding: '0.42rem 0.6rem',
+                          borderRadius: '9px',
+                          background: readerEyeFilter !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          color: readerEyeFilter !== 'normal' ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {readerEyeFilter === 'normal'
+                          ? '👁️ ألوان أصلية'
+                          : readerEyeFilter === 'warm'
+                          ? '🌙 حماية العين'
+                          : '⚡ تباين فائق'}
+                      </button>
+
+                      {readerMode === 'webtoon' && (
+                        <button
+                          type="button"
+                          onClick={() => setSeamlessStitch((s) => !s)}
+                          style={{
+                            padding: '0.42rem 0.6rem',
+                            borderRadius: '9px',
+                            background: seamlessStitch ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                            color: seamlessStitch ? '#000000' : '#ffffff',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            fontSize: '0.7rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✂️ دمج الشرائح: {seamlessStitch ? 'مفعل' : 'عادي'}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={savingOfflineChapter}
+                        onClick={handleSaveChapterOffline}
+                        style={{
+                          padding: '0.42rem 0.6rem',
+                          borderRadius: '9px',
+                          background: offlineChapters.some((x) => x.id === activeMangaChapter.id)
+                            ? '#ffffff'
+                            : 'rgba(255,255,255,0.12)',
+                          color: offlineChapters.some((x) => x.id === activeMangaChapter.id) ? '#000000' : '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {savingOfflineChapter
+                          ? '⏳...'
+                          : offlineChapters.some((x) => x.id === activeMangaChapter.id)
+                          ? '✓ محفوظ بدون نت'
+                          : '📥 حفظ الفصل بدون نت'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -6257,9 +6518,29 @@ export default function MobileApkApp() {
                   <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginBottom: '0.4rem' }}>
                     {selectedManga.type || 'مانهوا'} • {selectedManga.sourceLabel || 'BLACK X 1'} • ★ {selectedManga.rate || '9.3'}
                   </div>
-                  <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45 }}>
+                  <p style={{ margin: '0 0 0.45rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45 }}>
                     {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || '').slice(0, 220)}
                   </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleToggleSpeakText(
+                        selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || selectedManga.name
+                      )
+                    }
+                    style={{
+                      padding: '0.28rem 0.7rem',
+                      borderRadius: '99px',
+                      background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                      color: ttsSpeaking ? '#000000' : '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      fontSize: '0.68rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen Story'}
+                  </button>
                 </div>
               </div>
 
@@ -6942,9 +7223,56 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 5: FULL USER PROFILE, BADGES & PERSONAL LIBRARY STUDIO ==================== */}
+      {/* ==================== TAB 5: FULL USER PROFILE, BADGES & PERSONAL LIBRARY STUDIO (v7.0 CLEAN OBSIDIAN SUB-TABS) ==================== */}
       {activeTab === 'profile' && !selectedAnime && (
         <main style={{ padding: '1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
+          {/* Clean Obsidian 4-Pill Profile Sub-Tab Bar */}
+          <div
+            className="bx-mob-scroll"
+            style={{
+              display: 'flex',
+              gap: '0.4rem',
+              overflowX: 'auto',
+              marginBottom: '0.9rem',
+              padding: '0.35rem',
+              borderRadius: '14px',
+              background: '#08080c',
+              border: '1px solid rgba(255,255,255,0.14)'
+            }}
+          >
+            {[
+              { id: 'account', ar: '👤 حسابي والألقاب', en: '👤 Account & Titles' },
+              { id: 'appearance', ar: '🎨 المظهر والأمان', en: '🎨 Theme & Security' },
+              { id: 'vault', ar: '💾 الخزنة ومكتبتي', en: '💾 Vault & Library' },
+              ...(isDeveloper
+                ? [{ id: 'developer', ar: `🛡️ قيادة المطور (${cloudUserRequests.length})`, en: '🛡️ Dev Command' }]
+                : [])
+            ].map((tb) => {
+              const active = profileSubTab === tb.id;
+              return (
+                <button
+                  key={tb.id}
+                  type="button"
+                  onClick={() => setProfileSubTab(tb.id)}
+                  style={{
+                    flex: 1,
+                    padding: '0.52rem 0.75rem',
+                    borderRadius: '10px',
+                    background: active ? '#ffffff' : 'transparent',
+                    color: active ? '#000000' : 'rgba(255,255,255,0.78)',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '0.73rem',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isRtl ? tb.ar : tb.en}
+                </button>
+              );
+            })}
+          </div>
+
           {user ? (
             <>
               <div
@@ -6954,7 +7282,8 @@ export default function MobileApkApp() {
                   background: '#0a0a0e',
                   border: '1px solid rgba(255,255,255,0.16)',
                   textAlign: 'center',
-                  marginBottom: '1rem'
+                  marginBottom: '1rem',
+                  display: profileSubTab === 'account' ? 'block' : 'none'
                 }}
               >
                 {user.photoUrl ? (
@@ -7171,11 +7500,11 @@ export default function MobileApkApp() {
                 )}
               </div>
 
-              {/* ==================== DEVELOPER EXCLUSIVE MASTER VIP CONTROL PANEL (حساب المطور فقط) ==================== */}
-              {isDeveloper && (
+              {/* ==================== DEVELOPER EXCLUSIVE MASTER VIP CONTROL PANEL (حساب المطور فقط — مقسم لـ 4 تبويبات منظمة) ==================== */}
+              {isDeveloper && profileSubTab === 'developer' && (
                 <div
                   style={{
-                    marginTop: '1rem',
+                    marginTop: '0.2rem',
                     padding: '1.1rem',
                     borderRadius: '18px',
                     background: 'linear-gradient(145deg, #111116 0%, #050507 100%)',
@@ -7185,7 +7514,7 @@ export default function MobileApkApp() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.92rem' }}>
-                      👑 {isRtl ? 'لوحة تحكم المطور المركزية (VIP Global Control)' : 'Developer Master VIP Control'}
+                      👑 {isRtl ? 'مركز قيادة المطور (Developer Command Center)' : 'Developer Command Center'}
                     </div>
                     <span
                       style={{
@@ -7197,19 +7526,56 @@ export default function MobileApkApp() {
                         fontWeight: 900
                       }}
                     >
-                      DEV MASTER
+                      DEV v7.0
                     </span>
                   </div>
 
-                  <p style={{ margin: '0 0 0.8rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
-                    {isRtl
-                      ? 'تحكم في فرض أو إلغاء اشتراكات الـ VIP على جميع المستخدمين في تطبيق الـ APK والموقع في نفس اللحظة عبر السحابة الموحدة:'
-                      : 'Control global VIP subscription enforcement across all APK and Website instances in real time:'}
-                  </p>
+                  {/* Developer 4-Sub-Tab Switcher */}
+                  <div
+                    className="bx-mob-scroll"
+                    style={{
+                      display: 'flex',
+                      gap: '0.35rem',
+                      overflowX: 'auto',
+                      marginBottom: '0.85rem',
+                      padding: '0.3rem',
+                      borderRadius: '12px',
+                      background: '#050507',
+                      border: '1px solid rgba(255,255,255,0.16)'
+                    }}
+                  >
+                    {[
+                      { id: 'vip', label: '👑 الأكواد والـ VIP' },
+                      { id: 'users', label: '👥 كشاف وترقية الأعضاء' },
+                      { id: 'broadcast', label: '📢 البث والترشيح' },
+                      { id: 'requests', label: `📩 الطلبات (${cloudUserRequests.length})` }
+                    ].map((dt) => (
+                      <button
+                        key={dt.id}
+                        type="button"
+                        onClick={() => setDevSubTab(dt.id)}
+                        style={{
+                          flex: 1,
+                          padding: '0.45rem 0.65rem',
+                          borderRadius: '9px',
+                          background: devSubTab === dt.id ? '#ffffff' : 'transparent',
+                          color: devSubTab === dt.id ? '#000000' : 'rgba(255,255,255,0.75)',
+                          border: 'none',
+                          fontWeight: 900,
+                          fontSize: '0.7rem',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {dt.label}
+                      </button>
+                    ))}
+                  </div>
 
-                  {/* Master Global VIP Switch Button */}
+                  {/*Master Global VIP Switch Button*/}
                   <div
                     style={{
+                      display: devSubTab === 'vip' ? 'block' : 'none',
                       padding: '0.85rem',
                       borderRadius: '14px',
                       background: globalVipEnforced ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
@@ -7272,7 +7638,7 @@ export default function MobileApkApp() {
                   </div>
 
                   {/* Cloud VIP Code Generator inside APK */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem' }}>
+                  <div style={{ display: devSubTab === 'vip' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
                       🔑 {isRtl ? 'توليد أكواد تفعيل VIP سحابية فورية (تعمل في الموقع والتطبيق):' : 'Generate Cloud VIP Activation Codes:'}
                     </div>
@@ -7383,7 +7749,7 @@ export default function MobileApkApp() {
                   </div>
 
                   {/* Developer Global Push Broadcast Transmitter */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                  <div style={{ display: devSubTab === 'broadcast' ? 'block' : 'none', paddingTop: '0.2rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
                       📢 {isRtl ? 'بث إشعار عام فوري لجميع الهواتف والموقع:' : 'Global Real-Time Push Broadcast Banner:'}
                     </div>
@@ -7448,7 +7814,7 @@ export default function MobileApkApp() {
                   </div>
 
                   {/* Developer Direct User VIP Upgrade (Upgrade any username or email without code) */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                  <div style={{ display: devSubTab === 'users' ? 'block' : 'none', paddingTop: '0.2rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
                       👑 {isRtl ? 'ترقية أي مستخدم مباشرة إلى VIP (بدون كود):' : 'Direct User VIP Grant (No Code Needed):'}
                     </div>
@@ -7551,7 +7917,7 @@ export default function MobileApkApp() {
                   </div>
 
                   {/* Developer Live Cloud User Inspector (كشاف المستخدمين السحابي المباشر) */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                  <div style={{ display: devSubTab === 'users' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
                       👥 {isRtl ? 'كشاف حسابات المستخدمين المباشر (Cloud User Inspector):' : 'Live Cloud User Inspector:'}
                     </div>
@@ -7652,7 +8018,7 @@ export default function MobileApkApp() {
                   </div>
 
                   {/* Developer Global Featured Spotlight Pin (تثبيت ترشيح المطور الرسمي) */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+                  <div style={{ display: devSubTab === 'broadcast' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
                     <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.45rem' }}>
                       📌 {isRtl ? 'تثبيت أنمي اليوم كترشيح رسمي أعلى الصفحة الرئيسية:' : 'Pin Official Developer Spotlight on Home:'}
                     </div>
@@ -7731,6 +8097,62 @@ export default function MobileApkApp() {
                       )}
                     </div>
                   </div>
+
+                  {/* Developer User Requests & Ticket Center (صندوق طلبات الأعضاء المباشر للمطور) */}
+                  {devSubTab === 'requests' && (
+                    <div style={{ paddingTop: '0.2rem' }}>
+                      <div style={{ fontWeight: 900, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                        📩 {isRtl ? `طلبات الأعضاء المباشرة (${cloudUserRequests.length}):` : `User Requests (${cloudUserRequests.length}):`}
+                      </div>
+                      {cloudUserRequests.length === 0 ? (
+                        <div style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.74rem', color: 'rgba(255,255,255,0.55)' }}>
+                          {isRtl ? 'لا توجد طلبات جديدة من الأعضاء حالياً.' : 'No pending user requests.'}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '240px', overflowY: 'auto' }}>
+                          {cloudUserRequests.map((req) => (
+                            <div
+                              key={req.id}
+                              style={{
+                                padding: '0.65rem',
+                                borderRadius: '11px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.16)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                              }}
+                            >
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800 }}>
+                                  {req.type === 'anime' ? '🎬 طلب أنمي' : req.type === 'manga' ? '📖 طلب مانهوا' : '🛠️ بلاغ/دعم'} • 👤 {req.author}
+                                </div>
+                                <div style={{ fontSize: '0.76rem', fontWeight: 900, marginTop: '0.15rem' }}>{req.text}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDevDeleteUserRequest(req.id)}
+                                style={{
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '8px',
+                                  background: '#ffffff',
+                                  color: '#000000',
+                                  border: 'none',
+                                  fontWeight: 900,
+                                  fontSize: '0.68rem',
+                                  cursor: 'pointer',
+                                  flexShrink: 0
+                                }}
+                              >
+                                ✓ إنجاز
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -7936,6 +8358,7 @@ export default function MobileApkApp() {
           {/* VIP Subscription Status & Code Redemption Box inside Profile */}
           <div
             style={{
+              display: profileSubTab === 'account' ? 'block' : 'none',
               marginTop: '1rem',
               padding: '1rem',
               borderRadius: '16px',
@@ -8005,10 +8428,88 @@ export default function MobileApkApp() {
             </form>
           </div>
 
+          {/* Direct User Request Box to Developer (صندوق طلبات الأنمي والمانهوا المباشر للمطور) */}
+          <div
+            style={{
+              display: profileSubTab === 'account' ? 'block' : 'none',
+              marginTop: '1rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.35rem' }}>
+              📩 {isRtl ? 'صندوق طلبات الأعضاء المباشر للمطور (أنمي / مانهوا / دعم):' : 'Direct Request to Developer:'}
+            </div>
+            <form onSubmit={handleSubmitUserRequest} style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                {[
+                  { id: 'anime', label: '🎬 طلب أنمي' },
+                  { id: 'manga', label: '📖 طلب مانهوا' },
+                  { id: 'issue', label: '🛠️ بلاغ أو استفسار' }
+                ].map((rt) => (
+                  <button
+                    key={rt.id}
+                    type="button"
+                    onClick={() => setUserRequestType(rt.id)}
+                    style={{
+                      flex: 1,
+                      padding: '0.4rem',
+                      borderRadius: '8px',
+                      background: userRequestType === rt.id ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                      color: userRequestType === rt.id ? '#000000' : '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      fontWeight: 900,
+                      fontSize: '0.68rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {rt.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <input
+                  type="text"
+                  value={userRequestText}
+                  onChange={(e) => setUserRequestText(e.target.value)}
+                  placeholder={isRtl ? 'اكتب اسم الأنمي أو المانهوا أو رسالتك للمطور...' : 'Type your request...'}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem 0.75rem',
+                    borderRadius: '10px',
+                    background: '#050507',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    fontSize: '0.75rem'
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={userRequestBusy}
+                  style={{
+                    padding: '0 0.9rem',
+                    borderRadius: '10px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '0.75rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {userRequestBusy ? '⏳' : isRtl ? 'إرسال' : 'Send'}
+                </button>
+              </div>
+            </form>
+          </div>
+
           {/* Internal Splash Screen Motion Graphics Selector (من الداخل فقط) */}
           <div
             style={{
-              marginTop: '1rem',
+              display: profileSubTab === 'appearance' ? 'block' : 'none',
+              marginTop: '0.2rem',
               padding: '1rem',
               borderRadius: '16px',
               background: '#0a0a0e',
@@ -8090,7 +8591,7 @@ export default function MobileApkApp() {
               borderRadius: '16px',
               background: '#0a0a0e',
               border: '1px solid rgba(255,255,255,0.16)',
-              display: 'flex',
+              display: profileSubTab === 'appearance' ? 'flex' : 'none',
               justifyContent: 'space-between',
               alignItems: 'center',
               gap: '0.75rem',
@@ -8103,8 +8604,8 @@ export default function MobileApkApp() {
               </div>
               <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
                 {isRtl
-                  ? 'الإصدار الحالي: BLACK X Mobile v6.0 God-Tier (120Hz Full Edition)'
-                  : 'Current Version: BLACK X Mobile v6.0 God-Tier (120Hz Full Edition)'}
+                  ? 'الإصدار الحالي: BLACK X Mobile v7.0 Apex (Clean Obsidian Edition)'
+                  : 'Current Version: BLACK X Mobile v7.0 Apex (Clean Obsidian Edition)'}
               </div>
             </div>
             <a
@@ -8114,8 +8615,8 @@ export default function MobileApkApp() {
               onClick={() =>
                 showToast(
                   isRtl
-                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v6.0 God-Tier المباشرة...'
-                    : '✓ Downloading latest BLACK X Mobile v6.0 God-Tier APK...'
+                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v7.0 Apex المباشرة...'
+                    : '✓ Downloading latest BLACK X Mobile v7.0 Apex APK...'
                 )
               }
               style={{
@@ -8136,6 +8637,7 @@ export default function MobileApkApp() {
           {/* Sovereign Achievements & Unlockable Titles Selector (خزنة الأوسمة والألقاب الملكية) */}
           <div
             style={{
+              display: profileSubTab === 'account' ? 'block' : 'none',
               marginTop: '1rem',
               padding: '1rem',
               borderRadius: '16px',
@@ -8195,7 +8697,8 @@ export default function MobileApkApp() {
           {/* 1-Tap Full Vault Backup & Restore (تصدير واستيراد الخزنة الكاملة بضغطة واحدة) */}
           <div
             style={{
-              marginTop: '1rem',
+              display: profileSubTab === 'vault' ? 'block' : 'none',
+              marginTop: '0.2rem',
               padding: '1rem',
               borderRadius: '16px',
               background: '#0a0a0e',
@@ -8258,6 +8761,7 @@ export default function MobileApkApp() {
           {/* Privacy & Security Suite: Incognito Mode + 4-Digit App PIN Lock */}
           <div
             style={{
+              display: profileSubTab === 'appearance' ? 'block' : 'none',
               marginTop: '1rem',
               padding: '1rem',
               borderRadius: '16px',
@@ -8385,7 +8889,7 @@ export default function MobileApkApp() {
           </div>
 
           {/* 8-Tab Personal Library Manager (Favorites, Offline Vault, Saved Panels, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
-          <div style={{ marginTop: '1.15rem' }}>
+          <div style={{ display: profileSubTab === 'vault' ? 'block' : 'none', marginTop: '1.15rem' }}>
             <h3 style={{ margin: '0 0 0.55rem', fontSize: '0.95rem', fontWeight: 900 }}>
               📚 {isRtl ? 'مكتبتي الشخصية، خزنة بدون نت، ولقطاتي' : 'My Library, Offline Vault & Snapshots'}
             </h3>
@@ -9289,22 +9793,6 @@ export default function MobileApkApp() {
                       })()}
                       <button
                         type="button"
-                        onClick={() => setAutoNextEp((v) => !v)}
-                        style={{
-                          padding: '0.28rem 0.55rem',
-                          borderRadius: '8px',
-                          background: autoNextEp ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.06)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: '#fff',
-                          fontSize: '0.7rem',
-                          fontWeight: 800,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🔁 {autoNextEp ? 'تلقائي ON' : 'تلقائي OFF'}
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => {
                           if (videoRef.current) {
                             videoRef.current.currentTime = Math.min(
@@ -9315,7 +9803,7 @@ export default function MobileApkApp() {
                           }
                         }}
                         style={{
-                          padding: '0.28rem 0.58rem',
+                          padding: '0.32rem 0.65rem',
                           borderRadius: '8px',
                           background: 'rgba(255,255,255,0.14)',
                           border: '1px solid rgba(255,255,255,0.28)',
@@ -9326,8 +9814,204 @@ export default function MobileApkApp() {
                           cursor: 'pointer'
                         }}
                       >
-                        ⏭ {isRtl ? 'تخطي المقدمة +85s' : 'Skip Intro +85s'}
+                        ⏭ +85s
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setWatchPartyModalOpen((v) => !v)}
+                        style={{
+                          padding: '0.32rem 0.65rem',
+                          borderRadius: '8px',
+                          background: watchPartyRoom ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                          border: '1px solid rgba(255,255,255,0.24)',
+                          color: watchPartyRoom ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🍿 {watchPartyRoom ? watchPartyRoom.roomCode : isRtl ? 'مشاهدة جماعية' : 'Party'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPlayerStudioOpen((v) => !v)}
+                        style={{
+                          padding: '0.32rem 0.72rem',
+                          borderRadius: '8px',
+                          background: playerStudioOpen ? '#ffffff' : 'rgba(255,255,255,0.14)',
+                          border: '1.5px solid #ffffff',
+                          color: playerStudioOpen ? '#000000' : '#ffffff',
+                          fontSize: '0.71rem',
+                          fontWeight: 900,
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🎛️ {isRtl ? 'استوديو المشغل' : 'Pro Studio'} {playerStudioOpen ? '▲' : '▼'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Clean Collapsible Pro Player Studio Sheet (Opens when 🎛️ استوديو المشغل is tapped) */}
+                  {playerStudioOpen && (
+                    <div
+                      style={{
+                        marginBottom: '0.65rem',
+                        padding: '0.7rem',
+                        borderRadius: '14px',
+                        background: '#09090d',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                        gap: '0.42rem'
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={handleCycleVisualShader}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: visualShaderMode !== 'original' ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: visualShaderMode !== 'original' ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✨ محسن الصورة:{' '}
+                        {visualShaderMode === 'upscale4k'
+                          ? '4K Upscale'
+                          : visualShaderMode === 'amoled_hdr'
+                          ? 'AMOLED HDR'
+                          : visualShaderMode === 'cinema_imax'
+                          ? 'Cinema IMAX'
+                          : 'أصلي'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCycleAudioBooster}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: audioBoostMode !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: audioBoostMode !== 'normal' ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔊 مضخم الصوت:{' '}
+                        {audioBoostMode === 'boost200'
+                          ? '200% Bass'
+                          : audioBoostMode === 'boost150'
+                          ? '150%'
+                          : audioBoostMode === 'voice'
+                          ? 'حوارات'
+                          : '100%'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !autoSkipIntro;
+                          setAutoSkipIntro(next);
+                          localStorage.setItem('bx_mob_autoskip_intro', String(next));
+                          showToast(next ? '⚡ التخطي التلقائي للمقدمة: مفعل' : '⚡ التخطي التلقائي للمقدمة: متوقف');
+                        }}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: autoSkipIntro ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: autoSkipIntro ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚡ تخطي المقدمة: {autoSkipIntro ? 'تلقائي ON' : 'يدوي'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAutoNextEp((v) => !v)}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: autoNextEp ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: autoNextEp ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔁 الحلقة التالية: {autoNextEp ? 'تلقائي ON' : 'OFF'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleTakeVideoSnapshot}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📸 التقاط لقطة 1080p
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCycleAbLoop}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: loopPointA !== null ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: loopPointA !== null ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔁 تكرار مشهد: {loopPointA === null ? 'A-B' : loopPointB === null ? 'A→...' : 'A⇄B'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCycleSleepTimer}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: sleepTimerMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: sleepTimerMode !== 'off' ? '#000000' : '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        💤 مؤقت النوم:{' '}
+                        {sleepTimerMode === 'off'
+                          ? 'إيقاف'
+                          : sleepTimerMode === 'end_of_ep'
+                          ? 'نهاية الحلقة'
+                          : `${Math.ceil(sleepTimerRemainingSec / 60)} د`}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -9337,228 +10021,57 @@ export default function MobileApkApp() {
                           if (videoRef.current) videoRef.current.playbackRate = next;
                         }}
                         style={{
-                          padding: '0.28rem 0.55rem',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: '#fff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ⚡ {playbackSpeed}x
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCycleAudioBooster}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: audioBoostMode !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: audioBoostMode !== 'normal' ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🔊{' '}
-                        {audioBoostMode === 'boost200'
-                          ? '200% Bass'
-                          : audioBoostMode === 'boost150'
-                          ? '150%'
-                          : audioBoostMode === 'voice'
-                          ? isRtl
-                            ? '🎙️ حوارات'
-                            : '🎙️ Voice'
-                          : '100%'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleTakeVideoSnapshot}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: '#fff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        📸 {isRtl ? 'لقطة' : 'Snap'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCycleAbLoop}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: loopPointA !== null ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: loopPointA !== null ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🔁{' '}
-                        {loopPointA === null
-                          ? 'A-B'
-                          : loopPointB === null
-                          ? 'A→...'
-                          : 'A⇄B'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCycleSleepTimer}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: sleepTimerMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: sleepTimerMode !== 'off' ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        💤{' '}
-                        {sleepTimerMode === 'off'
-                          ? isRtl
-                            ? 'مؤقت'
-                            : 'Sleep'
-                          : sleepTimerMode === 'end_of_ep'
-                          ? isRtl
-                            ? 'نهاية الحلقة'
-                            : 'End Ep'
-                          : `${Math.ceil(sleepTimerRemainingSec / 60)}m`}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCycleVisualShader}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: visualShaderMode !== 'original' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: visualShaderMode !== 'original' ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✨{' '}
-                        {visualShaderMode === 'upscale4k'
-                          ? '4K Upscale'
-                          : visualShaderMode === 'amoled_hdr'
-                          ? 'AMOLED HDR'
-                          : visualShaderMode === 'cinema_imax'
-                          ? 'Cinema IMAX'
-                          : isRtl
-                          ? 'محسن 4K'
-                          : '4K Enhancer'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !autoSkipIntro;
-                          setAutoSkipIntro(next);
-                          localStorage.setItem('bx_mob_autoskip_intro', String(next));
-                          showToast(
-                            next
-                              ? isRtl
-                                ? '⚡ تم تفعيل التخطي التلقائي للمقدمة'
-                                : '⚡ Auto-Skip Intro ON'
-                              : isRtl
-                              ? '⚡ تم إيقاف التخطي التلقائي للمقدمة'
-                              : '⚡ Auto-Skip Intro OFF'
-                          );
-                        }}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: autoSkipIntro ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: autoSkipIntro ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ⚡ {autoSkipIntro ? (isRtl ? 'تخطي تلقائي ON' : 'Auto-Skip ON') : isRtl ? 'تخطي تلقائي' : 'Auto-Skip'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCycleSubtitleStyle}
-                        style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.1)',
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#ffffff',
                           fontSize: '0.7rem',
                           fontWeight: 900,
-                          whiteSpace: 'nowrap',
                           cursor: 'pointer'
                         }}
                       >
-                        🔤 {subStyleMode === 'yellow_xl' ? 'أصفر XL' : subStyleMode === 'red_bx' ? 'أحمر BX' : 'أبيض LG'}
+                        ⚡ سرعة العرض: {playbackSpeed}x
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCycleSubtitleStyle}
+                        style={{
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#ffffff',
+                          fontSize: '0.7rem',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔤 ستايل التعليق: {subStyleMode === 'yellow_xl' ? 'أصفر XL' : subStyleMode === 'red_bx' ? 'أحمر BX' : 'أبيض LG'}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
                           const next = !bgAudioMode;
                           setBgAudioMode(next);
-                          showToast(
-                            next
-                              ? isRtl
-                                ? '🎧 تم تفعيل تشغيل الصوت في الخلفية وقفل الشاشة'
-                                : '🎧 Background Audio Mode ON'
-                              : isRtl
-                              ? '🎧 تم إيقاف الصوت في الخلفية'
-                              : '🎧 Background Audio OFF'
-                          );
+                          showToast(next ? '🎧 الصوت في الخلفية: مفعل' : '🎧 الصوت في الخلفية: متوقف');
                         }}
                         style={{
-                          padding: '0.28rem 0.58rem',
-                          borderRadius: '8px',
-                          background: bgAudioMode ? '#ffffff' : 'rgba(255,255,255,0.1)',
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: bgAudioMode ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: bgAudioMode ? '#000000' : '#ffffff',
                           fontSize: '0.7rem',
                           fontWeight: 900,
-                          whiteSpace: 'nowrap',
                           cursor: 'pointer'
                         }}
                       >
-                        🎧 {isRtl ? 'صوت بالخلفية' : 'BG Audio'}
+                        🎧 صوت بالخلفية: {bgAudioMode ? 'ON' : 'OFF'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setWatchPartyModalOpen((v) => !v)}
-                        style={{
-                          padding: '0.28rem 0.62rem',
-                          borderRadius: '8px',
-                          background: watchPartyRoom ? '#ffffff' : 'rgba(255,255,255,0.14)',
-                          border: '1px solid rgba(255,255,255,0.28)',
-                          color: watchPartyRoom ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
-                          fontWeight: 900,
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🍿 {watchPartyRoom ? watchPartyRoom.roomCode : isRtl ? 'مشاهدة جماعية' : 'Watch Party'}
-                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -9573,9 +10086,9 @@ export default function MobileApkApp() {
                           }
                         }}
                         style={{
-                          padding: '0.28rem 0.55rem',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.1)',
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '9px',
+                          background: 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#fff',
                           fontSize: '0.7rem',
@@ -9583,8 +10096,9 @@ export default function MobileApkApp() {
                           cursor: 'pointer'
                         }}
                       >
-                        📺 PiP
+                        📺 نافذة عائمة (PiP)
                       </button>
+
                       {playingVideoUrl && (
                         <a
                           href={playingVideoUrl}
@@ -9592,20 +10106,21 @@ export default function MobileApkApp() {
                           rel="noopener noreferrer"
                           download
                           style={{
-                            padding: '0.28rem 0.65rem',
-                            borderRadius: '8px',
+                            padding: '0.45rem 0.6rem',
+                            borderRadius: '9px',
                             background: '#ffffff',
                             color: '#000000',
                             fontSize: '0.7rem',
                             fontWeight: 900,
-                            textDecoration: 'none'
+                            textDecoration: 'none',
+                            textAlign: 'center'
                           }}
                         >
-                          ⬇ {isRtl ? 'تحميل MP4' : 'Download MP4'}
+                          ⬇ تحميل الحلقة MP4
                         </a>
                       )}
                     </div>
-                  </div>
+                  )}
 
                   {/* BLACK X Exclusive Server & Quality Selector Pills */}
                   <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, marginBottom: '0.35rem' }}>
@@ -9986,7 +10501,7 @@ export default function MobileApkApp() {
               ))}
             </div>
 
-            {/* Expandable Arabic Story */}
+            {/* Expandable Arabic Story + v7.0 Arabic TTS Story Narrator */}
             <div
               onClick={() => setStoryExpanded((v) => !v)}
               style={{
@@ -9998,8 +10513,29 @@ export default function MobileApkApp() {
                 cursor: 'pointer'
               }}
             >
-              <div style={{ fontSize: '0.76rem', fontWeight: 900, marginBottom: '0.25rem' }}>
-                📖 {isRtl ? 'قصة الأنمي بالعربية (اضغط للتوسيع)' : 'Synopsis'}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 900 }}>
+                  📖 {isRtl ? 'قصة الأنمي بالعربية (اضغط للتوسيع)' : 'Synopsis'}
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleSpeakText(selectedAnime.storyAr);
+                  }}
+                  style={{
+                    padding: '0.24rem 0.65rem',
+                    borderRadius: '99px',
+                    background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                    color: ttsSpeaking ? '#000000' : '#ffffff',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    fontSize: '0.68rem',
+                    fontWeight: 900,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {ttsSpeaking ? (isRtl ? '🔇 إيقاف القراءة' : '🔇 Stop') : isRtl ? '🔊 استماع للقصة' : '🔊 Listen'}
+                </button>
               </div>
               <p
                 style={{
