@@ -4775,37 +4775,35 @@ export default function MobileApkApp() {
           borderBottom: '1px solid rgba(255, 255, 255, 0.07)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div
             onClick={() => setCommandMenuOpen(true)}
             style={{
-              width: '38px',
-              height: '38px',
+              width: '32px',
+              height: '32px',
               borderRadius: '50%',
-              background: '#0a0a0f',
-              border: '1.5px solid rgba(255,255,255,0.28)',
+              background: '#ffffff',
+              color: '#000000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(255,255,255,0.1)',
+              fontWeight: 900,
+              fontSize: '0.92rem',
+              boxShadow: '0 4px 16px rgba(255,255,255,0.22)',
               cursor: 'pointer'
             }}
           >
-            <img
-              src="/blackx-logo.png"
-              alt="BLACK X"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+            X
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontWeight: 900, fontSize: '0.98rem', letterSpacing: '0.06em' }}>BLACK X</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontWeight: 900, fontSize: '1.02rem', letterSpacing: '0.02em' }}>blackx</span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'rgba(255,255,255,0.72)' }}>original</span>
               <span
                 style={{
-                  fontSize: '0.6rem',
+                  fontSize: '0.58rem',
                   fontWeight: 900,
-                  padding: '0.1rem 0.42rem',
+                  padding: '0.08rem 0.4rem',
                   borderRadius: '99px',
                   background: '#ffffff',
                   color: '#000000'
@@ -4814,14 +4812,14 @@ export default function MobileApkApp() {
                 {fpsHz}Hz
               </span>
             </div>
-            <div style={{ fontSize: '0.63rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
-              {isRtl ? 'إصدار v12.0 SlothUI الملكي • 6,973 أنمي' : 'v12.0 SlothUI Flagship • 6,973 Anime'}
+            <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.52)', fontWeight: 700 }}>
+              {isRtl ? 'إصدار v13.0 slothUI Pro الشامل • 6,973 أنمي' : 'v13.0 slothUI Pro Full System'}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.42rem' }}>
-          {/* Circular Glass Search Button (Matches SlothUI Image 3) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {/* Circular Glass Search Button */}
           <button
             type="button"
             onClick={() => {
@@ -4829,40 +4827,40 @@ export default function MobileApkApp() {
               setActiveTab('catalog');
             }}
             style={{
-              width: '38px',
-              height: '38px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
-              background: 'rgba(255,255,255,0.09)',
-              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.22)',
               color: '#fff',
-              fontSize: '0.92rem',
+              fontSize: '0.88rem',
               cursor: 'pointer'
             }}
           >
             🔍
           </button>
 
-          {/* Circular Glass TV / Release Radar Button (Matches Image 3) */}
+          {/* Official slothUI Notification Bell Orb (Matches Handmaiden Tales Top-Right Bell) */}
           <button
             type="button"
             onClick={() => setRadarModalOpen(true)}
             style={{
               position: 'relative',
-              width: '38px',
-              height: '38px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
-              background: 'rgba(255,255,255,0.09)',
-              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.22)',
               color: '#fff',
-              fontSize: '0.88rem',
+              fontSize: '0.86rem',
               cursor: 'pointer'
             }}
           >
-            📺
+            🔔
             <span
               style={{
                 position: 'absolute',
-                top: '6px',
+                top: '5px',
                 right: '6px',
                 width: '6px',
                 height: '6px',
@@ -4872,24 +4870,41 @@ export default function MobileApkApp() {
             />
           </button>
 
-          {/* Circular Profile / Command Menu Trigger (Opens Image 2 Luxury Command Menu) */}
+          {/* Official slothUI Circular Avatar Orb + Hamburger Menu Trigger */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.14)',
+              color: '#ffffff',
+              border: '1.5px solid rgba(255,255,255,0.35)',
+              fontWeight: 900,
+              fontSize: '0.8rem',
+              cursor: 'pointer'
+            }}
+          >
+            {user ? (user.displayName?.[0] || 'X').toUpperCase() : '👤'}
+          </button>
+
           <button
             type="button"
             onClick={() => setCommandMenuOpen(true)}
             style={{
-              width: '38px',
-              height: '38px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
               background: '#ffffff',
               color: '#000000',
-              border: '2px solid rgba(255,255,255,0.35)',
+              border: 'none',
               fontWeight: 900,
-              fontSize: '0.86rem',
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(255,255,255,0.2)'
+              fontSize: '0.88rem',
+              cursor: 'pointer'
             }}
           >
-            {user ? (user.displayName?.[0] || 'X').toUpperCase() : '☷'}
+            ☰
           </button>
         </div>
       </header>
@@ -4966,58 +4981,53 @@ export default function MobileApkApp() {
             })}
           </div>
 
-          {/* v12.0 Primary Flagship UI: SlothUI Full-Bleed Hero Showcase */}
+          {/* v13.0 Official slothUI Pro 2.0 Full-Bleed Hero Showcase ("Handmaiden Tales" & "Sane Max Origins" Layout) */}
           {heroAnime && (
-            <section
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: '485px',
-                overflow: 'hidden',
-                borderBottom: '1px solid rgba(255,255,255,0.08)'
-              }}
-            >
-              <img
-                src={heroAnime.poster || heroAnime.banner}
-                alt={heroAnime.titleEn}
+            <>
+              <section
                 style={{
+                  position: 'relative',
                   width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center 18%',
-                  filter: 'brightness(0.72) contrast(1.12)'
-                }}
-              />
-              {/* Multi-Stop SlothUI Pitch-Black Vignette */}
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background:
-                    'linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.04) 28%, rgba(0,0,0,0.78) 68%, #000000 100%)'
-                }}
-              />
-
-              {/* Centered Editorial Metadata & SlothUI 50/50 Dual Pill Buttons (Matches Image 3 "RISE OF X") */}
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: '18px',
-                  left: '16px',
-                  right: '16px',
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center'
+                  height: '515px',
+                  overflow: 'hidden',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)'
                 }}
               >
-                {/* [X] BLACK X ORIGINAL Seal */}
+                <img
+                  src={heroAnime.poster || heroAnime.banner}
+                  alt={heroAnime.titleEn}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center 16%',
+                    filter: 'brightness(0.7) contrast(1.12)'
+                  }}
+                />
+                {/* Multi-Stop Official slothUI Pitch-Black Vignette */}
                 <div
                   style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background:
+                      'linear-gradient(180deg, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.06) 24%, rgba(0,0,0,0.82) 64%, #000000 100%)'
+                  }}
+                />
+
+                {/* Top-Left Official slothUI "[X] blackx original" Seal inside Hero */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '14px',
+                    left: '16px',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '0.42rem',
-                    marginBottom: '0.35rem'
+                    gap: '0.4rem',
+                    padding: '0.26rem 0.65rem 0.26rem 0.35rem',
+                    borderRadius: '999px',
+                    background: 'rgba(0,0,0,0.65)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255,255,255,0.18)'
                   }}
                 >
                   <span
@@ -5036,164 +5046,370 @@ export default function MobileApkApp() {
                   >
                     X
                   </span>
-                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em' }}>
-                    BLACK X <span style={{ fontWeight: 500, opacity: 0.8 }}>original</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
+                    blackx <span style={{ fontWeight: 500, opacity: 0.78 }}>original</span>
                   </span>
                 </div>
 
-                {/* Giant SlothUI Display Title */}
-                <h1
-                  style={{
-                    margin: '0 0 0.45rem',
-                    fontSize: '1.68rem',
-                    fontWeight: 900,
-                    lineHeight: 1.12,
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
-                    textShadow: '0 6px 24px rgba(0,0,0,0.95)',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {heroAnime.titleEn}
-                </h1>
-
-                {/* SlothUI Metadata Row: Year • Seasons/Type • [TV-MA] Pill */}
+                {/* Official slothUI Pro ("Handmaiden Tales" + "Sane Max") Centered Hero Content */}
                 <div
                   style={{
+                    position: 'absolute',
+                    bottom: '16px',
+                    left: '16px',
+                    right: '16px',
+                    textAlign: 'center',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.6rem',
-                    flexWrap: 'wrap',
-                    fontSize: '0.74rem',
-                    fontWeight: 800,
-                    color: 'rgba(255,255,255,0.88)',
-                    marginBottom: '0.5rem'
+                    flexDirection: 'column',
+                    alignItems: 'center'
                   }}
                 >
-                  <span>{heroAnime.year || '2026'}</span>
-                  <span>{heroAnime.type || (isRtl ? 'مسلسل أنمي' : 'Anime Series')}</span>
-                  <span
+                  {/* 1. slothUI Genre Pills ABOVE Title ("[Sci-Fi] [Adventure] [Action]") */}
+                  <div
                     style={{
-                      padding: '0.12rem 0.55rem',
-                      borderRadius: '99px',
-                      border: '1px solid rgba(255,255,255,0.45)',
-                      fontSize: '0.64rem',
-                      fontWeight: 900
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      flexWrap: 'wrap',
+                      marginBottom: '0.55rem'
                     }}
                   >
-                    TV-MA • 4K
-                  </span>
-                </div>
+                    {(heroAnime.tags?.length ? heroAnime.tags.slice(0, 3) : [isRtl ? 'أكشن' : 'Action', isRtl ? 'فانتازيا' : 'Fantasy', 'Sci-Fi']).map(
+                      (g, gIdx) => (
+                        <span
+                          key={gIdx}
+                          style={{
+                            padding: '0.2rem 0.68rem',
+                            borderRadius: '999px',
+                            background: 'rgba(255,255,255,0.12)',
+                            backdropFilter: 'blur(12px)',
+                            border: '1px solid rgba(255,255,255,0.28)',
+                            color: '#ffffff',
+                            fontSize: '0.66rem',
+                            fontWeight: 800
+                          }}
+                        >
+                          {g}
+                        </span>
+                      )
+                    )}
+                    <span
+                      style={{
+                        padding: '0.2rem 0.58rem',
+                        borderRadius: '999px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.64rem',
+                        fontWeight: 900
+                      }}
+                    >
+                      TV-MA • {heroAnime.year || '2026'}
+                    </span>
+                  </div>
 
-                {/* SlothUI Ranking Line: 📺 #1 in TV Shows Today */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.45rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 900,
-                    color: '#ffffff',
-                    marginBottom: '0.9rem'
-                  }}
-                >
-                  <span>📺</span>
-                  <span>
+                  {/* 2. Giant Bold Uppercase Title ("HANDMAIDEN TALES") */}
+                  <h1
+                    style={{
+                      margin: '0 0 0.35rem',
+                      fontSize: '1.72rem',
+                      fontWeight: 900,
+                      lineHeight: 1.1,
+                      letterSpacing: '0.03em',
+                      textTransform: 'uppercase',
+                      textShadow: '0 6px 24px rgba(0,0,0,0.95)',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {heroAnime.titleEn}
+                  </h1>
+
+                  {/* 3. Episode Subtitle Line ("S1 E1 • The Origins Of...") */}
+                  <div
+                    style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: 'rgba(255,255,255,0.78)',
+                      marginBottom: '0.85rem'
+                    }}
+                  >
                     {isRtl
-                      ? `#${heroSlide + 1} في مسلسلات BLACK X اليوم`
-                      : `#${heroSlide + 1} in TV Shows Today`}
-                  </span>
+                      ? `م1 ح1 • بداية أسطورة ${heroAnime.titleEn.slice(0, 26)} • ★ ${heroAnime.rating || '9.4'}`
+                      : `S1 E1 • The Origins Of ${heroAnime.titleEn.slice(0, 26)} • ★ ${heroAnime.rating || '9.4'}`}
+                  </div>
+
+                  {/* 4. Official slothUI Dual Pill Row ("[▶ Play S1 E1]" + "[Details]") */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.15fr 0.85fr',
+                      gap: '0.6rem',
+                      width: '100%',
+                      maxWidth: '380px',
+                      marginBottom: '0.52rem'
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAnime(heroAnime, 1)}
+                      style={{
+                        padding: '0.76rem 1rem',
+                        borderRadius: '999px',
+                        border: 'none',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: '0.84rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.45rem',
+                        boxShadow: '0 8px 24px rgba(255,255,255,0.22)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>▶</span>
+                      <span>{isRtl ? 'تشغيل م1 ح1 (Play S1 E1)' : 'Play S1 E1'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAnime(heroAnime)}
+                      style={{
+                        padding: '0.76rem 1rem',
+                        borderRadius: '999px',
+                        border: '1px solid rgba(255,255,255,0.28)',
+                        background: 'rgba(20, 20, 26, 0.88)',
+                        backdropFilter: 'blur(16px)',
+                        color: '#ffffff',
+                        fontWeight: 900,
+                        fontSize: '0.82rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.4rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>ⓘ</span>
+                      <span>{isRtl ? 'التفاصيل (Details)' : 'Details'}</span>
+                    </button>
+                  </div>
+
+                  {/* 5. Official slothUI ("Sane Max Origins") Full-Width Outlined Pill ("[＋ Add To Playlist]") */}
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(heroAnime)}
+                    style={{
+                      width: '100%',
+                      maxWidth: '380px',
+                      padding: '0.62rem 1rem',
+                      borderRadius: '999px',
+                      border: '1px solid rgba(255,255,255,0.24)',
+                      background: favorites.some((f) => f.objectID === heroAnime.objectID)
+                        ? 'rgba(255,255,255,0.2)'
+                        : 'rgba(255,255,255,0.07)',
+                      backdropFilter: 'blur(14px)',
+                      color: '#ffffff',
+                      fontWeight: 800,
+                      fontSize: '0.78rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.45rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span>{favorites.some((f) => f.objectID === heroAnime.objectID) ? '✓' : '＋'}</span>
+                    <span>
+                      {favorites.some((f) => f.objectID === heroAnime.objectID)
+                        ? isRtl
+                          ? 'مضاف في قائمتي (In Playlist)'
+                          : 'Saved in Playlist'
+                        : isRtl
+                        ? 'أضف إلى قائمتي (Add To Playlist)'
+                        : 'Add To Playlist'}
+                    </span>
+                  </button>
                 </div>
 
-                {/* SlothUI Dual 50/50 Rounded Pill Buttons (▶ Play | ⓘ More Info) */}
+                {/* Hero Slide Dots */}
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '0.7rem',
-                    width: '100%',
-                    maxWidth: '370px'
+                    position: 'absolute',
+                    top: '18px',
+                    right: '16px',
+                    display: 'flex',
+                    gap: '4px'
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => handleOpenAnime(heroAnime, 1)}
-                    style={{
-                      padding: '0.76rem 1rem',
-                      borderRadius: '999px',
-                      border: 'none',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontWeight: 900,
-                      fontSize: '0.86rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.45rem',
-                      boxShadow: '0 8px 24px rgba(255,255,255,0.2)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <span>▶</span>
-                    <span>{isRtl ? 'تشغيل' : 'Play'}</span>
-                  </button>
+                  {popularList.slice(0, 6).map((_, idx) => (
+                    <span
+                      key={idx}
+                      onClick={() => setHeroSlide(idx)}
+                      style={{
+                        width: heroSlide === idx ? '18px' : '6px',
+                        height: '6px',
+                        borderRadius: '99px',
+                        background: heroSlide === idx ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
 
+              {/* Official slothUI Pro ("Handmaiden Tales" Bottom Section): "All Episodes ↔ ⇅ Most Popular" 16:9 Strip */}
+              <section style={{ padding: '0.85rem 1rem 0.2rem' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '0.6rem'
+                  }}
+                >
+                  <span style={{ fontWeight: 900, fontSize: '0.94rem', letterSpacing: '0.01em' }}>
+                    {isRtl ? 'حلقات مختارة (All Episodes)' : 'All Episodes'}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => handleOpenAnime(heroAnime)}
+                    onClick={() => setHeroSlide((s) => (s + 1) % Math.max(1, Math.min(6, popularList.length)))}
                     style={{
-                      padding: '0.76rem 1rem',
-                      borderRadius: '999px',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      background: 'rgba(22, 22, 28, 0.88)',
-                      backdropFilter: 'blur(16px)',
-                      color: '#ffffff',
-                      fontWeight: 900,
-                      fontSize: '0.84rem',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255,255,255,0.75)',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.45rem',
+                      gap: '0.3rem',
                       cursor: 'pointer'
                     }}
                   >
-                    <span>ⓘ</span>
-                    <span>{isRtl ? 'تفاصيل أكثر' : 'More Info'}</span>
+                    <span>⇅</span>
+                    <span>{isRtl ? 'الأكثر شهرة (Most Popular)' : 'Most Popular'}</span>
                   </button>
                 </div>
-              </div>
 
-              {/* Hero Slide Dots */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '14px',
-                  display: 'flex',
-                  gap: '4px'
-                }}
-              >
-                {popularList.slice(0, 6).map((_, idx) => (
-                  <span
-                    key={idx}
-                    onClick={() => setHeroSlide(idx)}
-                    style={{
-                      width: heroSlide === idx ? '18px' : '6px',
-                      height: '6px',
-                      borderRadius: '99px',
-                      background: heroSlide === idx ? '#ffffff' : 'rgba(255,255,255,0.3)',
-                      transition: 'all 0.2s ease',
-                      cursor: 'pointer'
-                    }}
-                  />
-                ))}
-              </div>
-            </section>
+                <div
+                  className="bx-mob-scroll"
+                  style={{
+                    display: 'flex',
+                    gap: '0.7rem',
+                    overflowX: 'auto',
+                    paddingBottom: '0.3rem'
+                  }}
+                >
+                  {popularList.slice(0, 8).map((epItem, epIdx) => (
+                    <div
+                      key={`sloth-ep-${epItem.objectID}-${epIdx}`}
+                      onClick={() => handleOpenAnime(epItem, 1)}
+                      style={{
+                        position: 'relative',
+                        width: '210px',
+                        height: '118px',
+                        borderRadius: '18px',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: '#0a0a0f',
+                        border: '1px solid rgba(255,255,255,0.16)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <img
+                        src={epItem.banner || epItem.poster}
+                        alt={epItem.titleEn}
+                        loading="lazy"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          filter: 'brightness(0.82) contrast(1.08)'
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 45%, rgba(0,0,0,0.88) 100%)'
+                        }}
+                      />
+                      {/* Top-Left slothUI Badge: "E1   24:00" */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          left: '8px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.18rem 0.52rem',
+                          borderRadius: '8px',
+                          background: 'rgba(0,0,0,0.72)',
+                          backdropFilter: 'blur(8px)',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          fontSize: '0.64rem',
+                          fontWeight: 900,
+                          color: '#ffffff'
+                        }}
+                      >
+                        <span>E{epIdx + 1}</span>
+                        <span style={{ opacity: 0.72 }}>24:00</span>
+                      </div>
+
+                      {/* Bottom Title + Right Circular [X] slothUI Seal */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          left: '10px',
+                          right: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '0.4rem'
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 900,
+                            color: '#ffffff',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {epItem.titleEn}
+                        </div>
+                        <span
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            color: '#000000',
+                            fontSize: '0.62rem',
+                            fontWeight: 900,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}
+                        >
+                          X
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
           )}
 
           {/* Mode B: Prime Rounded Hero Card + Top Search Bar (Matches Image 1 Left Screen "Popular Movies / HEROES") */}
@@ -7361,22 +7577,147 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 2.5: WEEKLY AIRING SCHEDULE (جدول مواعيد الحلقات الأسبوعي) ==================== */}
+      {/* ==================== TAB 2.5: WEEKLY AIRING SCHEDULE (v13.0 OFFICIAL SLOTH-UI PRO 16:9 SIMULCAST STUDIO) ==================== */}
       {activeTab === 'schedule' && !selectedAnime && (
         <main style={{ padding: '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
-          <div style={{ marginBottom: '0.75rem' }}>
-            <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.05rem', fontWeight: 900 }}>
-              📅 {isRtl ? 'جدول مواعيد بث حلقات الأنمي الأسبوعي' : 'Weekly Anime Airing Schedule'}
+          {/* Official slothUI Pro Simulcast Hero Card */}
+          <div
+            style={{
+              position: 'relative',
+              padding: '1.15rem 1rem',
+              borderRadius: '26px',
+              background: 'linear-gradient(180deg, #12121a 0%, #050508 100%)',
+              border: '1px solid rgba(255,255,255,0.16)',
+              marginBottom: '0.9rem',
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span
+                  style={{
+                    width: '22px',
+                    height: '22px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontSize: '0.68rem',
+                    fontWeight: 900,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  X
+                </span>
+                <span style={{ fontSize: '0.76rem', fontWeight: 900, color: '#ffffff' }}>
+                  blackx <span style={{ fontWeight: 500, opacity: 0.75 }}>simulcast</span>
+                </span>
+              </div>
+              <span
+                style={{
+                  padding: '0.18rem 0.6rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.12)',
+                  border: '1px solid rgba(255,255,255,0.24)',
+                  fontSize: '0.64rem',
+                  fontWeight: 900
+                }}
+              >
+                TV-MA • 2026 • 120Hz
+              </span>
+            </div>
+
+            <h2 style={{ margin: '0 0 0.28rem', fontSize: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              {isRtl ? 'جدول البث الأسبوعي المباشر' : 'WEEKLY SIMULCAST SCHEDULE'}
             </h2>
-            <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)' }}>
+            <p style={{ margin: '0 0 0.85rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
               {isRtl
-                ? 'تابع مواعيد نزول الحلقات الجديدة للأنميات المستمرة حسب أيام الأسبوع بتوقيت القاهرة ومكة.'
-                : 'Track new episode releases for currently airing anime by day of the week.'}
+                ? 'تابع مواعيد نزول الحلقات الجديدة للأنميات المستمرة حسب أيام الأسبوع بتوقيت القاهرة ومكة بتصميم slothUI Pro.'
+                : 'Track new episode simulcast drops by day of the week in Official slothUI Pro 16:9 format.'}
             </p>
+
+            {/* Official slothUI ("Houses & Dragons") 4 Circular Action Orbs Row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (scheduleItems[0]) handleOpenAnime(scheduleItems[0], 1);
+                }}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontSize: '0.96rem',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 18px rgba(255,255,255,0.22)'
+                }}
+              >
+                ▶
+              </button>
+              <button
+                type="button"
+                onClick={() => setRadarModalOpen(true)}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🔔
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduleDay(SCHEDULE_DAYS[new Date().getDay()]?.id || 'saturday')}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                📅
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (scheduleItems[0]) toggleFavorite(scheduleItems[0]);
+                }}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  fontSize: '1rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                ＋
+              </button>
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+                {isRtl ? `${scheduleItems.length} حلقة مجدولة` : `${scheduleItems.length} Scheduled Drops`}
+              </span>
+            </div>
           </div>
 
-          {/* 7 Days of the Week Selector Pills */}
-          <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.9rem', paddingBottom: '0.2rem' }}>
+          {/* 7 Days of the Week Selector Pills (slothUI Capsule Pills) */}
+          <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.42rem', overflowX: 'auto', marginBottom: '0.9rem', paddingBottom: '0.2rem' }}>
             {SCHEDULE_DAYS.map((d) => {
               const active = scheduleDay === d.id;
               return (
@@ -7385,21 +7726,31 @@ export default function MobileApkApp() {
                   type="button"
                   onClick={() => setScheduleDay(d.id)}
                   style={{
-                    padding: '0.45rem 0.9rem',
-                    borderRadius: '12px',
-                    fontSize: '0.76rem',
+                    padding: '0.46rem 0.95rem',
+                    borderRadius: '999px',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     whiteSpace: 'nowrap',
                     cursor: 'pointer',
-                    background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                    background: active ? '#ffffff' : 'rgba(255,255,255,0.07)',
                     color: active ? '#000000' : '#ffffff',
-                    border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
+                    border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.18)'
                   }}
                 >
                   {isRtl ? d.ar : d.en}
                 </button>
               );
             })}
+          </div>
+
+          {/* Official slothUI Section Header: "All Episodes ↔ ⇅ Most Popular" */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+            <span style={{ fontWeight: 900, fontSize: '0.94rem' }}>
+              {isRtl ? 'حلقات اليوم (All Episodes)' : 'All Episodes'}
+            </span>
+            <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+              ⇅ {isRtl ? 'الأعلى تقييماً (Most Popular)' : 'Most Popular'}
+            </span>
           </div>
 
           {scheduleLoading ? (
@@ -7411,95 +7762,164 @@ export default function MobileApkApp() {
               {isRtl ? 'لا توجد حلقات مجدولة لهذا اليوم حالياً.' : 'No scheduled episodes found for this day.'}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              {scheduleItems.map((item) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.78rem' }}>
+              {scheduleItems.map((item, sIdx) => (
                 <div
                   key={item.objectID}
                   className="bx-mob-card"
                   onClick={() => handleOpenAnime(item)}
                   style={{
-                    display: 'flex',
-                    gap: '0.8rem',
-                    padding: '0.65rem',
-                    borderRadius: '14px',
-                    background: '#0a0a0e',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    alignItems: 'center',
+                    borderRadius: '22px',
+                    background: '#08080c',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    overflow: 'hidden',
                     cursor: 'pointer'
                   }}
                 >
-                  <img
-                    src={item.poster}
-                    alt={item.titleEn}
-                    loading="lazy"
-                    style={{ width: '68px', height: '96px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                  {/* Top 16:9 slothUI Episode Banner with "E1  24:00" & Circular "[X]" Seal */}
+                  <div style={{ position: 'relative', width: '100%', height: '148px', overflow: 'hidden' }}>
+                    <img
+                      src={item.banner || item.poster}
+                      alt={item.titleEn}
+                      loading="lazy"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        filter: 'brightness(0.76) contrast(1.08)'
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(180deg, rgba(0,0,0,0.42) 0%, transparent 40%, rgba(0,0,0,0.92) 100%)'
+                      }}
+                    />
+                    {/* Top-Left slothUI "E1   24:00" Pill */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '10px',
+                        left: '10px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        padding: '0.22rem 0.6rem',
+                        borderRadius: '10px',
+                        background: 'rgba(0,0,0,0.75)',
+                        backdropFilter: 'blur(10px)',
+                        border: '1px solid rgba(255,255,255,0.24)',
+                        fontSize: '0.68rem',
+                        fontWeight: 900,
+                        color: '#ffffff'
+                      }}
+                    >
+                      <span>E{sIdx + 1}</span>
+                      <span style={{ opacity: 0.75 }}>24:00</span>
+                      <span>• {item.showTime || scheduleDay}</span>
+                    </div>
+
+                    {/* Top-Right Rating Pill */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        padding: '0.2rem 0.55rem',
+                        borderRadius: '999px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.66rem',
+                        fontWeight: 900
+                      }}
+                    >
+                      ★ {item.rating}
+                    </div>
+
+                    {/* Bottom Title + Circular [X] Seal */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '10px',
+                        left: '12px',
+                        right: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <div style={{ fontWeight: 900, fontSize: '0.96rem', color: '#ffffff' }}>{item.titleEn}</div>
                       <span
                         style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
                           background: '#ffffff',
                           color: '#000000',
-                          fontSize: '0.62rem',
+                          fontSize: '0.68rem',
                           fontWeight: 900,
-                          padding: '0.1rem 0.45rem',
-                          borderRadius: '6px'
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
                         }}
                       >
-                        📅 {item.showTime || scheduleDay}
-                      </span>
-                      <span
-                        style={{
-                          background: 'rgba(255,255,255,0.1)',
-                          color: '#ffffff',
-                          fontSize: '0.62rem',
-                          fontWeight: 800,
-                          padding: '0.1rem 0.45rem',
-                          borderRadius: '6px'
-                        }}
-                      >
-                        ★ {item.rating}
-                      </span>
-                      <span
-                        style={{
-                          background: 'rgba(255,255,255,0.08)',
-                          color: 'rgba(255,255,255,0.8)',
-                          fontSize: '0.62rem',
-                          fontWeight: 800,
-                          padding: '0.1rem 0.45rem',
-                          borderRadius: '6px'
-                        }}
-                      >
-                        {item.studio}
+                        X
                       </span>
                     </div>
-                    <div style={{ fontWeight: 900, fontSize: '0.88rem', marginBottom: '0.2rem' }}>{item.titleEn}</div>
+                  </div>
+
+                  {/* Bottom Metadata + Dual slothUI Action Pills */}
+                  <div style={{ padding: '0.7rem 0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem' }}>
                     <div
                       style={{
                         fontSize: '0.72rem',
-                        color: 'rgba(255,255,255,0.65)',
+                        color: 'rgba(255,255,255,0.68)',
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        flex: 1
                       }}
                     >
                       {item.storyAr}
                     </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.42rem', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(item);
+                        }}
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.22)',
+                          color: '#ffffff',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {favorites.some((f) => f.objectID === item.objectID) ? '✓' : '＋'}
+                      </button>
+                      <span
+                        style={{
+                          padding: '0.46rem 0.85rem',
+                          borderRadius: '999px',
+                          background: '#ffffff',
+                          color: '#000000',
+                          fontWeight: 900,
+                          fontSize: '0.74rem'
+                        }}
+                      >
+                        ▶ {isRtl ? 'تشغيل' : 'Play'}
+                      </span>
+                    </div>
                   </div>
-                  <span
-                    style={{
-                      padding: '0.45rem 0.7rem',
-                      borderRadius: '10px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontWeight: 900,
-                      fontSize: '0.72rem',
-                      flexShrink: 0
-                    }}
-                  >
-                    ▶ {isRtl ? 'شاهد' : 'Watch'}
-                  </span>
                 </div>
               ))}
             </div>
@@ -9065,11 +9485,101 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 4: ARENA (PREDICTIONS XP + LEADERBOARD + LIVE COMMUNITY) ==================== */}
+      {/* ==================== TAB 4: ARENA (v13.0 OFFICIAL SLOTH-UI PRO PREDICTIONS XP + LEADERBOARD + LIVE COMMUNITY) ==================== */}
       {activeTab === 'community' && !selectedAnime && (
         <main style={{ padding: '0.9rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
-          {/* Arena Sub-Tab Switcher */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem', marginBottom: '0.95rem' }}>
+          {/* Official slothUI Pro Arena Header Card */}
+          <div
+            style={{
+              padding: '1.1rem 1rem',
+              borderRadius: '26px',
+              background: 'linear-gradient(180deg, #12121a 0%, #050508 100%)',
+              border: '1px solid rgba(255,255,255,0.16)',
+              marginBottom: '0.9rem'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span
+                  style={{
+                    width: '22px',
+                    height: '22px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontSize: '0.68rem',
+                    fontWeight: 900,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  X
+                </span>
+                <span style={{ fontSize: '0.76rem', fontWeight: 900, color: '#ffffff' }}>
+                  blackx <span style={{ fontWeight: 500, opacity: 0.75 }}>arena</span>
+                </span>
+              </div>
+              <span
+                style={{
+                  padding: '0.2rem 0.65rem',
+                  borderRadius: '999px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.68rem',
+                  fontWeight: 900
+                }}
+              >
+                ⚡ {userXp} XP
+              </span>
+            </div>
+
+            <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.22rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              {isRtl ? 'ساحة التوقعات والمجتمع الملكي' : 'SOVEREIGN COMMUNITY ARENA'}
+            </h2>
+            <p style={{ margin: '0 0 0.85rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.68)' }}>
+              {isRtl
+                ? 'صوّت على أحداث الحلقات القادمة، شارك مع آلاف المتابعين، وتصدر قائمة عاهلي الظلال.'
+                : 'Predict episode plot twists, post live discussions, and climb the global XP leaderboard.'}
+            </p>
+
+            {/* Official slothUI 4 Circular Action Orbs Row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              {[
+                { id: 'predictions', icon: '🔮', lbl: isRtl ? 'توقعات' : 'Predict' },
+                { id: 'community', icon: '💬', lbl: isRtl ? 'نقاشات' : 'Feed' },
+                { id: 'leaderboard', icon: '🏆', lbl: isRtl ? 'متصدرون' : 'Ranks' }
+              ].map((orb) => {
+                const active = arenaSubTab === orb.id;
+                return (
+                  <button
+                    key={orb.id}
+                    type="button"
+                    onClick={() => setArenaSubTab(orb.id)}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '50%',
+                      background: active ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                      color: active ? '#000000' : '#ffffff',
+                      border: active ? 'none' : '1px solid rgba(255,255,255,0.24)',
+                      fontSize: '0.96rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {orb.icon}
+                  </button>
+                );
+              })}
+              <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>
+                {isRtl ? 'اختر القسم من الكرات الدائرية أو الأزرار أدناه' : 'Switch Arena Mode'}
+              </span>
+            </div>
+          </div>
+
+          {/* Arena Sub-Tab Switcher (slothUI Capsule Pills) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.45rem', marginBottom: '0.95rem' }}>
             {[
               { id: 'predictions', ar: '🔮 التوقعات XP', en: '🔮 Predictions' },
               { id: 'community', ar: '💬 المجتمع', en: '💬 Community' },
@@ -9082,12 +9592,12 @@ export default function MobileApkApp() {
                   type="button"
                   onClick={() => setArenaSubTab(st.id)}
                   style={{
-                    padding: '0.55rem 0.4rem',
-                    borderRadius: '12px',
+                    padding: '0.58rem 0.4rem',
+                    borderRadius: '999px',
                     fontWeight: 900,
-                    fontSize: '0.76rem',
-                    border: active ? '1.5px solid #fff' : '1px solid rgba(255,255,255,0.14)',
-                    background: active ? '#ffffff' : '#0a0a0e',
+                    fontSize: '0.75rem',
+                    border: active ? '1.5px solid #fff' : '1px solid rgba(255,255,255,0.18)',
+                    background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
                     color: active ? '#000000' : '#ffffff',
                     cursor: 'pointer'
                   }}
@@ -13312,68 +13822,63 @@ export default function MobileApkApp() {
                 </div>
               </div>
 
-              {/* Image 3 Left Signature Circular Action Row: (▶) Play S1 E1 + (＋) + (ⓘ) */}
+              {/* Official slothUI Pro ("Houses & Dragons" + "Sane Max") 4 Circular Action Orbs Row: (▶) Play + (≡) Episodes + (＋) Watchlist + (⬇) Download */}
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '0.75rem',
+                  gap: '0.7rem',
                   marginBottom: '0.85rem'
                 }}
               >
-                <div
-                  onClick={() => {
-                    const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
-                    const targetEp =
-                      (savedHist && animeEpisodes.find((e) => Number(e.number) === Number(savedHist.episode))) ||
-                      animeEpisodes[0];
-                    if (targetEp) handlePlayEpisode(selectedAnime, targetEp);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.7rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <span
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.62rem' }}>
+                  {/* 1. Solid White (▶) Play Orb */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                      const targetEp =
+                        (savedHist && animeEpisodes.find((e) => Number(e.number) === Number(savedHist.episode))) ||
+                        animeEpisodes[0];
+                      if (targetEp) handlePlayEpisode(selectedAnime, targetEp);
+                    }}
                     style={{
-                      width: '52px',
-                      height: '52px',
+                      width: '50px',
+                      height: '50px',
                       borderRadius: '50%',
                       background: '#ffffff',
                       color: '#000000',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '1.1rem',
+                      border: 'none',
+                      fontSize: '1.08rem',
                       fontWeight: 900,
-                      boxShadow: '0 8px 24px rgba(255,255,255,0.22)'
+                      boxShadow: '0 8px 24px rgba(255,255,255,0.24)',
+                      cursor: 'pointer'
                     }}
                   >
                     ▶
-                  </span>
-                  <div>
-                    <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#ffffff' }}>
-                      {(() => {
-                        const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
-                        return savedHist
-                          ? isRtl
-                            ? `متابعة ح ${savedHist.episode}`
-                            : `Resume S1 E${savedHist.episode}`
-                          : isRtl
-                          ? 'تشغيل م1 ح1'
-                          : 'Play S1 E1';
-                      })()}
-                    </div>
-                    <div style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800 }}>
-                      {isRtl ? 'يفتح في المشغل السينمائي المستقل' : 'Opens in Standalone Cinema Player'}
-                    </div>
-                  </div>
-                </div>
+                  </button>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {/* 2. Outlined Glass (≡) Episodes Orb */}
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab('episodes')}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '50%',
+                      background: detailTab === 'episodes' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.28)',
+                      fontSize: '1rem',
+                      fontWeight: 900,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ≡
+                  </button>
+
+                  {/* 3. Outlined Glass (＋) Watchlist Orb */}
                   <button
                     type="button"
                     onClick={() => toggleFavorite(selectedAnime)}
@@ -13383,9 +13888,9 @@ export default function MobileApkApp() {
                       borderRadius: '50%',
                       background: favorites.some((f) => f.objectID === selectedAnime.objectID)
                         ? '#ffffff'
-                        : 'rgba(255,255,255,0.1)',
+                        : 'rgba(255,255,255,0.08)',
                       color: favorites.some((f) => f.objectID === selectedAnime.objectID) ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.24)',
+                      border: '1px solid rgba(255,255,255,0.28)',
                       fontSize: '1.05rem',
                       fontWeight: 900,
                       cursor: 'pointer'
@@ -13394,67 +13899,126 @@ export default function MobileApkApp() {
                     {favorites.some((f) => f.objectID === selectedAnime.objectID) ? '✓' : '＋'}
                   </button>
 
+                  {/* 4. Outlined Glass (⬇) Offline Vault / Download Orb */}
                   <button
                     type="button"
-                    onClick={() => setDetailTab('trailer')}
+                    onClick={() => {
+                      const targetEp = animeEpisodes[0];
+                      if (targetEp) {
+                        handleSaveOfflineVault(selectedAnime, targetEp);
+                      }
+                    }}
                     style={{
                       width: '44px',
                       height: '44px',
                       borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.08)',
                       color: '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.24)',
-                      fontSize: '0.98rem',
+                      border: '1px solid rgba(255,255,255,0.28)',
+                      fontSize: '0.96rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
                   >
-                    ⓘ
+                    ⬇
                   </button>
+                </div>
+
+                <div style={{ textAlign: isRtl ? 'left' : 'right' }}>
+                  <div style={{ fontWeight: 900, fontSize: '0.84rem', color: '#ffffff' }}>
+                    {(() => {
+                      const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                      return savedHist
+                        ? isRtl
+                          ? `متابعة ح ${savedHist.episode}`
+                          : `Resume S1 E${savedHist.episode}`
+                        : isRtl
+                        ? 'تشغيل م1 ح1'
+                        : 'Play S1 E1';
+                    })()}
+                  </div>
+                  <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 800 }}>
+                    {isRtl ? '120Hz مشغل سينمائي' : '120Hz Cinema'}
+                  </div>
                 </div>
               </div>
 
-              {/* Image 1 Bottom-Right Giant Full-Width Pill "Watch Now" CTA Button */}
-              <button
-                type="button"
-                disabled={episodesLoading || animeEpisodes.length === 0}
-                onClick={() => {
-                  const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
-                  const targetEp =
-                    (savedHist && animeEpisodes.find((e) => Number(e.number) === Number(savedHist.episode))) ||
-                    animeEpisodes[0];
-                  if (targetEp) {
-                    handlePlayEpisode(selectedAnime, targetEp);
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.82rem 1rem',
-                  borderRadius: '999px',
-                  border: 'none',
-                  background: '#ffffff',
-                  color: '#000000',
-                  fontWeight: 900,
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  boxShadow: '0 10px 28px rgba(255,255,255,0.18)',
-                  cursor: 'pointer'
-                }}
-              >
-                <span>▶</span>
-                <span>
-                  {episodesLoading
-                    ? isRtl
-                      ? 'جاري تجهيز المشغل المستقل...'
-                      : 'Preparing Standalone Player...'
-                    : isRtl
-                    ? 'مشاهدة الآن (Watch Now)'
-                    : 'Watch Now'}
-                </span>
-              </button>
+              {/* Official slothUI Pro ("Sane Max Origins") Stacked Dual Full-Width Pills: [▶ Play S1 E1] + [＋ Add To Playlist] */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.52rem' }}>
+                <button
+                  type="button"
+                  disabled={episodesLoading || animeEpisodes.length === 0}
+                  onClick={() => {
+                    const savedHist = watchHistory.find((h) => h.objectID === selectedAnime.objectID);
+                    const targetEp =
+                      (savedHist && animeEpisodes.find((e) => Number(e.number) === Number(savedHist.episode))) ||
+                      animeEpisodes[0];
+                    if (targetEp) {
+                      handlePlayEpisode(selectedAnime, targetEp);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.82rem 1rem',
+                    borderRadius: '999px',
+                    border: 'none',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontWeight: 900,
+                    fontSize: '0.88rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    boxShadow: '0 10px 28px rgba(255,255,255,0.18)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>▶</span>
+                  <span>
+                    {episodesLoading
+                      ? isRtl
+                        ? 'جاري تجهيز المشغل المستقل...'
+                        : 'Preparing Standalone Player...'
+                      : isRtl
+                      ? 'تشغيل م1 ح1 (Play S1 E1)'
+                      : 'Play S1 E1'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleFavorite(selectedAnime)}
+                  style={{
+                    width: '100%',
+                    padding: '0.72rem 1rem',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: favorites.some((f) => f.objectID === selectedAnime.objectID)
+                      ? 'rgba(255,255,255,0.18)'
+                      : 'rgba(255,255,255,0.06)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>{favorites.some((f) => f.objectID === selectedAnime.objectID) ? '✓' : '＋'}</span>
+                  <span>
+                    {favorites.some((f) => f.objectID === selectedAnime.objectID)
+                      ? isRtl
+                        ? 'مضاف في قائمتي (Saved In Playlist)'
+                        : 'Saved In Playlist'
+                      : isRtl
+                      ? 'أضف إلى قائمتي (Add To Playlist)'
+                      : 'Add To Playlist'}
+                  </span>
+                </button>
+              </div>
 
               {/* Image 1 Bottom-Right 3-Column Pipe-Separated Action Bar: 🔖 List | 👍 Like | ↗ Share */}
               <div
@@ -13525,6 +14089,116 @@ export default function MobileApkApp() {
           </div>
 
           <div style={{ padding: '0 1rem 1rem' }}>
+            {/* Official slothUI Pro ("Handmaiden Tales") Horizontal 16:9 "All Episodes ↔ ⇅ Most Popular" Strip inside Show Hub */}
+            {animeEpisodes.length > 0 && (
+              <div style={{ marginTop: '0.85rem', marginBottom: '0.6rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.92rem' }}>
+                    {isRtl ? `كل الحلقات (${animeEpisodes.length})` : `All Episodes (${animeEpisodes.length})`}
+                  </span>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+                    ⇅ {isRtl ? 'الأكثر شهرة (Most Popular)' : 'Most Popular'}
+                  </span>
+                </div>
+
+                <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                  {animeEpisodes.slice(0, 12).map((ep) => {
+                    const active = activeEpisode?.docId === ep.docId;
+                    return (
+                      <div
+                        key={`sloth-hub-ep-${ep.docId}`}
+                        onClick={() => handlePlayEpisode(selectedAnime, ep)}
+                        style={{
+                          position: 'relative',
+                          width: '198px',
+                          height: '112px',
+                          borderRadius: '18px',
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                          background: '#0a0a0f',
+                          border: active ? '2px solid #ffffff' : '1px solid rgba(255,255,255,0.18)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <img
+                          src={selectedAnime.banner || selectedAnime.poster}
+                          alt={`E${ep.number}`}
+                          loading="lazy"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            filter: 'brightness(0.75) contrast(1.08)'
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'linear-gradient(180deg, rgba(0,0,0,0.48) 0%, transparent 45%, rgba(0,0,0,0.9) 100%)'
+                          }}
+                        />
+                        {/* Top-Left slothUI Badge: "E1   24:00" */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            left: '8px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.38rem',
+                            padding: '0.16rem 0.5rem',
+                            borderRadius: '8px',
+                            background: 'rgba(0,0,0,0.75)',
+                            backdropFilter: 'blur(8px)',
+                            border: '1px solid rgba(255,255,255,0.24)',
+                            fontSize: '0.64rem',
+                            fontWeight: 900,
+                            color: '#ffffff'
+                          }}
+                        >
+                          <span>E{ep.number}</span>
+                          <span style={{ opacity: 0.72 }}>24:00</span>
+                        </div>
+                        {/* Bottom Title + Circular [X] Seal */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            left: '10px',
+                            right: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.4rem'
+                          }}
+                        >
+                          <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff' }}>
+                            {isRtl ? `الحلقة ${ep.number}` : `Episode ${ep.number}`}
+                          </span>
+                          <span
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background: '#ffffff',
+                              color: '#000000',
+                              fontSize: '0.6rem',
+                              fontWeight: 900,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            X
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* Image 3 Left Underlined Season / Detail Studio Tab Bar */}
             <div
               className="bx-mob-scroll"
