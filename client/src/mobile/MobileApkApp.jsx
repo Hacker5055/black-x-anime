@@ -10046,7 +10046,7 @@ export default function MobileApkApp() {
               }}
             />
 
-            {/* Top Action Row: < back <-> Profile <-> Sync/Settings (Matches Profile UI 1) */}
+            {/* Top Action Row: [X] blackx member <-> Profile <-> 🔔/⚙ Orbs (Official slothUI Pro 2.0) */}
             <div
               style={{
                 position: 'relative',
@@ -10057,45 +10057,76 @@ export default function MobileApkApp() {
                 marginBottom: '0.65rem'
               }}
             >
-              <button
-                type="button"
+              <div
                 onClick={() => setActiveTab('home')}
                 style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#ffffff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.38rem',
+                  padding: '0.24rem 0.65rem 0.24rem 0.32rem',
                   borderRadius: '999px',
-                  padding: '0.34rem 0.78rem',
-                  fontSize: '0.72rem',
-                  fontWeight: 900,
-                  cursor: 'pointer'
-                }}
-              >
-                {isRtl ? '→ الرئيسية' : '‹ back'}
-              </button>
-
-              <span style={{ fontSize: '0.76rem', fontWeight: 900, letterSpacing: '0.06em', color: 'rgba(255,255,255,0.85)' }}>
-                {isRtl ? 'الملف الشخصي الملكي' : 'SOVEREIGN PROFILE'}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setProfileSubTab((t) => (t === 'appearance' ? 'account' : 'appearance'))}
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '50%',
                   background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#ffffff',
-                  fontSize: '0.82rem',
-                  fontWeight: 900,
+                  border: '1px solid rgba(255,255,255,0.2)',
                   cursor: 'pointer'
                 }}
-                title={isRtl ? 'إعدادات المظهر' : 'Settings'}
               >
-                ⚙
-              </button>
+                <span
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontSize: '0.65rem',
+                    fontWeight: 900,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  X
+                </span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff' }}>
+                  blackx <span style={{ fontWeight: 500, opacity: 0.75 }}>member</span>
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setRadarModalOpen(true)}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#ffffff',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfileSubTab((t) => (t === 'appearance' ? 'account' : 'appearance'))}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    border: 'none',
+                    color: '#000000',
+                    fontSize: '0.82rem',
+                    fontWeight: 900,
+                    cursor: 'pointer'
+                  }}
+                  title={isRtl ? 'إعدادات المظهر' : 'Settings'}
+                >
+                  ⚙
+                </button>
+              </div>
             </div>
 
             {/* Centered 90x90 Circular Avatar with Top-Right Status Badge (Matches Profile UI 1 & UI 3) */}
@@ -10155,12 +10186,142 @@ export default function MobileApkApp() {
               </span>
             </div>
 
+            {/* Official slothUI Pro ("Handmaiden Tales") Pill Row ABOVE Display Name */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.38rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>
+              <span
+                style={{
+                  padding: '0.16rem 0.6rem',
+                  borderRadius: '999px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.62rem',
+                  fontWeight: 900
+                }}
+              >
+                {isDeveloper ? '👑 FOUNDER' : userVipTier !== 'free' ? '👑 VIP MONARCH' : '⚡ MEMBER'}
+              </span>
+              <span
+                style={{
+                  padding: '0.16rem 0.6rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.24)',
+                  color: '#ffffff',
+                  fontSize: '0.62rem',
+                  fontWeight: 800
+                }}
+              >
+                {selectedSovereignTitle}
+              </span>
+              <span
+                style={{
+                  padding: '0.16rem 0.6rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.24)',
+                  color: '#ffffff',
+                  fontSize: '0.62rem',
+                  fontWeight: 800
+                }}
+              >
+                {fpsHz}Hz Ultra
+              </span>
+            </div>
+
             {/* Name & Sovereign Rank Subtitle */}
-            <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.22rem', fontWeight: 900 }}>
+            <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.32rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
               {user ? user.displayName : isRtl ? 'زائر BLACK X الملكي' : 'BLACK X Guest Monarch'}
             </h2>
             <div style={{ fontSize: '0.73rem', fontWeight: 800, color: 'rgba(255,255,255,0.62)', marginBottom: '0.85rem', letterSpacing: '0.03em' }}>
-              {selectedSovereignTitle} • {user ? `@${user.username}` : isRtl ? 'سجّل دخولك للمزامنة السحابية' : 'Sign in for Cloud Sync'}
+              {user ? `@${user.username} • Lv.${Math.floor(userXp / 100) + 1}` : isRtl ? 'سجّل دخولك للمزامنة السحابية' : 'Sign in for Cloud Sync'}
+            </div>
+
+            {/* Official slothUI Pro ("Houses & Dragons") 4 Circular Action Orbs Row inside Profile */}
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.68rem', marginBottom: '0.9rem' }}>
+              {/* 1. Solid White (▶) Resume Last Watched Orb */}
+              <button
+                type="button"
+                onClick={() => {
+                  const last = watchHistory[0] || popularList[0];
+                  if (last) handleOpenAnime(last, last.episode || 1);
+                }}
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 900,
+                  boxShadow: '0 6px 20px rgba(255,255,255,0.24)',
+                  cursor: 'pointer'
+                }}
+                title={isRtl ? 'متابعة آخر حلقة' : 'Resume Last Watched'}
+              >
+                ▶
+              </button>
+              {/* 2. Outlined Glass (≡) Library & History Orb */}
+              <button
+                type="button"
+                onClick={() => setProfileSubTab('vault')}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: profileSubTab === 'vault' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.26)',
+                  fontSize: '0.96rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+                title={isRtl ? 'مكتبتي والسجل' : 'My Library'}
+              >
+                ≡
+              </button>
+              {/* 3. Outlined Glass (🪪) Otaku ID Card Orb */}
+              <button
+                type="button"
+                onClick={handleGenerateOtakuIdCard}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.26)',
+                  fontSize: '0.94rem',
+                  cursor: 'pointer'
+                }}
+                title={isRtl ? 'بطاقة الأوتاكو الملكية' : 'Otaku ID Card'}
+              >
+                🪪
+              </button>
+              {/* 4. Outlined Glass (🔄) Cloud Sync Orb */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (user) {
+                    syncUserStateToCloud(user, favorites, watchHistory).then(() => showToast('✓ تمت المزامنة السحابية مع الموقع!'));
+                  } else {
+                    setProfileSubTab('account');
+                  }
+                }}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.26)',
+                  fontSize: '0.92rem',
+                  cursor: 'pointer'
+                }}
+                title={isRtl ? 'مزامنة سحابية' : 'Cloud Sync'}
+              >
+                🔄
+              </button>
             </div>
 
             {/* 3-Column Big Counter Strip (Matches Profile UI 2: 149 | 201k | 2020) */}
@@ -10342,6 +10503,133 @@ export default function MobileApkApp() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Official slothUI Pro ("Handmaiden Tales") 16:9 "Recent Episodes ↔ ⇅ Watch History" Strip inside Profile */}
+          <div style={{ marginBottom: '0.95rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.9rem' }}>
+                {isRtl ? 'متابعة حلقاتك (Recent Episodes)' : 'Recent Episodes'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setProfileSubTab('vault')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.75)',
+                  fontSize: '0.73rem',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                ⇅ {isRtl ? 'كل السجل (All History)' : 'All History'}
+              </button>
+            </div>
+
+            <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+              {(watchHistory.length > 0 ? watchHistory : popularList).slice(0, 6).map((item, idx) => (
+                <div
+                  key={`prof-sloth-ep-${item.objectID || idx}`}
+                  onClick={() => handleOpenAnime(item, item.episode || 1)}
+                  style={{
+                    position: 'relative',
+                    width: '198px',
+                    height: '112px',
+                    borderRadius: '18px',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    background: '#0a0a0f',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <img
+                    src={item.banner || item.poster}
+                    alt={item.titleEn}
+                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      filter: 'brightness(0.76) contrast(1.08)'
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'linear-gradient(180deg, rgba(0,0,0,0.48) 0%, transparent 45%, rgba(0,0,0,0.9) 100%)'
+                    }}
+                  />
+                  {/* Top-Left slothUI Badge: "E1   24:00" */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      left: '8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.38rem',
+                      padding: '0.16rem 0.5rem',
+                      borderRadius: '8px',
+                      background: 'rgba(0,0,0,0.76)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255,255,255,0.24)',
+                      fontSize: '0.64rem',
+                      fontWeight: 900,
+                      color: '#ffffff'
+                    }}
+                  >
+                    <span>E{item.episode || idx + 1}</span>
+                    <span style={{ opacity: 0.72 }}>24:00</span>
+                  </div>
+                  {/* Bottom Title + Circular [X] Seal */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '8px',
+                      left: '10px',
+                      right: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.4rem'
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 900,
+                        color: '#ffffff',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {item.titleEn}
+                    </span>
+                    <span
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontSize: '0.6rem',
+                        fontWeight: 900,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      X
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* SlothUI Segmented Pill Profile Sub-Tab Bar (Matches Profile UI 2 Segmented Switcher) */}
