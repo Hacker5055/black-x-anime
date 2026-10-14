@@ -150,6 +150,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'server_error', message: 'Something went wrong' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  ⚡ BLACK X API listening on http://0.0.0.0:${PORT}\n`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n  ⚡ BLACK X API listening on http://0.0.0.0:${PORT}\n`);
+  });
+}
+
+export default app;

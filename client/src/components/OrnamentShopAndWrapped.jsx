@@ -564,7 +564,7 @@ export function WrappedCardPanel({
 
     ctx.fillStyle = '#94a3b8';
     ctx.font = '700 26px sans-serif';
-    ctx.fillText('black-x-anime.ai.studio • Official Global Anime & Manga Card', 540, 1245);
+    ctx.fillText('black-x-anime.me • Official Global Anime & Manga Card', 540, 1245);
 
     const link = document.createElement('a');
     link.download = `black-x-wrapped-${user?.username || 'profile'}.png`;

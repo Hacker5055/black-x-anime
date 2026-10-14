@@ -14861,7 +14861,7 @@ export default function MobileApkApp() {
                   type="button"
                   onClick={() => {
                     try {
-                      navigator.clipboard?.writeText(`https://black-x-anime.ai.studio/`);
+                      navigator.clipboard?.writeText(`https://black-x-anime.me/`);
                       showToast(isRtl ? '↗ تم نسخ رابط المشاركة' : '↗ Share link copied');
                     } catch (_) {}
                   }}

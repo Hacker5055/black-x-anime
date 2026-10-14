@@ -3,32 +3,32 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://black-x-anime.ai.studio/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
     },
     {
       "source": "/search-anime",
-      "destination": "https://black-x-anime.ai.studio/search-anime"
+      "destination": "/api/index.js"
     },
     {
       "source": "/get-episodes",
-      "destination": "https://black-x-anime.ai.studio/get-episodes"
+      "destination": "/api/index.js"
     },
     {
       "source": "/get-episode-dl",
-      "destination": "https://black-x-anime.ai.studio/get-episode-dl"
+      "destination": "/api/index.js"
     },
     {
       "source": "/latest-episodes",
-      "destination": "https://black-x-anime.ai.studio/latest-episodes"
+      "destination": "/api/index.js"
     },
     {
       "source": "/fetch-seasonals",
-      "destination": "https://black-x-anime.ai.studio/fetch-seasonals"
+      "destination": "/api/index.js"
     },
     {
       "source": "/get-anime-info",
-      "destination": "https://black-x-anime.ai.studio/get-anime-info"
+      "destination": "/api/index.js"
     },
     {
       "source": "/((?!api/|assets/|favicon\\.png|blackx-logo\\.png).*)",
