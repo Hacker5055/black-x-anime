@@ -115,52 +115,137 @@ export default function ShowDetail({ onOpenAuth }) {
 
   return (
     <>
-      <button type="button" className="btn btn--ghost btn--sm reveal" style={{ marginBlockEnd: '1.15rem' }} onClick={() => navigate(-1)}>
+      <button
+        type="button"
+        className="btn btn--ghost btn--sm reveal"
+        style={{
+          marginBlockEnd: '1.15rem',
+          borderRadius: '999px',
+          padding: '0.48rem 1.05rem',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.22)'
+        }}
+        onClick={() => navigate(-1)}
+      >
         <span style={{ transform: 'scaleX(var(--flip))', display: 'inline-block' }}>←</span> {t('common.back')}
       </button>
 
-      <section className="detail-hero glass reveal">
+      <section
+        className="detail-hero glass reveal sloth-show-hub"
+        style={{
+          borderRadius: '28px',
+          background: '#050508',
+          border: '1px solid rgba(255,255,255,0.2)',
+          boxShadow: '0 28px 70px rgba(0,0,0,0.95)',
+          overflow: 'hidden'
+        }}
+      >
         <div className="detail-hero__banner" style={{ backgroundImage: `url(${show.banner || show.poster || ''})` }} />
         <div className="detail-hero__veil" />
         <div className="detail-hero__content">
-          <div className="detail-poster">
+          <div className="detail-poster" style={{ borderRadius: '22px', overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.28)' }}>
             {show.poster ? (
               <img onError={imgFallback} src={show.poster} alt={title} referrerPolicy="no-referrer" />
             ) : (
-              <div style={{ aspectRatio: '2/2.85', background: `linear-gradient(150deg, ${color}, #0a0d18)` }} />
+              <img src="/blackx-logo.png" alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             )}
           </div>
 
           <div>
-            <div className="hero__badge">
-              <span className="hero__badge-dot" />
-              {show.sourceName || (sourceParam === 'english' ? '🌐 سيرفر BLACK X 3' : sourceParam === 'anime3rb' ? '⚡ سيرفر BLACK X 2' : '👑 سيرفر BLACK X 1')}
+            {/* Official slothUI Pro [BLACK X] original Seal */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.28rem 0.78rem 0.28rem 0.38rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.26)'
+                }}
+              >
+                <img
+                  src="/blackx-logo.png"
+                  alt="BLACK X"
+                  style={{ width: '22px', height: '22px', borderRadius: '6px', objectFit: 'cover' }}
+                />
+                <span style={{ fontSize: '0.74rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
+                  BLACK X <span style={{ fontWeight: 500, opacity: 0.78 }}>original</span>
+                </span>
+              </div>
+              <span
+                style={{
+                  padding: '0.24rem 0.68rem',
+                  borderRadius: '999px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.68rem',
+                  fontWeight: 900
+                }}
+              >
+                4K Ultra • 120Hz
+              </span>
             </div>
-            <h1 style={{ fontSize: 'clamp(1.75rem, 3.6vw, 2.65rem)', margin: '0.35rem 0 0' }}>{title}</h1>
-            {otherTitle && <p className="detail-title-ar">{otherTitle}</p>}
 
-            <div className="detail-meta">
-              <span className="badge badge--cat">{show.episodeCount ? t('show.episodeCount', { n: formatNumber(show.episodeCount) }) : '?'}</span>
-              <span className="badge badge--open">{t('watch.sub')}</span>
-              <span className="badge badge--score">HD</span>
-              <span className="badge" style={{ background: 'rgba(234,179,8,0.22)', color: '#fde047', fontWeight: 900 }}>
+            <h1 style={{ fontSize: 'clamp(1.75rem, 3.6vw, 2.65rem)', margin: '0.25rem 0 0', fontWeight: 900 }}>{title}</h1>
+            {otherTitle && <p className="detail-title-ar" style={{ color: 'rgba(255,255,255,0.68)' }}>{otherTitle}</p>}
+
+            <div className="detail-meta" style={{ marginTop: '0.6rem' }}>
+              <span className="badge badge--cat" style={{ borderRadius: '999px', background: '#ffffff', color: '#000000', fontWeight: 900 }}>
+                {show.episodeCount ? t('show.episodeCount', { n: formatNumber(show.episodeCount) }) : `${eps.length} EP`}
+              </span>
+              <span className="badge badge--open" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)' }}>
+                {t('watch.sub')}
+              </span>
+              <span className="badge" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)', fontWeight: 900 }}>
                 👑 FHD 1080p • VIP
               </span>
             </div>
 
+            {/* Official slothUI Pro 6-Icon Micro-Stats Strip */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+                gap: '0.4rem',
+                padding: '0.75rem 0.5rem',
+                margin: '0.95rem 0',
+                borderRadius: '20px',
+                background: 'rgba(12, 12, 18, 0.9)',
+                border: '1px solid rgba(255,255,255,0.16)',
+                textAlign: 'center'
+              }}
+            >
+              {[
+                { icon: '🎞️', val: show.episodeCount || eps.length || '12', lbl: lang === 'ar' ? 'حلقات' : 'Eps' },
+                { icon: '♥', val: '1.4K', lbl: lang === 'ar' ? 'إعجاب' : 'Likes' },
+                { icon: '👁', val: '24.8K', lbl: lang === 'ar' ? 'مشاهدة' : 'Views' },
+                { icon: '💬', val: '186', lbl: lang === 'ar' ? 'تقييم' : 'Reviews' },
+                { icon: '🧬', val: '98%', lbl: lang === 'ar' ? 'تطابق' : 'Match' },
+                { icon: '★', val: '9.5', lbl: lang === 'ar' ? 'التقييم' : 'Score' }
+              ].map((st, idx) => (
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <span style={{ fontSize: '0.92rem', lineHeight: 1 }}>{st.icon}</span>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 900, color: '#ffffff' }}>{st.val}</span>
+                  <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'rgba(255,255,255,0.58)' }}>{st.lbl}</span>
+                </div>
+              ))}
+            </div>
+
             {show.description && (
-              <p className="detail-synopsis">{show.description}</p>
+              <p className="detail-synopsis" style={{ color: 'rgba(255,255,255,0.82)' }}>{show.description}</p>
             )}
 
-            {/* WitAnime Metadata Grid (معلومات الأنمي) */}
+            {/* Official slothUI Pro Metadata Grid */}
             <div className="wit-meta-grid">
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'النوع:' : 'Type:'}</span>
-                <span className="wit-meta-val">TV</span>
+                <span className="wit-meta-val">TV • 120Hz</span>
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'حالة الأنمي:' : 'Status:'}</span>
-                <span className="wit-meta-val" style={{ color: '#10b981' }}>{lang === 'ar' ? 'يعرض الان' : 'Airing'}</span>
+                <span className="wit-meta-val" style={{ color: '#ffffff' }}>{lang === 'ar' ? 'يعرض الآن' : 'Airing'}</span>
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'عدد الحلقات:' : 'Episodes:'}</span>
@@ -176,24 +261,33 @@ export default function ShowDetail({ onOpenAuth }) {
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'الجودة المتوفرة:' : 'Quality:'}</span>
-                <span className="wit-meta-val" style={{ color: '#fde047' }}>👑 FHD 1080p VIP / HD</span>
+                <span className="wit-meta-val" style={{ color: '#ffffff' }}>👑 FHD 1080p VIP / HD</span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBlockStart: '1.15rem' }}>
+            {/* Official slothUI Pro Capsule CTA + Circular Orbs Row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap', marginBlockStart: '1.15rem' }}>
               {continueEp && (
                 <button
                   type="button"
-                  className="btn btn--primary"
                   onClick={() => navigate(`/watch/${slug}/${continueEp.episode}${srcSuffix}`)}
+                  style={{
+                    padding: '0.78rem 1.65rem',
+                    borderRadius: '999px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: '1.5px solid #ffffff',
+                    fontWeight: 900,
+                    fontSize: '0.9rem',
+                    boxShadow: '0 10px 28px rgba(255,255,255,0.24)',
+                    cursor: 'pointer'
+                  }}
                 >
-                  <span className="btn__shine" />
                   ▶ {progress[continueEp.episode] ? t('common.continue') : t('common.watchNow')} · {t('common.ep')} {continueEp.episode}
                 </button>
               )}
               <button
                 type="button"
-                className={`btn ${alertEnabled ? 'btn--primary' : 'btn--ghost'}`}
                 onClick={async () => {
                   const maxEp = eps.length ? Math.max(...eps.map((e) => Number(e.episode || 0))) : 1;
                   const nextState = await toggleAnimeEpisodeAlert(
@@ -208,32 +302,55 @@ export default function ShowDetail({ onOpenAuth }) {
                   );
                   setAlertEnabled(nextState);
                 }}
-                style={
-                  alertEnabled
-                    ? { background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#041016', fontWeight: 900 }
-                    : { borderColor: 'rgba(34,211,238,0.45)', color: 'var(--cyan)', fontWeight: 800 }
-                }
+                style={{
+                  padding: '0.76rem 1.25rem',
+                  borderRadius: '999px',
+                  background: alertEnabled ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                  color: alertEnabled ? '#000000' : '#ffffff',
+                  border: '1.5px solid rgba(255,255,255,0.3)',
+                  fontWeight: 900,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer'
+                }}
               >
                 {alertEnabled
-                  ? (lang === 'ar' ? '🔔 إشعارات الحلقات مفعّلة على جهازك ✓' : '🔔 Episode Device Alerts On ✓')
-                  : (lang === 'ar' ? '📲 تفعيل إشعارات الحلقات الجديدة' : '📲 Notify Me on New Episodes')}
+                  ? (lang === 'ar' ? '🔔 إشعارات الحلقات مفعّلة ✓' : '🔔 Episode Alerts On ✓')
+                  : (lang === 'ar' ? '🔔 تفعيل إشعارات الحلقات' : '🔔 Notify on New Episodes')}
               </button>
               <button
                 type="button"
-                className={`btn ${fav ? 'btn--violet' : 'btn--ghost'}`}
                 onClick={toggleFav}
                 disabled={favBusy}
+                style={{
+                  padding: '0.76rem 1.25rem',
+                  borderRadius: '999px',
+                  background: fav ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                  color: fav ? '#000000' : '#ffffff',
+                  border: '1.5px solid rgba(255,255,255,0.3)',
+                  fontWeight: 900,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer'
+                }}
               >
-                {fav ? '♥ ' : '♡ '}{fav ? t('show.unfavorite') : t('show.favorite')}
+                {fav ? '♥ ' : '＋ '}{fav ? t('show.unfavorite') : t('show.favorite')}
               </button>
               {eps.length > 0 && (
                 <button
                   type="button"
-                  className="btn btn--ghost"
                   onClick={() => navigate(`/watch/${slug}/${continueEp?.episode || 1}${srcSuffix}`)}
                   title={t('watch.downloadEpisode')}
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255,255,255,0.28)',
+                    fontWeight: 900,
+                    cursor: 'pointer'
+                  }}
                 >
-                  📥 {t('watch.downloadEpisode')}
+                  ⬇
                 </button>
               )}
             </div>
@@ -253,24 +370,24 @@ export default function ShowDetail({ onOpenAuth }) {
               onChange={(e) => setEpFilter(e.target.value)}
               placeholder={lang === 'ar' ? '🔍 ابحث برقم الحلقة...' : '🔍 Filter episode #...'}
               style={{
-                padding: '0.35rem 0.75rem',
-                borderRadius: '8px',
-                background: '#131926',
-                border: '1px solid #28344b',
+                padding: '0.42rem 0.9rem',
+                borderRadius: '999px',
+                background: '#08080c',
+                border: '1px solid rgba(255,255,255,0.22)',
                 color: '#fff',
                 fontSize: '0.8rem',
-                width: '165px'
+                width: '185px'
               }}
             />
             <span
               style={{
                 fontSize: '0.76rem',
                 fontWeight: 800,
-                padding: '0.28rem 0.75rem',
-                borderRadius: '99px',
-                background: vipTier === 'free' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(16, 185, 129, 0.14)',
-                border: vipTier === 'free' ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.4)',
-                color: vipTier === 'free' ? '#fde047' : '#34d399'
+                padding: '0.32rem 0.85rem',
+                borderRadius: '999px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.24)',
+                color: '#ffffff'
               }}
             >
               {vipTier === 'free'

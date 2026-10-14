@@ -19,21 +19,69 @@ const WEEK_DAYS = [
   { id: 5, ar: 'الجمعة', en: 'Friday' }
 ];
 
-/* --------------------------- WitAnime Section Header --------------------------- */
+/* --------------------------- Official slothUI Pro 2.0 Section Header --------------------------- */
 function WitSectionHeader({ icon, title, sub, linkTo, linkLabel }) {
   return (
-    <div className="wit-sec-header">
-      <div className="wit-sec-header__right">
-        <span className="wit-sec-header__bar" />
+    <div
+      className="wit-sec-header sloth-sec-header"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '1rem',
+        flexWrap: 'wrap',
+        marginBottom: '1.15rem',
+        padding: '0.85rem 1.15rem',
+        borderRadius: '22px',
+        background: 'rgba(10, 10, 15, 0.85)',
+        border: '1px solid rgba(255, 255, 255, 0.14)',
+        backdropFilter: 'blur(20px)'
+      }}
+    >
+      <div className="wit-sec-header__right" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <img
+          src="/blackx-logo.png"
+          alt="BLACK X"
+          style={{
+            width: '34px',
+            height: '34px',
+            borderRadius: '10px',
+            objectFit: 'cover',
+            border: '1px solid rgba(255,255,255,0.32)',
+            flexShrink: 0
+          }}
+        />
         <div>
-          <h2 className="wit-sec-header__title">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '2px' }}>
+            <span style={{ fontSize: '0.64rem', fontWeight: 900, letterSpacing: '0.06em', color: 'rgba(255,255,255,0.68)' }}>
+              BLACK X ORIGINAL • SLOTHUI PRO
+            </span>
+          </div>
+          <h2 className="wit-sec-header__title" style={{ margin: 0, fontSize: '1.22rem', fontWeight: 900 }}>
             {icon && <span>{icon}</span>} {title}
           </h2>
-          {sub && <p className="wit-sec-header__sub">{sub}</p>}
+          {sub && (
+            <p className="wit-sec-header__sub" style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'rgba(255,255,255,0.62)' }}>
+              {sub}
+            </p>
+          )}
         </div>
       </div>
       {linkTo && (
-        <Link className="wit-sec-header__more" to={linkTo}>
+        <Link
+          className="wit-sec-header__more sloth-pill-cta"
+          to={linkTo}
+          style={{
+            padding: '0.48rem 1.05rem',
+            borderRadius: '999px',
+            background: '#ffffff',
+            color: '#000000',
+            fontWeight: 900,
+            fontSize: '0.8rem',
+            border: '1.5px solid #ffffff',
+            boxShadow: '0 6px 20px rgba(255,255,255,0.18)'
+          }}
+        >
           {linkLabel || 'المزيد ←'}
         </Link>
       )}
@@ -60,7 +108,7 @@ const DEFAULT_HERO_SLIDES = [
   }
 ];
 
-/* --------------------------- 0. Exact WitAnime Cinema Hero Banner --------------------------- */
+/* --------------------------- 0. Official slothUI Pro 2.0 Cinema Hero Banner ("Handmaiden Tales" + "Houses & Dragons") --------------------------- */
 function Hero3DStage({ items = [], trending = [] }) {
   const { lang, formatNumber } = useI18n();
   const navigate = useNavigate();
@@ -100,78 +148,318 @@ function Hero3DStage({ items = [], trending = [] }) {
     arabicSub && arabicSub !== displayTitle
       ? arabicSub
       : lang === 'ar'
-      ? 'القسم الجديد من الموسم متاح الآن بجودة عالية.'
-      : 'New season episodes streaming now in Full HD.';
+      ? 'القسم الجديد من الموسم متاح الآن بجودة FHD 1080p وسرعة 120Hz عبر سيرفرات BLACK X.'
+      : 'New season episodes streaming now in Full HD 1080p on BLACK X.';
   const epCount = current.episodes || current.episode || 12;
-  const score = current.score ? (Number(current.score) / 10).toFixed(1) : '8.8';
+  const score = current.score ? (Number(current.score) / 10).toFixed(1) : '9.4';
   const artwork =
     current.banner ||
     current.bannerUrl ||
     current.poster ||
     current.coverUrl ||
-    '';
+    '/blackx-logo.png';
+
+  const heroGenres =
+    lang === 'ar'
+      ? ['أكشن', 'فانتازيا', 'شونين']
+      : ['Action', 'Fantasy', 'Shonen'];
 
   return (
-    <section className="wit-cinema-hero">
-      {/* Left Artwork Area (in RTL) with seamless black edge fade */}
-      <div className="wit-cinema-hero__art-wrap" aria-hidden="true">
-        <img
-          src={artwork}
-          alt={displayTitle}
-          className="wit-cinema-hero__art"
-          referrerPolicy="no-referrer"
-        />
-        <div className="wit-cinema-hero__fade" />
-      </div>
+    <div style={{ marginBottom: '1.6rem' }}>
+      <section
+        className="wit-cinema-hero sloth-pro-hero"
+        style={{
+          position: 'relative',
+          borderRadius: '28px',
+          overflow: 'hidden',
+          minHeight: '440px',
+          background: '#050508',
+          border: '1px solid rgba(255,255,255,0.2)',
+          boxShadow: '0 28px 70px rgba(0,0,0,0.95)'
+        }}
+      >
+        {/* Full-Bleed Artwork with slothUI Pro Bottom & Side Vignette */}
+        <div className="wit-cinema-hero__art-wrap" aria-hidden="true">
+          <img
+            src={artwork}
+            alt={displayTitle}
+            className="wit-cinema-hero__art"
+            referrerPolicy="no-referrer"
+          />
+          <div className="wit-cinema-hero__fade" />
+        </div>
 
-      {/* Right Content Area (in RTL) */}
-      <div className="wit-cinema-hero__content">
-        <h1 className="wit-cinema-hero__title">{displayTitle}</h1>
-
-        <div className="wit-cinema-hero__meta">
-          <span className="wit-cinema-hero__tv-pill">TV</span>
-          <span className="wit-cinema-hero__score-pill">★ {score}</span>
-          <span className="wit-cinema-hero__meta-text">
-            • 2026 • {formatNumber(epCount)} {lang === 'ar' ? 'حلقات' : 'Episodes'} •{' '}
-            {lang === 'ar' ? 'مستمر • أكشن، مغامرة، شونين' : 'Airing • Action, Adventure, Shonen'}
+        {/* Top-Right/Left Official [BLACK X] original Seal */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '20px',
+            insetInlineStart: '22px',
+            zIndex: 4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.32rem 0.85rem 0.32rem 0.42rem',
+            borderRadius: '999px',
+            background: 'rgba(0,0,0,0.72)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,0.24)'
+          }}
+        >
+          <img
+            src="/blackx-logo.png"
+            alt="BLACK X"
+            style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '7px',
+              objectFit: 'cover',
+              border: '1px solid rgba(255,255,255,0.35)'
+            }}
+          />
+          <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
+            BLACK X <span style={{ fontWeight: 500, opacity: 0.78 }}>original</span>
+          </span>
+          <span
+            style={{
+              padding: '0.1rem 0.5rem',
+              borderRadius: '999px',
+              background: '#ffffff',
+              color: '#000000',
+              fontSize: '0.64rem',
+              fontWeight: 900
+            }}
+          >
+            4K • 120Hz
           </span>
         </div>
 
-        <p className="wit-cinema-hero__desc">{subLine}</p>
+        {/* Right/Center Content Area (Official slothUI Pro Layout) */}
+        <div className="wit-cinema-hero__content" style={{ position: 'relative', zIndex: 3, paddingTop: '3.6rem' }}>
+          {/* 1. slothUI Pro Genre Pills ABOVE Title */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.7rem' }}>
+            {heroGenres.map((g, i) => (
+              <span
+                key={i}
+                style={{
+                  padding: '0.26rem 0.82rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.12)',
+                  backdropFilter: 'blur(14px)',
+                  border: '1px solid rgba(255,255,255,0.28)',
+                  color: '#ffffff',
+                  fontSize: '0.74rem',
+                  fontWeight: 800
+                }}
+              >
+                {g}
+              </span>
+            ))}
+            <span
+              style={{
+                padding: '0.26rem 0.75rem',
+                borderRadius: '999px',
+                background: '#ffffff',
+                color: '#000000',
+                fontSize: '0.72rem',
+                fontWeight: 900
+              }}
+            >
+              TV-MA • 2026
+            </span>
+          </div>
 
-        <div className="wit-cinema-hero__cta-row">
-          <button
-            type="button"
-            className="wit-watch-pill-btn"
-            onClick={() =>
-              navigate(
-                current.episode && current.slug
-                  ? `/watch/${current.slug}/${current.episode}`
-                  : current.slug
-                  ? `/show/${current.slug}`
-                  : `/trending?q=${encodeURIComponent(displayTitle)}`
-              )
-            }
+          {/* 2. Giant Bold Title */}
+          <h1
+            className="wit-cinema-hero__title"
+            style={{
+              fontSize: 'clamp(1.75rem, 3.5vw, 2.85rem)',
+              fontWeight: 900,
+              lineHeight: 1.12,
+              marginBottom: '0.6rem',
+              textShadow: '0 8px 28px rgba(0,0,0,0.95)'
+            }}
           >
-            <span className="wit-watch-pill-btn__arrow">▶</span>
-            <span>{lang === 'ar' ? 'شاهد الآن' : 'Watch Now'}</span>
-          </button>
-        </div>
+            {displayTitle}
+          </h1>
 
-        {/* Pagination Dots */}
-        <div className="wit-hero-dots" role="tablist">
-          {heroPool.map((it, idx) => (
+          {/* 3. slothUI Pro Metadata Bar */}
+          <div className="wit-cinema-hero__meta" style={{ marginBottom: '0.75rem' }}>
+            <span
+              style={{
+                padding: '0.2rem 0.65rem',
+                borderRadius: '999px',
+                background: '#ffffff',
+                color: '#000000',
+                fontWeight: 900,
+                fontSize: '0.76rem'
+              }}
+            >
+              ★ {score}
+            </span>
+            <span
+              style={{
+                padding: '0.2rem 0.65rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.24)',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '0.74rem'
+              }}
+            >
+              🧬 98% Match
+            </span>
+            <span className="wit-cinema-hero__meta-text" style={{ fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>
+              • {formatNumber(epCount)} {lang === 'ar' ? 'حلقات' : 'Episodes'} • FHD 1080p
+            </span>
+          </div>
+
+          <p className="wit-cinema-hero__desc" style={{ maxWidth: '620px', color: 'rgba(255,255,255,0.78)' }}>
+            {subLine}
+          </p>
+
+          {/* 4. slothUI Pro Dual Capsule CTA + Circular Orbs */}
+          <div
+            className="wit-cinema-hero__cta-row"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', marginTop: '0.9rem' }}
+          >
             <button
-              key={it.slug || it.id || idx}
               type="button"
-              className={`wit-hero-dot ${idx === activeIdx ? 'active' : ''}`}
-              onClick={() => setActiveIdx(idx)}
-              aria-label={`Slide ${idx + 1}`}
-            />
-          ))}
+              className="wit-watch-pill-btn"
+              onClick={() =>
+                navigate(
+                  current.episode && current.slug
+                    ? `/watch/${current.slug}/${current.episode}`
+                    : current.slug
+                    ? `/show/${current.slug}`
+                    : `/trending?q=${encodeURIComponent(displayTitle)}`
+                )
+              }
+              style={{
+                padding: '0.76rem 1.65rem',
+                borderRadius: '999px',
+                background: '#ffffff',
+                color: '#000000',
+                border: '1.5px solid #ffffff',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                boxShadow: '0 10px 30px rgba(255,255,255,0.25)',
+                cursor: 'pointer'
+              }}
+            >
+              <span>▶</span>
+              <span>{lang === 'ar' ? 'شاهد الآن' : 'Watch Now'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  current.slug
+                    ? `/show/${current.slug}`
+                    : `/trending?q=${encodeURIComponent(displayTitle)}`
+                )
+              }
+              style={{
+                padding: '0.76rem 1.35rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.1)',
+                backdropFilter: 'blur(16px)',
+                color: '#ffffff',
+                border: '1.5px solid rgba(255,255,255,0.3)',
+                fontWeight: 900,
+                fontSize: '0.86rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                cursor: 'pointer'
+              }}
+            >
+              <span>ℹ️</span>
+              <span>{lang === 'ar' ? 'تفاصيل الأنمي' : 'Show Hub'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/discover')}
+              title={lang === 'ar' ? 'عجلة الاكتشاف الذكية' : 'Smart Discovery'}
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.28)',
+                color: '#ffffff',
+                fontSize: '1rem',
+                fontWeight: 900,
+                cursor: 'pointer'
+              }}
+            >
+              🎲
+            </button>
+          </div>
+
+          {/* Pagination Capsule Dots */}
+          <div className="wit-hero-dots" role="tablist" style={{ marginTop: '1.15rem' }}>
+            {heroPool.map((it, idx) => (
+              <button
+                key={it.slug || it.id || idx}
+                type="button"
+                className={`wit-hero-dot ${idx === activeIdx ? 'active' : ''}`}
+                onClick={() => setActiveIdx(idx)}
+                aria-label={`Slide ${idx + 1}`}
+              />
+            ))}
+          </div>
         </div>
+      </section>
+
+      {/* Official slothUI Pro 2.0 Quick Category Capsule Strip */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.55rem',
+          overflowX: 'auto',
+          padding: '0.85rem 0.15rem 0.15rem',
+          scrollbarWidth: 'none'
+        }}
+      >
+        {[
+          { ar: '🔥 جميع الأنميات (6,973)', en: '🔥 All Anime (6,973)', to: '/trending', active: true },
+          { ar: '⚔️ أكشن وقتال', en: '⚔️ Action', to: '/trending?q=Action' },
+          { ar: '🔮 خيال وسحر', en: '🔮 Fantasy', to: '/trending?q=Fantasy' },
+          { ar: '🎬 أفلام الأنمي', en: '🎬 Anime Movies', to: '/trending?type=movie' },
+          { ar: '📖 المانجا والمانهوا (30,000+)', en: '📖 Manga & Manhwa', to: '/browse' },
+          { ar: '🏆 تصنيفات الأوتاكو', en: '🏆 Rankings', to: '/rankings' },
+          { ar: '💬 ساحة المجتمع', en: '💬 Community Arena', to: '/community' }
+        ].map((pill, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => navigate(pill.to)}
+            style={{
+              padding: '0.52rem 1.05rem',
+              borderRadius: '999px',
+              background: pill.active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+              color: pill.active ? '#000000' : '#ffffff',
+              border: pill.active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
+              fontWeight: 900,
+              fontSize: '0.78rem',
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              boxShadow: pill.active ? '0 8px 22px rgba(255,255,255,0.2)' : 'none'
+            }}
+          >
+            {lang === 'ar' ? pill.ar : pill.en}
+          </button>
+        ))}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -473,7 +761,7 @@ function LibraryShowcaseSection() {
       type: 'مانهوا',
       rating: '9.9',
       chapters: '205 فصل',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/Solo-Leveling-1.jpg'
+      cover: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx105398-b673Vt5ZS2qp.jpg'
     },
     {
       id: 'omniscient-readers-viewpoint',
@@ -482,7 +770,7 @@ function LibraryShowcaseSection() {
       type: 'مانهوا',
       rating: '9.9',
       chapters: '220 فصل',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/1-2-193x278-1.jpg'
+      cover: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx119257-R3N93C4X9M5G.jpg'
     },
     {
       id: 'one-piece',
@@ -491,7 +779,7 @@ function LibraryShowcaseSection() {
       type: 'مانجا',
       rating: '9.9',
       chapters: '1160 فصل',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/05/One-Piece-1-193x278.jpg'
+      cover: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/nx21-6A18Y87b1h30.jpg'
     },
     {
       id: 'jujutsu-kaisen',
@@ -500,7 +788,7 @@ function LibraryShowcaseSection() {
       type: 'مانجا',
       rating: '9.8',
       chapters: '270 فصل',
-      cover: 'https://io.mangalik.net/wp-content/uploads/2020/11/Jujutsu-Kaisen-193x278.jpg'
+      cover: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg'
     }
   ];
 

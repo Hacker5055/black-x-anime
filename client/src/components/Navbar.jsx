@@ -108,20 +108,45 @@ export default function Navbar({ onOpenAuth }) {
               {mobileDrawerOpen ? '✕' : '☰'}
             </button>
 
-            <NavLink to="/" className="wit-brand" aria-label="BLACK X">
+            <NavLink to="/" className="wit-brand sloth-brand" aria-label="BLACK X">
               <img
                 src="/blackx-logo.png"
                 alt="BLACK X"
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '9px',
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '11px',
                   objectFit: 'cover',
                   background: '#000000',
-                  border: '1px solid rgba(255,255,255,0.2)'
+                  border: '1.5px solid rgba(255,255,255,0.32)',
+                  boxShadow: '0 4px 18px rgba(255,0,0,0.28)'
                 }}
               />
-              <span className="wit-brand__text">BLACK X</span>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span className="wit-brand__text" style={{ fontWeight: 900, fontSize: '1.08rem', letterSpacing: '0.02em' }}>
+                    BLACK X
+                  </span>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'rgba(255,255,255,0.72)' }}>
+                    original
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.58rem',
+                      fontWeight: 900,
+                      padding: '0.08rem 0.42rem',
+                      borderRadius: '999px',
+                      background: '#ffffff',
+                      color: '#000000'
+                    }}
+                  >
+                    120Hz
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(255,255,255,0.52)', marginTop: '2px' }}>
+                  slothUI Pro 2.0 • 6,973 ANIME
+                </span>
+              </div>
             </NavLink>
 
             <nav className="wit-exact-nav__links" aria-label="Main">

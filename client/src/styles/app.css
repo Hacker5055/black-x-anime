@@ -7870,6 +7870,220 @@ body {
   }
 }
 
+/* ============================================================
+   OFFICIAL slothUI Pro 2.0 — FULL WEBSITE DESIGN SYSTEM
+   Pure Monochrome Pitch-Black (#000000 / #08080c / #ffffff)
+   24px–28px Rounded Cinema Cards · 999px Capsule Pills · White Play Orbs
+   ============================================================ */
+
+:root {
+  --bg-0: #000000 !important;
+  --bg-1: #050508 !important;
+  --ink: #ffffff !important;
+  --ink-dim: rgba(255, 255, 255, 0.72) !important;
+  --ink-faint: rgba(255, 255, 255, 0.48) !important;
+  --cyan: #ffffff !important;
+  --violet: #ffffff !important;
+  --live: #ffffff !important;
+  --live-rgb: 255, 255, 255 !important;
+  --radius-xl: 28px !important;
+  --radius-lg: 24px !important;
+  --radius-md: 18px !important;
+  --radius-sm: 14px !important;
+}
+
+body {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+/* 1. slothUI Pro Floating Glass Capsule Navbar */
+.wit-exact-nav {
+  background: rgba(0, 0, 0, 0.86) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.wit-exact-nav__links {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem !important;
+}
+
+.wit-exact-nav__link {
+  padding: 0.44rem 0.92rem !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  font-size: 0.84rem !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.wit-exact-nav__link:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.26) !important;
+}
+
+.wit-exact-nav__link.active {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.24) !important;
+}
+
+.wit-nav-search {
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+}
+
+.wit-nav-search__filter {
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 900 !important;
+}
+
+/* 2. slothUI Pro 24px Rounded Anime & Episode Cards */
+.wit-anime-card,
+.wit-ep-card,
+.bx-3d-card {
+  border-radius: 22px !important;
+  background: #08080c !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.88) !important;
+  overflow: hidden !important;
+}
+
+.wit-anime-card:hover,
+.wit-ep-card:hover,
+.bx-3d-card:hover {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.95), 0 0 24px rgba(255, 255, 255, 0.12) !important;
+}
+
+/* slothUI Pro Capsule Badges on Cards */
+.wit-badge,
+.wit-ep-card__num,
+.wit-ep-card__vip {
+  border-radius: 999px !important;
+  font-weight: 900 !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.wit-badge--status,
+.wit-ep-card__num {
+  background: rgba(0, 0, 0, 0.78) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+}
+
+.wit-badge--type,
+.wit-ep-card__vip {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: none !important;
+}
+
+/* slothUI Pro Solid White Circular Play Orb */
+.wit-play-circle,
+.bx-3d-orb {
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: none !important;
+  font-weight: 900 !important;
+  box-shadow: 0 10px 28px rgba(255, 255, 255, 0.35) !important;
+}
+
+/* 3. slothUI Pro Weekly Schedule Capsule Day Tabs */
+.wit-days-bar {
+  display: flex;
+  gap: 0.5rem !important;
+  overflow-x: auto;
+  padding-bottom: 0.4rem;
+}
+
+.wit-day-tab {
+  border-radius: 999px !important;
+  padding: 0.52rem 1.15rem !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  font-weight: 800 !important;
+}
+
+.wit-day-tab.active {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.22) !important;
+}
+
+.wit-day-tab__today {
+  border-radius: 999px !important;
+  background: rgba(0, 0, 0, 0.18) !important;
+  color: inherit !important;
+}
+
+/* 4. slothUI Pro Episode Chips & Buttons */
+.ep-chip {
+  border-radius: 16px !important;
+  background: #08080c !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+.ep-chip:hover {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+.btn--primary {
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 1.5px solid #ffffff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.22) !important;
+}
+
+.btn--ghost {
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  font-weight: 800 !important;
+}
+
+.glass,
+.wit-panel {
+  border-radius: 26px !important;
+  background: rgba(10, 10, 15, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+}
+
+.wit-hero-dot {
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.28) !important;
+}
+
+.wit-hero-dot.active {
+  width: 28px !important;
+  background: #ffffff !important;
+}
+
+
 
 
 

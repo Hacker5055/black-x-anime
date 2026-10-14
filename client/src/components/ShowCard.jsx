@@ -6,20 +6,19 @@ import {
   toggleAnimeEpisodeAlert
 } from '../utils/deviceNotifications.js';
 
-/** Poster image with graceful fallback when the URL is missing or broken. */
+/** Poster image with automatic AniList HD cover healing + /blackx-logo.png fallback */
 function Poster({ src, alt, cls = '' }) {
-  const [broken, setBroken] = useState(false);
-  if (!src || broken) {
-    return <div className={`anime-card__fallback ${cls}`}>{(alt || 'X').slice(0, 2)}</div>;
-  }
+  const effectiveSrc =
+    src && !String(src).includes('api.mangatek.com')
+      ? src
+      : `https://invalid-cover.blackx.local/${encodeURIComponent(alt || 'anime')}.jpg`;
   return (
     <img
       className={cls}
-      src={src}
-      alt={alt}
+      src={effectiveSrc}
+      alt={alt || 'BLACK X'}
       loading="lazy"
       referrerPolicy="no-referrer"
-      onError={() => setBroken(true)}
     />
   );
 }

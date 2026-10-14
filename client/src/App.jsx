@@ -51,13 +51,39 @@ function Footer() {
   }, []);
 
   return (
-    <footer className="footer">
-      <div className="container">
-        <div className="footer__logo">BLACK <span className="nav__logo-x">X</span></div>
-        <div style={{ fontSize: '0.94rem', fontWeight: 600 }}>
+    <footer className="footer sloth-footer">
+      <div className="container sloth-footer__inner">
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            padding: '0.35rem 0.9rem 0.35rem 0.45rem',
+            borderRadius: '999px',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            marginBottom: '0.75rem'
+          }}
+        >
+          <img
+            src="/blackx-logo.png"
+            alt="BLACK X"
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              objectFit: 'cover',
+              border: '1px solid rgba(255,255,255,0.32)'
+            }}
+          />
+          <span style={{ fontWeight: 900, fontSize: '0.96rem', letterSpacing: '0.03em', color: '#ffffff' }}>
+            BLACK X <span style={{ fontWeight: 500, opacity: 0.75 }}>original • slothUI Pro 2.0</span>
+          </span>
+        </div>
+        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#ffffff' }}>
           {footerText?.tagline || t('footer.tagline')}
         </div>
-        <div style={{ marginTop: '0.35rem', opacity: 0.75, fontSize: '0.84rem' }}>
+        <div style={{ marginTop: '0.35rem', opacity: 0.68, fontSize: '0.82rem' }}>
           © {new Date().getFullYear()} · {footerText?.notice || t('footer.rights')}
         </div>
       </div>
@@ -201,6 +227,60 @@ export default function App() {
         localStorage.setItem('blackx_referral_code', ref.trim());
       }
     } catch {}
+  }, []);
+
+  // Global Capture-Phase Image Auto-Healer for Website (Fixes broken covers via AniList HD + /blackx-logo.png)
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (!window.__bxWebCoverCache) window.__bxWebCoverCache = {};
+
+    const onImgError = (ev) => {
+      const img = ev?.target;
+      if (!img || img.tagName !== 'IMG') return;
+      const curSrc = String(img.getAttribute('src') || '');
+      if (curSrc.endsWith('/blackx-logo.png') || img.dataset.bxHealed === 'done') return;
+
+      img.src = '/blackx-logo.png';
+      img.dataset.bxHealed = 'pending';
+
+      const rawTitle = String(img.getAttribute('alt') || '')
+        .replace(/[^\w\s\u0621-\u064A]/g, ' ')
+        .trim();
+      if (!rawTitle || rawTitle.length < 2 || rawTitle.toLowerCase() === 'black x') {
+        img.dataset.bxHealed = 'done';
+        return;
+      }
+
+      if (window.__bxWebCoverCache[rawTitle]) {
+        img.dataset.bxHealed = 'done';
+        img.src = window.__bxWebCoverCache[rawTitle];
+        return;
+      }
+
+      fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          query: `query($s: String) { Media(search: $s) { coverImage { extraLarge large } } }`,
+          variables: { s: rawTitle.split(/\s+/).slice(0, 4).join(' ') }
+        })
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          const hdUrl = d?.data?.Media?.coverImage?.extraLarge || d?.data?.Media?.coverImage?.large;
+          img.dataset.bxHealed = 'done';
+          if (hdUrl) {
+            window.__bxWebCoverCache[rawTitle] = hdUrl;
+            img.src = hdUrl;
+          }
+        })
+        .catch(() => {
+          img.dataset.bxHealed = 'done';
+        });
+    };
+
+    window.addEventListener('error', onImgError, true);
+    return () => window.removeEventListener('error', onImgError, true);
   }, []);
 
   const handleSplashDone = () => {
