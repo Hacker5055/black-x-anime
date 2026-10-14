@@ -22,40 +22,46 @@ import { optionalAuth } from './auth.js';
 import { db } from './db.js';
 import { main as seedAll, enrichLibrary } from './seed.js';
 
-// never let a stray async error kill the API (client aborts during video
-// streaming are the usual suspects)
-process.on('unhandledRejection', (err) => {
-  console.error('[unhandledRejection]', err?.message || err);
-});
-process.on('uncaughtException', (err) => {
-  console.error('[uncaughtException]', err?.message || err);
-});
+const IS_CLOUDFLARE_WORKER = Boolean(globalThis.__BLACKX_CLOUDFLARE_RUNTIME__);
 
-// Auto-seed on first boot: free hosts (Render etc.) have ephemeral disks,
-// so a redeploy starts with an empty database. Quick rows appear instantly,
-// then live metadata is enriched in the background.
-try {
-  const { c: userCount } = db.prepare('SELECT COUNT(*) AS c FROM users').get();
-  if (userCount === 0) {
-    console.log('🌱 Empty database — seeding demo data…');
-    seedAll({ quick: true })
-      .then(() => {
-        console.log('🌱 Quick seed done — enriching metadata in background');
-        const attempt = (n) => enrichLibrary()
-          .then(() => console.log('✨ Library enriched with live metadata'))
-          .catch((err) => {
-            console.error('enrich attempt failed:', err?.message || err);
-            if (n < 5) setTimeout(() => attempt(n + 1), 3 * 60 * 1000);
-          });
-        return attempt(1);
-      })
-      .catch((err) => console.error('seed failed:', err?.message || err));
-  }
-} catch (err) {
-  console.error('auto-seed check failed:', err?.message || err);
+// Never let a stray async error kill the Node-hosted API (client aborts during
+// video streaming are the usual suspects). Workers manage request failures in
+// their own event lifecycle.
+if (!IS_CLOUDFLARE_WORKER) {
+  process.on('unhandledRejection', (err) => {
+    console.error('[unhandledRejection]', err?.message || err);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[uncaughtException]', err?.message || err);
+  });
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Auto-seed Node hosts on first boot. Cloudflare initializes the durable SQL
+// schema through its persistent SQLite adapter and avoids background seeding.
+if (!IS_CLOUDFLARE_WORKER) {
+  try {
+    const { c: userCount } = db.prepare('SELECT COUNT(*) AS c FROM users').get();
+    if (userCount === 0) {
+      console.log('🌱 Empty database — seeding demo data…');
+      seedAll({ quick: true })
+        .then(() => {
+          console.log('🌱 Quick seed done — enriching metadata in background');
+          const attempt = (n) => enrichLibrary()
+            .then(() => console.log('✨ Library enriched with live metadata'))
+            .catch((err) => {
+              console.error('enrich attempt failed:', err?.message || err);
+              if (n < 5) setTimeout(() => attempt(n + 1), 3 * 60 * 1000);
+            });
+          return attempt(1);
+        })
+        .catch((err) => console.error('seed failed:', err?.message || err));
+    }
+  } catch (err) {
+    console.error('auto-seed check failed:', err?.message || err);
+  }
+}
+
+const __dirname = IS_CLOUDFLARE_WORKER ? '' : dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = 3000;
 
@@ -129,7 +135,7 @@ app.get(/_service-worker\.js$/, (req, res) => {
 
 // Serve the built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist');
-if (fs.existsSync(clientDist)) {
+if (!IS_CLOUDFLARE_WORKER && fs.existsSync(clientDist)) {
   app.use(
     express.static(clientDist, {
       setHeaders: (res, filePath) => {
@@ -150,7 +156,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'server_error', message: 'Something went wrong' });
 });
 
-if (!process.env.VERCEL) {
+if (!IS_CLOUDFLARE_WORKER && !process.env.VERCEL) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n  ⚡ BLACK X API listening on http://0.0.0.0:${PORT}\n`);
   });

@@ -79,7 +79,9 @@ export async function ensurePrismaUser(prisma, reqUser) {
 /** True when Prisma cannot reach a database (no URL, suspended host, refused...). */
 let dbBroken = false;
 /** Once a DB connection failure happens, stick to the SQLite store (circuit breaker). */
-export function dbIsBroken() { return dbBroken; }
+export function dbIsBroken() {
+  return Boolean(globalThis.__BLACKX_CLOUDFLARE_RUNTIME__) || dbBroken;
+}
 
 export function isDbUnavailable(err) {
   const s = String((err && err.message) || err || '') + ' ' + String((err && err.code) || '') + ' ' + String((err && err.meta && (err.meta.code || err.meta.message)) || '');

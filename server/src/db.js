@@ -3,79 +3,84 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = process.env.VERCEL ? '/tmp/blackx-data' : join(__dirname, '..', 'data');
-try {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-} catch {
-  /* ignore read-only fs */
+const cloudflareAdapter = globalThis.__BLACKX_DB_ADAPTER__ || null;
+const __dirname = cloudflareAdapter ? '' : dirname(fileURLToPath(import.meta.url));
+const dataDir = cloudflareAdapter ? '' : process.env.VERCEL ? '/tmp/blackx-data' : join(__dirname, '..', 'data');
+if (!cloudflareAdapter) {
+  try {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  } catch {
+    /* ignore read-only fs */
+  }
 }
 
-let dbInstance;
-try {
-  const Database = (await import('better-sqlite3')).default;
-  dbInstance = new Database(join(dataDir, 'blackx.db'));
-  dbInstance.pragma('journal_mode = WAL');
-  dbInstance.pragma('foreign_keys = ON');
-} catch (err) {
-  console.warn('[db] better-sqlite3 fallback active:', err?.message || err);
+let dbInstance = cloudflareAdapter;
+if (!dbInstance) {
   try {
-    const { DatabaseSync } = await import('node:sqlite');
-    const sqliteDb = new DatabaseSync(':memory:');
-    dbInstance = {
-      pragma: () => {},
-      exec: (sql) => {
-        try {
-          sqliteDb.exec(sql);
-        } catch {}
-      },
-      prepare: (sql) => {
-        try {
-          const stmt = sqliteDb.prepare(sql);
-          return {
-            get: (...args) => {
-              try {
-                return stmt.get(...args);
-              } catch {
-                return undefined;
+    const Database = (await import('better-sqlite3')).default;
+    dbInstance = new Database(join(dataDir, 'blackx.db'));
+    dbInstance.pragma('journal_mode = WAL');
+    dbInstance.pragma('foreign_keys = ON');
+  } catch (err) {
+    console.warn('[db] better-sqlite3 fallback active:', err?.message || err);
+    try {
+      const { DatabaseSync } = await import('node:sqlite');
+      const sqliteDb = new DatabaseSync(':memory:');
+      dbInstance = {
+        pragma: () => {},
+        exec: (sql) => {
+          try {
+            sqliteDb.exec(sql);
+          } catch {}
+        },
+        prepare: (sql) => {
+          try {
+            const stmt = sqliteDb.prepare(sql);
+            return {
+              get: (...args) => {
+                try {
+                  return stmt.get(...args);
+                } catch {
+                  return undefined;
+                }
+              },
+              all: (...args) => {
+                try {
+                  return stmt.all(...args) || [];
+                } catch {
+                  return [];
+                }
+              },
+              run: (...args) => {
+                try {
+                  return stmt.run(...args) || { changes: 0, lastInsertRowid: 1 };
+                } catch {
+                  return { changes: 0, lastInsertRowid: 1 };
+                }
               }
-            },
-            all: (...args) => {
-              try {
-                return stmt.all(...args) || [];
-              } catch {
-                return [];
-              }
-            },
-            run: (...args) => {
-              try {
-                return stmt.run(...args) || { changes: 0, lastInsertRowid: 1 };
-              } catch {
-                return { changes: 0, lastInsertRowid: 1 };
-              }
-            }
-          };
-        } catch {
-          return {
-            get: () => ({ c: 0, cnt: 0, total: 0 }),
-            all: () => [],
-            run: () => ({ changes: 0, lastInsertRowid: 1 })
-          };
-        }
-      },
-      transaction: (fn) => (...args) => fn(...args)
-    };
-  } catch {
-    dbInstance = {
-      pragma: () => {},
-      exec: () => {},
-      prepare: () => ({
-        get: () => ({ c: 0, cnt: 0, total: 0 }),
-        all: () => [],
-        run: () => ({ changes: 0, lastInsertRowid: 1 })
-      }),
-      transaction: (fn) => (...args) => fn(...args)
-    };
+            };
+          } catch {
+            return {
+              get: () => ({ c: 0, cnt: 0, total: 0 }),
+              all: () => [],
+              run: () => ({ changes: 0, lastInsertRowid: 1 })
+            };
+          }
+        },
+        transaction: (fn) => (...args) => fn(...args)
+      };
+    } catch {
+      dbInstance = {
+        pragma: () => {},
+        exec: () => {},
+        prepare: () => ({
+          get: () => ({ c: 0, cnt: 0, total: 0 }),
+          all: () => [],
+          run: () => ({ changes: 0, lastInsertRowid: 1 })
+        }),
+        transaction: (fn) => (...args) => fn(...args)
+      };
+    }
   }
 }
 

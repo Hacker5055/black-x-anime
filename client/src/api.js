@@ -42,17 +42,15 @@ export function getServerUrl() {
   } catch {
     /* ignore */
   }
+  // The Workers deployment now runs the API on the same origin as the SPA.
+  // Prefer that local Worker endpoint even if an old VITE_API_BASE_URL was
+  // configured during the earlier static-only deployment.
+  const host = typeof window !== 'undefined' ? String(window.location.hostname || '').toLowerCase() : '';
+  if (host.endsWith('.workers.dev') || host.endsWith('.pages.dev')) return '';
+
   const envUrl = import.meta.env?.VITE_API_BASE_URL || '';
   if (envUrl && String(envUrl).trim()) {
     return String(envUrl).trim().replace(/\/+$/, '');
-  }
-
-  // Cloudflare Workers/Pages static deployments only host the Vite frontend.
-  // Keep API requests on the live Vercel backend instead of letting the SPA
-  // fallback return index.html for /api/* and leave catalogs empty.
-  const host = typeof window !== 'undefined' ? String(window.location.hostname || '').toLowerCase() : '';
-  if (host.endsWith('.workers.dev') || host.endsWith('.pages.dev')) {
-    return 'https://black-x-anime.me';
   }
   return '';
 }

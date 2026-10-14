@@ -8,14 +8,14 @@
  */
 import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url);
+const require = globalThis.__BLACKX_CLOUDFLARE_RUNTIME__ ? null : createRequire(import.meta.url);
 
 let instance = null;
 
 export function getPrisma() {
   if (!instance) {
-    if (!process.env.DATABASE_URL) {
-      console.warn('[AI Studio] DATABASE_URL not set — using mock Prisma proxy');
+    if (globalThis.__BLACKX_CLOUDFLARE_RUNTIME__ || !process.env.DATABASE_URL) {
+      console.warn('[AI Studio] Prisma disabled or DATABASE_URL not set — using SQLite-backed fallback');
       const noOp = {
         findMany: async () => [],
         findFirst: async () => null,
