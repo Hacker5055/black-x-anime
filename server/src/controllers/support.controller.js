@@ -75,7 +75,7 @@ export async function getMyTickets(req, res) {
 export async function getAdminTickets(req, res) {
   try {
     const userId = getUserId(req);
-    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || req.user?.isDeveloper;
+    const isDev = req.user?.role === 'developer';
     if (!userId || !isDev) return fail(res, 403, 'Developer/Admin access required.');
     ensureSocialTables();
     const tickets = social.getTickets(String(userId), true);
@@ -89,7 +89,7 @@ export async function getAdminTickets(req, res) {
 export async function replyAdminTicket(req, res) {
   try {
     const userId = getUserId(req);
-    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || req.user?.isDeveloper;
+    const isDev = req.user?.role === 'developer';
     if (!userId || !isDev) return fail(res, 403, 'Developer/Admin access required.');
     const { id } = req.params;
     const { reply, status = 'RESOLVED' } = req.body || {};

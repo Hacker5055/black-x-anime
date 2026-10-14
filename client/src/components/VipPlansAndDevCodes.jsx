@@ -750,10 +750,9 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
                 type="button"
                 className="btn btn--primary"
                 onClick={() => {
-                  const codeHint = selectedPlanModal.tier === 'vip_monarch' ? 'BX-MONARCH-2026-MAX' : 'BX-BASIC-2026-VIP';
-                  setRedeemCode(codeHint);
+                  setRedeemCode('');
                   setSelectedPlanModal(null);
-                  pushToast('🔑 تم وضع كود التفعيل في الخانة! اضغط على «تفعيل كود الاشتراك الآن» للتجربة الفورية.', 'info');
+                  pushToast('أدخل كود التفعيل الذي استلمته من إدارة المنصة.', 'info');
                 }}
                 style={{ background: 'linear-gradient(135deg, #a855f7, #06b6d4)', fontWeight: 900 }}
               >
@@ -926,7 +925,7 @@ export function DevVipCodeGenerator() {
 
   const handleDeleteCode = async (id) => {
     try {
-      await api.delete(`/api/dev/vip-codes/${id}`);
+      await api.del(`/api/dev/vip-codes/${id}`);
       setCodes((prev) => prev.filter((c) => c.id !== id));
       pushToast('🗑️ تم حذف/إلغاء كود الاشتراك', 'info');
     } catch (err) {

@@ -124,7 +124,9 @@ export function AuthProvider({ children }) {
           const effectiveName = firestoreProfile?.displayName || devProfile?.displayName || currentFbUser.displayName;
           const effectivePhoto = firestoreProfile?.photoUrl || firestoreProfile?.photoURL || devProfile?.photoUrl || currentFbUser.photoURL;
 
+          const idToken = await currentFbUser.getIdToken();
           const data = await api.post('/api/auth/google', {
+            idToken,
             uid: currentFbUser.uid,
             email: currentFbUser.email,
             displayName: effectiveName,
@@ -222,32 +224,31 @@ export function AuthProvider({ children }) {
   }, [refresh]);
 
   const loginAsDeveloper = useCallback(async () => {
-    // Read persistent developer profile from Firestore if exists
-    let devProfile = null;
-    try {
-      devProfile = await fetchDeveloperProfileFromFirestore();
-    } catch {}
-
-    const data = await api.post('/api/auth/dev-login', {
-      displayName: devProfile?.displayName,
-      photoURL: devProfile?.photoUrl || devProfile?.photoURL
+    const firebaseUser = await signInWithGoogle();
+    if (firebaseUser.email?.toLowerCase() !== 'mz0970mmz@gmail.com') {
+      await fbSignOut(auth).catch(() => {});
+      setStoredToken(null);
+      throw new Error('Sign in with the authorized developer Google account.');
+    }
+    const idToken = await firebaseUser.getIdToken();
+    const data = await api.post('/api/auth/google', {
+      idToken,
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL || firebaseUser.photoUrl
     });
-
     if (data.token) setStoredToken(data.token);
-    const finalUser = {
-      ...data.user,
-      displayName: devProfile?.displayName || data.user.displayName,
-      photoUrl: devProfile?.photoUrl || devProfile?.photoURL || data.user.photoUrl,
-      photoURL: devProfile?.photoUrl || devProfile?.photoURL || data.user.photoUrl
-    };
-    setUser(finalUser);
+    setUser({ ...data.user, firebaseUid: firebaseUser.uid });
     await refresh();
-    return finalUser;
+    return data.user;
   }, [refresh]);
 
   const loginWithGoogle = useCallback(async () => {
     const firebaseUser = await signInWithGoogle();
+    const idToken = await firebaseUser.getIdToken();
     const data = await api.post('/api/auth/google', {
+      idToken,
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName,

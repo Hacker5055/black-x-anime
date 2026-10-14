@@ -4,13 +4,16 @@
   "description": "BLACK X \\u2014 Interactive Anime Tracker & Prediction Engine (bilingual EN/AR)",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite build client && node server/src/index.js",
     "server": "node --watch server/src/index.js",
     "client": "vite --config client/vite.config.js",
     "seed": "node server/src/seed.js",
-    "build": "vite build client && rm -rf dist && cp -r client/dist dist",
-    "start": "vite build client && node server/src/index.js",
+    "build": "vite build client",
+    "start": "node server/src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

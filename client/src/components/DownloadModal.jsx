@@ -8,6 +8,28 @@ import { isFhdQuality } from './VideoPlayer.jsx';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 
+const pickDownloadUrl = (source) => source?.downloadUrl || source?.url || source?.directUrl || null;
+
+function absoluteDownloadUrl(url) {
+  try {
+    return typeof window === 'undefined' ? url : new URL(url, window.location.origin).href;
+  } catch {
+    return url;
+  }
+}
+
+function localDownloadEndpoint(url) {
+  try {
+    if (typeof window === 'undefined') return null;
+    const parsed = new URL(url, window.location.origin);
+    return parsed.origin === window.location.origin && parsed.pathname === '/api/stream/download'
+      ? `${parsed.pathname}${parsed.search}`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * DownloadModal
  * Comprehensive multi-source episode downloader:
@@ -55,6 +77,8 @@ export function DownloadModal({
   useEffect(() => {
     if (!isOpen || !slug || !episode) return;
     let active = true;
+    setSourcesData(null);
+    setResolvingId(null);
     setLoadingSources(true);
 
     api.get(`/api/stream/download-sources/${slug}/${episode}`)
@@ -76,6 +100,8 @@ export function DownloadModal({
   // Build proxy download URL for direct streams to bypass 403 Forbidden
   const getDirectDownloadEndpoint = useCallback((directUrl, quality = '') => {
     if (!directUrl) return '';
+    const existingEndpoint = localDownloadEndpoint(directUrl);
+    if (existingEndpoint) return existingEndpoint;
     const cleanTitle = (title || slug || 'Anime').replace(/[^a-zA-Z0-9_\u0600-\u06FF\s-]/g, '').trim();
     const filename = `${cleanTitle}_Ep${episode}_${quality || 'HD'}.mp4`;
     return `/api/stream/download?url=${encodeURIComponent(directUrl)}&filename=${encodeURIComponent(filename)}`;
@@ -104,29 +130,48 @@ export function DownloadModal({
 
   const handleCopy = (url, id) => {
     if (!url) return;
-    navigator.clipboard?.writeText(url);
+    const copyUrl = absoluteDownloadUrl(url);
+    navigator.clipboard?.writeText(copyUrl).catch?.(() => {});
     setCopiedId(id);
     pushToast(t('watch.linkCopied'), 'success');
     setTimeout(() => setCopiedId(null), 2500);
   };
 
   const displayList = useMemo(() => {
-    const fromApi = sourcesData?.cloudHosts || [];
-    const fromProps = downloads || [];
-    const sourceList = fromApi.length > 0 ? fromApi : fromProps;
-
-    return sourceList.map((item, idx) => {
-      const res = resolvedDownloads[item.id] || {};
-      const rawQual = item.quality || (idx % 2 === 0 ? 'FHD' : 'HD');
-      return {
-        id: item.id,
-        server: item.server || 'Server',
-        quality: rawQual,
-        isFhd: isFhdQuality(rawQual),
-        url: item.url || res.downloadUrl || null,
-        directUrl: item.directUrl || res.directUrl || null
-      };
+    const candidates = [...(sourcesData?.cloudHosts || []), ...(downloads || [])];
+    const byId = new Map();
+    candidates.forEach((item, idx) => {
+      const key = item.id || item.url || item.downloadUrl || item.directUrl || `server-${idx}`;
+      const previous = byId.get(key) || {};
+      byId.set(key, {
+        ...previous,
+        ...item,
+        url: item.url || item.downloadUrl || previous.url || previous.downloadUrl || null,
+        directUrl: item.directUrl || previous.directUrl || previous.downloadUrl || null
+      });
     });
+
+    const seenUrls = new Set();
+    return [...byId.values()]
+      .filter((item) => {
+        const url = item.directUrl || item.url || item.downloadUrl;
+        if (!url) return true;
+        if (seenUrls.has(url)) return false;
+        seenUrls.add(url);
+        return true;
+      })
+      .map((item, idx) => {
+        const res = resolvedDownloads[item.id] || {};
+        const rawQual = item.quality || (idx % 2 === 0 ? 'FHD' : 'HD');
+        return {
+          id: item.id,
+          server: item.server || 'Server',
+          quality: rawQual,
+          isFhd: isFhdQuality(rawQual),
+          url: item.url || item.downloadUrl || res.downloadUrl || res.url || res.directUrl || null,
+          directUrl: item.directUrl || res.directUrl || res.downloadUrl || res.url || null
+        };
+      });
   }, [sourcesData, downloads, resolvedDownloads]);
 
   const promptVipForFhd = () => {
@@ -145,20 +190,28 @@ export function DownloadModal({
       promptVipForFhd();
       return;
     }
-    let url = item.url;
+    let url = item.url || item.directUrl;
+    let pendingWindow = null;
     if (!url && onResolveDownload) {
+      pendingWindow = window.open('about:blank', '_blank');
+      if (pendingWindow) pendingWindow.opener = null;
       setResolvingId(item.id);
       try {
-        const res = await onResolveDownload(item.id);
-        url = res?.downloadUrl;
-      } catch (err) {
+        const res = await onResolveDownload(item);
+        url = pickDownloadUrl(res);
+      } catch {
         pushToast(lang === 'ar' ? 'تعذر جلب رابط السيرفر حالياً' : 'Failed to fetch server link', 'error');
       } finally {
         setResolvingId(null);
       }
     }
     if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer');
+      if (pendingWindow && !pendingWindow.closed) pendingWindow.location.replace(absoluteDownloadUrl(url));
+      else if (!pendingWindow) window.open(url, '_blank', 'noopener,noreferrer');
+      else handleCopy(url, item.id);
+    } else {
+      pendingWindow?.close();
+      pushToast(lang === 'ar' ? 'لا يتوفر رابط لهذا السيرفر حالياً' : 'No link is available for this server right now', 'error');
     }
   };
 
@@ -167,12 +220,12 @@ export function DownloadModal({
       promptVipForFhd();
       return;
     }
-    let url = item.url;
+    let url = item.url || item.directUrl;
     if (!url && onResolveDownload) {
       setResolvingId(item.id);
       try {
-        const res = await onResolveDownload(item.id);
-        url = res?.downloadUrl;
+        const res = await onResolveDownload(item);
+        url = pickDownloadUrl(res);
       } catch {}
       setResolvingId(null);
     }

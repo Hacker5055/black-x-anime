@@ -546,7 +546,7 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
 
     if (!data) return res.status(404).json({ error: 'not_found', message: 'Episode not found' });
 
-    const isDev = req.user?.role === 'developer' || (req.user?.email || '').toLowerCase() === 'mz0970mmz@gmail.com';
+    const isDev = req.user?.role === 'developer';
     const vipStatus = isDev ? 'VIP Monarch' : (req.user?.vip_status || null);
     const isVipBasic = vipStatus === 'VIP Basic' || vipStatus === 'VIP Monarch' || isDev;
     const isVipMonarch = vipStatus === 'VIP Monarch' || isDev;
@@ -852,13 +852,15 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
       const a3rbData = await anime3rbService.getEpisode(slug, ep);
       if (a3rbData?.downloads?.length) {
         for (const dl of a3rbData.downloads) {
-          if (dl.downloadUrl) seenUrls.add(dl.downloadUrl);
+          const downloadUrl = dl.downloadUrl || dl.directUrl || null;
+          if (downloadUrl && seenUrls.has(downloadUrl)) continue;
+          if (downloadUrl) seenUrls.add(downloadUrl);
           cloudHosts.push({
             id: dl.id,
             server: dl.server || '📥 سيرفر تحميل BLACK X المباشر',
             quality: dl.quality || 'FHD',
-            url: dl.downloadUrl,
-            directUrl: dl.downloadUrl,
+            url: downloadUrl,
+            directUrl: downloadUrl,
             type: 'blackx_direct_download'
           });
         }
@@ -877,6 +879,7 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
           } catch (_) {}
         }
         const finalUrl = resolved?.downloadUrl || resolved?.directUrl || null;
+        if (finalUrl && seenUrls.has(finalUrl)) continue;
         if (finalUrl) seenUrls.add(finalUrl);
         cloudHosts.push({
           id: dl.id,
@@ -993,7 +996,13 @@ const ALLOWED_HOSTS = [
   'hianime.at',
   'allanimenews.com',
   'fast4speed.rsvp',
-  'wixmp.com'
+  'wixmp.com',
+  'vibuxer.com',
+  'hgcloud.me',
+  'hgcloud.to',
+  'hlswish.com',
+  'wishembed.com',
+  'drama1.cfd'
 ];
 
 function unwrapProxyUrl(raw) {
@@ -1018,8 +1027,43 @@ function unwrapProxyUrl(raw) {
 }
 
 function hostAllowed(hostname) {
-  const h = hostname.toLowerCase();
-  return ALLOWED_HOSTS.some((a) => h === a || h.endsWith('.' + a) || h.endsWith(a));
+  const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  return ALLOWED_HOSTS.some((a) => h === a || h.endsWith(`.${a}`));
+}
+
+function isAllowedRemoteStreamUrl(target) {
+  return target instanceof URL &&
+    (target.protocol === 'https:' || target.protocol === 'http:') &&
+    !target.username &&
+    !target.password &&
+    hostAllowed(target.hostname);
+}
+
+async function fetchAllowedHlsUrl(url, headers, maxRedirects = 4) {
+  let current = new URL(url);
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
+    if (!isAllowedRemoteStreamUrl(current)) {
+      throw Object.assign(new Error('HLS host not allowed'), { code: 'hls_host_not_allowed' });
+    }
+    const response = await fetch(current.href, {
+      headers,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(25000)
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return { response, finalUrl: current.href };
+    }
+
+    const location = response.headers.get('location');
+    if (!location) return { response, finalUrl: current.href };
+    const next = new URL(location, current.href);
+    if (response.body) await response.body.cancel().catch(() => {});
+    if (!isAllowedRemoteStreamUrl(next)) {
+      throw Object.assign(new Error('HLS redirect host not allowed'), { code: 'hls_host_not_allowed' });
+    }
+    current = next;
+  }
+  throw Object.assign(new Error('Too many HLS redirects'), { code: 'hls_redirect_limit' });
 }
 
 /**
@@ -1276,7 +1320,8 @@ router.get('/proxy', optionalAuth, async (req, res) => {
       return res.status(502).json({ error: 'upstream_not_video', message: 'Upstream returned non-video response' });
     }
 
-    res.status(upstream.status === 200 && req.headers.range ? 206 : upstream.status);
+    // Preserve the upstream status; claiming 206 without Content-Range breaks HTML5 seek/playback.
+    res.status(upstream.status);
     const pass = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
     for (const h of pass) {
       const v = upstream.headers.get(h);
@@ -1329,6 +1374,9 @@ router.get('/hls-proxy', async (req, res) => {
   } catch {
     return res.status(400).send('Invalid url');
   }
+  if (!isAllowedRemoteStreamUrl(target)) {
+    return res.status(403).send('HLS host not allowed');
+  }
   try {
     const isZoko =
       target.hostname.includes('drama') ||
@@ -1337,15 +1385,11 @@ router.get('/hls-proxy', async (req, res) => {
       target.hostname.endsWith('.top');
     const referer = isZoko ? 'https://zokoanime.video/' : 'https://vibuxer.com/';
     const origin = isZoko ? 'https://zokoanime.video' : 'https://vibuxer.com';
-    const upstream = await fetch(target.href, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        Accept: '*/*',
-        Referer: referer,
-        Origin: origin
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(25000)
+    const { response: upstream, finalUrl } = await fetchAllowedHlsUrl(target.href, {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      Accept: '*/*',
+      Referer: referer,
+      Origin: origin
     });
     if (!upstream.ok) return res.status(upstream.status).end();
 
@@ -1369,16 +1413,18 @@ router.get('/hls-proxy', async (req, res) => {
             if (trimmed.startsWith('#')) {
               return line.replace(/URI="([^"]+)"/g, (_, uri) => {
                 try {
-                  const full = new URL(uri, target.href).href;
-                  return `URI="/api/stream/hls-proxy?url=${encodeURIComponent(full)}"`;
+                  const full = new URL(uri, finalUrl);
+                  if (!isAllowedRemoteStreamUrl(full)) return `URI="${full.href}"`;
+                  return `URI="/api/stream/hls-proxy?url=${encodeURIComponent(full.href)}"`;
                 } catch {
                   return `URI="${uri}"`;
                 }
               });
             }
             try {
-              const full = new URL(trimmed, target.href).href;
-              return `/api/stream/hls-proxy?url=${encodeURIComponent(full)}`;
+              const full = new URL(trimmed, finalUrl);
+              if (!isAllowedRemoteStreamUrl(full)) return full.href;
+              return `/api/stream/hls-proxy?url=${encodeURIComponent(full.href)}`;
             } catch {
               return line;
             }
@@ -1400,20 +1446,44 @@ router.get('/hls-proxy', async (req, res) => {
     res.on('error', cleanup);
     upstreamStream.pipe(res);
   } catch (err) {
-    if (!res.headersSent) res.status(502).end();
+    if (!res.headersSent) res.status(err.code === 'hls_host_not_allowed' ? 403 : 502).end();
   }
 });
 
 /**
- * GET /api/stream/hls-player?url=…&sub=… — Self-hosted, 100% Sandbox-Safe HTML5 + hls.js player
+ * GET /api/stream/hls-player?url=…&sub=… — Self-hosted HTML5 + hls.js player
  */
 router.get('/hls-player', (req, res) => {
   const rawUrl = String(req.query.url || '');
-  const subUrl = String(req.query.sub || '');
+  const requestedSubUrl = String(req.query.sub || '');
   const subEnUrl = String(req.query.sub_en || '');
   if (!rawUrl) return res.status(400).send('Missing url');
-  const proxiedM3u8 = `/api/stream/hls-proxy?url=${encodeURIComponent(rawUrl)}`;
-  const proxiedSubEn = subEnUrl ? `/api/stream/hls-proxy?url=${encodeURIComponent(subEnUrl)}` : '';
+
+  let target;
+  try {
+    target = new URL(rawUrl);
+  } catch {
+    return res.status(400).send('Invalid url');
+  }
+  if (!isAllowedRemoteStreamUrl(target)) return res.status(403).send('HLS host not allowed');
+
+  let subUrl = '';
+  try {
+    const localSub = new URL(requestedSubUrl, 'https://black-x.invalid');
+    if (localSub.origin === 'https://black-x.invalid' && localSub.pathname.startsWith('/api/stream/subtitles/')) {
+      subUrl = `${localSub.pathname}${localSub.search}`;
+    }
+  } catch {}
+
+  let safeSubEnUrl = '';
+  try {
+    const parsedSubEn = new URL(subEnUrl);
+    if (isAllowedRemoteStreamUrl(parsedSubEn)) safeSubEnUrl = parsedSubEn.href;
+  } catch {}
+
+  const proxiedM3u8 = `/api/stream/hls-proxy?url=${encodeURIComponent(target.href)}`;
+  const proxiedSubEn = safeSubEnUrl ? `/api/stream/hls-proxy?url=${encodeURIComponent(safeSubEnUrl)}` : '';
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">

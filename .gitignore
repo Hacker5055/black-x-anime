@@ -8,8 +8,4 @@ screenshots/
 .env
 .DS_Store
 .vite/
-.wrangler/
 /dist
-
-# the repo intentionally ships without a lockfile (Dockerfile installs fresh)
-package-lock.json

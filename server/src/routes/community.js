@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db.js';
+import { requireAuth } from '../auth.js';
 
 const router = Router();
 
@@ -96,20 +97,20 @@ router.get('/posts', (req, res) => {
  * POST /api/community/posts
  * Create a new post
  */
-router.post('/posts', (req, res) => {
+router.post('/posts', requireAuth, (req, res) => {
   try {
-    const { content, tag, tagName, imageUrl, authorName, authorUsername, authorAvatar, authorRole, uid, voiceUrl, voiceDuration } = req.body;
+    const { content, tag, tagName, imageUrl, voiceUrl, voiceDuration } = req.body || {};
 
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'empty_content', message: 'Content cannot be empty' });
     }
 
-    const effectiveUid = req.user?.uid || req.user?.id || req.user?.email || uid || 'anonymous';
-    const effectiveAuthor = req.user?.displayName || req.user?.display_name || authorName || 'متابع الأنمي';
-    const effectiveUsername = req.user?.username || authorUsername || '';
-    const effectiveAvatar = req.user?.photoURL || req.user?.photo_url || authorAvatar || '';
-    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || authorRole === 'developer';
-    const effectiveRole = isDev ? 'developer' : (authorRole || 'user');
+    const effectiveUid = req.user.id;
+    const effectiveAuthor = req.user.displayName || req.user.display_name || req.user.username || 'BLACK X user';
+    const effectiveUsername = req.user.username || '';
+    const effectiveAvatar = req.user.photoURL || req.user.photo_url || '';
+    const isDev = req.user.role === 'developer';
+    const effectiveRole = isDev ? 'developer' : 'user';
 
     const result = db.prepare(`
       INSERT INTO community_posts (
@@ -152,14 +153,20 @@ router.post('/posts', (req, res) => {
  * POST /api/community/posts/:id/react
  * React to a post (like, love, haha, wow, sad)
  */
-router.post('/posts/:id/react', (req, res) => {
+router.post('/posts/:id/react', requireAuth, (req, res) => {
   try {
     const postId = Number(req.params.id);
-    const { reactionType = 'like', userId } = req.body;
-    const effectiveUserId = req.user?.uid || req.user?.id || req.user?.email || userId;
+    const { reactionType = 'like' } = req.body || {};
+    const effectiveUserId = req.user.id;
 
-    if (!effectiveUserId) {
-      return res.status(401).json({ error: 'unauthorized', message: 'User ID required' });
+    if (!Number.isInteger(postId) || postId < 1) {
+      return res.status(400).json({ error: 'invalid_post_id', message: 'Invalid post ID' });
+    }
+    if (!['like', 'love', 'haha', 'wow', 'sad'].includes(reactionType)) {
+      return res.status(400).json({ error: 'invalid_reaction', message: 'Unsupported reaction type' });
+    }
+    if (!db.prepare('SELECT id FROM community_posts WHERE id = ?').get(postId)) {
+      return res.status(404).json({ error: 'not_found', message: 'Post not found' });
     }
 
     const existing = db.prepare('SELECT id, reaction_type FROM community_reactions WHERE post_id = ? AND user_id = ?')
@@ -231,20 +238,19 @@ router.get('/posts/:id/comments', (req, res) => {
  * POST /api/community/posts/:id/comments
  * Add a comment to a post
  */
-router.post('/posts/:id/comments', (req, res) => {
+router.post('/posts/:id/comments', requireAuth, (req, res) => {
   try {
     const postId = Number(req.params.id);
-    const { content, authorName, authorAvatar, authorRole, userId } = req.body;
+    const { content } = req.body || {};
 
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'empty_comment', message: 'Comment content cannot be empty' });
     }
 
-    const effectiveUserId = req.user?.uid || req.user?.id || req.user?.email || userId || 'anonymous';
-    const effectiveAuthor = req.user?.displayName || req.user?.display_name || authorName || 'متابع الأنمي';
-    const effectiveAvatar = req.user?.photoURL || req.user?.photo_url || authorAvatar || '';
-    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || authorRole === 'developer';
-    const effectiveRole = isDev ? 'developer' : (authorRole || 'user');
+    const effectiveUserId = req.user.id;
+    const effectiveAuthor = req.user.displayName || req.user.display_name || req.user.username || 'BLACK X user';
+    const effectiveAvatar = req.user.photoURL || req.user.photo_url || '';
+    const effectiveRole = req.user.role === 'developer' ? 'developer' : 'user';
 
     const result = db.prepare(`
       INSERT INTO community_comments (post_id, user_id, author_name, author_avatar, author_role, content, created_at)
@@ -276,7 +282,7 @@ router.post('/posts/:id/comments', (req, res) => {
  * DELETE /api/community/posts/:id
  * Delete a post (by author or developer)
  */
-router.delete('/posts/:id', (req, res) => {
+router.delete('/posts/:id', requireAuth, (req, res) => {
   try {
     const postId = Number(req.params.id);
     const post = db.prepare('SELECT * FROM community_posts WHERE id = ?').get(postId);
@@ -284,8 +290,8 @@ router.delete('/posts/:id', (req, res) => {
       return res.status(404).json({ error: 'not_found', message: 'Post not found' });
     }
 
-    const currentUserId = req.user?.uid || req.user?.id || req.user?.email || req.body?.userId;
-    const isDev = req.user?.role === 'developer' || req.user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || req.body?.userRole === 'developer';
+    const currentUserId = String(req.user.id);
+    const isDev = req.user.role === 'developer';
 
     if (!isDev && post.uid !== String(currentUserId)) {
       return res.status(403).json({ error: 'forbidden', message: 'Permission denied' });

@@ -20,26 +20,20 @@ import mangaNovelRoutes from './routes/mangaNovel.routes.js';
 import { animeScraperRouter } from './routes/animeScraper.routes.js';
 import { optionalAuth } from './auth.js';
 import { db } from './db.js';
-import { main as seedAll, enrichLibrary } from './seed.js';
 
-const IS_CLOUDFLARE_WORKER = Boolean(globalThis.__BLACKX_CLOUDFLARE_RUNTIME__);
-
-// Never let a stray async error kill the Node-hosted API (client aborts during
-// video streaming are the usual suspects). Workers manage request failures in
-// their own event lifecycle.
-if (!IS_CLOUDFLARE_WORKER) {
+// Keep local Node development resilient to client-abort and background-task
+// rejections. Vercel should manage the serverless invocation lifecycle itself.
+if (!process.env.VERCEL) {
   process.on('unhandledRejection', (err) => {
     console.error('[unhandledRejection]', err?.message || err);
   });
-  process.on('uncaughtException', (err) => {
-    console.error('[uncaughtException]', err?.message || err);
-  });
 }
 
-// Auto-seed Node hosts on first boot. Cloudflare initializes the durable SQL
-// schema through its persistent SQLite adapter and avoids background seeding.
-if (!IS_CLOUDFLARE_WORKER) {
+// Seed only the standalone Node deployment. Vercel functions are short-lived;
+// running catalog scrapers and background enrichment on cold start wastes CPU.
+if (!process.env.VERCEL) {
   try {
+    const { main: seedAll, enrichLibrary } = await import('./seed.js');
     const { c: userCount } = db.prepare('SELECT COUNT(*) AS c FROM users').get();
     if (userCount === 0) {
       console.log('🌱 Empty database — seeding demo data…');
@@ -61,11 +55,51 @@ if (!IS_CLOUDFLARE_WORKER) {
   }
 }
 
-const __dirname = IS_CLOUDFLARE_WORKER ? '' : dirname(fileURLToPath(import.meta.url));
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = 3000;
 
-app.use(cors({ origin: true, credentials: true }));
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '').toLowerCase();
+const allowedCorsOrigins = new Set([
+  'https://black-x-anime.me',
+  'https://www.black-x-anime.me',
+  'http://localhost',
+  'https://localhost',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'capacitor://localhost',
+  'ionic://localhost',
+  ...(process.env.CORS_ORIGINS || '').split(',').map(normalizeOrigin)
+].filter(Boolean));
+
+const allowedCorsOrigin = (origin, callback) => {
+  const normalized = normalizeOrigin(origin);
+  callback(null, normalized && allowedCorsOrigins.has(normalized) ? origin : false);
+};
+app.use(cors({ origin: allowedCorsOrigin, credentials: true }));
+
+// CORS alone does not stop a disallowed simple form request from reaching a
+// state-changing route. Reject cross-origin mutations unless the origin is
+// explicitly trusted or is the same host/protocol (including Vercel previews).
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (!origin || allowedCorsOrigins.has(normalizeOrigin(origin))) return next();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    try {
+      const parsedOrigin = new URL(origin);
+      const requestHost = String(req.get('host') || '').toLowerCase();
+      const forwardedProto = String(req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim().toLowerCase();
+      const isSameOrigin = parsedOrigin.host.toLowerCase() === requestHost &&
+        parsedOrigin.protocol === `${forwardedProto}:`;
+      if (isSameOrigin) return next();
+    } catch { /* malformed origin is rejected below */ }
+    return res.status(403).json({ error: 'origin_not_allowed' });
+  }
+  return next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(optionalAuth);
@@ -76,7 +110,7 @@ app.get('/api/health', (req, res) => {
     db.prepare('SELECT id, username, email, password_hash FROM users LIMIT 0').all();
     res.json({ ok: true, name: 'BLACK X API', database: 'ok', time: new Date().toISOString() });
   } catch (err) {
-    const requestId = req.get('cf-ray') || req.get('x-vercel-id') || req.get('x-request-id') || null;
+    const requestId = req.get('x-vercel-id') || req.get('x-request-id') || null;
     console.error('[health database failure]', JSON.stringify({
       requestId,
       name: err?.name || 'Error',
@@ -154,7 +188,7 @@ app.get(/_service-worker\.js$/, (req, res) => {
 
 // Serve the built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist');
-if (!IS_CLOUDFLARE_WORKER && fs.existsSync(clientDist)) {
+if (!process.env.VERCEL && fs.existsSync(clientDist)) {
   app.use(
     express.static(clientDist, {
       setHeaders: (res, filePath) => {
@@ -171,7 +205,7 @@ if (!IS_CLOUDFLARE_WORKER && fs.existsSync(clientDist)) {
 }
 
 app.use((err, req, res, next) => {
-  const requestId = req.get('cf-ray') || req.get('x-vercel-id') || req.get('x-request-id') || null;
+  const requestId = req.get('x-vercel-id') || req.get('x-request-id') || null;
   const safePath = String(req.originalUrl || req.path || '').split('?')[0];
   const error = err instanceof Error ? err : new Error(String(err || 'Unknown server error'));
   console.error('[server error]', JSON.stringify({
@@ -189,7 +223,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'server_error', message: 'Something went wrong', requestId });
 });
 
-if (!IS_CLOUDFLARE_WORKER && !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n  ⚡ BLACK X API listening on http://0.0.0.0:${PORT}\n`);
   });

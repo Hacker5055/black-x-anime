@@ -2,8 +2,66 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { db } from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'black-x-dev-secret-change-in-production';
+const DEFAULT_DEV_JWT_SECRET = 'black-x-dev-secret-change-in-production';
+const configuredJwtSecret = String(process.env.JWT_SECRET || '').trim();
+const isProductionRuntime = Boolean(process.env.VERCEL) || process.env.NODE_ENV === 'production';
+if (
+  isProductionRuntime &&
+  (configuredJwtSecret.length < 32 || configuredJwtSecret === DEFAULT_DEV_JWT_SECRET)
+) {
+  throw new Error('Set a random JWT_SECRET of at least 32 characters in production.');
+}
+const JWT_SECRET = configuredJwtSecret || DEFAULT_DEV_JWT_SECRET;
 const COOKIE_NAME = 'blackx_token';
+export const DEVELOPER_EMAIL = 'mz0970mmz@gmail.com';
+const FIREBASE_PROJECT_ID = 'spry-oxide-1h7sp';
+const FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+let firebaseCertCache = null;
+let firebaseCertCacheUntil = 0;
+
+async function getFirebaseSigningCerts() {
+  if (firebaseCertCache && firebaseCertCacheUntil > Date.now()) return firebaseCertCache;
+  const response = await fetch(FIREBASE_CERTS_URL, { signal: AbortSignal.timeout(5000) });
+  if (!response.ok) throw new Error(`Firebase signing-certificate lookup failed (${response.status}).`);
+  const certs = await response.json();
+  if (!certs || typeof certs !== 'object') throw new Error('Firebase signing-certificate response was invalid.');
+  const maxAge = Number(response.headers.get('cache-control')?.match(/max-age=(\d+)/i)?.[1] || 3600);
+  firebaseCertCache = certs;
+  firebaseCertCacheUntil = Date.now() + Math.max(60, Math.min(maxAge, 86400)) * 1000;
+  return certs;
+}
+
+/** Verify a Firebase-issued Google ID token before trusting its email or UID. */
+export async function verifyFirebaseGoogleIdToken(idToken) {
+  if (typeof idToken !== 'string' || idToken.length < 100 || idToken.length > 12000) return null;
+  const decoded = jwt.decode(idToken, { complete: true });
+  if (!decoded || decoded.header?.alg !== 'RS256' || typeof decoded.header?.kid !== 'string') return null;
+  const certs = await getFirebaseSigningCerts();
+  const cert = certs[decoded.header.kid];
+  if (!cert) return null;
+
+  let claims;
+  try {
+    claims = jwt.verify(idToken, cert, {
+      algorithms: ['RS256'],
+      audience: FIREBASE_PROJECT_ID,
+      issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+      clockTolerance: 5
+    });
+  } catch {
+    return null;
+  }
+
+  const uid = String(claims.sub || '');
+  const email = String(claims.email || '').trim().toLowerCase();
+  if (
+    !uid || uid.length > 128 ||
+    !email || claims.email_verified !== true ||
+    claims.firebase?.sign_in_provider !== 'google.com'
+  ) return null;
+
+  return { uid, email, displayName: String(claims.name || ''), photoURL: String(claims.picture || '') };
+}
 
 export function hashPassword(password) {
   return bcrypt.hashSync(password, 10);
@@ -43,7 +101,7 @@ export function clearAuthCookie(res) {
 
 export function publicUser(row) {
   if (!row) return null;
-  const isDev = (row.email || '').toLowerCase() === 'mz0970mmz@gmail.com' || row.role === 'developer';
+  const isDev = row.role === 'developer';
   let badges = [];
   try {
     badges = typeof row.badges === 'string' ? JSON.parse(row.badges || '[]') : (row.badges || []);
@@ -111,9 +169,6 @@ function userFromRequest(req) {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.id);
     if (!user) return null;
-    if ((user.email || '').toLowerCase() === 'mz0970mmz@gmail.com' && user.role !== 'developer') {
-      user.role = 'developer';
-    }
     return user;
   } catch {
     return null;
@@ -135,7 +190,7 @@ export function requireAuth(req, res, next) {
 export function requireDeveloper(req, res, next) {
   const user = userFromRequest(req);
   if (!user) return res.status(401).json({ error: 'auth_required', message: 'Authentication required' });
-  const isDev = (user.email || '').toLowerCase() === 'mz0970mmz@gmail.com' || user.role === 'developer';
+  const isDev = user.role === 'developer';
   if (!isDev) return res.status(403).json({ error: 'forbidden', message: 'Developer access required' });
   req.user = user;
   next();

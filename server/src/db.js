@@ -3,84 +3,63 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
 
-const cloudflareAdapter = globalThis.__BLACKX_DB_ADAPTER__ || null;
-const __dirname = cloudflareAdapter ? '' : dirname(fileURLToPath(import.meta.url));
-const dataDir = cloudflareAdapter ? '' : process.env.VERCEL ? '/tmp/blackx-data' : join(__dirname, '..', 'data');
-if (!cloudflareAdapter) {
-  try {
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  } catch {
-    /* ignore read-only fs */
-  }
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dataDir = process.env.VERCEL ? '/tmp/blackx-data' : join(__dirname, '..', 'data');
+try {
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+} catch (err) {
+  console.warn('[db] could not create data directory:', err?.message || err);
 }
 
-let dbInstance = cloudflareAdapter;
-if (!dbInstance) {
+let dbInstance;
+try {
+  const Database = (await import('better-sqlite3')).default;
+  dbInstance = new Database(join(dataDir, 'blackx.db'));
+  dbInstance.pragma('journal_mode = WAL');
+  dbInstance.pragma('foreign_keys = ON');
+} catch (err) {
+  // Vercel's Node runtime may expose the built-in SQLite driver. Keep the
+  // same file-backed store; never silently fall back to an empty in-memory DB.
   try {
-    const Database = (await import('better-sqlite3')).default;
-    dbInstance = new Database(join(dataDir, 'blackx.db'));
+    const { DatabaseSync } = await import('node:sqlite');
+    const sqliteDb = new DatabaseSync(join(dataDir, 'blackx.db'));
+    const invoke = (statement, method, args) => {
+      const params = args.length === 1 && args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])
+        ? [args[0]]
+        : args;
+      return statement[method](...params);
+    };
+    dbInstance = {
+      pragma: (value) => sqliteDb.exec(`PRAGMA ${value}`),
+      exec: (sql) => sqliteDb.exec(sql),
+      prepare: (sql) => {
+        const statement = sqliteDb.prepare(sql);
+        return {
+          get: (...args) => invoke(statement, 'get', args),
+          all: (...args) => invoke(statement, 'all', args) || [],
+          run: (...args) => invoke(statement, 'run', args)
+        };
+      },
+      transaction: (fn) => (...args) => {
+        sqliteDb.exec('BEGIN');
+        try {
+          const result = fn(...args);
+          if (result && typeof result.then === 'function') {
+            throw new TypeError('SQLite transactions must be synchronous');
+          }
+          sqliteDb.exec('COMMIT');
+          return result;
+        } catch (error) {
+          sqliteDb.exec('ROLLBACK');
+          throw error;
+        }
+      }
+    };
     dbInstance.pragma('journal_mode = WAL');
     dbInstance.pragma('foreign_keys = ON');
-  } catch (err) {
-    console.warn('[db] better-sqlite3 fallback active:', err?.message || err);
-    try {
-      const { DatabaseSync } = await import('node:sqlite');
-      const sqliteDb = new DatabaseSync(':memory:');
-      dbInstance = {
-        pragma: () => {},
-        exec: (sql) => {
-          try {
-            sqliteDb.exec(sql);
-          } catch {}
-        },
-        prepare: (sql) => {
-          try {
-            const stmt = sqliteDb.prepare(sql);
-            return {
-              get: (...args) => {
-                try {
-                  return stmt.get(...args);
-                } catch {
-                  return undefined;
-                }
-              },
-              all: (...args) => {
-                try {
-                  return stmt.all(...args) || [];
-                } catch {
-                  return [];
-                }
-              },
-              run: (...args) => {
-                try {
-                  return stmt.run(...args) || { changes: 0, lastInsertRowid: 1 };
-                } catch {
-                  return { changes: 0, lastInsertRowid: 1 };
-                }
-              }
-            };
-          } catch {
-            return {
-              get: () => ({ c: 0, cnt: 0, total: 0 }),
-              all: () => [],
-              run: () => ({ changes: 0, lastInsertRowid: 1 })
-            };
-          }
-        },
-        transaction: (fn) => (...args) => fn(...args)
-      };
-    } catch {
-      dbInstance = {
-        pragma: () => {},
-        exec: () => {},
-        prepare: () => ({
-          get: () => ({ c: 0, cnt: 0, total: 0 }),
-          all: () => [],
-          run: () => ({ changes: 0, lastInsertRowid: 1 })
-        }),
-        transaction: (fn) => (...args) => fn(...args)
-      };
-    }
+  } catch (fallbackError) {
+    console.error('[db] SQLite initialization failed:', err?.message || err);
+    throw new Error('BLACK X requires a working SQLite driver.', { cause: fallbackError });
   }
 }
 
@@ -290,6 +269,14 @@ try {
   /* column already exists */
 }
 
+// Do not preserve legacy developer promotions created by the former password/email flow.
+// The only way to regain developer privileges is a freshly verified Firebase Google token.
+try {
+  db.prepare("UPDATE users SET role = 'user' WHERE LOWER(role) = 'developer'").run();
+} catch (err) {
+  console.error('[db] could not clear legacy developer roles:', err?.message || err);
+}
+
 // ===== VIP Subscription Codes table (generated by Developer, redeemed by Users) =====
 db.exec(`
 CREATE TABLE IF NOT EXISTS vip_codes (
@@ -321,31 +308,6 @@ try {
   `).run();
 } catch (err) {
   console.warn('Settings init note:', err.message);
-}
-
-// Ensure mz0970mmz@gmail.com is configured as developer
-try {
-  const existingDev = db.prepare('SELECT id, role, password_hash FROM users WHERE email = ?').get('mz0970mmz@gmail.com');
-  if (existingDev) {
-    if (existingDev.role !== 'developer') {
-      db.prepare("UPDATE users SET role = 'developer' WHERE email = ?").run('mz0970mmz@gmail.com');
-    }
-  } else {
-    // Initial setup for developer account mz0970mmz@gmail.com
-    db.prepare(`
-      INSERT INTO users (username, email, password_hash, display_name, avatar_color, role)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      'developer',
-      'mz0970mmz@gmail.com',
-      bcrypt.hashSync('blackx2026', 10),
-      'Developer MZ',
-      '#ec4899',
-      'developer'
-    );
-  }
-} catch (err) {
-  console.warn('Developer user setup note:', err.message);
 }
 
 // Ensure community_posts has voice columns

@@ -30,7 +30,7 @@ export default function MyList({ onOpenAuth }) {
   if (!user) {
     return (
       <div className="glass" style={{ padding: '2.5rem' }}>
-        <EmptyState icon="📺" title={t('dashboard.loginPrompt')} sub={t('auth.demoHint')}>
+        <EmptyState icon="📺" title={t('dashboard.loginPrompt')}>
           <button type="button" className="btn btn--primary" onClick={() => onOpenAuth('login')}>
             <span className="btn__shine" />
             {t('nav.login')}

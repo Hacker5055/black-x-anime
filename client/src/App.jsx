@@ -3,7 +3,6 @@ import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-
 import Navbar from './components/Navbar.jsx';
 import Backdrop, { Toasts } from './components/Backdrop.jsx';
 import { AuthModal } from './components/Modals.jsx';
-import { GooFilter } from './components/Loading.jsx';
 import { useI18n } from './i18n/I18nProvider.jsx';
 const Dashboard = React.lazy(() => import('./pages/Dashboard.jsx'));
 const Browse = React.lazy(() => import('./pages/Browse.jsx'));
@@ -1068,6 +1067,7 @@ export default function App() {
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const { user } = useAuth();
   const { lang } = useI18n();
+  const { pathname } = useLocation();
   const openAuth = (mode = 'login') => setAuthModal(mode);
 
   useEffect(() => {
@@ -1094,12 +1094,12 @@ export default function App() {
       return {
         active: shouldShow,
         mode: undefined,
-        durationMs: 4000,
+        durationMs: isApkRuntime ? 4000 : 2500,
         subtitleAr: '',
         subtitleEn: ''
       };
     } catch {
-      return { active: true, mode: undefined, durationMs: 4000, subtitleAr: '', subtitleEn: '' };
+      return { active: true, mode: undefined, durationMs: isApkRuntime ? 4000 : 2500, subtitleAr: '', subtitleEn: '' };
     }
   });
 
@@ -1232,16 +1232,16 @@ export default function App() {
           customSubtitleAr={splashConfig.subtitleAr}
           customSubtitleEn={splashConfig.subtitleEn}
           lang={lang || 'ar'}
-          enableSound={true}
+          enableSound={false}
+          performanceProfile="web"
           onComplete={handleSplashDone}
         />
       )}
-      <GooFilter />
       <Backdrop />
       <ScrollToTop />
       <div className="app-shell" style={{ position: 'relative', zIndex: 1, paddingBottom: '88px' }}>
         <main className="main" style={{ paddingTop: '0.85rem' }}>
-          <div className="container">
+          <div className="container page-route-enter" key={pathname}>
             <Suspense fallback={<div role="status" aria-live="polite" style={{ minHeight: '52vh', display: 'grid', placeItems: 'center', background: '#000000', color: '#ffffff', fontWeight: 800 }}>{lang === 'ar' ? 'جارٍ تحميل الصفحة…' : 'Loading page…'}</div>}>
               <Routes>
                 <Route path="/" element={<Dashboard onOpenAuth={openAuth} />} />

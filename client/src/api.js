@@ -34,11 +34,10 @@ export function isNativeApk() {
 }
 
 export function getServerUrl() {
-  // Browser deployments use same-origin /api routes (Vercel rewrites or the
-  // Worker router). Never let a stale desktop-browser override send website
-  // traffic to an old workers.dev deployment. Explicit backend URLs remain
-  // supported for the native APK, which cannot use the website's same-origin
-  // API route.
+  // Browser deployments use Vercel's same-origin /api rewrites. Never let a
+  // stale desktop-browser override send website traffic to an old API host.
+  // Explicit backend URLs remain supported for the native APK, which cannot
+  // use the website's same-origin API route.
   if (!isNativeApk()) return '';
 
   try {
