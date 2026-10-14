@@ -246,33 +246,25 @@ export function AuthProvider({ children }) {
   }, [refresh]);
 
   const loginWithGoogle = useCallback(async () => {
-    try {
-      const firebaseUser = await signInWithGoogle();
-      const data = await api.post('/api/auth/google', {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-        photoURL: firebaseUser.photoURL || firebaseUser.photoUrl
-      });
-      if (data.token) setStoredToken(data.token);
-      const enrichedUser = {
-        ...data.user,
-        photoURL: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
-        photoUrl: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
-        displayName: data.user.displayName || firebaseUser.displayName,
-        firebaseUid: firebaseUser.uid
-      };
-      setUser(enrichedUser);
-      await refresh();
-      return enrichedUser;
-    } catch (err) {
-      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain') || err?.code === 'auth/popup-blocked' || err?.code === 'auth/popup-closed-by-user') {
-        console.warn('[Auth] Google popup unavailable on this preview domain. Signing in via Developer/Demo session.');
-        return await loginAsDeveloper();
-      }
-      throw err;
-    }
-  }, [refresh, loginAsDeveloper]);
+    const firebaseUser = await signInWithGoogle();
+    const data = await api.post('/api/auth/google', {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL || firebaseUser.photoUrl
+    });
+    if (data.token) setStoredToken(data.token);
+    const enrichedUser = {
+      ...data.user,
+      photoURL: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
+      photoUrl: data.user.photoUrl || firebaseUser.photoURL || firebaseUser.photoUrl,
+      displayName: data.user.displayName || firebaseUser.displayName,
+      firebaseUid: firebaseUser.uid
+    };
+    setUser(enrichedUser);
+    await refresh();
+    return enrichedUser;
+  }, [refresh]);
 
   const register = useCallback(async (payload) => {
     const data = await api.post('/api/auth/register', payload);

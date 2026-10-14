@@ -48,7 +48,22 @@ export function AuthModal({ initialMode = 'login', onClose }) {
       pushToast(t('auth.loginSuccess', { name: u.displayName || u.username }), 'success');
       onClose();
     } catch (err) {
-      setError(err?.message || t('auth.errGeneric'));
+      const host = typeof window !== 'undefined' ? window.location.hostname : '';
+      if (err?.code === 'auth/unauthorized-domain') {
+        setError(lang === 'ar'
+          ? `نطاق الموقع ${host} غير مضاف في Firebase. أضِفه من Authentication ثم Settings ثم Authorized domains.`
+          : `This domain (${host}) is not authorized in Firebase. Add it under Authentication → Settings → Authorized domains.`);
+      } else if (err?.code === 'auth/popup-blocked') {
+        setError(lang === 'ar'
+          ? 'المتصفح منع نافذة Google. اسمح بالنوافذ المنبثقة لهذا الموقع ثم حاول مرة أخرى.'
+          : 'Your browser blocked the Google popup. Allow pop-ups for this site and try again.');
+      } else if (err?.code === 'auth/operation-not-allowed') {
+        setError(lang === 'ar'
+          ? 'تسجيل Google غير مفعّل في Firebase Authentication.'
+          : 'Google sign-in is not enabled in Firebase Authentication.');
+      } else {
+        setError(err?.message || t('auth.errGeneric'));
+      }
     } finally {
       setBusy(false);
     }

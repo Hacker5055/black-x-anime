@@ -196,7 +196,9 @@ router.post('/google', async (req, res) => {
 
     const palette = ['#22d3ee', '#8b5cf6', '#f472b6', '#a3e635', '#fb923c', '#f87171', '#60a5fa'];
     const color = avatarColor || palette[Math.floor(Math.random() * palette.length)];
-    const dummyHash = hashPassword(uid || Math.random().toString(36));
+    // Google-only accounts do not use a local password. Avoid a synchronous
+    // bcrypt hash here (it is unnecessary and can exceed Workers Free CPU time).
+    const dummyHash = `google-oauth-only:${String(uid || email.toLowerCase())}`;
 
     const info = db.prepare(
       'INSERT INTO users (username, email, password_hash, display_name, avatar_color, photo_url, bio, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'

@@ -10,7 +10,13 @@ export function hashPassword(password) {
 }
 
 export function verifyPassword(password, hash) {
-  return bcrypt.compareSync(password, hash);
+  // Google-only accounts carry a non-bcrypt sentinel; never compare it as a password hash.
+  if (!/^\$2[aby]\$/.test(String(hash || ''))) return false;
+  try {
+    return bcrypt.compareSync(password, hash);
+  } catch {
+    return false;
+  }
 }
 
 export function signToken(user) {
