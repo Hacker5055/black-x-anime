@@ -1642,7 +1642,7 @@ class MangalikService {
 
   async getAniListMasterCatalog(page = 1, countryOfOrigin = null, search = '') {
     const cacheKey = `anilist_master:${page}:${countryOfOrigin || 'ALL'}:${search || ''}`;
-    const cached = getCached(cacheKey);
+    const cached = getCache(cacheKey);
     if (cached) return cached;
 
     try {
@@ -1745,7 +1745,7 @@ class MangalikService {
     const cleanId = String(anilistId || '').replace(/^al:/, '').trim();
     if (!cleanId) return null;
     const cacheKey = `anilist_detail:${cleanId}`;
-    const cached = getCached(cacheKey);
+    const cached = getCache(cacheKey);
     if (cached) return cached;
 
     try {
@@ -1929,7 +1929,7 @@ class MangalikService {
     const cleanId = String(mdMangaId || '').replace(/^md:/, '').trim();
     if (!cleanId) return [];
     const cacheKey = `md_chapters:${cleanId}`;
-    const cached = getCached(cacheKey);
+    const cached = getCache(cacheKey);
     if (cached) return cached;
 
     try {
@@ -1979,7 +1979,7 @@ class MangalikService {
     const cleanChId = String(mdChId || '').replace(/^md:/, '').trim();
     if (!cleanChId) return [];
     const cacheKey = `md_pages:${cleanChId}`;
-    const cached = getCached(cacheKey);
+    const cached = getCache(cacheKey);
     if (cached) return cached;
 
     try {

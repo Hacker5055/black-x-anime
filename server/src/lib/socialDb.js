@@ -508,6 +508,14 @@ export const social = {
     return db.prepare('SELECT score FROM social_ratings WHERE user_key = ? AND slug = ? AND episode = ?')
       .get(userKey, slug, episode) || null;
   },
+  listRatings(userKey, limit = 500) {
+    ensureSocialTables();
+    return db.prepare(`
+      SELECT slug, title, episode, score, updated_at AS updatedAt
+      FROM social_ratings WHERE user_key = ?
+      ORDER BY updated_at DESC LIMIT ?
+    `).all(userKey, limit);
+  },
   follow(followerKey, followingKey) {
     ensureSocialTables();
     db.prepare('INSERT OR IGNORE INTO social_follows (follower_key, following_key) VALUES (?, ?)')

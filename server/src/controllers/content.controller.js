@@ -143,6 +143,49 @@ export async function getMyRating(req, res) {
 }
 
 /**
+ * GET /api/content/ratings — every score the signed-in user has saved
+ * (used by the profile dashboard / Wrapped card).
+ */
+export async function listMyRatings(req, res) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return fail(res, 401, 'Authentication required.');
+
+    var socialFallback = () => {
+      ensureSocialTables();
+      return res.status(200).json({ success: true, ratings: social.listRatings(String(userId)) });
+    };
+    if (!process.env.DATABASE_URL || dbIsBroken()) return socialFallback();
+
+    const prisma = getPrisma();
+    const user = await ensurePrismaUser(prisma, req.user);
+    if (!user) return res.status(200).json({ success: true, ratings: [] });
+    const rows = await prisma.rating.findMany({
+      where: { user_id: user.id },
+      include: {
+        content: { select: { slug: true, title: true } },
+        episode: { select: { number: true } }
+      },
+      orderBy: { updated_at: 'desc' },
+      take: 500
+    });
+    return res.status(200).json({
+      success: true,
+      ratings: (rows || []).map((r) => ({
+        slug: r.content?.slug || r.content_id,
+        title: r.content?.title || null,
+        episode: r.episode?.number ?? 0,
+        score: r.score,
+        updatedAt: r.updated_at
+      }))
+    });
+  } catch (err) {
+    if (isDbUnavailable(err) && typeof socialFallback === 'function') return socialFallback();
+    return prismaError(res, err);
+  }
+}
+
+/**
  * GET /api/content/library?type=ALL|MANGA|MANHWA&q=&server=all|bx1|bx2|bx3
  */
 export async function getLibrary(req, res) {

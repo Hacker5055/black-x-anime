@@ -1,0 +1,12 @@
+# Keep host artifacts out of the image: native modules (better-sqlite3) must be
+# built inside the container, and local databases/secrets must never be baked in.
+node_modules
+client/dist
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+screenshots
+.git
+.env
+*.log
+.DS_Store

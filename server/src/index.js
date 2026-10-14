@@ -57,7 +57,8 @@ if (!process.env.VERCEL) {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = 3000;
+// Hosts such as Render, Railway, Koyeb and the Docker image inject PORT.
+const PORT = Number(process.env.PORT) || 3000;
 
 const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '').toLowerCase();
 const allowedCorsOrigins = new Set([
@@ -224,7 +225,12 @@ app.use((err, req, res, next) => {
 });
 
 if (!process.env.VERCEL) {
-  app.listen(PORT, '0.0.0.0', () => {
+  // Express 5 passes listen errors (e.g. EADDRINUSE) to this callback.
+  app.listen(PORT, '0.0.0.0', (err) => {
+    if (err) {
+      console.error(`\n  ✖ BLACK X API could not listen on port ${PORT}: ${err.message}\n`);
+      process.exit(1);
+    }
     console.log(`\n  ⚡ BLACK X API listening on http://0.0.0.0:${PORT}\n`);
   });
 }

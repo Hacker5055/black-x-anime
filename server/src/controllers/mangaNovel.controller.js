@@ -76,9 +76,9 @@ export const mangaNovelController = {
         );
       }
 
-      if ((type === 'all' || type === 'novel') && typeof scraperService?.searchNovels === 'function') {
+      if ((type === 'all' || type === 'novel') && typeof scraperService?.searchArabicNovels === 'function') {
         promises.push(
-          Promise.resolve(scraperService.searchNovels(query))
+          Promise.resolve(scraperService.searchArabicNovels(query))
             .then((data) => {
               results.novels = data || [];
             })
@@ -86,9 +86,11 @@ export const mangaNovelController = {
         );
       }
 
-      if (typeof anilistService?.searchMedia === 'function') {
+      // AniList metadata only for type=all: the web client queries AniList itself,
+      // so manga/novel searches stay fast and don't spend the server's rate limit.
+      if (type === 'all' && typeof anilistService?.search === 'function') {
         promises.push(
-          Promise.resolve(anilistService.searchMedia(query))
+          Promise.resolve(anilistService.search(query))
             .then((data) => {
               results.metadata = data || [];
             })
@@ -118,7 +120,7 @@ export const mangaNovelController = {
         return res.json(meta);
       }
       if (!Number.isNaN(Number(id))) {
-        const details = await anilistService.getMediaDetails(Number(id));
+        const details = await anilistService.getDetails(id);
         return res.json(details);
       }
       return res.json({ id, message: 'Use /chapters to get chapters for this BLACK X Manga ID' });
@@ -258,7 +260,7 @@ export const mangaNovelController = {
     try {
       const { id } = req.params;
       if (!Number.isNaN(Number(id))) {
-        const details = await anilistService.getMediaDetails(Number(id));
+        const details = await anilistService.getDetails(id);
         return res.json(details);
       }
       return res.json({ slug: id, message: 'Use /chapters to get novel chapters' });
