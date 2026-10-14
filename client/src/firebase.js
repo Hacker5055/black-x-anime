@@ -126,6 +126,9 @@ export async function signInWithGoogle() {
 
     return {
       ...fbUser,
+      // Firebase User methods live on its prototype, so object spread drops them.
+      // Keep the method bound to the real User instance for AuthContext callers.
+      getIdToken: fbUser.getIdToken.bind(fbUser),
       displayName: effectiveDisplayName,
       photoURL: effectivePhoto,
       photoUrl: effectivePhoto,

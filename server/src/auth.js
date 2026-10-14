@@ -5,13 +5,29 @@ import { db } from './db.js';
 const DEFAULT_DEV_JWT_SECRET = 'black-x-dev-secret-change-in-production';
 const configuredJwtSecret = String(process.env.JWT_SECRET || '').trim();
 const isProductionRuntime = Boolean(process.env.VERCEL) || process.env.NODE_ENV === 'production';
-if (
-  isProductionRuntime &&
-  (configuredJwtSecret.length < 32 || configuredJwtSecret === DEFAULT_DEV_JWT_SECRET)
-) {
-  throw new Error('Set a random JWT_SECRET of at least 32 characters in production.');
+const authSecretIsValid =
+  configuredJwtSecret.length >= 32 && configuredJwtSecret !== DEFAULT_DEV_JWT_SECRET;
+const authDisabledByConfiguration = isProductionRuntime && !authSecretIsValid;
+if (authDisabledByConfiguration) {
+  // Keep public catalog/streaming APIs available when Vercel is missing its
+  // JWT secret. Never fall back to the development key in production.
+  console.error('[auth] JWT_SECRET is missing or invalid; authentication is disabled until configured.');
 }
 const JWT_SECRET = configuredJwtSecret || DEFAULT_DEV_JWT_SECRET;
+
+export function isAuthConfigured() {
+  return !authDisabledByConfiguration;
+}
+
+export function requireJwtSecret(_req, res, next) {
+  if (authDisabledByConfiguration) {
+    return res.status(503).json({
+      error: 'auth_unavailable',
+      message: 'Authentication is temporarily unavailable; the server owner must configure JWT_SECRET.'
+    });
+  }
+  return next();
+}
 const COOKIE_NAME = 'blackx_token';
 export const DEVELOPER_EMAIL = 'mz0970mmz@gmail.com';
 const FIREBASE_PROJECT_ID = 'spry-oxide-1h7sp';
@@ -78,6 +94,9 @@ export function verifyPassword(password, hash) {
 }
 
 export function signToken(user) {
+  if (authDisabledByConfiguration) {
+    throw new Error('auth_unavailable: configure JWT_SECRET before issuing tokens.');
+  }
   return jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
 }
 
@@ -163,6 +182,8 @@ export function publicUser(row) {
 }
 
 function userFromRequest(req) {
+  // Do not accept tokens signed with the development fallback in production.
+  if (authDisabledByConfiguration) return null;
   const token = req.cookies?.[COOKIE_NAME] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (!token) return null;
   try {
@@ -181,6 +202,12 @@ export function optionalAuth(req, _res, next) {
 }
 
 export function requireAuth(req, res, next) {
+  if (authDisabledByConfiguration) {
+    return res.status(503).json({
+      error: 'auth_unavailable',
+      message: 'Authentication is temporarily unavailable; the server owner must configure JWT_SECRET.'
+    });
+  }
   const user = userFromRequest(req);
   if (!user) return res.status(401).json({ error: 'auth_required', message: 'Authentication required' });
   req.user = user;
@@ -188,6 +215,12 @@ export function requireAuth(req, res, next) {
 }
 
 export function requireDeveloper(req, res, next) {
+  if (authDisabledByConfiguration) {
+    return res.status(503).json({
+      error: 'auth_unavailable',
+      message: 'Authentication is temporarily unavailable; the server owner must configure JWT_SECRET.'
+    });
+  }
   const user = userFromRequest(req);
   if (!user) return res.status(401).json({ error: 'auth_required', message: 'Authentication required' });
   const isDev = user.role === 'developer';

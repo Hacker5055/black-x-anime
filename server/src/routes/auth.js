@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth, DEVELOPER_EMAIL, verifyFirebaseGoogleIdToken } from '../auth.js';
+import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth, requireJwtSecret, DEVELOPER_EMAIL, verifyFirebaseGoogleIdToken } from '../auth.js';
 import { social } from '../lib/socialDb.js';
 import { syncUserToCloud, fetchUserFromCloud, sha256Hex, syncAllLocalUsersToCloud } from '../services/cloudSync.service.js';
 
@@ -17,7 +17,7 @@ if (!process.env.VERCEL) {
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 
-router.post('/register', (req, res) => {
+router.post('/register', requireJwtSecret, (req, res) => {
   const { username, email, password, displayName, referralCode } = req.body || {};
   if (!username || !USERNAME_RE.test(username)) {
     return res.status(400).json({ error: 'invalid_username', message: 'Username must be 3-24 chars (letters, numbers, _ . -)' });
@@ -83,7 +83,7 @@ router.post('/register', (req, res) => {
   res.status(201).json({ user: publicUser(user), token });
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', requireJwtSecret, async (req, res) => {
   const { username, email, password } = req.body || {};
   const identifier = (username || email || '').trim().toLowerCase();
   if (!identifier || !password) {
@@ -140,7 +140,7 @@ router.post('/login', async (req, res) => {
   res.json({ user: publicUser(user), token });
 });
 
-router.post('/google', async (req, res) => {
+router.post('/google', requireJwtSecret, async (req, res) => {
   const { idToken, displayName, photoURL, username: customUsername, bio, avatarColor } = req.body || {};
   if (typeof idToken !== 'string' || !idToken) {
     return res.status(401).json({ error: 'google_token_required', message: 'Verified Google sign-in is required.' });
