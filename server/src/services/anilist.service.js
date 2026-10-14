@@ -15,7 +15,9 @@ async function anilistRequest(query, variables = {}) {
       'Accept': 'application/json',
       'User-Agent': 'BLACK-X/2.0 (Arabic Manga Engine)'
     },
-    body: JSON.stringify({ query, variables })
+    body: JSON.stringify({ query, variables }),
+    // Never let a stalled AniList request hold up search/detail responses.
+    signal: AbortSignal.timeout(10000)
   });
 
   if (!res.ok) {

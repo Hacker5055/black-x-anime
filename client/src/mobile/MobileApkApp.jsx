@@ -4054,6 +4054,39 @@ export default function MobileApkApp() {
     [user, favorites, incognitoMode, syncUserStateToCloud, handleSelectServer]
   );
 
+  // (⬇) Download orb on the anime details page. If this episode's stream is
+  // already resolved, download it right away; otherwise start the episode and
+  // open the Pro Studio sheet, where "⬇ تحميل الحلقة MP4" appears once ready.
+  const handleSaveOfflineVault = useCallback(
+    (anime, epObj) => {
+      if (!anime || !epObj) return;
+      const isResolvedEpisode =
+        Boolean(playingVideoUrl) &&
+        activeEpisode &&
+        selectedAnime?.objectID === anime.objectID &&
+        Number(activeEpisode.number) === Number(epObj.number);
+      if (isResolvedEpisode) {
+        const link = document.createElement('a');
+        link.href = playingVideoUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.download = '';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+      }
+      showToast(
+        lang === 'ar'
+          ? `⬇ جاري تجهيز الحلقة ${epObj.number}… سيظهر زر «تحميل الحلقة MP4» في استوديو المشغل`
+          : `⬇ Preparing episode ${epObj.number}… the "Download MP4" button will appear in Pro Studio`
+      );
+      handlePlayEpisode(anime, epObj);
+      setPlayerStudioOpen(true);
+    },
+    [playingVideoUrl, activeEpisode, selectedAnime, showToast, lang, handlePlayEpisode]
+  );
+
   // Auto-open Standalone Video Player Page when user tapped "▶ تشغيل الآن" from Home Hero / Continue Watching / Quick Peek
   useEffect(() => {
     if (
@@ -16084,12 +16117,14 @@ export default function MobileApkApp() {
                 {
                   icon: '📥',
                   label: isRtl ? 'التنزيلات بدون إنترنت' : 'Offline Downloads',
-                  badge: downloadedEpisodes.length + downloadedChapters.length,
+                  badge: offlineChapters.length,
                   onClick: () => {
                     setCommandMenuOpen(false);
                     setSelectedAnime(null);
                     setActiveEpisode(null);
                     setActiveTab('profile');
+                    setProfileSubTab('vault');
+                    setLibrarySubTab('offline');
                   }
                 },
                 {

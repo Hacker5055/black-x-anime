@@ -151,9 +151,9 @@ export default function ProfileDashboard({ onOpenAuth }) {
     if (!supportMessage.trim()) return;
     setSubmittingSupport(true);
     try {
-      await api.post('/api/support/tickets', {
-        title: supportMessage.slice(0, 50),
-        message: supportMessage,
+      await api.post('/api/support/ticket', {
+        subject: supportMessage.trim().slice(0, 50),
+        message: supportMessage.trim(),
         category: supportCategory
       });
       pushToast(lang === 'ar' ? '✓ تم إرسال تذكرتك بنجاح إلى الدعم الفني!' : 'Ticket submitted successfully!', 'success');

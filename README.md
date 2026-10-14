@@ -4,8 +4,6 @@ A bilingual (English / العربية) **anime streaming platform** with a Liqui
 custom video player, live catalog + streams from **witanime.site**, AniList discovery,
 favorites (watchlist) and continue-watching — all persisted per user.
 
-![player](screenshots/04-watch-player.png)
-
 ## Features
 
 - 🎬 **Custom Liquid-Glass video player** — glass play overlay, scrubber, ±seek, volume,
@@ -45,7 +43,7 @@ npm run check:ornaments                              # engine smoke test in Node
 | Layer     | Tech                                                        |
 | --------- | ----------------------------------------------------------- |
 | Client    | React 19 + Vite, React Router, custom CSS design system      |
-| Server    | Express 5 (0.0.0.0, `PORT` env), cookie-parser, CORS         |
+| Server    | Express 5 (0.0.0.0, `PORT` env, default 3000), cookie-parser, CORS |
 | Database  | SQLite via better-sqlite3 (users, favorites, progress, caches) |
 | Streaming | witanime.site scraper + Range-capable video proxy            |
 | Metadata  | AniList GraphQL (trending, season) + witanime show pages     |
@@ -55,15 +53,21 @@ npm run check:ornaments                              # engine smoke test in Node
 ```bash
 npm install
 npm run build        # build the React client → client/dist
-npm start            # production server on http://localhost:4001
+npm start            # production server on http://localhost:3000 (set PORT to change it)
 ```
 
-Development (hot reload, client on :5173 proxying /api → :4001):
+`npm run dev` builds the client once and starts the server on :3000.
+
+Hot reload (Vite on :3000 proxying /api → API on :4001) — run in two terminals:
 
 ```bash
-npm run dev
-npm run seed         # optional: (re)seed demo data  (--quick = no upstream calls)
+PORT=4001 npm run server     # Windows PowerShell: $env:PORT=4001; npm run server
+npm run client
+npm run seed                 # optional: (re)seed demo data  (--quick = no upstream calls)
 ```
+
+> In production (`NODE_ENV=production` or on Vercel) the server requires a random
+> `JWT_SECRET` of at least 32 characters — see `.env.example`.
 
 The database auto-seeds itself on first boot (quick rows instantly, live metadata
 enriched in the background), so a fresh deploy looks right immediately.
@@ -95,13 +99,18 @@ All passwords: `blackx2026`
 ### Railway (free $5 trial credit, no card)
 
 **New Project → Deploy from GitHub repo** — build `npm install && npm run build`,
-start `npm start`. Add env `JWT_SECRET` if you like.
+start `npm start`. Add env `JWT_SECRET` (random, 32+ characters) — it is required in production.
+
+### Vercel
+
+Import the repo — `vercel.json` builds the client and serves the API from `api/index.js`.
+Set `JWT_SECRET` (random, 32+ characters) in **Project → Settings → Environment Variables**.
 
 ### Any Docker host
 
 ```bash
 docker build -t black-x .
-docker run -p 4001:4001 black-x
+docker run -p 4001:4001 -e JWT_SECRET="$(openssl rand -base64 48)" black-x
 ```
 
 > **Note on persistence:** free tiers have ephemeral disks — a redeploy wipes the
@@ -138,9 +147,12 @@ server/src/        Express API: db, auth, anilist, witanime scraper, routes
 client/src/        React SPA: pages (Dashboard/Browse/ShowDetail/Watch/MyList),
                    VideoPlayer, Liquid Glass design system, EN/AR i18n
 server/data/       SQLite database (auto-created + auto-seeded)
+api/index.js       Vercel serverless entry (wraps the Express app)
+prisma/            optional PostgreSQL schema for the social/gamification API
+vercel.json        Vercel build + rewrites
 render.yaml        Render Blueprint (free tier)
 Dockerfile         container build
-smoke-test.mjs     Playwright E2E (22 checks, 12 screenshots)
+tools/             Node smoke test for the 3D ornament engine
 ```
 
 ---

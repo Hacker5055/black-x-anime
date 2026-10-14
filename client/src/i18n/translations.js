@@ -99,6 +99,7 @@ export const translations = {
     'common.next': 'Next',
     'common.previous': 'Previous',
     'common.hd': 'HD',
+    'common.optional': 'Optional',
 
     'auth.welcomeBack': 'Welcome back',
     'auth.loginTitle': 'Log in to BLACK X',
@@ -268,6 +269,7 @@ export const translations = {
     'browse.latest': 'Latest episodes',
     'browse.empty': 'No results — try another keyword.',
     'browse.sourceNote': 'High-Speed Cloud Stream',
+    'browse.series': 'Series',
 
     'footer.tagline': 'Built for the fandom · Ultra-Fast Streaming · Powered by BLACK X · Bilingual by design',
     'footer.rights': 'BLACK X — demo project',
@@ -435,6 +437,7 @@ export const translations = {
     'common.next': 'التالي',
     'common.previous': 'السابق',
     'common.hd': 'عالية',
+    'common.optional': 'اختياري',
 
     'auth.welcomeBack': 'مرحباً بعودتك',
     'auth.loginTitle': 'سجّل الدخول إلى BLACK X',
@@ -604,6 +607,7 @@ export const translations = {
     'browse.latest': 'أحدث الحلقات',
     'browse.empty': 'لا نتائج — جرّب كلمة أخرى.',
     'browse.sourceNote': 'بث سحابي فائق السرعة',
+    'browse.series': 'مسلسل',
 
     'footer.tagline': 'صُنع للفاندوم · بث فائق السرعة · بيانات حصرية · ثنائي اللغة بالتصميم',
     'footer.rights': 'BLACK X — مشروع تجريبي',

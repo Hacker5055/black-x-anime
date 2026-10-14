@@ -277,7 +277,7 @@ export default function MangaNovelReader({
   // Record reading XP
   const handleRewardXP = async () => {
     try {
-      await api.post('/api/gamification/progress', { minutes: 15, type: 'READ' });
+      await api.post('/api/gamification/sync-time', { sessionMinutes: 15, type: 'read' });
       pushToast(
         lang === 'ar'
           ? '⚡ تم تسجيل 15 دقيقة قراءة وحساب +150 نقطة خبرة (XP) في ملفك الشخصي!'
