@@ -14,9 +14,10 @@ export default function Browse() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQ = searchParams.get('q') || '';
   const initialFilter = searchParams.get('filter') || 'ALL';
+  const initialServer = searchParams.get('server') || 'all';
 
-  const [filter, setFilter] = useState(initialFilter); // ALL | MANHWA | MANGA | TOP_RATED | ONGOING | COMPLETED
-  const [serverFilter, setServerFilter] = useState('all'); // all | bx1 | bx2 | bx3
+  const [filter, setFilter] = useState(initialFilter); // ALL | MANHWA | MANGA | MANHUA | TOP_RATED | ONGOING | COMPLETED
+  const [serverFilter, setServerFilter] = useState(initialServer); // all | bx1 | bx2 | bx3
   const [query, setQuery] = useState(initialQ);
   const [libraryItems, setLibraryItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -24,6 +25,15 @@ export default function Browse() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchingLive, setSearchingLive] = useState(false);
   const [liveSearchResults, setLiveSearchResults] = useState(null);
+
+  useEffect(() => {
+    const qParam = searchParams.get('q') || '';
+    const fltParam = searchParams.get('filter') || 'ALL';
+    const srvParam = searchParams.get('server') || 'all';
+    setQuery(qParam);
+    setFilter(fltParam);
+    setServerFilter(srvParam);
+  }, [searchParams]);
 
   const safeCover = useCallback((url) => {
     if (!url) return 'https://olympustaff.com/images/manga/thumbnail_b05147568d52f22c663c084172fc0dac.png';
@@ -587,143 +597,51 @@ export default function Browse() {
         </div>
       )}
 
-      {/* Filter and Search Control Bar */}
-      <div className="filter-bar glass reveal" style={{ gap: '1rem', marginBottom: '1.25rem' }}>
-        <form
-          style={{ display: 'flex', gap: '0.65rem', flex: 1, flexWrap: 'wrap' }}
-          onSubmit={handleSearch}
-        >
-          <input
-            className="input"
-            name="q"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              if (!e.target.value.trim()) setLiveSearchResults(null);
-            }}
-            placeholder={
-              lang === 'ar'
-                ? 'ابحث باسم المانهوا أو المانجا (سولو، ون بيس، جوجوتسو، بيرسيرك...)'
-                : 'Search Manga or Manhwa title...'
-            }
-            style={{ flex: 1, minWidth: '220px' }}
-          />
-          <button type="submit" className="btn btn--primary">
-            <span className="btn__shine" />
-            {lang === 'ar' ? 'بحث في مكتبة BLACK X' : 'Search BLACK X'}
-          </button>
-          {liveSearchResults !== null && (
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => {
-                setQuery('');
-                setLiveSearchResults(null);
-              }}
-            >
-              ✕ {lang === 'ar' ? 'إلغاء البحث' : 'Clear'}
-            </button>
-          )}
-        </form>
-        <span
-          className="chip"
+      {/* Active Unified Search / Filter Status Pill (only shown when filtered via Unified Search Window) */}
+      {(query || serverFilter !== 'all' || filter !== 'ALL') && (
+        <div
           style={{
-            cursor: 'default',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.6rem',
+            padding: '0.65rem 1rem',
+            marginBottom: '1.25rem',
             borderRadius: '999px',
-            background: '#ffffff',
-            borderColor: '#ffffff',
-            color: '#000000',
-            fontWeight: 900,
-            fontSize: '0.8rem'
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.18)'
           }}
         >
-          ⚡ {lang === 'ar' ? 'قراءة مباشرة عالية الدقة 120Hz' : 'Direct High-Res Arabic Reader'}
-        </span>
-      </div>
-
-      {/* Multi-Server Switcher Bar (BLACK X 1 / 2 / 3) */}
-      <div
-        className="reveal"
-        style={{
-          display: 'flex',
-          gap: '0.5rem',
-          flexWrap: 'wrap',
-          marginBottom: '1rem',
-          alignItems: 'center',
-          padding: '0.75rem 1rem',
-          borderRadius: '20px',
-          background: 'rgba(255, 255, 255, 0.04)',
-          border: '1px solid rgba(255, 255, 255, 0.14)'
-        }}
-      >
-        <span style={{ fontSize: '0.84rem', color: 'var(--ink-dim)', marginInlineEnd: '0.35rem', fontWeight: 800 }}>
-          {lang === 'ar' ? 'سيرفر القراءة:' : 'Server:'}
-        </span>
-        {serverTabs.map((srv) => (
+          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ffffff' }}>
+            {lang === 'ar'
+              ? `نتائج مفلترة من نافذة البحث الشاملة ${query ? `• "${query}"` : ''}`
+              : `Filtered via Unified Search ${query ? `• "${query}"` : ''}`}
+          </span>
           <button
-            key={srv.id}
             type="button"
             onClick={() => {
-              setServerFilter(srv.id);
-              if (liveSearchResults !== null && query.trim()) {
-                handleSearch(null, srv.id);
-              }
+              setQuery('');
+              setLiveSearchResults(null);
+              setServerFilter('all');
+              setFilter('ALL');
+              setSearchParams({}, { replace: true });
             }}
             style={{
-              padding: '0.45rem 0.95rem',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
               borderRadius: '999px',
-              fontSize: '0.82rem',
+              padding: '0.32rem 0.9rem',
+              fontSize: '0.75rem',
               fontWeight: 900,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              border: serverFilter === srv.id ? '1.5px solid #fff' : '1px solid rgba(255, 255, 255, 0.16)',
-              background: serverFilter === srv.id ? '#fff' : 'rgba(255, 255, 255, 0.06)',
-              color: serverFilter === srv.id ? '#000' : '#ffffff'
+              cursor: 'pointer'
             }}
           >
-            {lang === 'ar' ? srv.labelAr : srv.labelEn}
+            {lang === 'ar' ? 'إلغاء الفلتر ✕' : 'Reset Filter ✕'}
           </button>
-        ))}
-      </div>
-
-      {/* Filter Chips Pills (slothUI Pro Monochrome) */}
-      <div
-        className="reveal"
-        style={{
-          display: 'flex',
-          gap: '0.5rem',
-          flexWrap: 'wrap',
-          marginBottom: '1.75rem',
-          alignItems: 'center'
-        }}
-      >
-        <span style={{ fontSize: '0.86rem', color: 'var(--ink-dim)', marginInlineEnd: '0.35rem', fontWeight: 700 }}>
-          {lang === 'ar' ? 'تصنيف:' : 'Filter:'}
-        </span>
-        {filterChips.map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            onClick={() => {
-              setFilter(chip.id);
-              setSearchParams(query ? { filter: chip.id, q: query } : { filter: chip.id }, { replace: true });
-            }}
-            style={{
-              padding: '0.45rem 0.95rem',
-              borderRadius: '999px',
-              fontSize: '0.84rem',
-              fontWeight: 900,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              border: filter === chip.id ? '1.5px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.16)',
-              background: filter === chip.id ? '#ffffff' : 'rgba(255, 255, 255, 0.06)',
-              color: filter === chip.id ? '#000000' : '#ffffff'
-            }}
-          >
-            {lang === 'ar' ? chip.labelAr : chip.labelEn}
-          </button>
-        ))}
-      </div>
+        </div>
+      )}
 
       {searchingLive && <LiquidLoader />}
 

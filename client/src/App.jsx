@@ -23,72 +23,145 @@ import { api, isNativeApk } from './api.js';
 import BxIcon from './components/BxIcon.jsx';
 
 /**
- * Instant Monochrome Liquid Glass Spotlight Search Overlay (Anime + Manga/Manhwa)
+ * Comprehensive Unified Monochrome Liquid Glass Search, Server & Category Hub (Anime + Manga/Manhwa)
  */
 function SpotlightSearchModal({ open, onClose }) {
   const navigate = useNavigate();
   const { lang } = useI18n();
   const isRtl = lang === 'ar';
   const [q, setQ] = useState('');
+  const [scope, setScope] = useState('ALL'); // 'ALL' | 'ANIME' | 'MANGA'
+  const [server, setServer] = useState('all'); // 'all' | 'bx1' | 'bx2' | 'bx3'
+  const [category, setCategory] = useState('ALL'); // 'ALL' | 'TRENDING' | 'TOP_RATED' | 'MANHWA' | 'MANGA_JP' | 'MANHUA' | 'Action' | 'Fantasy' | 'Adventure' | 'Romance' | 'Sci-Fi' | 'Mystery'
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
+
+  const scopeTabs = [
+    { id: 'ALL', ar: 'الكل (أنمي + مانجا)', en: 'All (Anime + Manga)', icon: 'sparkles' },
+    { id: 'ANIME', ar: 'الأنمي (6,973)', en: 'Anime (6,973)', icon: 'tv' },
+    { id: 'MANGA', ar: 'المانجا والمانهوا (+120K)', en: 'Manga & Manhwa (+120K)', icon: 'book' }
+  ];
+
+  const serverOptions = [
+    { id: 'all', animeSrc: 'all', mangaSrv: 'all', ar: 'جميع سيرفرات BLACK X', en: 'All BLACK X Servers' },
+    { id: 'bx1', animeSrc: 'witanime', mangaSrv: 'bx1', ar: 'سيرفر BLACK X 1', en: 'BLACK X Server 1' },
+    { id: 'bx2', animeSrc: 'anime3rb', mangaSrv: 'bx2', ar: 'سيرفر BLACK X 2', en: 'BLACK X Server 2' },
+    { id: 'bx3', animeSrc: 'english', mangaSrv: 'bx3', ar: 'سيرفر BLACK X 3 (+120K)', en: 'BLACK X Server 3 (+120K)' }
+  ];
+
+  const categoryOptions = [
+    { id: 'ALL', ar: 'الكل', en: 'All', genre: null },
+    { id: 'TRENDING', ar: 'الأكثر رواجاً', en: 'Trending', genre: null },
+    { id: 'TOP_RATED', ar: 'الأعلى تقييماً', en: 'Top Rated', genre: null },
+    { id: 'MANHWA', ar: 'مانهوا كورية', en: 'Korean Manhwa', genre: null, country: 'KR' },
+    { id: 'MANGA_JP', ar: 'مانجا يابانية', en: 'Japanese Manga', genre: null, country: 'JP' },
+    { id: 'MANHUA', ar: 'مانهاوا صينية', en: 'Chinese Manhua', genre: null, country: 'CN' },
+    { id: 'Action', ar: 'أكشن', en: 'Action', genre: 'Action' },
+    { id: 'Fantasy', ar: 'خيال', en: 'Fantasy', genre: 'Fantasy' },
+    { id: 'Adventure', ar: 'مغامرات', en: 'Adventure', genre: 'Adventure' },
+    { id: 'Romance', ar: 'رومانسي', en: 'Romance', genre: 'Romance' },
+    { id: 'Sci-Fi', ar: 'خيال علمي', en: 'Sci-Fi', genre: 'Sci-Fi' },
+    { id: 'Mystery', ar: 'غموض', en: 'Mystery', genre: 'Mystery' }
+  ];
 
   useEffect(() => {
     if (!open) return undefined;
     const trimmed = q.trim();
+    const activeCat = categoryOptions.find((c) => c.id === category) || categoryOptions[0];
+    const sortMode = category === 'TOP_RATED' ? ['SCORE_DESC', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC'];
+
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const gql = `
-          query ($s: String) {
-            anime: Page(page: 1, perPage: 6) {
-              media(type: ANIME, search: $s, sort: [POPULARITY_DESC], isAdult: false) {
+          query ($s: String, $genre: String, $country: CountryCode, $sort: [MediaSort]) {
+            anime: Page(page: 1, perPage: 10) {
+              media(type: ANIME, search: $s, genre: $genre, sort: $sort, isAdult: false) {
                 id
                 title { english romaji native }
                 averageScore
                 episodes
+                genres
                 coverImage { large }
               }
             }
-            manga: Page(page: 1, perPage: 6) {
-              media(type: MANGA, search: $s, sort: [POPULARITY_DESC], isAdult: false) {
+            manga: Page(page: 1, perPage: 10) {
+              media(type: MANGA, search: $s, genre: $genre, countryOfOrigin: $country, sort: $sort, isAdult: false) {
                 id
                 countryOfOrigin
                 title { english romaji native }
                 averageScore
                 chapters
+                genres
                 coverImage { large }
               }
             }
           }
         `;
+        const variables = { sort: sortMode };
+        if (trimmed) variables.s = trimmed;
+        if (activeCat.genre) variables.genre = activeCat.genre;
+        if (activeCat.country) variables.country = activeCat.country;
+
         const resp = await fetch('https://graphql.anilist.co', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            query: gql,
-            variables: trimmed ? { s: trimmed } : {}
-          })
+          body: JSON.stringify({ query: gql, variables })
         });
         const json = await resp.json();
-        const animeItems = (json?.data?.anime?.media || []).map((m) => ({
-          id: `anime-${m.id}`,
-          kind: 'ANIME',
-          title: m.title?.english || m.title?.romaji || m.title?.native,
-          score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.2',
-          meta: `${m.episodes || 12} EP`,
-          poster: m.coverImage?.large || '/blackx-logo.png',
-          to: `/trending?q=${encodeURIComponent(m.title?.english || m.title?.romaji || '')}`
-        }));
-        const mangaItems = (json?.data?.manga?.media || []).map((m) => ({
-          id: `manga-${m.id}`,
-          kind: m.countryOfOrigin === 'KR' ? 'MANHWA' : 'MANGA',
-          title: m.title?.english || m.title?.romaji || m.title?.native,
-          score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4',
-          meta: `${m.chapters || 100}+ CH`,
-          poster: m.coverImage?.large || '/blackx-logo.png',
-          to: `/browse?q=${encodeURIComponent(m.title?.english || m.title?.romaji || '')}`
-        }));
+
+        const srvObj = serverOptions.find((s) => s.id === server) || serverOptions[0];
+        const animeGenreParam = activeCat.genre || 'all';
+        const animeFilterParam = category === 'TOP_RATED' ? 'top' : 'trending';
+        const mangaFilterParam =
+          category === 'MANHWA'
+            ? 'MANHWA'
+            : category === 'MANGA_JP'
+            ? 'MANGA'
+            : category === 'MANHUA'
+            ? 'MANHUA'
+            : category === 'TOP_RATED'
+            ? 'TOP_RATED'
+            : 'ALL';
+
+        const animeItems =
+          scope === 'MANGA' || activeCat.country
+            ? []
+            : (json?.data?.anime?.media || []).map((m) => {
+                const title = m.title?.english || m.title?.romaji || m.title?.native || 'Anime';
+                return {
+                  id: `anime-${m.id}`,
+                  kind: 'ANIME',
+                  badgeAr: 'أنمي',
+                  badgeEn: 'ANIME',
+                  title,
+                  score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.2',
+                  meta: `${m.episodes || 12} EP • ${srvObj.id.toUpperCase()}`,
+                  poster: m.coverImage?.large || '/blackx-logo.png',
+                  to: `/trending?q=${encodeURIComponent(title)}&source=${encodeURIComponent(srvObj.animeSrc)}&genre=${encodeURIComponent(animeGenreParam)}&filter=${encodeURIComponent(animeFilterParam)}`
+                };
+              });
+
+        const mangaItems =
+          scope === 'ANIME'
+            ? []
+            : (json?.data?.manga?.media || []).map((m) => {
+                const title = m.title?.english || m.title?.romaji || m.title?.native || 'Manga';
+                const isManhwa = m.countryOfOrigin === 'KR';
+                const isManhua = m.countryOfOrigin === 'CN';
+                return {
+                  id: `manga-${m.id}`,
+                  kind: isManhwa ? 'MANHWA' : isManhua ? 'MANHUA' : 'MANGA',
+                  badgeAr: isManhwa ? 'مانهوا' : isManhua ? 'مانهاوا' : 'مانجا',
+                  badgeEn: isManhwa ? 'MANHWA' : isManhua ? 'MANHUA' : 'MANGA',
+                  title,
+                  score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4',
+                  meta: `${m.chapters || 100}+ CH • ${srvObj.id.toUpperCase()}`,
+                  poster: m.coverImage?.large || '/blackx-logo.png',
+                  to: `/browse?q=${encodeURIComponent(title)}&server=${encodeURIComponent(srvObj.mangaSrv)}&filter=${encodeURIComponent(mangaFilterParam)}`
+                };
+              });
+
         setResults([...animeItems, ...mangaItems]);
       } catch {
         setResults([]);
@@ -97,9 +170,34 @@ function SpotlightSearchModal({ open, onClose }) {
       }
     }, 220);
     return () => clearTimeout(timer);
-  }, [q, open]);
+  }, [q, scope, server, category, open]);
 
   if (!open) return null;
+
+  const srvObj = serverOptions.find((s) => s.id === server) || serverOptions[0];
+  const activeCat = categoryOptions.find((c) => c.id === category) || categoryOptions[0];
+
+  const applyToAnimePage = () => {
+    const params = new URLSearchParams();
+    if (q.trim()) params.set('q', q.trim());
+    if (srvObj.animeSrc !== 'all') params.set('source', srvObj.animeSrc);
+    if (activeCat.genre) params.set('genre', activeCat.genre);
+    if (category === 'TOP_RATED') params.set('filter', 'top');
+    onClose();
+    navigate(`/trending${params.toString() ? `?${params.toString()}` : ''}`);
+  };
+
+  const applyToMangaPage = () => {
+    const params = new URLSearchParams();
+    if (q.trim()) params.set('q', q.trim());
+    if (srvObj.mangaSrv !== 'all') params.set('server', srvObj.mangaSrv);
+    if (category === 'MANHWA') params.set('filter', 'MANHWA');
+    else if (category === 'MANGA_JP') params.set('filter', 'MANGA');
+    else if (category === 'MANHUA') params.set('filter', 'MANHUA');
+    else if (category === 'TOP_RATED') params.set('filter', 'TOP_RATED');
+    onClose();
+    navigate(`/browse${params.toString() ? `?${params.toString()}` : ''}`);
+  };
 
   return (
     <div
@@ -108,11 +206,13 @@ function SpotlightSearchModal({ open, onClose }) {
         position: 'fixed',
         inset: 0,
         zIndex: 9990,
-        background: 'rgba(0, 0, 0, 0.82)',
+        background: 'rgba(0, 0, 0, 0.86)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
-        padding: '4.5rem 1rem 2rem'
+        padding: '2.2rem 1rem 5.5rem'
       }}
     >
       <div
@@ -120,43 +220,23 @@ function SpotlightSearchModal({ open, onClose }) {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '620px',
-          borderRadius: '28px',
+          maxWidth: '720px',
+          borderRadius: '30px',
           padding: '1.15rem',
-          maxHeight: '80vh',
+          maxHeight: '84vh',
           display: 'flex',
           flexDirection: 'column',
-          gap: '0.85rem'
+          gap: '0.8rem'
         }}
       >
-        <div
-          className="ios-lg-capsule-track"
-          style={{
-            padding: '0.55rem 0.95rem',
-            gap: '0.65rem'
-          }}
-        >
-          <BxIcon name="search" size={19} />
-          <input
-            type="text"
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={
-              isRtl
-                ? 'ابحث فوراً في 6,973 أنمي و +120,000 مانهوا ومانجا...'
-                : 'Instant Spotlight Search across 6,973 Anime & +120K Manga/Manhwa...'
-            }
-            style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: '#ffffff',
-              fontSize: '0.92rem',
-              fontWeight: 700
-            }}
-          />
+        {/* Header Title Row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', padding: '0 0.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <BxIcon name="search" size={18} />
+            <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#ffffff' }}>
+              {isRtl ? 'نافذة البحث الشاملة والفلترة (الأنمي والمانجا)' : 'Unified Anime & Manga Search Hub'}
+            </span>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -177,13 +257,172 @@ function SpotlightSearchModal({ open, onClose }) {
           </button>
         </div>
 
-        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.45rem', paddingRight: '0.2rem' }}>
+        {/* Search Input Capsule */}
+        <div
+          className="ios-lg-capsule-track"
+          style={{
+            padding: '0.5rem 0.9rem',
+            gap: '0.6rem'
+          }}
+        >
+          <BxIcon name="search" size={18} />
+          <input
+            type="text"
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={
+              isRtl
+                ? 'ابحث بالاسم في الأنمي والمانجا والمانهوا (مثال: Solo Leveling, One Piece, جوجوتسو)...'
+                : 'Search Anime, Manga & Manhwa (e.g. Solo Leveling, One Piece, Bleach)...'
+            }
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: '#ffffff',
+              fontSize: '0.9rem',
+              fontWeight: 700
+            }}
+          />
+          {q && (
+            <button
+              type="button"
+              onClick={() => setQ('')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.7)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
+            >
+              <BxIcon name="close" size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Unified Scope Switcher (All / Anime / Manga) */}
+        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+          {scopeTabs.map((tb) => {
+            const active = scope === tb.id;
+            return (
+              <button
+                key={tb.id}
+                type="button"
+                onClick={() => setScope(tb.id)}
+                style={{
+                  flex: 1,
+                  minWidth: '130px',
+                  padding: '0.5rem 0.85rem',
+                  borderRadius: '999px',
+                  fontSize: '0.78rem',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                  color: active ? '#000000' : '#ffffff',
+                  border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)'
+                }}
+              >
+                <BxIcon name={tb.icon} size={14} active={active} />
+                <span>{isRtl ? tb.ar : tb.en}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Unified Server Selector (BLACK X 1 / 2 / 3) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            paddingBottom: '0.1rem'
+          }}
+        >
+          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.68)', whiteSpace: 'nowrap', marginInlineEnd: '0.25rem' }}>
+            {isRtl ? 'السيرفر:' : 'Server:'}
+          </span>
+          {serverOptions.map((srv) => {
+            const active = server === srv.id;
+            return (
+              <button
+                key={srv.id}
+                type="button"
+                onClick={() => setServer(srv.id)}
+                style={{
+                  padding: '0.36rem 0.78rem',
+                  borderRadius: '999px',
+                  fontSize: '0.73rem',
+                  fontWeight: 900,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
+                  color: active ? '#000000' : '#ffffff',
+                  border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.15)'
+                }}
+              >
+                {isRtl ? srv.ar : srv.en}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Unified Category & Genre Pills */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.38rem',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            paddingBottom: '0.15rem'
+          }}
+        >
+          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.68)', whiteSpace: 'nowrap', marginInlineEnd: '0.25rem' }}>
+            {isRtl ? 'التصنيف:' : 'Category:'}
+          </span>
+          {categoryOptions.map((cat) => {
+            const active = category === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setCategory(cat.id)}
+                style={{
+                  padding: '0.34rem 0.74rem',
+                  borderRadius: '999px',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
+                  color: active ? '#000000' : 'rgba(255,255,255,0.85)',
+                  border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
+                }}
+              >
+                {isRtl ? cat.ar : cat.en}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Unified Results Feed */}
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.45rem', paddingRight: '0.2rem', flex: 1, minHeight: '180px' }}>
           {loading ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: '0.85rem' }}>
-              {isRtl ? 'جاري البحث الفوري في الأنمي والمانهوا...' : 'Searching Anime & Manhwa...'}
+            <div style={{ padding: '1.75rem', textAlign: 'center', color: 'rgba(255,255,255,0.68)', fontWeight: 700, fontSize: '0.85rem' }}>
+              {isRtl ? 'جاري البحث الفوري في الأنمي والمانجا...' : 'Searching Anime & Manga...'}
             </div>
           ) : results.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'rgba(255,255,255,0.55)', fontSize: '0.84rem' }}>
+            <div style={{ padding: '1.75rem', textAlign: 'center', color: 'rgba(255,255,255,0.55)', fontSize: '0.84rem' }}>
               {isRtl ? 'لا توجد نتائج مطابقة' : 'No matching titles found'}
             </div>
           ) : (
@@ -199,7 +438,7 @@ function SpotlightSearchModal({ open, onClose }) {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: '0.75rem',
-                  padding: '0.55rem 0.75rem',
+                  padding: '0.52rem 0.75rem',
                   borderRadius: '18px',
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(255,255,255,0.12)',
@@ -236,7 +475,7 @@ function SpotlightSearchModal({ open, onClose }) {
                           fontWeight: 900
                         }}
                       >
-                        {r.kind}
+                        {isRtl ? r.badgeAr : r.badgeEn}
                       </span>
                       <span>★ {r.score}</span>
                       <span>• {r.meta}</span>
@@ -261,6 +500,65 @@ function SpotlightSearchModal({ open, onClose }) {
               </div>
             ))
           )}
+        </div>
+
+        {/* Bottom Direct Apply Buttons for Anime List & Manga Page */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.55rem',
+            flexWrap: 'wrap',
+            paddingTop: '0.35rem',
+            borderTop: '1px solid rgba(255,255,255,0.12)'
+          }}
+        >
+          <button
+            type="button"
+            onClick={applyToAnimePage}
+            style={{
+              flex: 1,
+              minWidth: '180px',
+              padding: '0.58rem 0.9rem',
+              borderRadius: '999px',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              fontSize: '0.78rem',
+              fontWeight: 900,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <BxIcon name="tv" size={14} active />
+            <span>{isRtl ? 'عرض في قائمة الأنمي' : 'Open in Anime List'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={applyToMangaPage}
+            style={{
+              flex: 1,
+              minWidth: '180px',
+              padding: '0.58rem 0.9rem',
+              borderRadius: '999px',
+              background: 'rgba(255,255,255,0.1)',
+              color: '#ffffff',
+              border: '1px solid rgba(255,255,255,0.28)',
+              fontSize: '0.78rem',
+              fontWeight: 900,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <BxIcon name="book" size={14} />
+            <span>{isRtl ? 'عرض في صفحة المانجا' : 'Open in Manga Page'}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -449,8 +747,8 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
     },
     {
       id: 'search',
-      match: (p) => p.startsWith('/trending'),
-      to: '/trending',
+      match: () => false,
+      to: '#search',
       labelAr: 'البحث',
       labelEn: 'Search',
       renderIcon: (active) => (
@@ -458,6 +756,20 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
           <circle cx="11" cy="11" r="7" fill={active ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.07)'} />
           <path d="M8.5 8.8A3.5 3.5 0 0 1 11 7.5" strokeWidth="1.6" opacity="0.75" />
           <line x1="16.2" y1="16.2" x2="21" y2="21" strokeWidth="2.4" />
+        </svg>
+      )
+    },
+    {
+      id: 'anime',
+      match: (p) => p.startsWith('/trending'),
+      to: '/trending',
+      labelAr: 'الأنمي',
+      labelEn: 'Anime',
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.3' : '1.9'} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="6.5" width="18" height="13.5" rx="3" fill={active ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.07)'} />
+          <polyline points="8.5 2.5 12 6.5 15.5 2.5" />
+          <polygon points="10.2 10.5 15.2 13.25 10.2 16 10.2 10.5" fill="currentColor" stroke="none" />
         </svg>
       )
     },
@@ -581,6 +893,12 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
               className="ios-lg-orb"
               title={lang === 'ar' ? item.labelAr : item.labelEn}
               onClick={() => {
+                if (item.id === 'search') {
+                  if (typeof window !== 'undefined' && typeof window.openBlackXSpotlight === 'function') {
+                    window.openBlackXSpotlight();
+                  }
+                  return;
+                }
                 if (item.id === 'profile' && !user && typeof onOpenAuth === 'function') {
                   onOpenAuth('login');
                   return;

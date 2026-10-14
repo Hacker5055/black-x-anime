@@ -37,10 +37,24 @@ export default function TrendingAnime() {
   const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
 
   const initialQ = searchParams.get('q') || '';
+  const initialSource = searchParams.get('source') || 'all';
+  const initialFilter = searchParams.get('filter') || 'trending';
+  const initialGenre = searchParams.get('genre') || 'all';
   const [query, setQuery] = useState(initialQ);
-  const [selectedSource, setSelectedSource] = useState('all'); // 'all' | 'witanime' | 'anime3rb' | 'english'
-  const [activeFilter, setActiveFilter] = useState('trending'); // 'trending' | 'latest' | 'top' | 'alerts' | 'random'
-  const [selectedGenre, setSelectedGenre] = useState('all');
+  const [selectedSource, setSelectedSource] = useState(initialSource); // 'all' | 'witanime' | 'anime3rb' | 'english'
+  const [activeFilter, setActiveFilter] = useState(initialFilter); // 'trending' | 'latest' | 'top' | 'alerts' | 'random'
+  const [selectedGenre, setSelectedGenre] = useState(initialGenre);
+
+  useEffect(() => {
+    const qParam = searchParams.get('q') || '';
+    const srcParam = searchParams.get('source') || 'all';
+    const fltParam = searchParams.get('filter') || 'trending';
+    const gnrParam = searchParams.get('genre') || 'all';
+    setQuery(qParam);
+    setSelectedSource(srcParam);
+    setActiveFilter(fltParam);
+    setSelectedGenre(gnrParam);
+  }, [searchParams]);
 
   const [trendingList, setTrendingList] = useState([]);
   const [latestStreamList, setLatestStreamList] = useState([]);
@@ -588,81 +602,6 @@ export default function TrendingAnime() {
           </button>
         </div>
 
-        {/* Dedicated Instant Anime Search Bar (slothUI Pro Capsule) */}
-        <div
-          className="bx-trending-search"
-          style={{
-            display: 'flex',
-            gap: '0.65rem',
-            flexWrap: 'wrap',
-            padding: '0.55rem 0.65rem',
-            borderRadius: '999px',
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.24)',
-            marginBottom: '1.15rem'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '180px', paddingInlineStart: '0.75rem' }}>
-            <span style={{ fontSize: '1.15rem' }}>🔍</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                if (e.target.value.trim()) {
-                  setSearchParams({ q: e.target.value }, { replace: true });
-                } else {
-                  setSearchParams({}, { replace: true });
-                }
-              }}
-              placeholder={
-                lang === 'ar'
-                  ? 'ابحث في الأعمال الرائجة وكل الأنميات (مثال: One Piece, Solo Leveling, Attack on Titan, بليتش)...'
-                  : 'Search trending & all anime (e.g. One Piece, Solo Leveling, Bleach, Jujutsu Kaisen)...'
-              }
-              style={{
-                flex: 1,
-                background: 'transparent',
-                border: 'none',
-                color: '#fff',
-                fontSize: '0.94rem',
-                fontWeight: 700,
-                outline: 'none',
-                padding: '0.45rem 0'
-              }}
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery('');
-                  setSearchResults(null);
-                  setSearchParams({}, { replace: true });
-                }}
-                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '1rem' }}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => runSearch(query)}
-            disabled={searching}
-            style={{
-              background: '#ffffff',
-              color: '#000000',
-              border: 'none',
-              fontWeight: 900,
-              borderRadius: '999px',
-              padding: '0.65rem 1.55rem',
-              cursor: 'pointer'
-            }}
-          >
-            {searching ? (lang === 'ar' ? 'جارٍ البحث...' : 'Searching...') : (lang === 'ar' ? 'بحث الأنمي' : 'Search Anime')}
-          </button>
-        </div>
-
         {/* Release Policy & VIP FHD Banner (Pure Monochrome slothUI Pro) */}
         <div
           style={{
@@ -707,154 +646,51 @@ export default function TrendingAnime() {
         </div>
       </section>
 
-      {/* Official BLACK X Anime Server Engine Selector */}
-      <div
-        className="glass bx-server-selector"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.85rem',
-          padding: '0.95rem 1.25rem',
-          borderRadius: '18px',
-          border: '1px solid rgba(34, 211, 238, 0.4)',
-          background: 'linear-gradient(135deg, rgba(8, 12, 24, 0.95), rgba(15, 23, 42, 0.9))'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <span style={{ fontSize: '1.35rem' }}>🌐</span>
-          <div>
-            <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#fff' }}>
-              {lang === 'ar' ? 'سيرفرات الأنمي الرسمية (BLACK X Servers):' : 'Official BLACK X Anime Servers:'}
-            </div>
-            <div style={{ fontSize: '0.74rem', color: 'var(--ink-dim)' }}>
-              {lang === 'ar'
-                ? 'اختر سيرفر المشاهدة لتصفح جميع الأنميات اليابانية المتواجدة داخله مباشرة عبر BLACK X'
-                : 'Select a BLACK X server to browse all Japanese anime and episodes'}
-            </div>
-          </div>
-        </div>
-
-        <div className="bx-server-tabs" style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
-          {[
-            { id: 'all', icon: '🌟', labelAr: 'جميع سيرفرات BLACK X (الكل)', labelEn: 'All BLACK X Servers' },
-            { id: 'witanime', icon: '👑', labelAr: 'سيرفر BLACK X 1', labelEn: 'BLACK X Server 1' },
-            { id: 'anime3rb', icon: '⚡', labelAr: 'سيرفر BLACK X 2', labelEn: 'BLACK X Server 2' },
-            { id: 'english', icon: '🌐', labelAr: 'سيرفر BLACK X 3', labelEn: 'BLACK X Server 3' }
-          ].map((src) => {
-            const active = selectedSource === src.id;
-            return (
-              <button
-                key={src.id}
-                type="button"
-                onClick={() => {
-                  setSelectedSource(src.id);
-                  setQuery('');
-                  setSearchResults(null);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.55rem 1.15rem',
-                  borderRadius: '12px',
-                  fontWeight: 900,
-                  fontSize: '0.84rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.22s ease',
-                  background: active
-                    ? src.id === 'anime3rb'
-                      ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
-                      : src.id === 'witanime'
-                      ? 'linear-gradient(135deg, #06b6d4, #8b5cf6)'
-                      : 'linear-gradient(135deg, #22d3ee, #10b981)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  color: active ? '#040d1a' : '#cbd5e1',
-                  border: active ? '1px solid transparent' : '1px solid rgba(255, 255, 255, 0.14)',
-                  boxShadow: active ? '0 4px 18px rgba(34, 211, 238, 0.35)' : 'none'
-                }}
-              >
-                <span>{src.icon}</span>
-                <span>{lang === 'ar' ? src.labelAr : src.labelEn}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Filter Tabs & Genre Chips */}
-      <div className="bx-filter-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <div className="bx-filter-chips" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {[
-            { id: 'trending', ar: '🔥 الأكثر رواجاً الآن', en: '🔥 Trending Now' },
-            { id: 'random', ar: '🎲 أنميات عشوائية', en: '🎲 Random Anime' },
-            { id: 'latest', ar: '🎬 أحدث الحلقات المضافة', en: '🎬 Latest Episodes' },
-            { id: 'top', ar: '⭐ الأعلى تقييماً', en: '⭐ Top Rated' },
-            { id: 'alerts', ar: `🔔 تنبيهاتك المفعّلة (${subscribedSlugs.size})`, en: `🔔 Your Alerts (${subscribedSlugs.size})` }
-          ].map((tb) => (
-            <button
-              key={tb.id}
-              type="button"
-              className={`chip ${activeFilter === tb.id && searchResults === null ? 'active' : ''}`}
-              onClick={() => {
-                setQuery('');
-                setSearchResults(null);
-                setActiveFilter(tb.id);
-                if (tb.id === 'random') {
-                  refreshRandomAnime();
-                }
-              }}
-              style={{ fontWeight: 800, padding: '0.5rem 1.05rem' }}
-            >
-              {lang === 'ar' ? tb.ar : tb.en}
-            </button>
-          ))}
+      {/* Active Unified Search / Filter Status Pill (only shown when filtered via Unified Search Window) */}
+      {(query || selectedSource !== 'all' || selectedGenre !== 'all' || activeFilter !== 'trending') && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.6rem',
+            padding: '0.65rem 1rem',
+            borderRadius: '999px',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.18)'
+          }}
+        >
+          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ffffff' }}>
+            {lang === 'ar'
+              ? `نتائج مفلترة من نافذة البحث الشاملة ${query ? `• "${query}"` : ''}`
+              : `Filtered via Unified Search ${query ? `• "${query}"` : ''}`}
+          </span>
           <button
             type="button"
-            className="chip"
-            disabled={shufflingRandom}
             onClick={() => {
               setQuery('');
               setSearchResults(null);
-              setActiveFilter('random');
-              refreshRandomAnime();
+              setSelectedSource('all');
+              setSelectedGenre('all');
+              setActiveFilter('trending');
+              setSearchParams({}, { replace: true });
             }}
             style={{
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              borderRadius: '999px',
+              padding: '0.32rem 0.9rem',
+              fontSize: '0.75rem',
               fontWeight: 900,
-              padding: '0.5rem 0.95rem',
-              borderColor: 'rgba(255,255,255,0.35)',
-              color: '#ffffff'
+              cursor: 'pointer'
             }}
           >
-            {shufflingRandom
-              ? (lang === 'ar' ? '⏳ جاري الجلب...' : '⏳ Shuffling...')
-              : (lang === 'ar' ? '🔄 خلط أنميات عشوائية' : '🔄 Shuffle Random')}
+            {lang === 'ar' ? 'إلغاء الفلتر ✕' : 'Reset Filter ✕'}
           </button>
         </div>
-
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          {ANIME_GENRES.map((g) => (
-            <button
-              key={g.id}
-              type="button"
-              onClick={() => setSelectedGenre(g.id)}
-              style={{
-                padding: '0.35rem 0.75rem',
-                borderRadius: '99px',
-                fontSize: '0.76rem',
-                fontWeight: 800,
-                cursor: 'pointer',
-                border: selectedGenre === g.id ? '1px solid var(--cyan)' : '1px solid rgba(255,255,255,0.1)',
-                background: selectedGenre === g.id ? 'rgba(34,211,238,0.18)' : 'rgba(255,255,255,0.04)',
-                color: selectedGenre === g.id ? 'var(--cyan)' : '#cbd5e1'
-              }}
-            >
-              {lang === 'ar' ? g.ar : g.en}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Anime Cards Grid */}
       {loading || searching ? (
