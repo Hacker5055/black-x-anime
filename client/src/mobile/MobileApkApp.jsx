@@ -5323,7 +5323,8 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* Top SlothUI / Prime Luxury Floating Glass Header Bar with Official BLACK X Logo */}
+      {/* Top SlothUI / Prime Luxury Floating Glass Header Bar with Official BLACK X Logo (Shown on inner tabs; Home uses Full-Bleed Hero Header) */}
+      {!(activeTab === 'home' && !selectedAnime) && (
       <header
         style={{
           position: 'sticky',
@@ -5466,6 +5467,7 @@ export default function MobileApkApp() {
           </button>
         </div>
       </header>
+      )}
 
       {/* Global Real-Time Developer Push Broadcast Banner */}
       {globalBroadcastMsg && (
@@ -5487,133 +5489,9 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== TAB 1: HOME (iOS 26 LIQUID GLASS — PURE MONOCHROME ANIME & MANHWA EDITION) ==================== */}
+      {/* ==================== TAB 1: HOME (1:1 EXACT MATCH TO REFERENCE SCREENSHOT) ==================== */}
       {activeTab === 'home' && !selectedAnime && (
         <main style={{ animation: 'bxSlideUp 0.18s ease-out', position: 'relative' }}>
-          {/* iOS Liquid Glass Anime & Manhwa Command Bar (Pure Monochrome) */}
-          <section style={{ padding: '0.75rem 0.9rem 0.55rem', display: 'flex', flexDirection: 'column', gap: '0.72rem' }}>
-            {/* Category Capsule Track (🔥 الكل | 📺 مسلسلات | 🎬 أفلام | ⚡ يعرض الآن | 📖 المانهوا والمانجا) */}
-            <div
-              className="ios-lg-capsule-track bx-mob-scroll"
-              style={{
-                padding: '0.35rem 0.48rem',
-                gap: '0.35rem',
-                overflowX: 'auto'
-              }}
-            >
-              <button
-                type="button"
-                className="ios-lg-orb"
-                onClick={() => setActiveTab('catalog')}
-                style={{ width: '34px', height: '34px', fontSize: '0.9rem', fontWeight: 800 }}
-                title={isRtl ? 'بحث شامل' : 'Search All'}
-              >
-                🔍
-              </button>
-              {[
-                { id: 'all', ar: '🔥 الكل', en: '🔥 All' },
-                { id: 'series', ar: '📺 مسلسلات الأنمي', en: '📺 Series' },
-                { id: 'movies', ar: '🎬 أفلام الأنمي', en: '🎬 Movies' },
-                { id: 'simulcast', ar: '⚡ يعرض الآن', en: '⚡ Simulcast' },
-                { id: 'manhwa', ar: '📖 المانهوا والمانجا (+120K)', en: '📖 Manga & Manhwa' }
-              ].map((cat) => {
-                const active = homeCategoryFilter === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={active ? 'ios-lg-active-pill' : ''}
-                    onClick={() => {
-                      if (cat.id === 'manhwa') {
-                        setActiveTab('manga');
-                        return;
-                      }
-                      setHomeCategoryFilter(cat.id);
-                    }}
-                    style={
-                      active
-                        ? { padding: '0.4rem 0.92rem', fontSize: '0.74rem', whiteSpace: 'nowrap' }
-                        : {
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'rgba(255,255,255,0.68)',
-                            fontWeight: 700,
-                            fontSize: '0.73rem',
-                            padding: '0.38rem 0.65rem',
-                            whiteSpace: 'nowrap',
-                            cursor: 'pointer'
-                          }
-                    }
-                  >
-                    {isRtl ? cat.ar : cat.en}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Dual iOS Liquid Glass Quick-Launch Bento Cards (100% Anime & Manhwa) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.68rem' }}>
-              <div
-                className="ios-lg-surface"
-                onClick={() => setActiveTab('catalog')}
-                style={{ padding: '0.88rem 0.95rem', borderRadius: '24px', cursor: 'pointer' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
-                  <div>
-                    <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#ffffff' }}>
-                      {isRtl ? '🎬 مكتبة الأنمي' : '🎬 Anime Hub'}
-                    </div>
-                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.18rem', fontWeight: 700 }}>
-                      {isRtl ? '⚡ 6,973 أنمي • FHD 120Hz' : '⚡ 6,973 Anime • FHD'}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      padding: '0.2rem 0.52rem',
-                      borderRadius: '999px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontSize: '0.65rem',
-                      fontWeight: 900
-                    }}
-                  >
-                    120Hz
-                  </span>
-                </div>
-              </div>
-
-              <div
-                className="ios-lg-surface"
-                onClick={() => setActiveTab('manga')}
-                style={{ padding: '0.88rem 0.95rem', borderRadius: '24px', cursor: 'pointer' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
-                  <div>
-                    <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#ffffff' }}>
-                      {isRtl ? '📖 المانهوا والمانجا' : '📖 Manga & Manhwa'}
-                    </div>
-                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.18rem', fontWeight: 700 }}>
-                      {isRtl ? '✨ +120,000 عمل وفصل' : '✨ +120,000 Works'}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      padding: '0.2rem 0.52rem',
-                      borderRadius: '999px',
-                      background: 'rgba(255,255,255,0.14)',
-                      border: '1px solid rgba(255,255,255,0.38)',
-                      color: '#ffffff',
-                      fontSize: '0.65rem',
-                      fontWeight: 900
-                    }}
-                  >
-                    8 مصادر
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
-
           {/* v13.0 Official slothUI Pro 2.0 Full-Bleed Hero Showcase ("Handmaiden Tales" & "Sane Max Origins" Layout) */}
           {heroAnime && (
             <>
@@ -5649,6 +5527,7 @@ export default function MobileApkApp() {
 
                 {/* Top-Left Official slothUI "[X] blackx original" Seal inside Hero */}
                 <div
+                  onClick={() => setCommandMenuOpen(true)}
                   style={{
                     position: 'absolute',
                     top: '14px',
@@ -5659,7 +5538,8 @@ export default function MobileApkApp() {
                     padding: '0.26rem 0.65rem 0.26rem 0.35rem',
                     borderRadius: '999px',
                     background: 'rgba(0,0,0,0.65)',
-                    border: '1px solid rgba(255,255,255,0.18)'
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    cursor: 'pointer'
                   }}
                 >
                   <img
@@ -5775,14 +5655,15 @@ export default function MobileApkApp() {
                       gap: '0.6rem',
                       width: '100%',
                       maxWidth: '380px',
-                      marginBottom: '0.52rem'
+                      marginBottom: '0.55rem'
                     }}
                   >
                     <button
                       type="button"
                       onClick={() => handleOpenAnime(heroAnime, 1)}
                       style={{
-                        padding: '0.76rem 1rem',
+                        minHeight: '62px',
+                        padding: '0.88rem 1rem',
                         borderRadius: '999px',
                         border: 'none',
                         background: '#ffffff',
@@ -5805,9 +5686,10 @@ export default function MobileApkApp() {
                       type="button"
                       onClick={() => handleOpenAnime(heroAnime)}
                       style={{
-                        padding: '0.76rem 1rem',
+                        minHeight: '62px',
+                        padding: '0.88rem 1rem',
                         borderRadius: '999px',
-                        border: '1px solid rgba(255,255,255,0.28)',
+                        border: '1px solid rgba(255,255,255,0.24)',
                         background: 'rgba(20, 20, 26, 0.88)',
                         color: '#ffffff',
                         fontWeight: 900,
@@ -5831,12 +5713,13 @@ export default function MobileApkApp() {
                     style={{
                       width: '100%',
                       maxWidth: '380px',
-                      padding: '0.62rem 1rem',
+                      minHeight: '46px',
+                      padding: '0.68rem 1rem',
                       borderRadius: '999px',
-                      border: '1px solid rgba(255,255,255,0.24)',
+                      border: '1px solid rgba(255,255,255,0.22)',
                       background: favorites.some((f) => f.objectID === heroAnime.objectID)
                         ? 'rgba(255,255,255,0.2)'
-                        : 'rgba(255,255,255,0.07)',
+                        : 'rgba(18, 18, 22, 0.85)',
                       color: '#ffffff',
                       fontWeight: 800,
                       fontSize: '0.78rem',
@@ -6602,6 +6485,79 @@ export default function MobileApkApp() {
             </div>
           )}
 
+          {/* ==================== v9.0 NETFLIX MOBILE / STORIES CIRCULAR PREVIEWS STRIP ==================== */}
+          {popularList.length > 0 && (
+            <section style={{ padding: '0.65rem 1rem 0.15rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <h2 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 900, letterSpacing: '0.01em' }}>
+                  ⚡ {isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}
+                </h2>
+                <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>
+                  {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
+                </span>
+              </div>
+              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
+                {popularList.slice(0, 12).map((item, idx) => (
+                  <div
+                    key={`story-${item.objectID}`}
+                    className="bx-mob-card"
+                    onClick={() => setStoryPreviewAnime({ item, index: idx })}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      minWidth: '68px',
+                      maxWidth: '68px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '50%',
+                        padding: '2.5px',
+                        background: idx < 3 ? '#ffffff' : 'rgba(255,255,255,0.45)',
+                        boxShadow: idx < 3 ? '0 0 14px rgba(255,255,255,0.22)' : 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <img
+                        src={item.poster}
+                        alt={item.titleEn}
+                        loading="lazy"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: '2px solid #000000'
+                        }}
+                      />
+                    </div>
+                    <span
+                      style={{
+                        marginTop: '0.28rem',
+                        fontSize: '0.64rem',
+                        fontWeight: 800,
+                        color: 'rgba(255,255,255,0.88)',
+                        maxWidth: '66px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {item.titleEn}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* ==================== v7.0 CLEAN OBSIDIAN SMART QUICK-ACTION DOCK ==================== */}
           <section style={{ padding: '0.7rem 1rem 0.2rem' }}>
             <div
@@ -6773,79 +6729,6 @@ export default function MobileApkApp() {
               </div>
             )}
           </section>
-
-          {/* ==================== v9.0 NETFLIX MOBILE / STORIES CIRCULAR PREVIEWS STRIP ==================== */}
-          {popularList.length > 0 && (
-            <section style={{ padding: '0.65rem 1rem 0.15rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <h2 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 900, letterSpacing: '0.01em' }}>
-                  ⚡ {isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}
-                </h2>
-                <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>
-                  {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
-                </span>
-              </div>
-              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.35rem' }}>
-                {popularList.slice(0, 12).map((item, idx) => (
-                  <div
-                    key={`story-${item.objectID}`}
-                    className="bx-mob-card"
-                    onClick={() => setStoryPreviewAnime({ item, index: idx })}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      minWidth: '68px',
-                      maxWidth: '68px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '50%',
-                        padding: '2.5px',
-                        background: idx < 3 ? '#ffffff' : 'rgba(255,255,255,0.45)',
-                        boxShadow: idx < 3 ? '0 0 14px rgba(255,255,255,0.22)' : 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <img
-                        src={item.poster}
-                        alt={item.titleEn}
-                        loading="lazy"
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                          border: '2px solid #000000'
-                        }}
-                      />
-                    </div>
-                    <span
-                      style={{
-                        marginTop: '0.28rem',
-                        fontSize: '0.64rem',
-                        fontWeight: 800,
-                        color: 'rgba(255,255,255,0.88)',
-                        maxWidth: '66px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {item.titleEn}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* Netflix-Style Continue Watching Strip (With Play Overlay + Bottom Progress Bar) */}
           {watchHistory.length > 0 && (
