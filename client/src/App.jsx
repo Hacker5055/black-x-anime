@@ -20,6 +20,401 @@ import BlackXSplashVortex from './components/BlackXSplashVortex.jsx';
 import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
+import BxIcon from './components/BxIcon.jsx';
+
+/**
+ * Instant Monochrome Liquid Glass Spotlight Search Overlay (Anime + Manga/Manhwa)
+ */
+function SpotlightSearchModal({ open, onClose }) {
+  const navigate = useNavigate();
+  const { lang } = useI18n();
+  const isRtl = lang === 'ar';
+  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState([]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const trimmed = q.trim();
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const gql = `
+          query ($s: String) {
+            anime: Page(page: 1, perPage: 6) {
+              media(type: ANIME, search: $s, sort: [POPULARITY_DESC], isAdult: false) {
+                id
+                title { english romaji native }
+                averageScore
+                episodes
+                coverImage { large }
+              }
+            }
+            manga: Page(page: 1, perPage: 6) {
+              media(type: MANGA, search: $s, sort: [POPULARITY_DESC], isAdult: false) {
+                id
+                countryOfOrigin
+                title { english romaji native }
+                averageScore
+                chapters
+                coverImage { large }
+              }
+            }
+          }
+        `;
+        const resp = await fetch('https://graphql.anilist.co', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            query: gql,
+            variables: trimmed ? { s: trimmed } : {}
+          })
+        });
+        const json = await resp.json();
+        const animeItems = (json?.data?.anime?.media || []).map((m) => ({
+          id: `anime-${m.id}`,
+          kind: 'ANIME',
+          title: m.title?.english || m.title?.romaji || m.title?.native,
+          score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.2',
+          meta: `${m.episodes || 12} EP`,
+          poster: m.coverImage?.large || '/blackx-logo.png',
+          to: `/trending?q=${encodeURIComponent(m.title?.english || m.title?.romaji || '')}`
+        }));
+        const mangaItems = (json?.data?.manga?.media || []).map((m) => ({
+          id: `manga-${m.id}`,
+          kind: m.countryOfOrigin === 'KR' ? 'MANHWA' : 'MANGA',
+          title: m.title?.english || m.title?.romaji || m.title?.native,
+          score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4',
+          meta: `${m.chapters || 100}+ CH`,
+          poster: m.coverImage?.large || '/blackx-logo.png',
+          to: `/browse?q=${encodeURIComponent(m.title?.english || m.title?.romaji || '')}`
+        }));
+        setResults([...animeItems, ...mangaItems]);
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [q, open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9990,
+        background: 'rgba(0, 0, 0, 0.82)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        padding: '4.5rem 1rem 2rem'
+      }}
+    >
+      <div
+        className="ios-lg-surface"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: '620px',
+          borderRadius: '28px',
+          padding: '1.15rem',
+          maxHeight: '80vh',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.85rem'
+        }}
+      >
+        <div
+          className="ios-lg-capsule-track"
+          style={{
+            padding: '0.55rem 0.95rem',
+            gap: '0.65rem'
+          }}
+        >
+          <BxIcon name="search" size={19} />
+          <input
+            type="text"
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={
+              isRtl
+                ? 'ابحث فوراً في 6,973 أنمي و +120,000 مانهوا ومانجا...'
+                : 'Instant Spotlight Search across 6,973 Anime & +120K Manga/Manhwa...'
+            }
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: '#ffffff',
+              fontSize: '0.92rem',
+              fontWeight: 700
+            }}
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.22)',
+              color: '#ffffff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <BxIcon name="close" size={15} />
+          </button>
+        </div>
+
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.45rem', paddingRight: '0.2rem' }}>
+          {loading ? (
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: '0.85rem' }}>
+              {isRtl ? 'جاري البحث الفوري في الأنمي والمانهوا...' : 'Searching Anime & Manhwa...'}
+            </div>
+          ) : results.length === 0 ? (
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'rgba(255,255,255,0.55)', fontSize: '0.84rem' }}>
+              {isRtl ? 'لا توجد نتائج مطابقة' : 'No matching titles found'}
+            </div>
+          ) : (
+            results.map((r) => (
+              <div
+                key={r.id}
+                onClick={() => {
+                  onClose();
+                  navigate(r.to);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '18px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                  <img
+                    src={r.poster}
+                    alt={r.title}
+                    style={{ width: '42px', height: '56px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: '0.86rem',
+                        fontWeight: 900,
+                        color: '#ffffff',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {r.title}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.22rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>
+                      <span
+                        style={{
+                          padding: '0.1rem 0.48rem',
+                          borderRadius: '999px',
+                          background: r.kind === 'ANIME' ? '#ffffff' : 'rgba(255,255,255,0.14)',
+                          color: r.kind === 'ANIME' ? '#000000' : '#ffffff',
+                          fontSize: '0.64rem',
+                          fontWeight: 900
+                        }}
+                      >
+                        {r.kind}
+                      </span>
+                      <span>★ {r.score}</span>
+                      <span>• {r.meta}</span>
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    color: '#000000',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <BxIcon name={r.kind === 'ANIME' ? 'play' : 'book'} size={14} active />
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Persistent Monochrome Liquid Glass Mini Floating Player (Continues playback across pages)
+ */
+function WebsiteMiniFloatingPlayer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { lang } = useI18n();
+  const isRtl = lang === 'ar';
+  const [session, setSession] = useState(() => (typeof window !== 'undefined' ? window.__bxMiniPlayer || null : null));
+
+  useEffect(() => {
+    const onUpdate = (e) => {
+      const next = e?.detail || null;
+      window.__bxMiniPlayer = next;
+      setSession(next);
+    };
+    window.addEventListener('bx_mini_player_update', onUpdate);
+    return () => window.removeEventListener('bx_mini_player_update', onUpdate);
+  }, []);
+
+  if (!session || !session.url || location.pathname.startsWith('/watch/')) {
+    return null;
+  }
+
+  return (
+    <div
+      className="ios-lg-surface"
+      style={{
+        position: 'fixed',
+        bottom: '84px',
+        insetInlineEnd: '18px',
+        width: '315px',
+        borderRadius: '22px',
+        zIndex: 94,
+        overflow: 'hidden',
+        border: '1.5px solid rgba(255,255,255,0.42)',
+        boxShadow: '0 22px 54px rgba(0,0,0,0.95)'
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.45rem',
+          padding: '0.45rem 0.68rem',
+          background: 'rgba(0,0,0,0.9)',
+          borderBottom: '1px solid rgba(255,255,255,0.14)'
+        }}
+      >
+        <div
+          onClick={() => navigate(`/watch/${session.slug}/${session.episode || 1}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0, cursor: 'pointer' }}
+        >
+          <span
+            style={{
+              padding: '0.12rem 0.45rem',
+              borderRadius: '999px',
+              background: '#ffffff',
+              color: '#000000',
+              fontSize: '0.64rem',
+              fontWeight: 900,
+              flexShrink: 0
+            }}
+          >
+            E{session.episode || 1}
+          </span>
+          <span
+            style={{
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              color: '#ffffff',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {session.title || session.slug}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.32rem', flexShrink: 0 }}>
+          <button
+            type="button"
+            title={isRtl ? 'تكبير لصفحة المشاهدة' : 'Expand Player'}
+            onClick={() => navigate(`/watch/${session.slug}/${session.episode || 1}`)}
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '50%',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <BxIcon name="expand" size={13} />
+          </button>
+          <button
+            type="button"
+            title={isRtl ? 'إغلاق المشغل المصغر' : 'Close Mini Player'}
+            onClick={() => {
+              window.__bxMiniPlayer = null;
+              setSession(null);
+            }}
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.12)',
+              color: '#ffffff',
+              border: '1px solid rgba(255,255,255,0.24)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <BxIcon name="close" size={13} />
+          </button>
+        </div>
+      </div>
+
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#000000' }}>
+        {session.kind === 'direct' ? (
+          <video
+            src={session.url}
+            controls
+            autoPlay
+            playsInline
+            style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+          />
+        ) : (
+          <iframe
+            src={session.url}
+            title={session.title || 'BLACK X Mini Player'}
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allowFullScreen
+            style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Floating Bottom Navigation Dock (Website — Custom Monochrome Liquid Glass SVG Icon Pack)
@@ -352,9 +747,24 @@ class MobileErrorBoundary extends React.Component {
 
 export default function App() {
   const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register'
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
   const { user } = useAuth();
   const { lang } = useI18n();
   const openAuth = (mode = 'login') => setAuthModal(mode);
+
+  useEffect(() => {
+    window.openBlackXSpotlight = () => setSpotlightOpen(true);
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSpotlightOpen((v) => !v);
+      } else if (e.key === 'Escape') {
+        setSpotlightOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   const isApkRuntime =
     isNativeApk() ||
     import.meta.env.VITE_BUILD_TARGET === 'apk' ||
@@ -536,6 +946,8 @@ export default function App() {
         </main>
         <Footer />
       </div>
+      <WebsiteMiniFloatingPlayer />
+      <SpotlightSearchModal open={spotlightOpen} onClose={() => setSpotlightOpen(false)} />
       <IosLiquidGlassFloatingDock onOpenAuth={openAuth} />
       <GlobalVipEnforcementGate user={user} onOpenAuth={openAuth} />
       <Toasts />

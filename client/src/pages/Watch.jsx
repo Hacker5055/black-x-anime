@@ -227,6 +227,25 @@ export default function Watch({ onOpenAuth }) {
   const isVipMember = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
   const [vipFastCdn, setVipFastCdn] = useState(() => isVipMember);
   const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
+
+  // Broadcast active stream session to the Website Mini Floating Player
+  useEffect(() => {
+    if (!episodeData?.resolved) return;
+    const resolvedList = Object.values(episodeData.resolved).filter((s) => s && s.url);
+    const activeSrc = resolvedList[0];
+    if (activeSrc?.url && typeof window !== 'undefined') {
+      const detail = {
+        slug,
+        episode,
+        title: show?.titleEn || title || slug,
+        poster: show?.poster || '/blackx-logo.png',
+        url: activeSrc.url,
+        kind: activeSrc.kind || 'embed'
+      };
+      window.__bxMiniPlayer = detail;
+      window.dispatchEvent(new CustomEvent('bx_mini_player_update', { detail }));
+    }
+  }, [episodeData, slug, episode, show, title]);
   const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
 
   useEffect(() => {

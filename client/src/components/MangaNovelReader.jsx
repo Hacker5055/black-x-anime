@@ -944,25 +944,21 @@ export default function MangaNovelReader({
         )}
       </main>
 
-      {/* ================= MOBILE BOTTOM FLOATING DOCK ================= */}
+      {/* ================= MONOCHROME LIQUID GLASS READER DOCK ================= */}
       <footer
+        className="ios-lg-capsule-track"
         style={{
           position: 'absolute',
-          bottom: '12px',
+          bottom: '14px',
           left: '50%',
           transform: showUI ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(120%)',
-          transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'transform 0.22s ease',
           zIndex: 90,
-          background: 'rgba(8, 12, 24, 0.92)',
-          backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.14)',
-          borderRadius: '99px',
-          padding: '0.4rem 0.65rem',
+          padding: '0.42rem 0.65rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.5rem',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
-          maxWidth: '92vw',
+          gap: '0.45rem',
+          maxWidth: '94vw',
           width: 'max-content'
         }}
       >
@@ -973,14 +969,17 @@ export default function MangaNovelReader({
           onClick={goToPrevChapter}
           aria-label="Previous Chapter"
           style={{
-            background: 'transparent',
-            border: 'none',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
             color: hasPrevChapter ? '#fff' : 'rgba(255,255,255,0.3)',
-            padding: '0.35rem 0.5rem',
-            fontSize: '0.85rem',
+            fontSize: '0.78rem',
             cursor: hasPrevChapter ? 'pointer' : 'default',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
         >
           ◀
@@ -991,13 +990,13 @@ export default function MangaNovelReader({
           type="button"
           onClick={() => setShowChapterDrawer(true)}
           style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#fff',
-            borderRadius: '99px',
-            padding: '0.35rem 0.85rem',
+            background: '#ffffff',
+            border: 'none',
+            color: '#000000',
+            borderRadius: '999px',
+            padding: '0.38rem 0.9rem',
             fontSize: '0.78rem',
-            fontWeight: 800,
+            fontWeight: 900,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -1005,7 +1004,7 @@ export default function MangaNovelReader({
             whiteSpace: 'nowrap'
           }}
         >
-          📑 {selectedChapter ? `فصل ${selectedChapter.chapterNumber}` : 'الفصول'}
+          <span>{selectedChapter ? `فصل ${selectedChapter.chapterNumber}` : 'الفصول'}</span>
         </button>
 
         {/* Next Chapter */}
@@ -1015,14 +1014,17 @@ export default function MangaNovelReader({
           onClick={goToNextChapter}
           aria-label="Next Chapter"
           style={{
-            background: 'transparent',
-            border: 'none',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
             color: hasNextChapter ? '#fff' : 'rgba(255,255,255,0.3)',
-            padding: '0.35rem 0.5rem',
-            fontSize: '0.85rem',
+            fontSize: '0.78rem',
             cursor: hasNextChapter ? 'pointer' : 'default',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
         >
           ▶
@@ -1030,27 +1032,66 @@ export default function MangaNovelReader({
 
         <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.2)' }} />
 
-        {/* Auto Scroll Toggle (Hands-free phone reading) */}
+        {/* Auto Scroll Toggle + Speed (1x / 2x / 3x) */}
         {!isNovel && readerMode === 'webtoon' && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.28rem' }}>
+            <button
+              type="button"
+              onClick={() => setAutoScrollActive((a) => !a)}
+              style={{
+                background: autoScrollActive ? '#ffffff' : 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.24)',
+                color: autoScrollActive ? '#000000' : '#ffffff',
+                borderRadius: '999px',
+                padding: '0.36rem 0.72rem',
+                fontSize: '0.74rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+              title={autoScrollActive ? 'إيقاف التمرير التلقائي' : 'تشغيل التمرير التلقائي'}
+            >
+              {autoScrollActive ? '⏸ تمرير' : '▶ تمرير'}
+            </button>
+            {autoScrollActive && (
+              <button
+                type="button"
+                onClick={() => setAutoScrollSpeed((s) => (s >= 3 ? 1 : s + 1))}
+                style={{
+                  background: 'rgba(255,255,255,0.14)',
+                  border: '1px solid rgba(255,255,255,0.32)',
+                  color: '#ffffff',
+                  borderRadius: '999px',
+                  padding: '0.34rem 0.55rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {autoScrollSpeed}x
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Quick Zoom Cycle (100% -> 115% -> 85%) */}
+        {!isNovel && (
           <button
             type="button"
-            onClick={() => setAutoScrollActive((a) => !a)}
+            onClick={() => setZoomLevel((z) => (z === 100 ? 115 : z === 115 ? 85 : 100))}
             style={{
-              background: autoScrollActive ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(255, 255, 255, 0.08)',
-              border: autoScrollActive ? 'none' : '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#fff',
-              borderRadius: '99px',
-              padding: '0.35rem 0.65rem',
-              fontSize: '0.74rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem'
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#ffffff',
+              borderRadius: '999px',
+              padding: '0.34rem 0.6rem',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              cursor: 'pointer'
             }}
-            title={autoScrollActive ? 'إيقاف التمرير التلقائي' : 'تشغيل التمرير التلقائي'}
+            title="حجم الصفحات"
           >
-            {autoScrollActive ? '⏸️ تمرير' : '▶ تمرير'}
+            {zoomLevel}%
           </button>
         )}
 
@@ -1059,8 +1100,8 @@ export default function MangaNovelReader({
           type="button"
           onClick={() => setShowSettingsDrawer(true)}
           style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.24)',
             color: '#fff',
             borderRadius: '50%',
             width: '32px',
@@ -1068,12 +1109,13 @@ export default function MangaNovelReader({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '0.82rem',
+            fontSize: '0.78rem',
+            fontWeight: 900,
             cursor: 'pointer'
           }}
           title="إعدادات القراءة"
         >
-          ⚙️
+          •••
         </button>
       </footer>
 

@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
-import { useAsync } from '../hooks/hooks.js';
+import { useAsync, pushToast } from '../hooks/hooks.js';
 import ShowCard, { EpisodeTile, ContinueCard } from '../components/ShowCard.jsx';
 import { SkeletonGrid, EmptyState } from '../components/Loading.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import AnimeDiscover from '../components/AnimeDiscover.jsx';
+import BxIcon from '../components/BxIcon.jsx';
+import { sendNativeDeviceNotification } from '../utils/deviceNotifications.js';
 
 const WEEK_DAYS = [
   { id: 6, ar: 'السبت', en: 'Saturday' },
@@ -110,10 +112,11 @@ const DEFAULT_HERO_SLIDES = [
 
 /* --------------------------- 0. Exact 1:1 Reference Cinema Hero + All Episodes + Anime/Manga Portals + Stories --------------------------- */
 function Hero3DStage({ items = [], trending = [] }) {
-  const { lang } = useI18n();
+  const { lang, setLang } = useI18n();
   const navigate = useNavigate();
   const [activeIdx, setActiveIdx] = useState(0);
   const [inPlaylist, setInPlaylist] = useState(false);
+  const [storyModalIdx, setStoryModalIdx] = useState(null);
   const isRtl = lang === 'ar';
 
   const heroPool = useMemo(() => {
@@ -130,12 +133,22 @@ function Hero3DStage({ items = [], trending = [] }) {
   }, [items, trending]);
 
   useEffect(() => {
-    if (heroPool.length <= 1) return undefined;
+    if (heroPool.length <= 1 || storyModalIdx !== null) return undefined;
     const id = setInterval(() => {
       setActiveIdx((prev) => (prev + 1) % Math.min(6, heroPool.length));
     }, 6500);
     return () => clearInterval(id);
-  }, [heroPool.length]);
+  }, [heroPool.length, storyModalIdx]);
+
+  // Auto-advance Interactive Full-Screen Stories Viewer every 6 seconds
+  useEffect(() => {
+    if (storyModalIdx === null) return undefined;
+    const maxStories = Math.min(12, heroPool.length);
+    const id = setTimeout(() => {
+      setStoryModalIdx((prev) => (prev === null ? null : prev + 1 < maxStories ? prev + 1 : null));
+    }, 6000);
+    return () => clearTimeout(id);
+  }, [storyModalIdx, heroPool.length]);
 
   const current = heroPool[activeIdx] || heroPool[0];
   const displayTitle =
@@ -171,6 +184,8 @@ function Hero3DStage({ items = [], trending = [] }) {
       navigate(`/trending?q=${encodeURIComponent(item?.titleEn || displayTitle)}`);
     }
   };
+
+  const activeStoryItem = storyModalIdx !== null ? heroPool[storyModalIdx] || current : null;
 
   return (
     <div style={{ marginBottom: '1.75rem' }}>
@@ -213,7 +228,7 @@ function Hero3DStage({ items = [], trending = [] }) {
 
         {/* Top-Left Official "[BLACK X original | X]" Seal */}
         <div
-          onClick={() => navigate('/trending')}
+          onClick={() => window.openBlackXSpotlight?.()}
           style={{
             position: 'absolute',
             top: '16px',
@@ -245,31 +260,84 @@ function Hero3DStage({ items = [], trending = [] }) {
           </span>
         </div>
 
-        {/* Top-Right Slide Indicator Dots ([━━] • • • • •) */}
+        {/* Top-Right Slide Indicator Dots ([━━] • • • • •) + Liquid Glass Mini-Orbs (Search, AR/EN, Bell) */}
         <div
           style={{
             position: 'absolute',
-            top: '20px',
-            right: '18px',
+            top: '14px',
+            right: '16px',
             zIndex: 4,
             display: 'flex',
-            gap: '4px'
+            alignItems: 'center',
+            gap: '0.6rem'
           }}
         >
-          {heroPool.slice(0, 6).map((_, idx) => (
-            <span
-              key={idx}
-              onClick={() => setActiveIdx(idx)}
-              style={{
-                width: activeIdx === idx ? '18px' : '6px',
-                height: '6px',
-                borderRadius: '99px',
-                background: activeIdx === idx ? '#ffffff' : 'rgba(255,255,255,0.3)',
-                transition: 'all 0.2s ease',
-                cursor: 'pointer'
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <button
+              type="button"
+              className="ios-lg-orb"
+              title={isRtl ? 'بحث فوري (Ctrl+K)' : 'Spotlight Search (Ctrl+K)'}
+              onClick={() => window.openBlackXSpotlight?.()}
+              style={{ width: '32px', height: '32px' }}
+            >
+              <BxIcon name="search" size={14} />
+            </button>
+            <button
+              type="button"
+              className="ios-lg-orb"
+              title={isRtl ? 'Switch to English' : 'التبديل للعربية'}
+              onClick={() => setLang?.(isRtl ? 'en' : 'ar')}
+              style={{ width: '32px', height: '32px', fontSize: '0.62rem', fontWeight: 900 }}
+            >
+              {isRtl ? 'EN' : 'AR'}
+            </button>
+            <button
+              type="button"
+              className="ios-lg-orb"
+              title={isRtl ? 'تنبيهات الحلقات الجديدة' : 'Episode Notifications'}
+              onClick={async () => {
+                const ok = await sendNativeDeviceNotification({
+                  title: `BLACK X 120Hz: ${displayTitle}`,
+                  body: isRtl
+                    ? 'تم تفعيل تنبيهات الحلقات والفصول الجديدة على جهازك!'
+                    : 'Live episode & chapter notifications enabled!',
+                  icon: artwork,
+                  url: current?.slug ? `/show/${current.slug}` : '/'
+                });
+                pushToast(
+                  ok
+                    ? isRtl
+                      ? 'تم إرسال إشعار فوري إلى جهازك!'
+                      : 'Sent instant device notification!'
+                    : isRtl
+                    ? 'مركز الإشعارات الذكي نشط!'
+                    : 'Smart notification center active!',
+                  'success'
+                );
               }}
-            />
-          ))}
+              style={{ width: '32px', height: '32px' }}
+            >
+              <span className="ios-lg-orb-dot" style={{ width: '6px', height: '6px' }} />
+              <BxIcon name="bell" size={14} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            {heroPool.slice(0, 6).map((_, idx) => (
+              <span
+                key={idx}
+                onClick={() => setActiveIdx(idx)}
+                style={{
+                  width: activeIdx === idx ? '18px' : '6px',
+                  height: '6px',
+                  borderRadius: '99px',
+                  background: activeIdx === idx ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Centered Hero Content at Bottom */}
@@ -393,7 +461,7 @@ function Hero3DStage({ items = [], trending = [] }) {
                 cursor: 'pointer'
               }}
             >
-              <span>▶</span>
+              <BxIcon name="play" size={15} active />
               <span>{isRtl ? 'تشغيل م1 ح1 (Play S1 E1)' : 'Play S1 E1'}</span>
             </button>
 
@@ -416,7 +484,7 @@ function Hero3DStage({ items = [], trending = [] }) {
                 cursor: 'pointer'
               }}
             >
-              <span>ⓘ</span>
+              <BxIcon name="info" size={16} />
               <span>{isRtl ? 'التفاصيل (Details)' : 'Details'}</span>
             </button>
           </div>
@@ -443,7 +511,7 @@ function Hero3DStage({ items = [], trending = [] }) {
               cursor: 'pointer'
             }}
           >
-            <span>{inPlaylist ? '✓' : '＋'}</span>
+            <BxIcon name={inPlaylist ? 'check' : 'plus'} size={15} />
             <span>
               {inPlaylist
                 ? isRtl
@@ -607,7 +675,7 @@ function Hero3DStage({ items = [], trending = [] }) {
         </div>
       </section>
 
-      {/* 3. Dual Artwork Portal Banner Cards: [🎬 قائمة الأنمي (ANIME LIST)] & [📖 قائمة المانجا (MANGA LIST)] */}
+      {/* 3. Dual Artwork Portal Banner Cards: [قائمة الأنمي (ANIME LIST)] & [قائمة المانجا (MANGA LIST)] */}
       <section style={{ padding: '0.7rem 0.15rem 0.2rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
           <div
@@ -637,8 +705,21 @@ function Hero3DStage({ items = [], trending = [] }) {
                 filter: 'brightness(0.38)'
               }}
             />
-            <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.82rem', letterSpacing: '0.03em', color: '#ffffff' }}>
-              🎬 {isRtl ? 'قائمة الأنمي (ANIME LIST)' : 'ANIME LIST'}
+            <span
+              style={{
+                position: 'relative',
+                zIndex: 2,
+                fontWeight: 900,
+                fontSize: '0.82rem',
+                letterSpacing: '0.03em',
+                color: '#ffffff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <BxIcon name="anime" size={16} />
+              <span>{isRtl ? 'قائمة الأنمي (ANIME LIST)' : 'ANIME LIST'}</span>
             </span>
             <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '42px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
           </div>
@@ -670,19 +751,44 @@ function Hero3DStage({ items = [], trending = [] }) {
                 filter: 'brightness(0.38)'
               }}
             />
-            <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.82rem', letterSpacing: '0.03em', color: '#ffffff' }}>
-              📖 {isRtl ? 'قائمة المانجا (MANGA LIST)' : 'MANGA LIST'}
+            <span
+              style={{
+                position: 'relative',
+                zIndex: 2,
+                fontWeight: 900,
+                fontSize: '0.82rem',
+                letterSpacing: '0.03em',
+                color: '#ffffff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <BxIcon name="manga" size={16} />
+              <span>{isRtl ? 'قائمة المانجا (MANGA LIST)' : 'MANGA LIST'}</span>
             </span>
             <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '42px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
           </div>
         </div>
       </section>
 
-      {/* 4. "⚡ معاينات سريعة (Stories)" ↔ "اضغط للمعاينة والتشغيل الفوري" */}
+      {/* 4. "معاينات سريعة (Stories)" ↔ "اضغط للمعاينة والتشغيل الفوري" */}
       <section style={{ padding: '0.75rem 0.15rem 0.15rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-          <h2 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 900, letterSpacing: '0.01em', color: '#ffffff' }}>
-            ⚡ {isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}
+          <h2
+            style={{
+              margin: 0,
+              fontSize: '0.92rem',
+              fontWeight: 900,
+              letterSpacing: '0.01em',
+              color: '#ffffff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <BxIcon name="bolt" size={16} />
+            <span>{isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}</span>
           </h2>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.52)', fontWeight: 800 }}>
             {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
@@ -695,7 +801,7 @@ function Hero3DStage({ items = [], trending = [] }) {
             return (
               <div
                 key={`web-story-${item.slug || idx}`}
-                onClick={() => handleOpenDetails(item)}
+                onClick={() => setStoryModalIdx(idx)}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -751,6 +857,202 @@ function Hero3DStage({ items = [], trending = [] }) {
           })}
         </div>
       </section>
+
+      {/* 5. Interactive Full-Screen Stories Viewer Modal */}
+      {activeStoryItem && (
+        <div
+          onClick={() => setStoryModalIdx(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9985,
+            background: 'rgba(0,0,0,0.92)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '430px',
+              height: 'min(82vh, 690px)',
+              borderRadius: '28px',
+              overflow: 'hidden',
+              background: '#050508',
+              border: '1.5px solid rgba(255,255,255,0.32)',
+              boxShadow: '0 28px 80px rgba(0,0,0,0.95)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}
+          >
+            <img
+              src={activeStoryItem.poster || activeStoryItem.coverUrl || activeStoryItem.banner || artwork}
+              alt={activeStoryItem.titleEn || displayTitle}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                filter: 'brightness(0.72) contrast(1.12)'
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(180deg, rgba(0,0,0,0.72) 0%, transparent 32%, rgba(0,0,0,0.88) 72%, #000000 100%)'
+              }}
+            />
+
+            {/* Left / Right Invisible Tap Zones for Story Navigation */}
+            <div
+              onClick={() =>
+                setStoryModalIdx((prev) =>
+                  prev > 0 ? prev - 1 : Math.min(11, heroPool.length - 1)
+                )
+              }
+              style={{ position: 'absolute', top: '64px', bottom: '120px', left: 0, width: '38%', zIndex: 3, cursor: 'pointer' }}
+            />
+            <div
+              onClick={() =>
+                setStoryModalIdx((prev) =>
+                  prev + 1 < Math.min(12, heroPool.length) ? prev + 1 : null
+                )
+              }
+              style={{ position: 'absolute', top: '64px', bottom: '120px', right: 0, width: '38%', zIndex: 3, cursor: 'pointer' }}
+            />
+
+            {/* Top Progress Segments + Story Header */}
+            <div style={{ position: 'relative', zIndex: 4, padding: '0.85rem 1rem 0' }}>
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '0.75rem' }}>
+                {heroPool.slice(0, Math.min(12, heroPool.length)).map((_, sIdx) => (
+                  <div
+                    key={sIdx}
+                    onClick={() => setStoryModalIdx(sIdx)}
+                    style={{
+                      flex: 1,
+                      height: '3.5px',
+                      borderRadius: '99px',
+                      background: sIdx <= storyModalIdx ? '#ffffff' : 'rgba(255,255,255,0.26)',
+                      cursor: 'pointer'
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <img
+                    src="/blackx-logo.png"
+                    alt="BLACK X"
+                    style={{ width: '28px', height: '28px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.4)' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 900, color: '#ffffff' }}>
+                      BLACK X STORY • 120Hz
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>
+                      ★ {activeStoryItem.score ? (Number(activeStoryItem.score) / 10).toFixed(1) : '9.2'} • FHD 1080p
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setStoryModalIdx(null)}
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.14)',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    color: '#ffffff',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <BxIcon name="close" size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom Story Details + Instant Play/Info Actions */}
+            <div style={{ position: 'relative', zIndex: 4, padding: '1.25rem', textAlign: 'center' }}>
+              <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.35rem', fontWeight: 900, color: '#ffffff', textTransform: 'uppercase' }}>
+                {activeStoryItem.titleEn || activeStoryItem.titleEnglish || activeStoryItem.titleAr || activeStoryItem.slug}
+              </h3>
+              <p style={{ margin: '0 0 1rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
+                {activeStoryItem.titleAr ||
+                  (isRtl
+                    ? 'متاح الآن للمشاهدة الفورية بجودة FHD 1080p وسرعة 120Hz عبر سيرفرات BLACK X.'
+                    : 'Streaming now in Full HD 1080p at 120Hz on BLACK X servers.')}
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = activeStoryItem;
+                    setStoryModalIdx(null);
+                    handleWatchCurrent(target, 1);
+                  }}
+                  style={{
+                    minHeight: '52px',
+                    borderRadius: '999px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '0.84rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <BxIcon name="play" size={14} active />
+                  <span>{isRtl ? 'تشغيل الحلقة 1' : 'Play S1 E1'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = activeStoryItem;
+                    setStoryModalIdx(null);
+                    handleOpenDetails(target);
+                  }}
+                  style={{
+                    minHeight: '52px',
+                    borderRadius: '999px',
+                    background: 'rgba(255,255,255,0.12)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255,255,255,0.28)',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <BxIcon name="info" size={15} />
+                  <span>{isRtl ? 'التفاصيل' : 'Details'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -870,7 +1172,7 @@ function LatestSection({ items, loading, error, onRetry }) {
   return (
     <section className="wit-section" id="latest-episodes">
       <WitSectionHeader
-        icon="🔥"
+        icon={<BxIcon name="flame" size={18} />}
         title={lang === 'ar' ? 'أحدث الحلقات المضافة' : t('dashboard.latest')}
         sub={
           lang === 'ar'
@@ -915,7 +1217,7 @@ function WeeklyScheduleSection({ items = [] }) {
   return (
     <section className="wit-section" id="schedule-section">
       <WitSectionHeader
-        icon="📅"
+        icon={<BxIcon name="calendar" size={18} />}
         title={lang === 'ar' ? 'مواعيد عرض الحلقات الأسبوعية' : 'Weekly Episode Airing Schedule'}
         sub={lang === 'ar' ? 'اختر اليوم لمعرفة الأنميات التي تعرض فيه' : 'Select a day of the week to view airing anime'}
       />
@@ -977,7 +1279,7 @@ function ContinueSection({ onOpenAuth }) {
   return (
     <section className="wit-section">
       <WitSectionHeader
-        icon="▶️"
+        icon={<BxIcon name="play" size={16} />}
         title={t('dashboard.continue')}
         sub={t('dashboard.continueSub')}
         linkTo="/mylist"
@@ -1002,7 +1304,7 @@ function TrendingSection() {
   return (
     <section className="wit-section">
       <WitSectionHeader
-        icon="🍂"
+        icon={<BxIcon name="spark" size={18} />}
         title={lang === 'ar' ? 'أنميات الموسم الأكثر شعبية' : t('dashboard.trending')}
         sub={lang === 'ar' ? 'الأعمال الأعلى مشاهدة وتقييماً هذا الموسم' : t('dashboard.trendingSub')}
         linkTo="/trending"
@@ -1087,7 +1389,7 @@ function LibraryShowcaseSection() {
   return (
     <section className="wit-section">
       <WitSectionHeader
-        icon="📖"
+        icon={<BxIcon name="manga" size={18} />}
         title={lang === 'ar' ? 'أحدث فصول المانجا والمانهوا' : 'Trending Manga & Manhwa'}
         sub={lang === 'ar' ? 'قراءة مباشرة لجميع الفصول المترجمة بالعربية' : 'Read high-res chapters directly'}
         linkTo="/browse"
@@ -1134,7 +1436,7 @@ function FavoritesSection() {
   return (
     <section className="wit-section">
       <WitSectionHeader
-        icon="❤️"
+        icon={<BxIcon name="crown" size={18} />}
         title={t('dashboard.favorites')}
         linkTo="/mylist"
         linkLabel={lang === 'ar' ? 'عرض الكل ←' : 'View All →'}
