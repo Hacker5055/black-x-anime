@@ -2,6 +2,7 @@ package app.blackx.mobile;
 
 import android.accounts.AccountManager;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -20,9 +21,19 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import com.getcapacitor.BridgeActivity;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 public class MainActivity extends BridgeActivity {
     private static final int REQ_PICK_GOOGLE_ACCOUNT = 9001;
+    private static final int REQ_POST_NOTIFICATIONS = 9002;
     private Dialog oauthDialog = null;
     private boolean volumeKeyScrollEnabled = false;
 
@@ -31,6 +42,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         enableHighRefreshRate120Hz();
         configurePitchBlackWindow();
+        requestNotificationPermission();
     }
 
     @Override
@@ -457,5 +469,236 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Native Android HTTP Engine (GET / POST with custom headers, zero CORS restrictions):
+     * headersPipe format: "Header1:Value1||Header2:Value2"
+     */
+    private String executeNativeHttp(String urlStr, String method, String headersPipe, String bodyStr) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(urlStr);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(12000);
+            String reqMethod = (method != null && !method.isEmpty()) ? method.toUpperCase() : "GET";
+            conn.setRequestMethod(reqMethod);
+            conn.setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            );
+
+            if (headersPipe != null && !headersPipe.isEmpty()) {
+                String[] pairs = headersPipe.split("\\|\\|");
+                for (int i = 0; i < pairs.length; i++) {
+                    String pair = pairs[i];
+                    int colon = pair.indexOf(':');
+                    if (colon > 0) {
+                        String k = pair.substring(0, colon).trim();
+                        String v = pair.substring(colon + 1).trim();
+                        if (!k.isEmpty()) {
+                            conn.setRequestProperty(k, v);
+                        }
+                    }
+                }
+            }
+
+            if ("POST".equals(reqMethod) && bodyStr != null && !bodyStr.isEmpty()) {
+                conn.setDoOutput(true);
+                byte[] outBytes = bodyStr.getBytes("UTF-8");
+                OutputStream os = conn.getOutputStream();
+                os.write(outBytes);
+                os.flush();
+                os.close();
+            }
+
+            int code = conn.getResponseCode();
+            // Handle manual 301/302/307/308 across protocols if needed
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String loc = conn.getHeaderField("Location");
+                if (loc != null && !loc.isEmpty()) {
+                    conn.disconnect();
+                    URL redirUrl = new URL(url, loc);
+                    conn = (HttpURLConnection) redirUrl.openConnection();
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(12000);
+                    conn.setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    );
+                    code = conn.getResponseCode();
+                }
+            }
+
+            InputStream is = (code >= 200 && code < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return "";
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            char[] buf = new char[4096];
+            int n;
+            while ((n = reader.read(buf)) != -1) {
+                sb.append(buf, 0, n);
+            }
+            reader.close();
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public String httpGetSync(final String urlStr, final String headersPipe) {
+        return executeNativeHttp(urlStr, "GET", headersPipe, null);
+    }
+
+    @JavascriptInterface
+    public String httpPostSync(final String urlStr, final String headersPipe, final String bodyStr) {
+        return executeNativeHttp(urlStr, "POST", headersPipe, bodyStr);
+    }
+
+    @JavascriptInterface
+    public void httpRequestAsync(
+        final String reqId,
+        final String urlStr,
+        final String method,
+        final String headersPipe,
+        final String bodyStr
+    ) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String resp = executeNativeHttp(urlStr, method, headersPipe, bodyStr);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            if (MainActivity.this.bridge != null && MainActivity.this.bridge.getWebView() != null) {
+                                String escaped = resp
+                                    .replace("\\", "\\\\")
+                                    .replace("'", "\\'")
+                                    .replace("\r", "\\r")
+                                    .replace("\n", "\\n")
+                                    .replace("\u2028", "\\u2028")
+                                    .replace("\u2029", "\\u2029");
+                                String safeId = reqId.replace("'", "");
+                                String js = "window.__onBlackXHttpResult && window.__onBlackXHttpResult('" + safeId + "', '" + escaped + "');";
+                                MainActivity.this.bridge.getWebView().evaluateJavascript(js, null);
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * Request Android 13+ (API 33+) POST_NOTIFICATIONS runtime permission
+     */
+    @JavascriptInterface
+    public void requestNotificationPermission() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        Method checkSelf = Context.class.getMethod("checkSelfPermission", String.class);
+                        int granted = (Integer) checkSelf.invoke(MainActivity.this, "android.permission.POST_NOTIFICATIONS");
+                        if (granted != 0) {
+                            Method reqPerm = MainActivity.this.getClass().getMethod(
+                                "requestPermissions",
+                                String[].class,
+                                int.class
+                            );
+                            reqPerm.invoke(
+                                MainActivity.this,
+                                new Object[]{new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_POST_NOTIFICATIONS}
+                            );
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    /**
+     * Dispatch a REAL Android OS Status-Bar & Heads-Up Notification for new Anime Episodes!
+     */
+    @JavascriptInterface
+    public void sendPhoneNotification(final String title, final String body, final int notifId) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Method getSysSvc = Context.class.getMethod("getSystemService", String.class);
+                    Object nm = getSysSvc.invoke(MainActivity.this, "notification");
+                    if (nm == null) return;
+
+                    String channelId = "blackx_episodes_channel";
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        Class<?> chanCls = Class.forName("android.app.NotificationChannel");
+                        Constructor<?> chanCtor = chanCls.getConstructor(String.class, CharSequence.class, int.class);
+                        // IMPORTANCE_HIGH = 4 (Heads-Up + Sound)
+                        Object channel = chanCtor.newInstance(channelId, "BLACK X Episode Alerts", 4);
+                        Method setDesc = chanCls.getMethod("setDescription", String.class);
+                        setDesc.invoke(channel, "إشعارات نزول حلقات الأنمي والفصول الجديدة على BLACK X");
+                        Method createChan = nm.getClass().getMethod("createNotificationChannel", chanCls);
+                        createChan.invoke(nm, channel);
+                    }
+
+                    Class<?> builderCls = Class.forName("android.app.Notification$Builder");
+                    Object builder;
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        Constructor<?> bCtor = builderCls.getConstructor(Context.class, String.class);
+                        builder = bCtor.newInstance(MainActivity.this, channelId);
+                    } else {
+                        Constructor<?> bCtor = builderCls.getConstructor(Context.class);
+                        builder = bCtor.newInstance(MainActivity.this);
+                    }
+
+                    // Get app icon resource ID via getApplicationInfo().icon
+                    int iconRes = 17301659; // fallback android.R.drawable.ic_media_play
+                    try {
+                        Method getAppInfo = Context.class.getMethod("getApplicationInfo");
+                        Object appInfo = getAppInfo.invoke(MainActivity.this);
+                        if (appInfo != null) {
+                            Field iconField = appInfo.getClass().getField("icon");
+                            int appIcon = iconField.getInt(appInfo);
+                            if (appIcon != 0) iconRes = appIcon;
+                        }
+                    } catch (Exception ignored) {}
+
+                    builderCls.getMethod("setSmallIcon", int.class).invoke(builder, iconRes);
+                    builderCls.getMethod("setContentTitle", CharSequence.class).invoke(builder, title != null ? title : "BLACK X");
+                    builderCls.getMethod("setContentText", CharSequence.class).invoke(builder, body != null ? body : "");
+                    builderCls.getMethod("setAutoCancel", boolean.class).invoke(builder, true);
+
+                    // Attach PendingIntent so tapping notification opens MainActivity
+                    try {
+                        Intent launchIntent = new Intent();
+                        Class<?> piCls = Class.forName("android.app.PendingIntent");
+                        Method getAct = piCls.getMethod("getActivity", Context.class, int.class, Intent.class, int.class);
+                        // FLAG_IMMUTABLE (67108864) | FLAG_UPDATE_CURRENT (134217728) = 201326592
+                        int flags = Build.VERSION.SDK_INT >= 23 ? 201326592 : 134217728;
+                        Object pendingIntent = getAct.invoke(null, MainActivity.this, 0, launchIntent, flags);
+                        if (pendingIntent != null) {
+                            builderCls.getMethod("setContentIntent", piCls).invoke(builder, pendingIntent);
+                        }
+                    } catch (Exception ignored) {}
+
+                    Object notification = builderCls.getMethod("build").invoke(builder);
+                    Method notifyMethod = nm.getClass().getMethod("notify", int.class, Class.forName("android.app.Notification"));
+                    notifyMethod.invoke(nm, notifId > 0 ? notifId : (int) (System.currentTimeMillis() % 100000), notification);
+                } catch (Exception ignored) {
+                }
+            }
+        });
     }
 }
