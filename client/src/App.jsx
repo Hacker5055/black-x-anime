@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import Backdrop, { Toasts } from './components/Backdrop.jsx';
 import { AuthModal } from './components/Modals.jsx';
@@ -20,6 +20,238 @@ import BlackXSplashVortex from './components/BlackXSplashVortex.jsx';
 import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
+
+/**
+ * 1:1 3D Obsidian & Liquid Chrome Wave Ribbon Stage + SVG Optical Refraction Filter
+ * Matches the flowing metallic S-curve background behind the glass cards in
+ * https://liquidglassdesign.com/gallery/ios-liquid-glass-effect-smart-home-ui
+ */
+function IosLiquidGlassWaveStage() {
+  return (
+    <div className="ios-lg-wave-stage" aria-hidden="true">
+      <svg className="ios-lg-wave-svg" viewBox="0 0 1600 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="ios-liquid-glass-refraction" x="-15%" y="-15%" width="130%" height="130%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.011 0.017" numOctaves="2" seed="7" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="16" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+            <feSpecularLighting in="noise" surfaceScale="3.5" specularConstant="1.15" specularExponent="34" lightingColor="#ffffff" result="spec">
+              <fePointLight x="320" y="180" z="260" />
+            </feSpecularLighting>
+            <feComposite in="spec" in2="SourceAlpha" operator="in" result="specMask" />
+            <feMerge>
+              <feMergeNode in="displaced" />
+              <feMergeNode in="specMask" />
+            </feMerge>
+          </filter>
+
+          <linearGradient id="iosLgRibbonMain" x1="260" y1="120" x2="1280" y2="1080" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#000000" stopOpacity="0" />
+            <stop offset="18%" stopColor="#1e1e24" stopOpacity="0.68" />
+            <stop offset="36%" stopColor="#d4d4dc" stopOpacity="0.52" />
+            <stop offset="48%" stopColor="#09090c" stopOpacity="0.95" />
+            <stop offset="63%" stopColor="#ffffff" stopOpacity="0.62" />
+            <stop offset="79%" stopColor="#1c1c22" stopOpacity="0.74" />
+            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+          </linearGradient>
+
+          <linearGradient id="iosLgRibbonRim" x1="360" y1="180" x2="1160" y2="1020" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
+            <stop offset="30%" stopColor="#ffffff" stopOpacity="0.45" />
+            <stop offset="52%" stopColor="#27272f" stopOpacity="0.18" />
+            <stop offset="72%" stopColor="#ffffff" stopOpacity="0.72" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+          </linearGradient>
+
+          <radialGradient id="iosLgCenterChrome" cx="52%" cy="52%" r="42%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
+            <stop offset="48%" stopColor="#71717a" stopOpacity="0.08" />
+            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+
+        <ellipse cx="830" cy="600" rx="540" ry="420" fill="url(#iosLgCenterChrome)" />
+
+        {/* Deep 3D Liquid Chrome S-Curve Fold 1 */}
+        <path
+          d="M360 150 C 640 190, 960 390, 820 590 C 680 790, 510 860, 860 1050 C 1090 1160, 1250 960, 1110 740 C 970 520, 740 420, 880 240 Z"
+          fill="url(#iosLgRibbonMain)"
+          filter="blur(12px)"
+        />
+
+        {/* Razor Specular Chrome Fold 2 (passes right behind the glass cards' bottom-right edges) */}
+        <path
+          d="M420 220 C 700 280, 910 430, 770 620 C 630 810, 620 940, 940 1030"
+          stroke="url(#iosLgRibbonRim)"
+          strokeWidth="64"
+          strokeLinecap="round"
+          filter="blur(8px)"
+        />
+        <path
+          d="M440 240 C 720 300, 920 440, 780 625 C 640 810, 640 935, 955 1020"
+          stroke="url(#iosLgRibbonRim)"
+          strokeWidth="14"
+          strokeLinecap="round"
+          filter="blur(1.5px)"
+        />
+        <path
+          d="M520 310 C 780 370, 860 510, 725 690 C 590 870, 730 960, 1020 990"
+          stroke="rgba(255,255,255,0.34)"
+          strokeWidth="6"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * 1:1 Floating Bottom Navigation Dock from iOS Liquid Glass Effect - Smart Home UI
+ * Active item is an expanded glowing capsule pill ([ 🏠 Home ]) + 4 circular glass orbs (( 🔍 ) ( 🎛️ ) ( ⊕ ) ( 📄 ))
+ */
+function IosLiquidGlassFloatingDock({ onOpenAuth }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { lang } = useI18n();
+  const { user } = useAuth();
+  const path = location.pathname;
+
+  const dockItems = [
+    {
+      id: 'home',
+      match: (p) => p === '/',
+      to: '/',
+      labelAr: 'الرئيسية',
+      labelEn: 'Home',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 3L4 9.5V20a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5L12 3z" />
+        </svg>
+      )
+    },
+    {
+      id: 'search',
+      match: (p) => p.startsWith('/trending') || p.startsWith('/discover'),
+      to: '/trending',
+      labelAr: 'بحث الأنمي',
+      labelEn: 'Search',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <circle cx="11" cy="11" r="7" />
+          <line x1="16.5" y1="16.5" x2="21" y2="21" />
+        </svg>
+      )
+    },
+    {
+      id: 'filters',
+      match: (p) => p.startsWith('/rankings') || p.startsWith('/community'),
+      to: '/rankings',
+      labelAr: 'التصنيفات',
+      labelEn: 'Filters',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="4" y1="6" x2="20" y2="6" />
+          <circle cx="9" cy="6" r="2" fill="#ffffff" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <circle cx="15" cy="12" r="2" fill="#ffffff" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+          <circle cx="10" cy="18" r="2" fill="#ffffff" />
+        </svg>
+      )
+    },
+    {
+      id: 'add',
+      match: (p) => p.startsWith('/profile') || p.startsWith('/mylist'),
+      to: '/profile',
+      labelAr: 'حسابي',
+      labelEn: 'Profile',
+      icon: (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="12" cy="12" r="8.5" />
+          <line x1="12" y1="8.5" x2="12" y2="15.5" />
+          <line x1="8.5" y1="12" x2="15.5" y2="12" />
+        </svg>
+      )
+    },
+    {
+      id: 'manga',
+      match: (p) => p.startsWith('/browse'),
+      to: '/browse',
+      labelAr: 'المانهوا والمانجا',
+      labelEn: 'Manga',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <rect x="5" y="3.5" width="14" height="17" rx="3" />
+          <line x1="8.5" y1="8.5" x2="15.5" y2="8.5" />
+          <line x1="8.5" y1="12" x2="15.5" y2="12" />
+          <line x1="8.5" y1="15.5" x2="12.5" y2="15.5" />
+        </svg>
+      )
+    }
+  ];
+
+  return (
+    <div className="ios-lg-floating-dock-wrap">
+      <nav
+        className="ios-lg-capsule-track"
+        aria-label="iOS Liquid Glass Dock"
+        style={{
+          padding: '0.52rem 0.68rem',
+          gap: '0.55rem'
+        }}
+      >
+        {dockItems.map((item) => {
+          const isActive = item.match(path);
+          if (isActive) {
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="ios-lg-active-pill"
+                onClick={() => navigate(item.to)}
+                style={{
+                  padding: '0.62rem 1.25rem',
+                  fontSize: '0.86rem'
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    filter: 'drop-shadow(0 0 10px #ffffff) drop-shadow(0 0 18px rgba(255,255,255,0.85))'
+                  }}
+                >
+                  {item.icon}
+                </span>
+                <span>{lang === 'ar' ? item.labelAr : item.labelEn}</span>
+              </button>
+            );
+          }
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className="ios-lg-orb"
+              title={lang === 'ar' ? item.labelAr : item.labelEn}
+              onClick={() => {
+                if (item.id === 'add' && !user && typeof onOpenAuth === 'function') {
+                  onOpenAuth('login');
+                  return;
+                }
+                navigate(item.to);
+              }}
+              style={{ width: '44px', height: '44px' }}
+            >
+              {item.icon}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -293,6 +525,7 @@ export default function App() {
   if (isApkRuntime) {
     return (
       <MobileErrorBoundary>
+        <IosLiquidGlassWaveStage />
         {splashConfig.active && (
           <BlackXSplashVortex
             durationMs={splashConfig.durationMs}
@@ -323,9 +556,10 @@ export default function App() {
         />
       )}
       <GooFilter />
+      <IosLiquidGlassWaveStage />
       <Backdrop />
       <ScrollToTop />
-      <div className="app-shell">
+      <div className="app-shell" style={{ position: 'relative', zIndex: 1, paddingBottom: '88px' }}>
         <Navbar onOpenAuth={openAuth} />
         <main className="main">
           <div className="container">
@@ -353,6 +587,7 @@ export default function App() {
         </main>
         <Footer />
       </div>
+      <IosLiquidGlassFloatingDock onOpenAuth={openAuth} />
       <GlobalVipEnforcementGate user={user} onOpenAuth={openAuth} />
       <Toasts />
       {authModal && <AuthModal initialMode={authModal} onClose={() => setAuthModal(null)} />}

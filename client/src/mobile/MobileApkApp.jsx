@@ -5491,57 +5491,211 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== TAB 1: HOME (v8.0 NETFLIX & CRUNCHYROLL GLOBAL LUXURY CINEMA UI) ==================== */}
+      {/* ==================== TAB 1: HOME (iOS 26 LIQUID GLASS — PURE MONOCHROME EDITION) ==================== */}
       {activeTab === 'home' && !selectedAnime && (
-        <main style={{ animation: 'bxSlideUp 0.22s ease-out' }}>
-          {/* Netflix-Style Floating Category Filter Bar (مسلسلات | أفلام | يعرض الآن | مانهوا | فاجئني) */}
-          <div
-            className="bx-mob-scroll"
-            style={{
-              display: 'flex',
-              gap: '0.42rem',
-              overflowX: 'auto',
-              padding: '0.55rem 1rem',
-              background: 'rgba(0,0,0,0.92)',
-              borderBottom: '1px solid rgba(255,255,255,0.08)'
-            }}
-          >
-            {[
-              { id: 'all', ar: '🔥 الكل', en: '🔥 All' },
-              { id: 'series', ar: '📺 مسلسلات', en: '📺 Series' },
-              { id: 'movies', ar: '🎬 أفلام', en: '🎬 Movies' },
-              { id: 'simulcast', ar: '⚡ يعرض الآن', en: '⚡ Simulcast' },
-              { id: 'manhwa', ar: '📖 مانهوا', en: '📖 Manhwa' }
-            ].map((cat) => {
-              const active = homeCategoryFilter === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    if (cat.id === 'manhwa') {
-                      setActiveTab('manga');
-                      return;
-                    }
-                    setHomeCategoryFilter(cat.id);
-                  }}
+        <main style={{ animation: 'bxSlideUp 0.22s ease-out', position: 'relative', zIndex: 2 }}>
+          {/* 1:1 iOS Liquid Glass Smart Home UI Control Deck (Pure Monochrome Liquid Glass) */}
+          <section style={{ padding: '0.85rem 0.95rem 0.65rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }} dir="ltr">
+            {/* Top Row: Profile Capsule + Bell Orb (with glowing white dot) + 4-Dot Grid Orb */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem' }}>
+              <div
+                className="ios-lg-capsule-track"
+                onClick={() => setActiveTab('profile')}
+                style={{ padding: '0.36rem 1.05rem 0.36rem 0.42rem', gap: '0.65rem', cursor: 'pointer' }}
+              >
+                <div
                   style={{
-                    padding: '0.36rem 0.85rem',
-                    borderRadius: '99px',
-                    background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                    color: active ? '#000000' : 'rgba(255,255,255,0.88)',
-                    border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.18)',
-                    fontWeight: 900,
-                    fontSize: '0.72rem',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer'
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    border: '1.5px solid rgba(255,255,255,0.72)',
+                    boxShadow: '0 0 12px rgba(255,255,255,0.28)',
+                    background: '#0a0a0f',
+                    flexShrink: 0
                   }}
                 >
-                  {isRtl ? cat.ar : cat.en}
+                  <img
+                    src={user?.photoURL || '/blackx-logo.png'}
+                    alt="BLACK X"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                  <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
+                    Hello,
+                  </span>
+                  <span style={{ fontSize: '0.92rem', color: '#ffffff', fontWeight: 800 }}>
+                    {user?.displayName || 'Michael'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <button
+                  type="button"
+                  className="ios-lg-orb"
+                  onClick={() => {
+                    try {
+                      if (window.BlackXNative?.sendPhoneNotification) {
+                        window.BlackXNative.sendPhoneNotification(
+                          '🎬 BLACK X 120Hz • iOS Liquid Glass',
+                          isRtl ? 'نظام إشعارات الحلقات والفصول الجديدة نشط!' : 'Episode & Chapter notifications active!',
+                          9001
+                        );
+                      }
+                    } catch (_) {}
+                  }}
+                  style={{ width: '42px', height: '42px' }}
+                >
+                  <span className="ios-lg-orb-dot" />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+                  </svg>
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  type="button"
+                  className="ios-lg-orb"
+                  onClick={() => setActiveTab('manga')}
+                  style={{ width: '42px', height: '42px' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                    <circle cx="5.5" cy="5.5" r="2.2" />
+                    <circle cx="14.5" cy="5.5" r="2.2" />
+                    <circle cx="5.5" cy="14.5" r="2.2" />
+                    <circle cx="14.5" cy="14.5" r="2.2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Category Capsule Track (+ Orb | Living Room / Anime / Manhwa / Series) */}
+            <div
+              className="ios-lg-capsule-track bx-mob-scroll"
+              style={{
+                padding: '0.35rem 0.5rem',
+                gap: '0.32rem',
+                overflowX: 'auto'
+              }}
+            >
+              <button
+                type="button"
+                className="ios-lg-orb"
+                onClick={() => setActiveTab('catalog')}
+                style={{ width: '34px', height: '34px', fontSize: '1.05rem', fontWeight: 700 }}
+              >
+                +
+              </button>
+              {[
+                { id: 'all', ar: 'Living Room', en: 'Living Room' },
+                { id: 'series', ar: 'Kitchen • مسلسلات', en: 'Kitchen' },
+                { id: 'movies', ar: 'Bathroom • أفلام', en: 'Bathroom' },
+                { id: 'manhwa', ar: 'Bedroom • مانهوا', en: 'Bedroom' }
+              ].map((cat) => {
+                const active = homeCategoryFilter === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={active ? 'ios-lg-active-pill' : ''}
+                    onClick={() => {
+                      if (cat.id === 'manhwa') {
+                        setActiveTab('manga');
+                        return;
+                      }
+                      setHomeCategoryFilter(cat.id);
+                    }}
+                    style={
+                      active
+                        ? { padding: '0.42rem 0.95rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }
+                        : {
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'rgba(255,255,255,0.62)',
+                            fontWeight: 600,
+                            fontSize: '0.74rem',
+                            padding: '0.4rem 0.65rem',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer'
+                          }
+                    }
+                  >
+                    {isRtl ? cat.ar : cat.en}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Wide Card (Air Conditioner / LG XM70_125 + 16° 18° 20° [22°] 24° 26° Scale) */}
+            <div className="ios-lg-surface" style={{ padding: '1.15rem 1.25rem 1rem', borderRadius: '28px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <div onClick={() => heroAnime && handleOpenAnime(heroAnime)} style={{ cursor: 'pointer' }}>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ffffff' }}>
+                    Air Conditioner
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.52)', fontWeight: 600, marginTop: '0.15rem' }}>
+                    LG XM70_125 • 120Hz Cinema
+                  </div>
+                </div>
+                <div className="ios-lg-toggle is-on">
+                  <span className="ios-lg-toggle__thumb" />
+                </div>
+              </div>
+              <div className="ios-lg-ruler" style={{ marginTop: '0.95rem', padding: '0.75rem 0.65rem 0.3rem' }}>
+                {['16°', '18°', '20°', '22°', '24°', '26°'].map((deg) => {
+                  const isCenter = deg === '22°';
+                  return (
+                    <span
+                      key={deg}
+                      style={{
+                        color: isCenter ? '#ffffff' : 'rgba(255,255,255,0.44)',
+                        fontSize: isCenter ? '1.65rem' : '0.78rem',
+                        fontWeight: isCenter ? 800 : 600,
+                        textShadow: isCenter ? '0 0 18px rgba(255,255,255,0.65)' : 'none'
+                      }}
+                    >
+                      {deg}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dual Square Bento Squircles (Door Lock & MOP/VAC) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div
+                className="ios-lg-surface"
+                onClick={() => setActiveTab('catalog')}
+                style={{ padding: '1rem 0.95rem 0.75rem', borderRadius: '26px', cursor: 'pointer' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.35rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#ffffff' }}>Door Lock</div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.15rem' }}>🔒 Locked</div>
+                  </div>
+                  <div className="ios-lg-toggle is-on" style={{ transform: 'scale(0.84)', transformOrigin: 'top right' }}>
+                    <span className="ios-lg-toggle__thumb" />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="ios-lg-surface"
+                onClick={() => setActiveTab('manga')}
+                style={{ padding: '1rem 0.95rem 0.75rem', borderRadius: '26px', cursor: 'pointer' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.35rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#ffffff' }}>MOP/VAC</div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.15rem' }}>✨ Cleaning</div>
+                  </div>
+                  <div className="ios-lg-toggle" style={{ transform: 'scale(0.84)', transformOrigin: 'top right' }}>
+                    <span className="ios-lg-toggle__thumb" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
 
           {/* v13.0 Official slothUI Pro 2.0 Full-Bleed Hero Showcase ("Handmaiden Tales" & "Sane Max Origins" Layout) */}
           {heroAnime && (
@@ -16292,23 +16446,17 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== v10.0 IMAGE 1 FLOATING CIRCULAR BUBBLE CAPSULE BOTTOM DOCK ==================== */}
+      {/* ==================== iOS 26 LIQUID GLASS — PURE MONOCHROME FLOATING DOCK ==================== */}
       <nav
+        className="ios-lg-capsule-track"
         style={{
           position: 'fixed',
           bottom: '12px',
           left: '14px',
           right: '14px',
           zIndex: 250,
-          display: 'flex',
-          alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0.42rem 0.55rem',
-          borderRadius: '999px',
-          background: 'rgba(12, 12, 18, 0.9)',
-          backdropFilter: 'blur(28px)',
-          border: '1px solid rgba(255, 255, 255, 0.18)',
-          boxShadow: '0 18px 48px rgba(0, 0, 0, 0.96)'
+          padding: '0.45rem 0.6rem'
         }}
       >
         {[
@@ -16324,32 +16472,43 @@ export default function MobileApkApp() {
             <button
               key={t.id}
               type="button"
+              className={active ? 'ios-lg-active-pill' : 'ios-lg-orb'}
               onClick={() => {
                 setSelectedAnime(null);
                 setActiveEpisode(null);
                 setPlayerMinimized(false);
                 setActiveTab(t.id);
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: active ? '0.36rem' : '0px',
-                height: '44px',
-                minWidth: active ? '88px' : '44px',
-                padding: active ? '0 0.85rem' : '0',
-                borderRadius: '999px',
-                border: active ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                color: active ? '#000000' : 'rgba(255,255,255,0.78)',
-                fontWeight: 900,
-                fontSize: '0.72rem',
-                cursor: 'pointer',
-                boxShadow: active ? '0 6px 22px rgba(255,255,255,0.28)' : 'none',
-                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-              }}
+              style={
+                active
+                  ? {
+                      height: '44px',
+                      minWidth: '88px',
+                      padding: '0 0.9rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 900,
+                      justifyContent: 'center'
+                    }
+                  : {
+                      width: '42px',
+                      height: '42px',
+                      fontSize: '0.96rem'
+                    }
+              }
             >
-              <span style={{ fontSize: '1.02rem', lineHeight: 1 }}>{t.icon}</span>
+              <span
+                style={
+                  active
+                    ? {
+                        fontSize: '1.02rem',
+                        lineHeight: 1,
+                        filter: 'drop-shadow(0 0 8px #ffffff) drop-shadow(0 0 16px rgba(255,255,255,0.9))'
+                      }
+                    : { fontSize: '0.98rem', lineHeight: 1 }
+                }
+              >
+                {t.icon}
+              </span>
               {active && <span style={{ whiteSpace: 'nowrap' }}>{isRtl ? t.ar : t.en}</span>}
             </button>
           );

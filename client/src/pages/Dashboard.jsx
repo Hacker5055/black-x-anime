@@ -856,6 +856,521 @@ function FavoritesSection() {
   );
 }
 
+/* --------------------------- 00. 1:1 iOS Liquid Glass Smart Control Deck --------------------------- */
+function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
+  const { lang } = useI18n();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const [activeRoom, setActiveRoom] = useState('living');
+  const [acOn, setAcOn] = useState(true);
+  const [lockOn, setLockOn] = useState(true);
+  const [vacOn, setVacOn] = useState(false);
+  const [selectedDeg, setSelectedDeg] = useState('22°');
+  const [activeDockBtn, setActiveDockBtn] = useState('home');
+
+  const rooms = [
+    { id: 'living', labelAr: 'صالة السينما', labelEn: 'Living Room', route: null },
+    { id: 'kitchen', labelAr: 'الأنمي الرائج', labelEn: 'Kitchen', route: '/trending' },
+    { id: 'bathroom', labelAr: 'المانهوا والمانجا', labelEn: 'Bathroom', route: '/browse' },
+    { id: 'bedroom', labelAr: 'الأعلى تقييماً', labelEn: 'Bedroom', route: '/rankings' }
+  ];
+
+  const degreeScale = ['16°', '18°', '20°', '22°', '24°', '26°'];
+  const featuredShow = featuredItems[0] || {
+    slug: 'solo-leveling',
+    titleAr: 'سولو ليفلينج (Solo Leveling)',
+    titleEn: 'Solo Leveling',
+    poster: '/blackx-logo.png'
+  };
+
+  const userDisplayName = user?.username || user?.name || (lang === 'ar' ? 'Michael • الملك' : 'Michael');
+
+  return (
+    <section className="ios-lg-smart-deck" dir="ltr" aria-label="iOS Liquid Glass Smart Control Deck">
+      {/* ==================== LEFT COLUMN ==================== */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+        {/* 1. Top Row: Profile Capsule + Bell Orb (with glowing white dot) + 4-Dot Grid Orb */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.85rem' }}>
+          <div
+            className="ios-lg-capsule-track"
+            onClick={() => (user ? navigate('/profile') : onOpenAuth?.('login'))}
+            style={{
+              padding: '0.45rem 1.35rem 0.45rem 0.52rem',
+              gap: '0.78rem',
+              cursor: 'pointer'
+            }}
+          >
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '1.5px solid rgba(255,255,255,0.68)',
+                boxShadow: '0 0 14px rgba(255,255,255,0.25)',
+                background: '#0a0a0f',
+                flexShrink: 0
+              }}
+            >
+              <img
+                src={user?.avatar || '/blackx-logo.png'}
+                alt={userDisplayName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+              <span style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.52)', fontWeight: 600 }}>
+                {lang === 'ar' ? 'Hello, مرحباً' : 'Hello,'}
+              </span>
+              <span style={{ fontSize: '1.05rem', color: '#ffffff', fontWeight: 800, letterSpacing: '-0.01em' }}>
+                {userDisplayName}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {/* Notification Bell Orb with Glowing Pure-White Dot */}
+            <button
+              type="button"
+              className="ios-lg-orb"
+              title={lang === 'ar' ? 'إشعارات الحلقات الجديدة' : 'Episode Notifications'}
+              onClick={async () => {
+                const ok = await sendNativeDeviceNotification({
+                  title: lang === 'ar' ? `🔔 BLACK X 120Hz: ${featuredShow.titleAr}` : `🔔 BLACK X 120Hz: ${featuredShow.titleEn}`,
+                  body:
+                    lang === 'ar'
+                      ? 'تم تفعيل نظام إشعارات iOS Liquid Glass للحلقات والفصول الجديدة!'
+                      : 'iOS Liquid Glass live notifications active!',
+                  icon: featuredShow.poster || '/blackx-logo.png',
+                  url: `/show/${featuredShow.slug}`
+                });
+                pushToast(
+                  ok
+                    ? (lang === 'ar' ? '🔔 تم إرسال إشعار فوري إلى جهازك!' : '🔔 Sent instant device notification!')
+                    : (lang === 'ar' ? '🔔 نظام الإشعارات الذكي نشط!' : '🔔 Smart notification center active!'),
+                  'success'
+                );
+              }}
+            >
+              <span className="ios-lg-orb-dot" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+              </svg>
+            </button>
+
+            {/* 4-Dot Bento Grid Orb */}
+            <button
+              type="button"
+              className="ios-lg-orb"
+              title={lang === 'ar' ? 'مكتبة المانهوا والمانجا الشاملة (+120K)' : 'Master Library (+120K)'}
+              onClick={() => navigate('/browse')}
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
+                <circle cx="5.5" cy="5.5" r="2.2" />
+                <circle cx="14.5" cy="5.5" r="2.2" />
+                <circle cx="5.5" cy="14.5" r="2.2" />
+                <circle cx="14.5" cy="14.5" r="2.2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* 2. Middle Row: Full-Capsule Category Track (+ Orb + Living Room Active Pill + Tabs) */}
+        <div
+          className="ios-lg-capsule-track"
+          style={{
+            padding: '0.42rem 0.65rem',
+            justifyContent: 'space-between',
+            gap: '0.4rem',
+            overflowX: 'auto'
+          }}
+        >
+          <button
+            type="button"
+            className="ios-lg-orb"
+            onClick={() => navigate('/trending')}
+            style={{ width: '38px', height: '38px', fontSize: '1.15rem', fontWeight: 600 }}
+            title={lang === 'ar' ? 'استكشاف كل الأعمال' : 'Explore All'}
+          >
+            +
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, justifyContent: 'space-around' }}>
+            {rooms.map((rm) => {
+              const active = activeRoom === rm.id;
+              return (
+                <button
+                  key={rm.id}
+                  type="button"
+                  className={active ? 'ios-lg-active-pill' : ''}
+                  onClick={() => {
+                    setActiveRoom(rm.id);
+                    if (rm.route) navigate(rm.route);
+                  }}
+                  style={
+                    active
+                      ? {
+                          padding: '0.52rem 1.15rem',
+                          fontSize: '0.84rem',
+                          whiteSpace: 'nowrap'
+                        }
+                      : {
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(255,255,255,0.62)',
+                          fontSize: '0.83rem',
+                          fontWeight: 600,
+                          padding: '0.5rem 0.75rem',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }
+                  }
+                >
+                  {lang === 'ar' ? rm.labelAr : rm.labelEn}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 3. Bottom-Left Wide Liquid Glass Card (Air Conditioner / LG XM70_125 -> 120Hz Cinema Engine + Scale) */}
+        <div
+          className="ios-lg-surface"
+          style={{
+            padding: '1.65rem 1.75rem 1.45rem',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: '225px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div
+              onClick={() => navigate(`/show/${featuredShow.slug}`)}
+              style={{ cursor: 'pointer' }}
+            >
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                {lang === 'ar' ? 'Air Conditioner • محرك 120Hz' : 'Air Conditioner'}
+              </div>
+              <div style={{ fontSize: '0.84rem', color: 'rgba(255,255,255,0.52)', fontWeight: 600, marginTop: '0.22rem' }}>
+                LG XM70_125 • {lang === 'ar' ? featuredShow.titleAr : featuredShow.titleEn}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              aria-label="Toggle Cinema Engine"
+              className={`ios-lg-toggle ${acOn ? 'is-on' : ''}`}
+              onClick={() => setAcOn((v) => !v)}
+            >
+              <span className="ios-lg-toggle__thumb" />
+            </button>
+          </div>
+
+          {/* Exact Bottom Tick Ruler Scale: 16°  18°  20°  [22°]  24°  26° */}
+          <div className="ios-lg-ruler">
+            {degreeScale.map((deg) => {
+              const isCenter = deg === selectedDeg;
+              return (
+                <button
+                  key={deg}
+                  type="button"
+                  onClick={() => setSelectedDeg(deg)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    padding: '0.15rem 0.35rem',
+                    cursor: 'pointer',
+                    color: isCenter ? '#ffffff' : 'rgba(255,255,255,0.44)',
+                    fontSize: isCenter ? '2.15rem' : '0.92rem',
+                    fontWeight: isCenter ? 800 : 600,
+                    letterSpacing: '-0.02em',
+                    textShadow: isCenter ? '0 0 22px rgba(255,255,255,0.65)' : 'none',
+                    transition: 'all 0.22s ease'
+                  }}
+                >
+                  {deg}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ==================== RIGHT COLUMN ==================== */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem', justifyContent: 'space-between' }}>
+        {/* 1. Top Row: Two Side-by-Side Square Bento Squircles (Door Lock & MOP/VAC) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.15rem', flex: 1 }}>
+          {/* Square Card 1: Door Lock / Locked with 3D Keypad & Pure White Glowing Ring */}
+          <div
+            className="ios-lg-surface"
+            style={{
+              padding: '1.4rem 1.35rem 0',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              minHeight: '248px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontSize: '1.12rem', fontWeight: 800, color: '#ffffff' }}>
+                  Door Lock
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.2rem' }}>
+                  <span>🔒</span>
+                  <span>{lockOn ? (lang === 'ar' ? 'Locked • محمي' : 'Locked') : (lang === 'ar' ? 'Unlocked' : 'Unlocked')}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Toggle Door Lock"
+                className={`ios-lg-toggle ${lockOn ? 'is-on' : ''}`}
+                onClick={() => setLockOn((v) => !v)}
+              >
+                <span className="ios-lg-toggle__thumb" />
+              </button>
+            </div>
+
+            {/* 1:1 3D Angled Smart Lock Keypad with Glowing Pure White/Chrome Ring */}
+            <div
+              onClick={() => navigate('/trending')}
+              style={{
+                position: 'relative',
+                height: '148px',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                overflow: 'hidden'
+              }}
+            >
+              <svg width="190" height="148" viewBox="0 0 190 148" fill="none">
+                <defs>
+                  <linearGradient id="keypadBody" x1="30" y1="10" x2="150" y2="148" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#2a2a32" />
+                    <stop offset="45%" stopColor="#111116" />
+                    <stop offset="100%" stopColor="#050508" />
+                  </linearGradient>
+                  <filter id="whiteRingGlow" x="-40%" y="-40%" width="180%" height="180%">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                <g transform="rotate(24 105 92)">
+                  <rect x="44" y="10" width="106" height="165" rx="34" fill="#09090d" stroke="rgba(255,255,255,0.38)" strokeWidth="2.5" />
+                  <rect x="48" y="14" width="98" height="157" rx="30" fill="url(#keypadBody)" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+                  {/* Glowing Pure-White Neon Ring */}
+                  <circle
+                    cx="97"
+                    cy="50"
+                    r="17"
+                    stroke="#ffffff"
+                    strokeWidth="3.2"
+                    filter="url(#whiteRingGlow)"
+                  />
+                  {/* Keypad Digits 1 2 3 / 4 5 6 / 7 8 9 */}
+                  <text x="73" y="92" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">1</text>
+                  <text x="94" y="92" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">2</text>
+                  <text x="115" y="92" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">3</text>
+                  <text x="73" y="112" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">4</text>
+                  <text x="94" y="112" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">5</text>
+                  <text x="115" y="112" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">6</text>
+                  <text x="73" y="132" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">7</text>
+                  <text x="94" y="132" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">8</text>
+                  <text x="115" y="132" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">9</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          {/* Square Card 2: MOP/VAC / Cleaning with 3D Glossy Metallic Smart Disc */}
+          <div
+            className="ios-lg-surface"
+            style={{
+              padding: '1.4rem 1.35rem 0',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              minHeight: '248px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontSize: '1.12rem', fontWeight: 800, color: '#ffffff' }}>
+                  MOP/VAC
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.2rem' }}>
+                  <span>✨</span>
+                  <span>{lang === 'ar' ? 'Cleaning • +120K' : 'Cleaning'}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Toggle MOP/VAC"
+                className={`ios-lg-toggle ${vacOn ? 'is-on' : ''}`}
+                onClick={() => setVacOn((v) => !v)}
+              >
+                <span className="ios-lg-toggle__thumb" />
+              </button>
+            </div>
+
+            {/* 1:1 3D Glossy Obsidian & Chrome Smart Disc */}
+            <div
+              onClick={() => navigate('/browse')}
+              style={{
+                position: 'relative',
+                height: '148px',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                overflow: 'hidden'
+              }}
+            >
+              <svg width="200" height="142" viewBox="0 0 200 142" fill="none">
+                <defs>
+                  <radialGradient id="vacTopChrome" cx="50%" cy="32%" r="58%">
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                    <stop offset="28%" stopColor="#8e8e99" stopOpacity="0.72" />
+                    <stop offset="65%" stopColor="#18181f" stopOpacity="0.96" />
+                    <stop offset="100%" stopColor="#050508" stopOpacity="1" />
+                  </radialGradient>
+                  <linearGradient id="vacRim" x1="15" y1="45" x2="185" y2="135" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+                    <stop offset="50%" stopColor="#27272f" stopOpacity="0.5" />
+                    <stop offset="100%" stopColor="#ffffff" stopOpacity="0.75" />
+                  </linearGradient>
+                </defs>
+                {/* Base Chassis */}
+                <ellipse cx="100" cy="98" rx="76" ry="38" fill="#07070b" stroke="url(#vacRim)" strokeWidth="2.5" />
+                {/* Glossy Top Dome */}
+                <ellipse cx="100" cy="84" rx="72" ry="34" fill="url(#vacTopChrome)" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5" />
+                {/* Center LiDAR Turret Ring */}
+                <ellipse cx="100" cy="76" rx="22" ry="10.5" fill="#18181f" stroke="#ffffff" strokeWidth="2" />
+                <ellipse cx="100" cy="75" rx="10" ry="4.8" fill="#ffffff" />
+                {/* Front Button Pill */}
+                <rect x="93" y="94" width="14" height="12" rx="6" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.65)" strokeWidth="1.2" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Bottom Row of Right Column: 1:1 Reference Dock ([ 🏠 Home ] ( 🔍 ) ( 🎛️ ) ( ⊕ ) ( 📄 )) */}
+        <div
+          className="ios-lg-capsule-track"
+          style={{
+            padding: '0.62rem 0.85rem',
+            justifyContent: 'space-between',
+            gap: '0.65rem'
+          }}
+        >
+          <button
+            type="button"
+            className="ios-lg-active-pill"
+            onClick={() => {
+              setActiveDockBtn('home');
+              navigate('/');
+            }}
+            style={{
+              padding: '0.68rem 1.45rem',
+              fontSize: '0.9rem'
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                color: '#ffffff',
+                filter: 'drop-shadow(0 0 10px #ffffff) drop-shadow(0 0 20px rgba(255,255,255,0.95))'
+              }}
+            >
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3L4 9.5V20a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5L12 3z" />
+              </svg>
+            </span>
+            <span>Home</span>
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.62rem' }}>
+            <button
+              type="button"
+              className="ios-lg-orb"
+              onClick={() => {
+                setActiveDockBtn('search');
+                navigate('/trending');
+              }}
+              title={lang === 'ar' ? 'بحث الأنمي' : 'Search'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="16.5" y1="16.5" x2="21" y2="21" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              className="ios-lg-orb"
+              onClick={() => {
+                setActiveDockBtn('sliders');
+                navigate('/rankings');
+              }}
+              title={lang === 'ar' ? 'الترتيب والفلاتر' : 'Filters'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="7" x2="20" y2="7" />
+                <circle cx="9" cy="7" r="2" fill="#ffffff" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <circle cx="15" cy="12" r="2" fill="#ffffff" />
+                <line x1="4" y1="17" x2="20" y2="17" />
+                <circle cx="10" cy="17" r="2" fill="#ffffff" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              className="ios-lg-orb"
+              onClick={() => {
+                setActiveDockBtn('add');
+                if (user) navigate('/profile');
+                else onOpenAuth?.('login');
+              }}
+              title={lang === 'ar' ? 'إضافة / حسابي' : 'Add / Profile'}
+            >
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="8.5" />
+                <line x1="12" y1="8.5" x2="12" y2="15.5" />
+                <line x1="8.5" y1="12" x2="15.5" y2="12" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              className="ios-lg-orb"
+              onClick={() => {
+                setActiveDockBtn('docs');
+                navigate('/browse');
+              }}
+              title={lang === 'ar' ? 'مكتبة المانهوا والمانجا' : 'Manga & Manhwa'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="8.5" />
+                <line x1="9" y1="10" x2="15" y2="10" />
+                <line x1="9" y1="12.5" x2="15" y2="12.5" />
+                <line x1="9" y1="15" x2="13" y2="15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------ Main WitAnime Home Page ------------------------------ */
 export default function Dashboard({ onOpenAuth }) {
   const [latest, setLatest] = useState(null);
@@ -899,6 +1414,9 @@ export default function Dashboard({ onOpenAuth }) {
 
   return (
     <div className="wit-home-wrap">
+      {/* 00. 1:1 iOS Liquid Glass Smart Home UI Control Deck (Pure Monochrome Liquid Glass) */}
+      <IosLiquidGlassSmartDeck onOpenAuth={onOpenAuth} featuredItems={pinnedItems} />
+
       {/* 0. Exact WitAnime Cinema Hero Banner */}
       <Hero3DStage items={pinnedItems} trending={trending || []} />
 
