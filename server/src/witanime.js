@@ -12,11 +12,6 @@ import crypto from 'node:crypto';
 import { apiGet, apiSet, streamGet, streamSet } from './db.js';
 
 export const WITA_BASE = 'https://witanime.site';
-// Cloudflare Worker relay (see worker/witanime-relay.js): datacenter hosts get
-// a "Just a moment…" challenge from witanime's WAF; the relay fetches from
-// Cloudflare's own network instead. Set WITA_RELAY=https://<name>.workers.dev
-const RELAY = (process.env.WITA_RELAY || '').replace(/\/$/, '');
-const viaRelay = (url) => (RELAY ? `${RELAY}/?url=${encodeURIComponent(url)}` : url);
 // WAF recon: stream routes 404 on long browser UAs and pass short ones.
 // A datacenter IP + long Chrome UA gets a hard 403, so EVERYTHING uses the
 // short profile now, with an honest fallback on retry.
@@ -92,7 +87,7 @@ function jarOf(cookies) {
 async function get(url, { ua = UA_API, cookies = {}, headers = {}, redirect = 'follow', _retry = true } = {}) {
   await throttle();
   const jar = jarOf(cookies);
-  const res = await fetch(viaRelay(url), {
+  const res = await fetch(url, {
     headers: {
       'User-Agent': ua,
       'Accept-Language': LANG,
@@ -113,7 +108,7 @@ async function get(url, { ua = UA_API, cookies = {}, headers = {}, redirect = 'f
 async function post(url, { ua = UA_API, cookies = {}, headers = {}, body, json = false, _retry = true } = {}) {
   await throttle();
   const jar = jarOf(cookies);
-  const res = await fetch(viaRelay(url), {
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'User-Agent': ua,
@@ -875,16 +870,23 @@ async function resolveDirectUrl(url) {
   return direct;
 }
 
+function looksLikeCloudflareChallenge(body) {
+  const html = String(body || '').slice(0, 20000);
+  return /<title[^>]*>\s*(?:Just a moment|Attention Required|Verify you are human|Checking your browser)/i.test(html) ||
+    /cf-browser-verification|__cf_chl_|cf_chl_(?:opt|captcha|challenge)/i.test(html);
+}
+
 /** Health/status helper for the UI. */
 export async function scrapeHealth() {
   try {
     const res = await get(`${WITA_BASE}/`, { headers: { Accept: 'text/html' } });
     const body = await res.text();
+    const challenge = looksLikeCloudflareChallenge(body);
     return {
-      ok: res.ok,
+      ok: res.ok && !challenge,
       status: res.status,
       source: 'witanime.site',
-      challenge: /Just a moment|challenge-platform|Attention Required/i.test(body)
+      challenge
     };
   } catch (err) {
     return { ok: false, status: 0, source: 'witanime.site', error: err.message };
@@ -893,14 +895,14 @@ export async function scrapeHealth() {
 
 /**
  * Deep diagnostics — run from the deployed host to see exactly how its IP/UA
- * is treated by the witanime WAF (statuses, cf-ray, challenge pages, manifest).
+ * is treated by the witanime WAF (response statuses, challenge pages, manifest).
  */
 export async function scrapeDiagnostics() {
-  const out = { source: 'witanime.site', relay: RELAY || null, at: new Date().toISOString(), probes: [] };
+  const out = { source: 'witanime.site', at: new Date().toISOString(), probes: [] };
   const uas = [['short', UA_API], ['honest', UA_HONEST], ['chrome-long', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36']];
   for (const [name, ua] of uas) {
     try {
-      const res = await fetch(viaRelay(`${WITA_BASE}/`), {
+      const res = await fetch(`${WITA_BASE}/`, {
         headers: { 'User-Agent': ua, Accept: 'text/html', 'Accept-Language': LANG },
         redirect: 'manual',
         signal: AbortSignal.timeout(15000)
@@ -909,9 +911,8 @@ export async function scrapeDiagnostics() {
       out.probes.push({
         name,
         status: res.status,
-        cfRay: res.headers.get('cf-ray'),
         server: res.headers.get('server'),
-        challenge: /Just a moment|challenge-platform|Attention Required/i.test(body),
+        challenge: looksLikeCloudflareChallenge(body),
         blocked: /Access denied|Sorry, you have been blocked/i.test(body),
         title: body.match(/<title>([^<]*)/)?.[1]?.slice(0, 60) || null
       });

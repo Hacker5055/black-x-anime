@@ -5,19 +5,6 @@ import { requireDeveloper, requireAuth, publicUser } from '../auth.js';
 
 const router = Router();
 
-// Seed initial demo codes if vip_codes table is empty
-try {
-  const c = db.prepare('SELECT COUNT(*) AS cnt FROM vip_codes').get()?.cnt || 0;
-  if (c === 0) {
-    const ins = db.prepare(`
-      INSERT OR IGNORE INTO vip_codes (code, tier, duration_days, max_uses, price_egp, note, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    ins.run('BX-BASIC-2026-VIP', 'vip_basic', 30, 5, 99, 'كود تجريبي - باقة صياد النخبة (شهر)', 'developer');
-    ins.run('BX-MONARCH-2026-MAX', 'vip_monarch', 30, 5, 199, 'كود تجريبي - باقة إمبراطور الظلال 4K (شهر)', 'developer');
-  }
-} catch {}
-
 /**
  * Public: Get site footer text
  */

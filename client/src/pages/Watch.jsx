@@ -30,14 +30,7 @@ export default function Watch({ onOpenAuth }) {
   useEffect(() => {
     if (!ep || ep === 'undefined' || ep === 'NaN' || !(Number(ep) > 0)) {
       navigate(`/watch/${slug}/${episode}${srcSuffix}`, { replace: true });
-      return;
     }
-    window.triggerBlackXMotion?.(
-      'katana',
-      1350,
-      `⚔️ الحلقة ${episode} · ضربة سيف الكاتانا 120Hz`,
-      `⚔️ EPISODE ${episode} · KATANA X-SLASH 120Hz`
-    );
   }, [ep, slug, episode, srcSuffix, navigate]);
 
   const showQuery = useAsync(() => api.get(`/api/stream/show/${slug}${srcSuffix}`), [slug, srcSuffix]);
@@ -52,6 +45,7 @@ export default function Watch({ onOpenAuth }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const saveRef = useRef(null);
   const lastPos = useRef({ pos: 0, dur: 0 });
+  const sourceLoadIdRef = useRef(0);
 
   const show = showQuery.data?.show;
   const color = useDominantColor(show?.poster, '#22d3ee');
@@ -63,11 +57,16 @@ export default function Watch({ onOpenAuth }) {
 
   /* ------------------------------ sources ------------------------------ */
   const loadSources = useCallback(() => {
+    const requestId = ++sourceLoadIdRef.current;
     setSourcesLoading(true);
     setSourcesError(false);
     setEpisodeData(null);
+    setScraperDownloads(null);
+    setResolvingDlId(null);
+
     api.get(`/api/stream/episode/${slug}/${episode}${srcSuffix}`)
       .then((d) => {
+        if (requestId !== sourceLoadIdRef.current) return;
         if (!d?.entries?.length && !d?.downloads?.length) throw new Error('empty');
         setEpisodeData({
           entries: d.entries || [],
@@ -75,59 +74,60 @@ export default function Watch({ onOpenAuth }) {
           resolved: d.resolved || {},
           resolvedDownloads: d.resolvedDownloads || {}
         });
-        // auto-resolve the first server so playback starts immediately
-        const first = d.entries?.[0];
-        if (first && !d.resolved?.[first.id]) {
-          resolveEntryRef.current?.(first);
-        }
       })
-      .catch(() => setSourcesError(true))
-      .finally(() => setSourcesLoading(false));
+      .catch(() => {
+        if (requestId === sourceLoadIdRef.current) setSourcesError(true);
+      })
+      .finally(() => {
+        if (requestId === sourceLoadIdRef.current) setSourcesLoading(false);
+      });
 
-    // Fetch multi-quality download links from 3v1ltw1n0x01/anime_scraper + WitAnime manifest
     api.get(`/api/stream/download-sources/${slug}/${episode}`)
-      .then((dlRes) => setScraperDownloads(dlRes))
+      .then((dlRes) => {
+        if (requestId === sourceLoadIdRef.current) setScraperDownloads(dlRes);
+      })
       .catch(() => {});
   }, [slug, episode, srcSuffix]);
 
   useEffect(() => {
     loadSources();
+    return () => { sourceLoadIdRef.current += 1; };
   }, [loadSources]);
 
   /** Resolve one manifest server on demand (stream gate → embed/direct). */
   const resolveEntry = useCallback(async (entry) => {
+    const entryId = typeof entry === 'string' ? entry : entry?.id;
+    if (!entryId) return null;
+    const requestId = sourceLoadIdRef.current;
     try {
-      const d = await api.post('/api/stream/resolve', {
-        slug,
-        episode,
-        entryId: entry.id
-      });
-      setEpisodeData((prev) => (prev
-        ? { ...prev, resolved: { ...prev.resolved, [entry.id]: d.source } }
-        : prev));
+      const d = await api.post('/api/stream/resolve', { slug, episode, entryId });
+      if (requestId === sourceLoadIdRef.current) {
+        setEpisodeData((prev) => (prev
+          ? { ...prev, resolved: { ...prev.resolved, [entryId]: d.source } }
+          : prev));
+      }
       return d.source;
     } catch {
       pushToast(t('watch.sourceError'), 'error');
       return null;
     }
   }, [slug, episode, t]);
-  const resolveEntryRef = useRef(null);
-  resolveEntryRef.current = resolveEntry;
 
   /** Resolve one download server on demand (download gate → direct/link). */
   const resolveDownload = useCallback(async (entry) => {
+    const entryId = typeof entry === 'string' ? entry : entry?.id;
+    if (!entryId) return null;
+    const requestId = sourceLoadIdRef.current;
     try {
-      const d = await api.post('/api/stream/resolve-download', {
-        slug,
-        episode,
-        entryId: entry.id
-      });
-      setEpisodeData((prev) => (prev
-        ? {
-            ...prev,
-            resolvedDownloads: { ...(prev.resolvedDownloads || {}), [entry.id]: d.source }
-          }
-        : prev));
+      const d = await api.post('/api/stream/resolve-download', { slug, episode, entryId });
+      if (requestId === sourceLoadIdRef.current) {
+        setEpisodeData((prev) => (prev
+          ? {
+              ...prev,
+              resolvedDownloads: { ...(prev.resolvedDownloads || {}), [entryId]: d.source }
+            }
+          : prev));
+      }
       return d.source;
     } catch {
       pushToast(t('watch.sourceError'), 'error');
@@ -392,6 +392,7 @@ export default function Watch({ onOpenAuth }) {
           ) : (
             <div style={monarch4kHdr ? { filter: 'contrast(1.1) saturate(1.18) brightness(1.03)', transition: 'filter 0.3s ease' } : undefined}>
               <VideoPlayer
+                key={`${slug}-${episode}-${sourceParam || 'auto'}`}
                 entries={episodeData.entries}
                 resolved={episodeData.resolved}
                 onResolve={resolveEntry}
@@ -598,16 +599,37 @@ export default function Watch({ onOpenAuth }) {
 
           {/* ---------- WitAnime & anime_scraper Direct Multi-Quality Download Table (جدول تحميل الحلقة) ---------- */}
           {(episodeData?.entries?.length > 0 || episodeData?.downloads?.length > 0 || scraperDownloads?.cloudHosts?.length > 0) && (() => {
-            const allDownloads = (scraperDownloads?.cloudHosts?.length ? scraperDownloads.cloudHosts : (episodeData?.downloads || [])).map((d, idx) => {
-              const res = episodeData?.resolvedDownloads?.[d.id] || {};
-              return {
-                id: d.id || `dl-${idx}`,
-                server: d.server || d.label || `Server ${idx + 1}`,
-                quality: String(d.quality || 'FHD').toUpperCase(),
-                url: d.url || res.downloadUrl || res.directUrl || null,
-                directUrl: d.directUrl || res.directUrl || null
-              };
+            const downloadCandidates = [...(scraperDownloads?.cloudHosts || []), ...(episodeData?.downloads || [])];
+            const downloadById = new Map();
+            downloadCandidates.forEach((d, idx) => {
+              const key = d.id || d.url || d.downloadUrl || d.directUrl || `dl-${idx}`;
+              const previous = downloadById.get(key) || {};
+              downloadById.set(key, {
+                ...previous,
+                ...d,
+                url: d.url || d.downloadUrl || previous.url || previous.downloadUrl || null,
+                directUrl: d.directUrl || previous.directUrl || previous.downloadUrl || null
+              });
             });
+            const seenDownloadUrls = new Set();
+            const allDownloads = [...downloadById.values()]
+              .filter((d) => {
+                const url = d.directUrl || d.url || d.downloadUrl;
+                if (!url) return true;
+                if (seenDownloadUrls.has(url)) return false;
+                seenDownloadUrls.add(url);
+                return true;
+              })
+              .map((d, idx) => {
+                const res = episodeData?.resolvedDownloads?.[d.id] || {};
+                return {
+                  id: d.id || `dl-${idx}`,
+                  server: d.server || d.label || `Server ${idx + 1}`,
+                  quality: String(d.quality || 'FHD').toUpperCase(),
+                  url: d.url || d.downloadUrl || res.downloadUrl || res.url || res.directUrl || null,
+                  directUrl: d.directUrl || res.directUrl || res.downloadUrl || res.url || null
+                };
+              });
 
             const fhdLinks = allDownloads.filter((d) => d.quality.includes('FHD') || d.quality.includes('1080'));
             const hdLinks = allDownloads.filter((d) => (d.quality.includes('HD') && !d.quality.includes('FHD')) || d.quality.includes('720'));
@@ -625,16 +647,21 @@ export default function Watch({ onOpenAuth }) {
                 return;
               }
               let targetUrl = dlItem.directUrl || dlItem.url;
+              let pendingWindow = null;
               if (!targetUrl && dlItem.id) {
+                pendingWindow = window.open('about:blank', '_blank');
+                if (pendingWindow) pendingWindow.opener = null;
                 setResolvingDlId(dlItem.id);
                 const resolved = await resolveDownload(dlItem);
                 setResolvingDlId(null);
-                targetUrl = resolved?.directUrl || resolved?.downloadUrl || null;
+                targetUrl = resolved?.directUrl || resolved?.downloadUrl || resolved?.url || null;
               }
               if (targetUrl) {
-                window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                if (pendingWindow && !pendingWindow.closed) pendingWindow.location.replace(new URL(targetUrl, window.location.origin).href);
+                else if (!pendingWindow) window.open(targetUrl, '_blank', 'noopener,noreferrer');
                 pushToast(lang === 'ar' ? `جاري فتح رابط التحميل (${dlItem.server})...` : `Opening download (${dlItem.server})...`, 'success');
               } else {
+                pendingWindow?.close();
                 setDownloadModalOpen(true);
               }
             };

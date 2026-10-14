@@ -24,6 +24,21 @@ const isDirectCdnPlayable = (url) => {
   return s.includes('pixeldrain.com/api/file/');
 };
 
+// Keep upstream host/provider names out of the player UI. Preserve only the
+// BLACK X server tier when it is already part of the branded label.
+const brandedServerName = (entry) => {
+  const match = String(entry?.server || '').match(/\bBLACK\s*X\s*(?:SERVER\s*)?([1-3])\b/i);
+  return match?.[1] ? `BLACK X ${match[1]}` : 'BLACK X';
+};
+
+const hasCustomPlayerSource = (entry, resolved = {}) => {
+  const source = resolved?.[entry?.id] || entry || {};
+  return Boolean(
+    source.directUrl ||
+    String(source.embedUrl || '').includes('/api/stream/mp4-player')
+  );
+};
+
 const proxied = (url, forceProxy = false) => {
   if (!url) return url;
   const s = String(url);
@@ -94,7 +109,11 @@ export default function VideoPlayer({
   const iframeRef = useRef(null);
 
   const active = useMemo(() => entries.find((e) => e.id === activeId) || entries[0] || null, [entries, activeId]);
-  const activeSource = active ? resolved[active.id] : null;
+  const activeSource = active
+    ? resolved[active.id] || ((active.directUrl || active.embedUrl)
+      ? { directUrl: active.directUrl || null, embedUrl: active.embedUrl || null }
+      : null)
+    : null;
 
   // Extract direct MP4 URL if embedUrl points to our internal /api/stream/mp4-player
   const effectiveDirectUrl = useMemo(() => {
@@ -130,14 +149,15 @@ export default function VideoPlayer({
   );
   const embedMode = Boolean(activeSource && (!effectiveDirectUrl || (forceEmbed && hasExternalEmbed)));
 
-  // auto-pick the first entry and resolve immediately
+  // Prefer a direct file/custom player so the BLACK X controls work and the
+  // upstream host's branded iframe is only used when no direct source exists.
   useEffect(() => {
     if (!activeId && entries.length) {
-      const chosen = entries[0];
+      const chosen = entries.find((entry) => hasCustomPlayerSource(entry, resolved)) || entries[0];
       setActiveId(chosen.id);
       setForceProxy(false);
       setForceEmbed(false);
-      if (!resolved[chosen.id] && onResolve) {
+      if (!resolved[chosen.id] && !chosen.directUrl && !chosen.embedUrl && onResolve) {
         onResolve(chosen).catch(() => {});
       }
     }
@@ -212,7 +232,7 @@ export default function VideoPlayer({
       setForceProxy(false);
       setForceEmbed(false);
       setActiveId(entry.id);
-      if (!resolved[entry.id] && onResolve) {
+      if (!resolved[entry.id] && !entry.directUrl && !entry.embedUrl && onResolve) {
         setBusyId(entry.id);
         try {
           await onResolve(entry);
@@ -580,7 +600,7 @@ export default function VideoPlayer({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', pointerEvents: 'auto' }}>
             {embedMode && active && (
-              <div className="player-top__via">{t('watch.playingVia', { server: active.server })}</div>
+              <div className="player-top__via">{t('watch.playingVia', { server: brandedServerName(active) })}</div>
             )}
             <button
               type="button"
@@ -852,14 +872,14 @@ export default function VideoPlayer({
         </div>
       </div>
 
-      {/* WitAnime Always-Visible Streaming Servers Bar (سيرفرات المشاهدة) */}
+      {/* BLACK X source selector — upstream provider names stay private */}
       {entries.length > 0 && (
         <div className="wit-servers-box">
           <div className="wit-servers-box__head">
             <span>🖥️ {lang === 'ar' ? 'سيرفرات المشاهدة المتاحة (اختر السيرفر):' : 'Streaming Servers (Select Server):'}</span>
             {active && (
               <span className="wit-servers-box__active">
-                {active.server} {active.quality ? `· ${active.quality}` : ''}
+                {brandedServerName(active)} {active.quality ? `· ${active.quality}` : ''}
               </span>
             )}
           </div>
@@ -873,10 +893,11 @@ export default function VideoPlayer({
                   type="button"
                   className={`wit-server-tab ${isSelected ? 'active' : ''} ${isFhd ? 'wit-server-tab--vip' : ''}`}
                   onClick={() => pickSource(e)}
+                  aria-label={`${brandedServerName(e)} ${e.quality || 'HD'}`}
                 >
                   <span>
                     {busyId === e.id ? '⏳ ' : isFhd ? '👑 ' : '▶ '}
-                    {e.server}
+                    {brandedServerName(e)}
                   </span>
                   <small>
                     {e.quality || 'HD'}

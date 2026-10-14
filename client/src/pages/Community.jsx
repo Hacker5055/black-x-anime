@@ -202,11 +202,6 @@ export default function Community({ onOpenAuth }) {
         imageUrl: imageUrl.trim(),
         voiceUrl: attachedVoiceUrl || '',
         voiceDuration: attachedVoiceDuration || 0,
-        authorName: user.displayName || user.username || (isDev ? 'Developer MZ' : 'عاشق الأنمي'),
-        authorUsername: user.username || '',
-        authorAvatar: user.photoURL || user.photoUrl || '',
-        authorRole: isDev ? 'developer' : (user.role || 'user'),
-        uid: user.uid || user.id || user.email,
         isPinned: isDev && isPinned
       };
 
@@ -270,10 +265,7 @@ export default function Community({ onOpenAuth }) {
     );
 
     try {
-      const res = await api.post(`/api/community/posts/${postId}/react`, {
-        reactionType,
-        userId: user.uid || user.id || user.email
-      });
+      const res = await api.post(`/api/community/posts/${postId}/react`, { reactionType });
 
       if (res && res.ok) {
         setPosts((prev) =>
@@ -325,13 +317,7 @@ export default function Community({ onOpenAuth }) {
 
     setSubmittingComment((prev) => ({ ...prev, [postId]: true }));
     try {
-      const res = await api.post(`/api/community/posts/${postId}/comments`, {
-        content: text,
-        authorName: user.displayName || user.username || 'متابع الأنمي',
-        authorAvatar: user.photoURL || user.photoUrl || '',
-        authorRole: isDev ? 'developer' : (user.role || 'user'),
-        userId: user.uid || user.id || user.email
-      });
+      const res = await api.post(`/api/community/posts/${postId}/comments`, { content: text });
 
       if (res && res.comment) {
         setCommentsData((prev) => ({
@@ -355,10 +341,7 @@ export default function Community({ onOpenAuth }) {
   const handleDeletePost = async (postId) => {
     if (!window.confirm(t('community.deleteConfirm'))) return;
     try {
-      await api.delete(`/api/community/posts/${postId}`, {
-        userId: user?.uid || user?.id || user?.email,
-        userRole: user?.role
-      });
+      await api.del(`/api/community/posts/${postId}`);
       setPosts((prev) => prev.filter((p) => p.id !== postId));
       pushToast(t('toast.deleted'), 'success');
     } catch (err) {

@@ -1,15 +1,19 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth } from '../auth.js';
+import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth, DEVELOPER_EMAIL, verifyFirebaseGoogleIdToken } from '../auth.js';
 import { social } from '../lib/socialDb.js';
 import { syncUserToCloud, fetchUserFromCloud, sha256Hex, syncAllLocalUsersToCloud } from '../services/cloudSync.service.js';
 
 const router = Router();
 
-// Background sync existing Website users to shared Cloud Firestore so APK can log in immediately
-setTimeout(() => {
-  syncAllLocalUsersToCloud().catch(() => {});
-}, 1500);
+// Reconcile local accounts only for the long-lived Node host. Vercel runs
+// serverless functions, so repeating a full-account sync on every cold start
+// wastes invocations; individual auth/library writes still sync on demand.
+if (!process.env.VERCEL) {
+  setTimeout(() => {
+    syncAllLocalUsersToCloud().catch(() => {});
+  }, 1500);
+}
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 
@@ -21,29 +25,27 @@ router.post('/register', (req, res) => {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'invalid_email', message: 'Enter a valid email address' });
   }
+  if (email.toLowerCase() === DEVELOPER_EMAIL) {
+    return res.status(403).json({ error: 'google_sign_in_required', message: 'This account must use verified Google sign-in.' });
+  }
+  if (username.toLowerCase() === 'developer') {
+    return res.status(403).json({ error: 'reserved_username', message: 'This username is reserved.' });
+  }
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'invalid_password', message: 'Password must be at least 6 characters' });
   }
 
   const exists = db.prepare('SELECT id, email FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?').get(username.toLowerCase(), email.toLowerCase());
   if (exists) {
-    if (email.toLowerCase() === 'mz0970mmz@gmail.com' || exists.email?.toLowerCase() === 'mz0970mmz@gmail.com') {
-      db.prepare("UPDATE users SET password_hash = ?, role = 'developer' WHERE id = ?").run(hashPassword(password), exists.id);
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(exists.id);
-      const token = signToken(user);
-      setAuthCookie(res, token);
-      return res.status(200).json({ user: publicUser(user), token });
-    }
     return res.status(409).json({ error: 'exists', message: 'Username or email already taken' });
   }
 
   const palette = ['#22d3ee', '#8b5cf6', '#f472b6', '#a3e635', '#fb923c', '#f87171', '#60a5fa'];
   const color = palette[Math.floor(Math.random() * palette.length)];
-  const isDev = email.toLowerCase() === 'mz0970mmz@gmail.com';
 
   const info = db.prepare(
     'INSERT INTO users (username, email, password_hash, display_name, avatar_color, role) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(username.toLowerCase(), email.toLowerCase(), hashPassword(password), displayName || username, color, isDev ? 'developer' : 'user');
+  ).run(username.toLowerCase(), email.toLowerCase(), hashPassword(password), displayName || username, color, 'user');
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
 
@@ -87,22 +89,23 @@ router.post('/login', async (req, res) => {
   if (!identifier || !password) {
     return res.status(400).json({ error: 'missing_credentials', message: 'Enter your username/email and password' });
   }
+  if (identifier === DEVELOPER_EMAIL || identifier === 'developer') {
+    return res.status(401).json({ error: 'google_sign_in_required', message: 'Use verified Google sign-in for this account.' });
+  }
 
   let user = db.prepare('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?').get(identifier, identifier);
-
-  // Auto-create or ensure developer account mz0970mmz@gmail.com if not exists
-  if (!user && (identifier === 'mz0970mmz@gmail.com' || identifier === 'developer')) {
-    const info = db.prepare(
-      'INSERT INTO users (username, email, password_hash, display_name, avatar_color, role) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run('developer', 'mz0970mmz@gmail.com', hashPassword(password), 'Developer MZ', '#ec4899', 'developer');
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+  if (user && (user.email?.toLowerCase() === DEVELOPER_EMAIL || user.role === 'developer')) {
+    return res.status(401).json({ error: 'google_sign_in_required', message: 'Use verified Google sign-in for this account.' });
   }
 
   // If user registered on the Android APK, pull their account from shared Cloud Firestore
   if (!user) {
     try {
       const cloudUser = await fetchUserFromCloud(identifier);
-      if (cloudUser && (!cloudUser.passSha256 || cloudUser.passSha256 === sha256Hex(password))) {
+      const cloudIdentifierMatches = cloudUser && (identifier.includes('@')
+        ? String(cloudUser.email || '').toLowerCase() === identifier
+        : String(cloudUser.username || '').toLowerCase() === identifier);
+      if (cloudIdentifierMatches && cloudUser.passSha256 && cloudUser.passSha256 === sha256Hex(password)) {
         const uname = (cloudUser.username || identifier.split('@')[0] || 'user').toLowerCase();
         const uemail = (cloudUser.email || `${uname}@blackx.app`).toLowerCase();
         const info = db.prepare(
@@ -115,7 +118,7 @@ router.post('/login', async (req, res) => {
           cloudUser.avatarColor || '#22d3ee',
           cloudUser.photoUrl || '',
           cloudUser.bio || '',
-          cloudUser.role || 'user'
+          'user'
         );
         user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
       }
@@ -126,20 +129,9 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'bad_credentials', message: 'Invalid credentials' });
   }
 
-  let valid = verifyPassword(password, user.password_hash);
-  // If developer account mz0970mmz@gmail.com had dummy password from Google, update password to entered password
-  if (!valid && (user.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user.username?.toLowerCase() === 'developer')) {
-    db.prepare("UPDATE users SET password_hash = ?, role = 'developer' WHERE id = ?").run(hashPassword(password), user.id);
-    valid = true;
-  }
-
+  const valid = verifyPassword(password, user.password_hash);
   if (!valid) {
     return res.status(401).json({ error: 'bad_credentials', message: 'Invalid credentials' });
-  }
-
-  if (user.email.toLowerCase() === 'mz0970mmz@gmail.com' && user.role !== 'developer') {
-    db.prepare("UPDATE users SET role = 'developer' WHERE id = ?").run(user.id);
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
   }
 
   const token = signToken(user);
@@ -148,84 +140,86 @@ router.post('/login', async (req, res) => {
   res.json({ user: publicUser(user), token });
 });
 
-router.post('/dev-login', (req, res) => {
-  const { displayName, photoURL } = req.body || {};
-  let user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?').get('mz0970mmz@gmail.com', 'developer');
-  if (!user) {
-    const info = db.prepare(
-      'INSERT INTO users (username, email, password_hash, display_name, avatar_color, photo_url, role) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run('developer', 'mz0970mmz@gmail.com', hashPassword('blackx2026'), displayName || 'Developer MZ', '#ec4899', photoURL || '', 'developer');
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
-  } else {
-    if (displayName && displayName !== user.display_name) {
-      db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(displayName, user.id);
-      user.display_name = displayName;
-    }
-    if (photoURL && photoURL !== user.photo_url) {
-      db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoURL, user.id);
-      user.photo_url = photoURL;
-    }
-    if (user.role !== 'developer') {
-      db.prepare("UPDATE users SET role = 'developer' WHERE id = ?").run(user.id);
-      user.role = 'developer';
-    }
-  }
-  const token = signToken(user);
-  setAuthCookie(res, token);
-  syncUserToCloud(user).catch(() => {});
-  res.json({ user: publicUser(user), token });
-});
-
 router.post('/google', async (req, res) => {
-  const { email, displayName, uid, photoURL, username: customUsername, bio, avatarColor } = req.body || {};
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'invalid_email', message: 'Valid email is required' });
+  const { idToken, displayName, photoURL, username: customUsername, bio, avatarColor } = req.body || {};
+  if (typeof idToken !== 'string' || !idToken) {
+    return res.status(401).json({ error: 'google_token_required', message: 'Verified Google sign-in is required.' });
   }
 
-  const isDev = email.toLowerCase() === 'mz0970mmz@gmail.com';
-  let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+  let identity;
+  try {
+    identity = await verifyFirebaseGoogleIdToken(idToken);
+  } catch (err) {
+    console.error('[auth/google] token verification unavailable:', err?.message || err);
+    return res.status(503).json({ error: 'auth_verification_unavailable', message: 'Google sign-in verification is temporarily unavailable.' });
+  }
+  if (!identity) {
+    return res.status(401).json({ error: 'invalid_google_token', message: 'Google sign-in could not be verified.' });
+  }
+
+  const email = identity.email;
+  const uid = identity.uid;
+  const isDev = email === DEVELOPER_EMAIL;
+  const safeDisplayName = String(displayName || identity.displayName || '').trim().slice(0, 120);
+  const safePhotoURL = String(photoURL || identity.photoURL || '').trim().slice(0, 2_000_000);
+  const safeBio = typeof bio === 'string' ? bio.trim().slice(0, 200) : '';
+
+  let user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(email);
 
   if (!user) {
-    let baseUsername = (customUsername || email.split('@')[0] || 'user').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 16);
+    let baseUsername = String(customUsername || email.split('@')[0] || 'user')
+      .replace(/[^a-zA-Z0-9_.-]/g, '')
+      .slice(0, 18);
     if (baseUsername.length < 3) baseUsername = `user_${Math.random().toString(36).slice(2, 7)}`;
-    let username = baseUsername;
-    let counter = 1;
-    while (db.prepare('SELECT id FROM users WHERE username = ?').get(username.toLowerCase())) {
-      username = `${baseUsername.slice(0, 12)}_${counter++}`;
-    }
+    if (baseUsername.toLowerCase() === 'developer' && !isDev) baseUsername = 'user_developer';
 
     const palette = ['#22d3ee', '#8b5cf6', '#f472b6', '#a3e635', '#fb923c', '#f87171', '#60a5fa'];
-    const color = avatarColor || palette[Math.floor(Math.random() * palette.length)];
-    // Google-only accounts do not use a local password. Avoid a synchronous
-    // bcrypt hash here (it is unnecessary and can exceed Workers Free CPU time).
-    const dummyHash = `google-oauth-only:${String(uid || email.toLowerCase())}`;
+    const safeAvatarColor = /^#[0-9a-f]{6}$/i.test(String(avatarColor || ''))
+      ? avatarColor
+      : palette[Math.floor(Math.random() * palette.length)];
+    const dummyHash = `google-oauth-only:${uid}`;
+    const insertGoogleUser = db.prepare(
+      'INSERT OR IGNORE INTO users (username, email, password_hash, display_name, avatar_color, photo_url, bio, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
 
-    const info = db.prepare(
-      'INSERT INTO users (username, email, password_hash, display_name, avatar_color, photo_url, bio, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(username.toLowerCase(), email.toLowerCase(), dummyHash, displayName || (isDev ? 'Developer MZ' : username), color, photoURL || '', bio || '', isDev ? 'developer' : 'user');
-
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+    // Firebase onAuthStateChanged and the explicit Google-login handler can
+    // hit this endpoint at nearly the same time. Re-read by email after each
+    // insert attempt so a unique-key race never returns another user's row.
+    for (let attempt = 0; attempt < 5 && !user; attempt += 1) {
+      const username = attempt === 0
+        ? baseUsername
+        : `${baseUsername.slice(0, 17)}_${Math.random().toString(36).slice(2, 7)}`;
+      insertGoogleUser.run(
+        username.toLowerCase(), email, dummyHash,
+        safeDisplayName || (isDev ? 'Developer MZ' : username),
+        safeAvatarColor, safePhotoURL, safeBio, isDev ? 'developer' : 'user'
+      );
+      user = db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').get(email);
+    }
+    if (!user) {
+      return res.status(409).json({ error: 'username_conflict', message: 'Could not create the account. Please try again.' });
+    }
   } else {
-    // Update profile data if customized
-    if (isDev && user.role !== 'developer') {
-      db.prepare("UPDATE users SET role = 'developer' WHERE id = ?").run(user.id);
-      user.role = 'developer';
+    const verifiedRole = isDev ? 'developer' : 'user';
+    if (user.role !== verifiedRole) {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(verifiedRole, user.id);
+      user.role = verifiedRole;
     }
-    if (displayName && displayName !== user.display_name && displayName !== 'Anime Fan') {
-      db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(displayName, user.id);
-      user.display_name = displayName;
+    if (safeDisplayName && safeDisplayName !== user.display_name && safeDisplayName !== 'Anime Fan') {
+      db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(safeDisplayName, user.id);
+      user.display_name = safeDisplayName;
     }
-    if (photoURL && photoURL !== user.photo_url) {
-      db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoURL, user.id);
-      user.photo_url = photoURL;
+    if (safePhotoURL && safePhotoURL !== user.photo_url) {
+      db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(safePhotoURL, user.id);
+      user.photo_url = safePhotoURL;
     }
-    if (avatarColor && avatarColor !== user.avatar_color) {
+    if (avatarColor && /^#[0-9a-f]{6}$/i.test(String(avatarColor)) && avatarColor !== user.avatar_color) {
       db.prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run(avatarColor, user.id);
       user.avatar_color = avatarColor;
     }
-    if (bio && bio !== user.bio) {
-      db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(bio, user.id);
-      user.bio = bio;
+    if (safeBio && safeBio !== user.bio) {
+      db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(safeBio, user.id);
+      user.bio = safeBio;
     }
   }
 

@@ -54,14 +54,23 @@ export const BLACK_X_MOTION_THEMES = [
 const CONCRETE_MODES = ['vortex', 'katana', 'cyber', 'eclipse', 'monarch'];
 
 function resolveInitialMode(requestedMode) {
-  const saved = requestedMode || localStorage.getItem('bx_motion_pref') || 'random';
-  if (saved === 'random' || !CONCRETE_MODES.includes(saved)) {
-    const lastIdx = Number(sessionStorage.getItem('bx_motion_rot_idx') || 0);
-    const nextIdx = (lastIdx + 1) % CONCRETE_MODES.length;
+  let saved = requestedMode || 'random';
+  if (!requestedMode) {
     try {
-      sessionStorage.setItem('bx_motion_rot_idx', String(nextIdx));
+      saved = localStorage.getItem('bx_motion_pref') || 'random';
     } catch (_) {}
-    return CONCRETE_MODES[nextIdx];
+  }
+  if (saved === 'random' || !CONCRETE_MODES.includes(saved)) {
+    let lastIdx = 0;
+    try {
+      lastIdx = Number(sessionStorage.getItem('bx_motion_rot_idx') || 0);
+    } catch (_) {}
+    const nextIdx = (Number.isFinite(lastIdx) ? lastIdx : 0) + 1;
+    const modeIdx = nextIdx % CONCRETE_MODES.length;
+    try {
+      sessionStorage.setItem('bx_motion_rot_idx', String(modeIdx));
+    } catch (_) {}
+    return CONCRETE_MODES[modeIdx];
   }
   return saved;
 }
@@ -82,22 +91,27 @@ export default function BlackXSplashVortex({
   customSubtitleEn,
   onComplete,
   lang = 'ar',
-  enableSound = true
+  enableSound = true,
+  performanceProfile = 'full'
 }) {
   const canvasRef = useRef(null);
-  const [prefMode, setPrefMode] = useState(() => localStorage.getItem('bx_motion_pref') || 'random');
-  const [activeMode, setActiveMode] = useState(() => resolveInitialMode(initialMode));
-  const [runKey, setRunKey] = useState(0);
+  const prefersReducedMotion = typeof window !== 'undefined' &&
+    Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+  const isWebProfile = performanceProfile === 'web';
+  const [activeMode] = useState(() => resolveInitialMode(initialMode));
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState(0); // 0: intro, 1: climax, 2: logo lock, 3: portal exit
   const [exiting, setExiting] = useState(false);
-  const [measuredHz, setMeasuredHz] = useState(120);
-  const [soundMuted, setSoundMuted] = useState(!enableSound);
+  const [measuredFps, setMeasuredFps] = useState(() => (isWebProfile ? 0 : 120));
+  const [soundMuted, setSoundMuted] = useState(() => !enableSound || prefersReducedMotion);
 
   const audioCtxRef = useRef(null);
   const soundPlayedRef = useRef(false);
   const impactPlayedRef = useRef(false);
   const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  const climaxAudioRef = useRef(null);
+  onCompleteRef.current = onComplete;
 
   const isRtl = lang === 'ar';
 
@@ -278,29 +292,13 @@ export default function BlackXSplashVortex({
           audioCtxRef.current.close().catch(() => {});
         }
       } catch (_) {}
-      onComplete?.();
+      onCompleteRef.current?.();
     }, 320);
-  }, [onComplete]);
+  }, []);
 
-  // Switch Motion Mode live from the HUD selector
-  const handleSelectMode = (modeId) => {
-    try {
-      localStorage.setItem('bx_motion_pref', modeId);
-    } catch (_) {}
-    setPrefMode(modeId);
-    const nextConcrete =
-      modeId === 'random'
-        ? CONCRETE_MODES[(CONCRETE_MODES.indexOf(activeMode) + 1) % CONCRETE_MODES.length]
-        : modeId;
-    soundPlayedRef.current = false;
-    impactPlayedRef.current = false;
-    completedRef.current = false;
-    setExiting(false);
-    setPhase(0);
-    setProgress(0);
-    setActiveMode(nextConcrete);
-    setRunKey((k) => k + 1);
-  };
+  useEffect(() => {
+    climaxAudioRef.current = triggerClimaxImpactAudio;
+  }, [triggerClimaxImpactAudio]);
 
   useEffect(() => {
     triggerIntroAudio(activeMode);
@@ -313,34 +311,47 @@ export default function BlackXSplashVortex({
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, [activeMode, runKey, triggerIntroAudio]);
+  }, [activeMode, triggerIntroAudio]);
 
-  // 120Hz Multi-Engine Canvas Renderer
+  // Canvas renderer uses one engine per splash and a 60 FPS cap on the website.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    let dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    let dpr = Math.min(window.devicePixelRatio || 1, isWebProfile ? 1.5 : 2.5);
     let width = window.innerWidth;
     let height = window.innerHeight;
 
     const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      dpr = Math.min(window.devicePixelRatio || 1, isWebProfile ? 1.5 : 2.5);
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
+
+    if (prefersReducedMotion) {
+      resize();
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, height);
+      setProgress(100);
+      setPhase(2);
+      const completionTimer = window.setTimeout(finishSplash, Math.min(850, Math.max(500, durationMs)));
+      return () => window.clearTimeout(completionTimer);
+    }
+
     resize();
     window.addEventListener('resize', resize);
 
     const maxRadius = Math.hypot(width, height) * 0.68;
 
-    // 1. Vortex & Eclipse Particles (360 particles)
-    const particles = Array.from({ length: 360 }, (_, i) => {
+    // Allocate only the current engine's particles; the website profile trims the active set.
+    const particleCount = isWebProfile ? 150 : 360;
+    const particles = activeMode === 'vortex' || activeMode === 'eclipse'
+      ? Array.from({ length: particleCount }, (_, i) => {
       const arm = i % 4;
       const baseAngle = (arm * Math.PI) / 2 + Math.random() * 0.9;
       const distRatio = Math.pow(Math.random(), 0.72);
@@ -354,10 +365,12 @@ export default function BlackXSplashVortex({
         trailLen: 0.06 + Math.random() * 0.14,
         inclination: (Math.random() - 0.5) * 0.38
       };
-    });
+    })
+      : [];
 
-    // 2. Katana Sparks (240 steel sparks)
-    const katanaSparks = Array.from({ length: 240 }, (_, i) => {
+    // 2. Katana Sparks
+    const katanaSparks = activeMode === 'katana'
+      ? Array.from({ length: isWebProfile ? 90 : 240 }, (_, i) => {
       const along = (Math.random() - 0.5) * Math.min(width, height) * 0.95;
       const diag = i % 2 === 0 ? 1 : -1;
       const angle = (diag === 1 ? Math.PI / 4 : (3 * Math.PI) / 4) + (Math.random() - 0.5) * 1.4;
@@ -371,10 +384,13 @@ export default function BlackXSplashVortex({
         alpha: 0.5 + Math.random() * 0.5,
         diag
       };
-    });
+    })
+      : [];
 
-    // 3. Cyber Matrix Columns (64 high-speed columns)
-    const colCount = Math.max(28, Math.floor(width / 22));
+    // Only build the current mode's matrix columns.
+    const colCount = activeMode === 'cyber'
+      ? (isWebProfile ? Math.max(12, Math.floor(width / 72)) : Math.max(28, Math.floor(width / 22)))
+      : 0;
     const matrixCols = Array.from({ length: colCount }, (_, i) => ({
       x: (i + 0.5) * (width / colCount),
       y: Math.random() * height,
@@ -385,15 +401,16 @@ export default function BlackXSplashVortex({
       )
     }));
 
-    // 4. Monarch Sovereign Ascending Flame Shards (180 shards)
-    const monarchShards = Array.from({ length: 180 }, () => ({
-      x: (Math.random() - 0.5) * width * 0.9,
-      y: height * 0.55 + Math.random() * height * 0.5,
-      vy: 180 + Math.random() * 420,
-      size: 2 + Math.random() * 5.5,
-      alpha: 0.3 + Math.random() * 0.7,
-      spin: (Math.random() - 0.5) * 6
-    }));
+    const monarchShards = activeMode === 'monarch'
+      ? Array.from({ length: isWebProfile ? 72 : 180 }, () => ({
+          x: (Math.random() - 0.5) * width * 0.9,
+          y: height * 0.55 + Math.random() * height * 0.5,
+          vy: 180 + Math.random() * 420,
+          size: 2 + Math.random() * 5.5,
+          alpha: 0.3 + Math.random() * 0.7,
+          spin: (Math.random() - 0.5) * 6
+        }))
+      : [];
 
     const shockwaves = [
       { maxR: Math.max(width, height) * 0.75, speed: 950, width: 3.5, alpha: 0.95, delay: 0 },
@@ -405,39 +422,49 @@ export default function BlackXSplashVortex({
     let lastFrameTime = startTime;
     let frameCounter = 0;
     let fpsTimer = startTime;
+    let lastProgress = -1;
+    let lastPhase = -1;
     let rafId;
+    const frameIntervalMs = 1000 / (isWebProfile ? 60 : 120);
+    const safeDurationMs = Math.max(1, Number(durationMs) || 4000);
 
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
     const render = (now) => {
+      if (completedRef.current) return;
+      if (now - lastFrameTime < frameIntervalMs - 0.25) {
+        rafId = requestAnimationFrame(render);
+        return;
+      }
       const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
       lastFrameTime = now;
 
       frameCounter++;
       if (now - fpsTimer >= 450) {
         const currentFps = Math.round((frameCounter * 1000) / (now - fpsTimer));
-        setMeasuredHz(currentFps >= 105 ? 120 : currentFps >= 80 ? 90 : 120);
+        setMeasuredFps(isWebProfile ? currentFps : (currentFps >= 105 ? 120 : currentFps >= 80 ? 90 : 120));
         frameCounter = 0;
         fpsTimer = now;
       }
 
       const elapsed = now - startTime;
-      const tNorm = Math.min(elapsed / durationMs, 1);
-      // Normalized 4-second choreographed clock (so 1.5s quick transitions play the full 4s choreography at faster pace!)
+      const tNorm = Math.min(elapsed / safeDurationMs, 1);
       const tSec = tNorm * 4.0;
 
-      setProgress(Math.round(tNorm * 100));
+      const nextProgress = Math.round(tNorm * 100);
+      if (nextProgress !== lastProgress) {
+        setProgress(nextProgress);
+        lastProgress = nextProgress;
+      }
 
-      if (tSec < 1.35) {
-        setPhase(0);
-      } else if (tSec < 1.95) {
-        setPhase(1);
-      } else if (tSec < 3.45) {
-        setPhase(2);
-        if (!impactPlayedRef.current) triggerClimaxImpactAudio(activeMode);
-      } else {
-        setPhase(3);
+      const nextPhase = tSec < 1.35 ? 0 : tSec < 1.95 ? 1 : tSec < 3.45 ? 2 : 3;
+      if (nextPhase !== lastPhase) {
+        setPhase(nextPhase);
+        lastPhase = nextPhase;
+      }
+      if (nextPhase === 2 && !impactPlayedRef.current) {
+        climaxAudioRef.current?.(activeMode);
       }
 
       const cx = width / 2;
@@ -521,7 +548,7 @@ export default function BlackXSplashVortex({
           ctx.strokeStyle = `rgba(255,255,255,${fade1})`;
           ctx.lineWidth = tSec < 0.85 ? 6.5 : 2.4;
           ctx.shadowColor = '#ffffff';
-          ctx.shadowBlur = 28;
+          ctx.shadowBlur = isWebProfile ? 12 : 28;
           ctx.beginPath();
           ctx.moveTo(-span, -span);
           ctx.lineTo(-span + span * 2 * p1, -span + span * 2 * p1);
@@ -535,7 +562,7 @@ export default function BlackXSplashVortex({
           ctx.strokeStyle = `rgba(255,255,255,${fade2})`;
           ctx.lineWidth = tSec < 1.35 ? 6.5 : 2.4;
           ctx.shadowColor = '#ffffff';
-          ctx.shadowBlur = 28;
+          ctx.shadowBlur = isWebProfile ? 12 : 28;
           ctx.beginPath();
           ctx.moveTo(span, -span);
           ctx.lineTo(span - span * 2 * p2, -span + span * 2 * p2);
@@ -644,7 +671,7 @@ export default function BlackXSplashVortex({
         // Blazing White Photon Ring + Pitch-Black Event Horizon Core
         ctx.save();
         ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = tSec >= 1.8 ? 42 : 24;
+        ctx.shadowBlur = isWebProfile ? (tSec >= 1.8 ? 20 : 12) : (tSec >= 1.8 ? 42 : 24);
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = tSec >= 1.8 ? 3.8 : 2.4;
         ctx.beginPath();
@@ -691,7 +718,7 @@ export default function BlackXSplashVortex({
           ctx.fillStyle = 'rgba(255,255,255,0.14)';
           ctx.lineWidth = 2.2;
           ctx.shadowColor = '#ffffff';
-          ctx.shadowBlur = 22;
+          ctx.shadowBlur = isWebProfile ? 10 : 22;
           ctx.beginPath();
           ctx.moveTo(-48, 16);
           ctx.lineTo(-56, -18);
@@ -727,7 +754,7 @@ export default function BlackXSplashVortex({
         }
       }
 
-      if (elapsed >= durationMs) {
+      if (elapsed >= safeDurationMs) {
         finishSplash();
         return;
       }
@@ -740,7 +767,7 @@ export default function BlackXSplashVortex({
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
     };
-  }, [activeMode, runKey, durationMs, finishSplash, triggerClimaxImpactAudio]);
+  }, [activeMode, durationMs, finishSplash, isWebProfile, prefersReducedMotion]);
 
   const logoVisible = phase >= 1;
   const textVisible = phase >= 2;
@@ -749,6 +776,7 @@ export default function BlackXSplashVortex({
 
   return (
     <div
+      className="bx-intro"
       style={{
         position: 'fixed',
         inset: 0,
@@ -763,7 +791,7 @@ export default function BlackXSplashVortex({
         userSelect: 'none',
         WebkitUserSelect: 'none',
         opacity: exiting ? 0 : 1,
-        transform: portalZoom ? 'scale(1.42)' : 'scale(1)',
+        transform: portalZoom ? (isWebProfile ? 'scale(1.05)' : 'scale(1.42)') : 'scale(1)',
         transition: 'opacity 0.34s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
       }}
     >
@@ -802,7 +830,7 @@ export default function BlackXSplashVortex({
             borderRadius: '999px',
             background: 'rgba(255,255,255,0.07)',
             border: '1px solid rgba(255,255,255,0.22)',
-            backdropFilter: 'blur(10px)',
+            backdropFilter: isWebProfile ? 'none' : 'blur(10px)',
             fontSize: '0.66rem',
             fontWeight: 900,
             letterSpacing: '0.07em',
@@ -819,7 +847,9 @@ export default function BlackXSplashVortex({
             }}
           />
           <span>
-            {measuredHz}Hz · {activeMeta.icon} {isRtl ? activeMeta.nameAr : activeMeta.nameEn}
+            {isWebProfile
+              ? (measuredFps ? `${measuredFps} FPS` : '≤60 FPS')
+              : `${measuredFps >= 105 ? 120 : measuredFps >= 80 ? 90 : 120}Hz`} · {activeMeta.icon} {isRtl ? activeMeta.nameAr : activeMeta.nameEn}
           </span>
         </div>
 
@@ -905,7 +935,7 @@ export default function BlackXSplashVortex({
               width: '140px',
               height: '140px',
               overflow: 'visible',
-              filter: 'drop-shadow(0 0 24px rgba(255,255,255,0.6))'
+              filter: isWebProfile ? 'drop-shadow(0 0 12px rgba(255,255,255,0.4))' : 'drop-shadow(0 0 24px rgba(255,255,255,0.6))'
             }}
           >
             <polygon
@@ -936,7 +966,7 @@ export default function BlackXSplashVortex({
               height: '88px',
               borderRadius: '20px',
               objectFit: 'cover',
-              boxShadow: '0 0 26px rgba(255, 0, 0, 0.45)'
+              boxShadow: isWebProfile ? '0 0 26px rgba(255, 255, 255, 0.34)' : '0 0 26px rgba(255, 0, 0, 0.45)'
             }}
           />
         </div>
@@ -955,7 +985,7 @@ export default function BlackXSplashVortex({
               letterSpacing: textVisible ? '0.26em' : '0.65em',
               paddingLeft: textVisible ? '0.26em' : '0.65em',
               color: '#ffffff',
-              textShadow: '0 0 28px rgba(255,255,255,0.65)',
+              textShadow: isWebProfile ? '0 0 16px rgba(255,255,255,0.5)' : '0 0 28px rgba(255,255,255,0.65)',
               lineHeight: 1.05,
               transition: 'letter-spacing 0.72s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
@@ -991,7 +1021,7 @@ export default function BlackXSplashVortex({
               fontFamily: 'monospace'
             }}
           >
-            {activeMeta.nameEn.toUpperCase()} · 120Hz ENGINE
+            {activeMeta.nameEn.toUpperCase()} · {isWebProfile ? 'WEB · 60 FPS CAP' : '120Hz ENGINE'}
           </div>
         </div>
       </div>

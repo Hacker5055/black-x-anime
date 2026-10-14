@@ -192,9 +192,6 @@ export function AuthModal({ initialMode = 'login', onClose }) {
             {mode === 'login' ? t('auth.register') : t('auth.login')}
           </button>
         </div>
-        <div style={{ textAlign: 'center', marginTop: '0.85rem', color: 'var(--ink-faint)', fontSize: '0.82rem' }}>
-          {t('auth.demoHint')}
-        </div>
       </form>
     </Modal>
   );

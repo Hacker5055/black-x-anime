@@ -80,7 +80,7 @@ export async function ensurePrismaUser(prisma, reqUser) {
 let dbBroken = false;
 /** Once a DB connection failure happens, stick to the SQLite store (circuit breaker). */
 export function dbIsBroken() {
-  return Boolean(globalThis.__BLACKX_CLOUDFLARE_RUNTIME__) || dbBroken;
+  return dbBroken;
 }
 
 export function isDbUnavailable(err) {
