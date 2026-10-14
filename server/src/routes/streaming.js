@@ -1477,15 +1477,43 @@ router.get('/mp4-player', (req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>BLACK X Direct Player</title>
 <style>
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
   video { width: 100%; height: 100%; object-fit: contain; background: #000; outline: none; }
   video::cue { background: rgba(0,0,0,0.78); color: #fff; font-family: 'Cairo', 'Tajawal', sans-serif; font-size: 1.15rem; }
+  .bx-hud { position: fixed; top: 10px; left: 10px; right: 10px; z-index: 20; display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+  .bx-btn { pointer-events: auto; background: rgba(0,0,0,0.78); color: #fff; border: 1px solid rgba(255,255,255,0.32); border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 800; cursor: pointer; backdrop-filter: blur(8px); }
+  .bx-btn--white { background: #fff; color: #000; border-color: #fff; }
 </style>
 </head>
 <body>
+<div class="bx-hud">
+  <button class="bx-btn" onclick="seek(-600)">⏪ -10 د</button>
+  <button class="bx-btn" onclick="seek(-10)">⏪ -10 ث</button>
+  <button class="bx-btn" onclick="seek(10)">+10 ث ⏩</button>
+  <button class="bx-btn" onclick="seek(600)">+10 د ⏩</button>
+  <button class="bx-btn bx-btn--white" onclick="goFs()">⛶ شاشة كاملة</button>
+</div>
 <video id="v" src="${proxiedMp4.replace(/"/g, '&quot;')}" controls autoplay playsinline crossorigin="anonymous">
   ${subUrl ? `<track kind="subtitles" srclang="ar" label="العربية (AI)" src="${subUrl.replace(/"/g, '&quot;')}" default />` : ''}
 </video>
+<script>
+  const v = document.getElementById('v');
+  function seek(d) {
+    if (!v) return;
+    v.currentTime = Math.max(0, (v.currentTime || 0) + d);
+  }
+  function goFs() {
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    else if (v && v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+  }
+  window.addEventListener('message', (e) => {
+    const d = e && e.data;
+    if (!d || !v) return;
+    if (d.type === 'bx_seek') seek(Number(d.delta) || 0);
+    if (d.type === 'bx_toggle_play') { if (v.paused) v.play(); else v.pause(); }
+  });
+</script>
 </body>
 </html>`);
 });

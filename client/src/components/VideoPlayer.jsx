@@ -90,14 +90,45 @@ export default function VideoPlayer({
   const [panel, setPanel] = useState(false);
   const [forceProxy, setForceProxy] = useState(false);
   const [forceEmbed, setForceEmbed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const iframeRef = useRef(null);
 
   const active = useMemo(() => entries.find((e) => e.id === activeId) || entries[0] || null, [entries, activeId]);
   const activeSource = active ? resolved[active.id] : null;
+
+  // Extract direct MP4 URL if embedUrl points to our internal /api/stream/mp4-player
+  const effectiveDirectUrl = useMemo(() => {
+    if (activeSource?.directUrl) return activeSource.directUrl;
+    const emb = String(activeSource?.embedUrl || '');
+    if (emb.startsWith('/api/stream/mp4-player')) {
+      try {
+        const u = new URL(emb, 'https://black-x-anime.me');
+        return u.searchParams.get('url') || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }, [activeSource]);
+
+  const effectiveSubUrl = useMemo(() => {
+    const emb = String(activeSource?.embedUrl || '');
+    if (emb.startsWith('/api/stream/mp4-player')) {
+      try {
+        const u = new URL(emb, 'https://black-x-anime.me');
+        return u.searchParams.get('sub') || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }, [activeSource]);
+
   const hasExternalEmbed = Boolean(
     activeSource?.embedUrl &&
     !String(activeSource.embedUrl).startsWith('/api/stream/mp4-player')
   );
-  const embedMode = Boolean(activeSource && (!activeSource.directUrl || (forceEmbed && hasExternalEmbed)));
+  const embedMode = Boolean(activeSource && (!effectiveDirectUrl || (forceEmbed && hasExternalEmbed)));
 
   // auto-pick the first entry and resolve immediately
   useEffect(() => {
@@ -136,7 +167,13 @@ export default function VideoPlayer({
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
-    if (embedMode || !v) return;
+    if (embedMode) {
+      try {
+        iframeRef.current?.contentWindow?.postMessage({ type: 'bx_toggle_play' }, '*');
+      } catch {}
+      return;
+    }
+    if (!v) return;
     if (v.paused) v.play().catch(() => {});
     else v.pause();
     wake();
@@ -145,11 +182,27 @@ export default function VideoPlayer({
   const seekBy = useCallback(
     (delta) => {
       const v = videoRef.current;
-      if (!v) return;
-      v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta));
+      if (v && !embedMode) {
+        const maxDur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : v.currentTime + Math.abs(delta) + 3600;
+        const nextTime = Math.max(0, Math.min(maxDur, (v.currentTime || 0) + delta));
+        v.currentTime = nextTime;
+        setCurrent(nextTime);
+        wake();
+        return;
+      }
+      // If in embedMode, postMessage to our mp4-player or HTML5 embed
+      try {
+        iframeRef.current?.contentWindow?.postMessage({ type: 'bx_seek', delta }, '*');
+      } catch {}
+      pushToast(
+        lang === 'ar'
+          ? `${delta > 0 ? '⏩ تم التقديم' : '⏪ تم التأخير'} ${Math.abs(delta) >= 60 ? `${Math.round(Math.abs(delta) / 60)} دقائق` : `${Math.abs(delta)} ثانية`}`
+          : `${delta > 0 ? '⏩ Forwarded' : '⏪ Rewound'} ${Math.abs(delta) >= 60 ? `${Math.round(Math.abs(delta) / 60)}m` : `${Math.abs(delta)}s`}`,
+        'info'
+      );
       wake();
     },
-    [wake]
+    [embedMode, lang, wake]
   );
 
   const pickSource = useCallback(
@@ -171,6 +224,56 @@ export default function VideoPlayer({
     [resolved, onResolve]
   );
 
+  useEffect(() => {
+    const onFsChange = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      if (fsEl) {
+        setIsFullscreen(true);
+      } else {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = shellRef.current;
+    const v = videoRef.current;
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl || isFullscreen) {
+      if (document.exitFullscreen && fsEl) document.exitFullscreen().catch(() => {});
+      else if (document.webkitExitFullscreen && fsEl) document.webkitExitFullscreen();
+      setIsFullscreen(false);
+      return;
+    }
+    if (el?.requestFullscreen) {
+      el.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => setIsFullscreen((prev) => !prev));
+    } else if (el?.webkitRequestFullscreen) {
+      try {
+        el.webkitRequestFullscreen();
+        setIsFullscreen(true);
+      } catch {
+        setIsFullscreen((prev) => !prev);
+      }
+    } else if (v?.webkitEnterFullscreen) {
+      try {
+        v.webkitEnterFullscreen();
+      } catch {
+        setIsFullscreen((prev) => !prev);
+      }
+    } else {
+      setIsFullscreen((prev) => !prev);
+    }
+    wake();
+  }, [isFullscreen, wake]);
+
   // keyboard shortcuts
   useEffect(() => {
     const shell = shellRef.current;
@@ -185,11 +288,19 @@ export default function VideoPlayer({
           break;
         case 'arrowright':
           e.preventDefault();
-          seekBy(5);
+          seekBy(e.shiftKey ? 600 : 10);
           break;
         case 'arrowleft':
           e.preventDefault();
-          seekBy(-5);
+          seekBy(e.shiftKey ? -600 : -10);
+          break;
+        case 'j':
+          e.preventDefault();
+          seekBy(-600);
+          break;
+        case 'l':
+          e.preventDefault();
+          seekBy(600);
           break;
         case 'arrowup':
           e.preventDefault();
@@ -203,6 +314,7 @@ export default function VideoPlayer({
           setMuted((m) => !m);
           break;
         case 'f':
+          e.preventDefault();
           toggleFullscreen();
           break;
         default:
@@ -210,8 +322,7 @@ export default function VideoPlayer({
     };
     shell.addEventListener('keydown', onKey);
     return () => shell.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [togglePlay, seekBy]);
+  }, [togglePlay, seekBy, toggleFullscreen]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -231,13 +342,6 @@ export default function VideoPlayer({
       document.removeEventListener('visibilitychange', onHide);
     };
   }, [save]);
-
-  const toggleFullscreen = () => {
-    const el = shellRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else el.requestFullscreen?.().catch(() => {});
-  };
 
   const togglePip = async () => {
     const v = videoRef.current;
@@ -274,8 +378,30 @@ export default function VideoPlayer({
       onMouseMove={wake}
       onTouchStart={wake}
       data-controls={showControls || !playing ? 'on' : 'off'}
+      style={
+        isFullscreen
+          ? {
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              width: '100vw',
+              height: '100vh',
+              maxWidth: '100vw',
+              maxHeight: '100vh',
+              borderRadius: 0,
+              background: '#000000',
+              display: 'flex',
+              flexDirection: 'column',
+              margin: 0
+            }
+          : undefined
+      }
     >
-      <div className="player-stage" onClick={embedMode ? undefined : togglePlay}>
+      <div
+        className="player-stage"
+        onClick={embedMode ? undefined : togglePlay}
+        style={isFullscreen ? { flex: 1, height: 'auto', minHeight: 0, aspectRatio: 'unset' } : undefined}
+      >
         {resumingSource || (!activeSource && !ended) ? (
           <div className="player-stage" style={{ display: 'grid', placeItems: 'center', cursor: 'default' }}>
             <div className="liquid-loader">
@@ -289,6 +415,7 @@ export default function VideoPlayer({
           </div>
         ) : embedMode ? (
           <iframe
+            ref={iframeRef}
             key={active.id}
             className="player-embed"
             src={resolveApiUrl(activeSource.embedUrl)}
@@ -300,14 +427,15 @@ export default function VideoPlayer({
           />
         ) : (
           <video
-            key={`${active?.id || 'none'}-${activeSource?.directUrl || ''}-${forceProxy ? 'proxy' : 'direct'}`}
+            key={`${active?.id || 'none'}-${effectiveDirectUrl || ''}-${forceProxy ? 'proxy' : 'direct'}`}
             ref={videoRef}
             className="player-video"
-            src={activeSource ? proxied(activeSource.directUrl, forceProxy) : undefined}
+            src={effectiveDirectUrl ? proxied(effectiveDirectUrl, forceProxy) : undefined}
             referrerPolicy="no-referrer"
             playsInline
             autoPlay
             preload="auto"
+            crossOrigin="anonymous"
             onPlay={() => { setPlaying(true); setEnded(false); setBuffering(false); wake(); }}
             onPause={() => { setPlaying(false); setShowControls(true); save(true); }}
             onTimeUpdate={(e) => {
@@ -338,7 +466,7 @@ export default function VideoPlayer({
             onError={() => {
               setBuffering(false);
               // 1) If direct CDN URL failed, retry via 4MB chunked /api/stream/proxy
-              if (!forceProxy && isDirectCdnPlayable(activeSource?.directUrl)) {
+              if (!forceProxy && isDirectCdnPlayable(effectiveDirectUrl)) {
                 setForceProxy(true);
                 return;
               }
@@ -356,11 +484,21 @@ export default function VideoPlayer({
                 }
               }
             }}
-          />
+          >
+            {effectiveSubUrl && (
+              <track
+                kind="subtitles"
+                srcLang="ar"
+                label="العربية"
+                src={resolveApiUrl(effectiveSubUrl)}
+                default
+              />
+            )}
+          </video>
         )}
 
         {/* center play overlay */}
-        {activeSource?.directUrl && !playing && !ended && (
+        {effectiveDirectUrl && !embedMode && !playing && !ended && (
           <button type="button" className="player-bigplay" onClick={togglePlay} aria-label={t('common.play')}>
             <span className="player-bigplay__ring" />
             <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true">
@@ -369,7 +507,7 @@ export default function VideoPlayer({
           </button>
         )}
 
-        {buffering && activeSource?.directUrl && (
+        {buffering && effectiveDirectUrl && !embedMode && (
           <div className="player-buffer" role="status">
             <div className="liquid-loader__blobs">
               <div className="liquid-loader__blob" />
@@ -380,7 +518,7 @@ export default function VideoPlayer({
           </div>
         )}
 
-        {showResume && activeSource?.directUrl && (
+        {showResume && effectiveDirectUrl && !embedMode && (
           <div className="player-resume glass glass--strong">
             <div className="player-resume__text">{t('watch.resumeAt', { time: fmt(startTime) })}</div>
             <div className="player-resume__row">
@@ -435,28 +573,66 @@ export default function VideoPlayer({
           </div>
         )}
 
-        <div className="player-top">
+        <div className="player-top" style={{ pointerEvents: 'none' }}>
           <div className="player-top__title">
             <strong>{title}</strong>
             {episodeLabel && <span className="player-top__ep">{episodeLabel}</span>}
           </div>
-          {embedMode && active && (
-            <div className="player-top__via">{t('watch.playingVia', { server: active.server })}</div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', pointerEvents: 'auto' }}>
+            {embedMode && active && (
+              <div className="player-top__via">{t('watch.playingVia', { server: active.server })}</div>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFullscreen();
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.4rem 0.85rem',
+                borderRadius: '999px',
+                background: '#ffffff',
+                color: '#000000',
+                border: '1.5px solid #ffffff',
+                fontWeight: 900,
+                fontSize: '0.76rem',
+                cursor: 'pointer',
+                boxShadow: '0 6px 18px rgba(0,0,0,0.65)'
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4">
+                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>
+                {isFullscreen
+                  ? lang === 'ar'
+                    ? 'تصغير الشاشة'
+                    : 'Exit Fullscreen'
+                  : lang === 'ar'
+                  ? 'شاشة كاملة'
+                  : 'Fullscreen'}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* glass control bar */}
-      {!embedMode && (
-        <div className="player-bar">
+      {/* Always-Visible Liquid Glass Control Bar (Time Skip -10m / -10s / +10s / +10m + Fullscreen) */}
+      <div className="player-bar" style={{ opacity: 1, pointerEvents: 'auto' }}>
+        {!embedMode && (
           <div className="player-scrub" onClick={seekTo} role="slider" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
             <div className="player-scrub__track">
               <div className="player-scrub__fill" style={{ width: `${percent}%` }} />
               <div className="player-scrub__thumb" style={{ insetInlineStart: `${percent}%` }} />
             </div>
           </div>
+        )}
 
-          <div className="player-bar__row">
+        <div className="player-bar__row" style={{ flexWrap: 'wrap', gap: '0.45rem' }}>
+          {!embedMode && (
             <button type="button" className="player-btn" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
               {playing ? (
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></svg>
@@ -464,83 +640,217 @@ export default function VideoPlayer({
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5z" /></svg>
               )}
             </button>
-            {onPrev && (
-              <button type="button" className="player-btn" onClick={onPrev} title={t('watch.prevEpisode')}>
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 6h2v12H7zM19 6v12l-9-6 9-6z" /></svg>
-              </button>
-            )}
-            {onNext && (
-              <button type="button" className="player-btn" onClick={onNext} title={t('watch.nextEpisode')}>
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15 6h2v12h-2zM5 6v12l9-6-9-6z" /></svg>
-              </button>
-            )}
+          )}
+          {onPrev && (
+            <button type="button" className="player-btn" onClick={onPrev} title={t('watch.prevEpisode')}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 6h2v12H7zM19 6v12l-9-6 9-6z" /></svg>
+            </button>
+          )}
+          {onNext && (
+            <button type="button" className="player-btn" onClick={onNext} title={t('watch.nextEpisode')}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15 6h2v12h-2zM5 6v12l9-6-9-6z" /></svg>
+            </button>
+          )}
 
+          {/* Dedicated Skip Buttons: -10m, -10s, +10s, +10m, +85s Intro */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => seekBy(-600)}
+              title={lang === 'ar' ? 'تأخير 10 دقائق (-10m)' : 'Rewind 10 minutes (-10m)'}
+              style={{
+                padding: '0.34rem 0.68rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.24)',
+                fontSize: '0.74rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              ⏪ {lang === 'ar' ? '-10 د' : '-10m'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => seekBy(-10)}
+              title={lang === 'ar' ? 'تأخير 10 ثوانٍ (-10s)' : 'Rewind 10 seconds (-10s)'}
+              style={{
+                padding: '0.34rem 0.68rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.24)',
+                fontSize: '0.74rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              ⏪ {lang === 'ar' ? '-10 ث' : '-10s'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => seekBy(10)}
+              title={lang === 'ar' ? 'تقديم 10 ثوانٍ (+10s)' : 'Forward 10 seconds (+10s)'}
+              style={{
+                padding: '0.34rem 0.68rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.24)',
+                fontSize: '0.74rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {lang === 'ar' ? '+10 ث' : '+10s'} ⏩
+            </button>
+
+            <button
+              type="button"
+              onClick={() => seekBy(600)}
+              title={lang === 'ar' ? 'تقديم 10 دقائق (+10m)' : 'Forward 10 minutes (+10m)'}
+              style={{
+                padding: '0.34rem 0.68rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.24)',
+                fontSize: '0.74rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {lang === 'ar' ? '+10 د' : '+10m'} ⏩
+            </button>
+
+            <button
+              type="button"
+              onClick={() => seekBy(85)}
+              title={lang === 'ar' ? 'تخطي المقدمة (+85 ثانية)' : 'Skip Intro (+85s)'}
+              style={{
+                padding: '0.34rem 0.68rem',
+                borderRadius: '999px',
+                background: 'rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.88)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              ⏭ {lang === 'ar' ? 'تخطي المقدمة' : 'Skip Intro'}
+            </button>
+          </div>
+
+          {!embedMode && (
             <div className="player-time">
               <span>{fmt(current)}</span>
               <span className="player-time__sep">/</span>
               <span>{fmt(duration)}</span>
             </div>
+          )}
 
-            <div className="player-bar__spacer" />
+          <div className="player-bar__spacer" />
 
-            <div className="player-vol">
-              <button type="button" className="player-btn" onClick={() => setMuted((m) => !m)} aria-label={t('watch.mute')}>
-                {muted || volume === 0 ? '🔇' : '🔊'}
-              </button>
-              <input
-                className="player-vol__range"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={muted ? 0 : volume}
-                onChange={(e) => {
-                  setVolume(Number(e.target.value));
-                  setMuted(Number(e.target.value) === 0);
-                }}
-                aria-label={t('watch.volume')}
-              />
-            </div>
+          {!embedMode && (
+            <>
+              <div className="player-vol">
+                <button type="button" className="player-btn" onClick={() => setMuted((m) => !m)} aria-label={t('watch.mute')}>
+                  {muted || volume === 0 ? '🔇' : '🔊'}
+                </button>
+                <input
+                  className="player-vol__range"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={muted ? 0 : volume}
+                  onChange={(e) => {
+                    setVolume(Number(e.target.value));
+                    setMuted(Number(e.target.value) === 0);
+                  }}
+                  aria-label={t('watch.volume')}
+                />
+              </div>
 
-            <select
-              className="player-speed"
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              aria-label={t('watch.speed')}
-            >
-              {[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => (
-                <option key={s} value={s}>{s}×</option>
-              ))}
-            </select>
-
-            {onOpenDownload && (
-              <button
-                type="button"
-                className="player-btn"
-                onClick={onOpenDownload}
-                title={t('watch.downloadEpisode')}
-                style={{ color: 'var(--cyan)' }}
+              <select
+                className="player-speed"
+                value={speed}
+                onChange={(e) => setSpeed(Number(e.target.value))}
+                aria-label={t('watch.speed')}
               >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            )}
+                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => (
+                  <option key={s} value={s}>{s}×</option>
+                ))}
+              </select>
+            </>
+          )}
 
+          {onOpenDownload && (
+            <button
+              type="button"
+              className="player-btn"
+              onClick={onOpenDownload}
+              title={t('watch.downloadEpisode')}
+              style={{ color: '#ffffff' }}
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+
+          {!embedMode && (
             <button type="button" className="player-btn" onClick={togglePip} title={t('watch.pip')}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="5" width="18" height="14" rx="2.5" />
                 <rect x="12" y="11" width="7" height="6" rx="1.5" fill="currentColor" stroke="none" />
               </svg>
             </button>
-            <button type="button" className="player-btn" onClick={toggleFullscreen} title={t('watch.fullscreen')}>
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" strokeLinecap="round" />
-              </svg>
-            </button>
-          </div>
+          )}
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            title={t('watch.fullscreen')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.38rem 0.85rem',
+              borderRadius: '999px',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              fontSize: '0.76rem',
+              fontWeight: 900,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>
+              {isFullscreen
+                ? lang === 'ar'
+                  ? 'تصغير'
+                  : 'Exit'
+                : lang === 'ar'
+                ? 'شاشة كاملة'
+                : 'Fullscreen'}
+            </span>
+          </button>
         </div>
-      )}
+      </div>
 
       {/* WitAnime Always-Visible Streaming Servers Bar (سيرفرات المشاهدة) */}
       {entries.length > 0 && (
