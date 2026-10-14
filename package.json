@@ -9,7 +9,7 @@
     "server": "node --watch server/src/index.js",
     "client": "vite --config client/vite.config.js",
     "seed": "node server/src/seed.js",
-    "build": "vite build client",
+    "build": "vite build client && rm -rf dist && cp -r client/dist dist",
     "start": "vite build client && node server/src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
