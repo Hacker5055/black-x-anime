@@ -856,27 +856,26 @@ function FavoritesSection() {
   );
 }
 
-/* --------------------------- 00. 1:1 iOS Liquid Glass Smart Control Deck --------------------------- */
+/* --------------------------- 00. iOS Liquid Glass Anime & Manhwa Command Deck --------------------------- */
 function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
   const { lang } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [activeRoom, setActiveRoom] = useState('living');
-  const [acOn, setAcOn] = useState(true);
-  const [lockOn, setLockOn] = useState(true);
-  const [vacOn, setVacOn] = useState(false);
-  const [selectedDeg, setSelectedDeg] = useState('22°');
-  const [activeDockBtn, setActiveDockBtn] = useState('home');
+  const [activeHub, setActiveHub] = useState('home');
+  const [fhdOn, setFhdOn] = useState(true);
+  const [vipAlertOn, setVipAlertOn] = useState(true);
+  const [autoHealOn, setAutoHealOn] = useState(true);
+  const [selectedQuality, setSelectedQuality] = useState('120Hz');
 
-  const rooms = [
-    { id: 'living', labelAr: 'صالة السينما', labelEn: 'Living Room', route: null },
-    { id: 'kitchen', labelAr: 'الأنمي الرائج', labelEn: 'Kitchen', route: '/trending' },
-    { id: 'bathroom', labelAr: 'المانهوا والمانجا', labelEn: 'Bathroom', route: '/browse' },
-    { id: 'bedroom', labelAr: 'الأعلى تقييماً', labelEn: 'Bedroom', route: '/rankings' }
+  const hubs = [
+    { id: 'home', labelAr: '🔥 الرئيسية', labelEn: '🔥 All Hub', route: null },
+    { id: 'anime', labelAr: '🎬 الأنمي الرائج', labelEn: '🎬 Trending Anime', route: '/trending' },
+    { id: 'manga', labelAr: '📖 المانهوا والمانجا', labelEn: '📖 Manga & Manhwa', route: '/browse' },
+    { id: 'rankings', labelAr: '👑 الأعلى تقييماً', labelEn: '👑 Top Rankings', route: '/rankings' }
   ];
 
-  const degreeScale = ['16°', '18°', '20°', '22°', '24°', '26°'];
+  const qualityScale = ['480p', '720p', '1080p', '120Hz', '2K', '4K HDR'];
   const featuredShow = featuredItems[0] || {
     slug: 'solo-leveling',
     titleAr: 'سولو ليفلينج (Solo Leveling)',
@@ -884,12 +883,12 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
     poster: '/blackx-logo.png'
   };
 
-  const userDisplayName = user?.username || user?.name || (lang === 'ar' ? 'Michael • الملك' : 'Michael');
+  const userDisplayName = user?.username || user?.name || (lang === 'ar' ? 'عضو BLACK X' : 'BLACK X Member');
 
   return (
-    <section className="ios-lg-smart-deck" dir="ltr" aria-label="iOS Liquid Glass Smart Control Deck">
+    <section className="ios-lg-smart-deck" aria-label="iOS Liquid Glass Anime & Manhwa Command Deck">
       {/* ==================== LEFT COLUMN ==================== */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         {/* 1. Top Row: Profile Capsule + Bell Orb (with glowing white dot) + 4-Dot Grid Orb */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.85rem' }}>
           <div
@@ -920,8 +919,8 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-              <span style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.52)', fontWeight: 600 }}>
-                {lang === 'ar' ? 'Hello, مرحباً' : 'Hello,'}
+              <span style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
+                {lang === 'ar' ? 'مرحباً بك في BLACK X' : 'Welcome to BLACK X'}
               </span>
               <span style={{ fontSize: '1.05rem', color: '#ffffff', fontWeight: 800, letterSpacing: '-0.01em' }}>
                 {userDisplayName}
@@ -940,8 +939,8 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
                   title: lang === 'ar' ? `🔔 BLACK X 120Hz: ${featuredShow.titleAr}` : `🔔 BLACK X 120Hz: ${featuredShow.titleEn}`,
                   body:
                     lang === 'ar'
-                      ? 'تم تفعيل نظام إشعارات iOS Liquid Glass للحلقات والفصول الجديدة!'
-                      : 'iOS Liquid Glass live notifications active!',
+                      ? 'تم تفعيل نظام إشعارات الحلقات والفصول الجديدة على جهازك!'
+                      : 'Live episode & chapter notifications active!',
                   icon: featuredShow.poster || '/blackx-logo.png',
                   url: `/show/${featuredShow.slug}`
                 });
@@ -976,7 +975,7 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
           </div>
         </div>
 
-        {/* 2. Middle Row: Full-Capsule Category Track (+ Orb + Living Room Active Pill + Tabs) */}
+        {/* 2. Middle Row: Full-Capsule Category Track (🔍 Orb + Anime & Manhwa Hubs) */}
         <div
           className="ios-lg-capsule-track"
           style={{
@@ -990,23 +989,23 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
             type="button"
             className="ios-lg-orb"
             onClick={() => navigate('/trending')}
-            style={{ width: '38px', height: '38px', fontSize: '1.15rem', fontWeight: 600 }}
-            title={lang === 'ar' ? 'استكشاف كل الأعمال' : 'Explore All'}
+            style={{ width: '38px', height: '38px', fontSize: '0.95rem', fontWeight: 700 }}
+            title={lang === 'ar' ? 'بحث الأنمي' : 'Search Anime'}
           >
-            +
+            🔍
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, justifyContent: 'space-around' }}>
-            {rooms.map((rm) => {
-              const active = activeRoom === rm.id;
+            {hubs.map((hb) => {
+              const active = activeHub === hb.id;
               return (
                 <button
-                  key={rm.id}
+                  key={hb.id}
                   type="button"
                   className={active ? 'ios-lg-active-pill' : ''}
                   onClick={() => {
-                    setActiveRoom(rm.id);
-                    if (rm.route) navigate(rm.route);
+                    setActiveHub(hb.id);
+                    if (hb.route) navigate(hb.route);
                   }}
                   style={
                     active
@@ -1018,32 +1017,32 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
                       : {
                           background: 'transparent',
                           border: 'none',
-                          color: 'rgba(255,255,255,0.62)',
+                          color: 'rgba(255,255,255,0.68)',
                           fontSize: '0.83rem',
-                          fontWeight: 600,
+                          fontWeight: 700,
                           padding: '0.5rem 0.75rem',
                           cursor: 'pointer',
                           whiteSpace: 'nowrap'
                         }
                   }
                 >
-                  {lang === 'ar' ? rm.labelAr : rm.labelEn}
+                  {lang === 'ar' ? hb.labelAr : hb.labelEn}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* 3. Bottom-Left Wide Liquid Glass Card (Air Conditioner / LG XM70_125 -> 120Hz Cinema Engine + Scale) */}
+        {/* 3. Bottom-Left Wide Liquid Glass Card (BLACK X 120Hz Cinema Engine + Quality Scale) */}
         <div
           className="ios-lg-surface"
           style={{
-            padding: '1.65rem 1.75rem 1.45rem',
+            padding: '1.45rem 1.65rem 1.25rem',
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            minHeight: '225px'
+            minHeight: '195px'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
@@ -1051,47 +1050,46 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
               onClick={() => navigate(`/show/${featuredShow.slug}`)}
               style={{ cursor: 'pointer' }}
             >
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
-                {lang === 'ar' ? 'Air Conditioner • محرك 120Hz' : 'Air Conditioner'}
+              <div style={{ fontSize: '1.18rem', fontWeight: 900, color: '#ffffff' }}>
+                {lang === 'ar' ? '🎬 محرك بث الأنمي الفائق • BLACK X 120Hz' : '🎬 BLACK X 120Hz Anime Engine'}
               </div>
-              <div style={{ fontSize: '0.84rem', color: 'rgba(255,255,255,0.52)', fontWeight: 600, marginTop: '0.22rem' }}>
-                LG XM70_125 • {lang === 'ar' ? featuredShow.titleAr : featuredShow.titleEn}
+              <div style={{ fontSize: '0.84rem', color: 'rgba(255,255,255,0.62)', fontWeight: 700, marginTop: '0.22rem' }}>
+                {lang === 'ar' ? `يعرض الآن: ${featuredShow.titleAr}` : `Now Streaming: ${featuredShow.titleEn}`}
               </div>
             </div>
 
             <button
               type="button"
-              aria-label="Toggle Cinema Engine"
-              className={`ios-lg-toggle ${acOn ? 'is-on' : ''}`}
-              onClick={() => setAcOn((v) => !v)}
+              aria-label="Toggle 120Hz Engine"
+              className={`ios-lg-toggle ${fhdOn ? 'is-on' : ''}`}
+              onClick={() => setFhdOn((v) => !v)}
             >
               <span className="ios-lg-toggle__thumb" />
             </button>
           </div>
 
-          {/* Exact Bottom Tick Ruler Scale: 16°  18°  20°  [22°]  24°  26° */}
+          {/* Interactive Streaming Quality & Frame-Rate Ruler Scale */}
           <div className="ios-lg-ruler">
-            {degreeScale.map((deg) => {
-              const isCenter = deg === selectedDeg;
+            {qualityScale.map((q) => {
+              const isCenter = q === selectedQuality;
               return (
                 <button
-                  key={deg}
+                  key={q}
                   type="button"
-                  onClick={() => setSelectedDeg(deg)}
+                  onClick={() => setSelectedQuality(q)}
                   style={{
                     background: 'transparent',
                     border: 'none',
                     padding: '0.15rem 0.35rem',
                     cursor: 'pointer',
-                    color: isCenter ? '#ffffff' : 'rgba(255,255,255,0.44)',
-                    fontSize: isCenter ? '2.15rem' : '0.92rem',
-                    fontWeight: isCenter ? 800 : 600,
-                    letterSpacing: '-0.02em',
-                    textShadow: isCenter ? '0 0 22px rgba(255,255,255,0.65)' : 'none',
-                    transition: 'all 0.22s ease'
+                    color: isCenter ? '#ffffff' : 'rgba(255,255,255,0.48)',
+                    fontSize: isCenter ? '1.65rem' : '0.86rem',
+                    fontWeight: isCenter ? 900 : 700,
+                    textShadow: isCenter ? '0 0 18px rgba(255,255,255,0.6)' : 'none',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  {deg}
+                  {q}
                 </button>
               );
             })}
@@ -1100,270 +1098,117 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
       </div>
 
       {/* ==================== RIGHT COLUMN ==================== */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem', justifyContent: 'space-between' }}>
-        {/* 1. Top Row: Two Side-by-Side Square Bento Squircles (Door Lock & MOP/VAC) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.15rem', flex: 1 }}>
-          {/* Square Card 1: Door Lock / Locked with 3D Keypad & Pure White Glowing Ring */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', justifyContent: 'space-between' }}>
+        {/* Two Side-by-Side Anime & Manhwa Bento Squircles */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.1rem', flex: 1 }}>
+          {/* Square Card 1: Full Anime Library (6,973 Anime) */}
           <div
             className="ios-lg-surface"
+            onClick={() => navigate('/trending')}
             style={{
-              padding: '1.4rem 1.35rem 0',
+              padding: '1.35rem',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              minHeight: '248px'
+              minHeight: '195px',
+              cursor: 'pointer'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
               <div>
-                <div style={{ fontSize: '1.12rem', fontWeight: 800, color: '#ffffff' }}>
-                  Door Lock
+                <div style={{ fontSize: '1.08rem', fontWeight: 900, color: '#ffffff' }}>
+                  {lang === 'ar' ? 'مكتبة الأنمي الشاملة' : 'Anime Catalog'}
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.2rem' }}>
-                  <span>🔒</span>
-                  <span>{lockOn ? (lang === 'ar' ? 'Locked • محمي' : 'Locked') : (lang === 'ar' ? 'Unlocked' : 'Unlocked')}</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.22rem', fontWeight: 700 }}>
+                  <span>⚡</span>
+                  <span>{lang === 'ar' ? '6,973 أنمي • 3 سيرفرات' : '6,973 Anime • 3 Servers'}</span>
                 </div>
               </div>
               <button
                 type="button"
-                aria-label="Toggle Door Lock"
-                className={`ios-lg-toggle ${lockOn ? 'is-on' : ''}`}
-                onClick={() => setLockOn((v) => !v)}
+                aria-label="Toggle Anime Alerts"
+                className={`ios-lg-toggle ${vipAlertOn ? 'is-on' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setVipAlertOn((v) => !v);
+                }}
               >
                 <span className="ios-lg-toggle__thumb" />
               </button>
             </div>
 
-            {/* 1:1 3D Angled Smart Lock Keypad with Glowing Pure White/Chrome Ring */}
-            <div
-              onClick={() => navigate('/trending')}
-              style={{
-                position: 'relative',
-                height: '148px',
-                display: 'flex',
-                alignItems: 'flex-end',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                overflow: 'hidden'
-              }}
-            >
-              <svg width="190" height="148" viewBox="0 0 190 148" fill="none">
-                <defs>
-                  <linearGradient id="keypadBody" x1="30" y1="10" x2="150" y2="148" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#2a2a32" />
-                    <stop offset="45%" stopColor="#111116" />
-                    <stop offset="100%" stopColor="#050508" />
-                  </linearGradient>
-                  <filter id="whiteRingGlow" x="-40%" y="-40%" width="180%" height="180%">
-                    <feGaussianBlur stdDeviation="4" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
-                <g transform="rotate(24 105 92)">
-                  <rect x="44" y="10" width="106" height="165" rx="34" fill="#09090d" stroke="rgba(255,255,255,0.38)" strokeWidth="2.5" />
-                  <rect x="48" y="14" width="98" height="157" rx="30" fill="url(#keypadBody)" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
-                  {/* Glowing Pure-White Neon Ring */}
-                  <circle
-                    cx="97"
-                    cy="50"
-                    r="17"
-                    stroke="#ffffff"
-                    strokeWidth="3.2"
-                    filter="url(#whiteRingGlow)"
-                  />
-                  {/* Keypad Digits 1 2 3 / 4 5 6 / 7 8 9 */}
-                  <text x="73" y="92" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">1</text>
-                  <text x="94" y="92" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">2</text>
-                  <text x="115" y="92" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">3</text>
-                  <text x="73" y="112" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">4</text>
-                  <text x="94" y="112" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">5</text>
-                  <text x="115" y="112" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">6</text>
-                  <text x="73" y="132" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">7</text>
-                  <text x="94" y="132" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">8</text>
-                  <text x="115" y="132" fill="rgba(255,255,255,0.78)" fontSize="11" fontWeight="700" fontFamily="sans-serif">9</text>
-                </g>
-              </svg>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem' }}>
+              <span
+                style={{
+                  padding: '0.38rem 0.9rem',
+                  borderRadius: '999px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.78rem',
+                  fontWeight: 900
+                }}
+              >
+                {lang === 'ar' ? '▶ تصفح الأنميات' : '▶ Browse Anime'}
+              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+                FHD 1080p
+              </span>
             </div>
           </div>
 
-          {/* Square Card 2: MOP/VAC / Cleaning with 3D Glossy Metallic Smart Disc */}
+          {/* Square Card 2: Master Manga, Manhwa & Manhua Library (+120,000 Works) */}
           <div
             className="ios-lg-surface"
+            onClick={() => navigate('/browse')}
             style={{
-              padding: '1.4rem 1.35rem 0',
+              padding: '1.35rem',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              minHeight: '248px'
+              minHeight: '195px',
+              cursor: 'pointer'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
               <div>
-                <div style={{ fontSize: '1.12rem', fontWeight: 800, color: '#ffffff' }}>
-                  MOP/VAC
+                <div style={{ fontSize: '1.08rem', fontWeight: 900, color: '#ffffff' }}>
+                  {lang === 'ar' ? 'المانهوا والمانجا' : 'Manga & Manhwa'}
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.2rem' }}>
-                  <span>✨</span>
-                  <span>{lang === 'ar' ? 'Cleaning • +120K' : 'Cleaning'}</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.22rem', fontWeight: 700 }}>
+                  <span>📖</span>
+                  <span>{lang === 'ar' ? '+120,000 عمل • 8 مصادر' : '+120,000 Works • 8 Sources'}</span>
                 </div>
               </div>
               <button
                 type="button"
-                aria-label="Toggle MOP/VAC"
-                className={`ios-lg-toggle ${vacOn ? 'is-on' : ''}`}
-                onClick={() => setVacOn((v) => !v)}
+                aria-label="Toggle Master Index"
+                className={`ios-lg-toggle ${autoHealOn ? 'is-on' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAutoHealOn((v) => !v);
+                }}
               >
                 <span className="ios-lg-toggle__thumb" />
               </button>
             </div>
 
-            {/* 1:1 3D Glossy Obsidian & Chrome Smart Disc */}
-            <div
-              onClick={() => navigate('/browse')}
-              style={{
-                position: 'relative',
-                height: '148px',
-                display: 'flex',
-                alignItems: 'flex-end',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                overflow: 'hidden'
-              }}
-            >
-              <svg width="200" height="142" viewBox="0 0 200 142" fill="none">
-                <defs>
-                  <radialGradient id="vacTopChrome" cx="50%" cy="32%" r="58%">
-                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-                    <stop offset="28%" stopColor="#8e8e99" stopOpacity="0.72" />
-                    <stop offset="65%" stopColor="#18181f" stopOpacity="0.96" />
-                    <stop offset="100%" stopColor="#050508" stopOpacity="1" />
-                  </radialGradient>
-                  <linearGradient id="vacRim" x1="15" y1="45" x2="185" y2="135" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
-                    <stop offset="50%" stopColor="#27272f" stopOpacity="0.5" />
-                    <stop offset="100%" stopColor="#ffffff" stopOpacity="0.75" />
-                  </linearGradient>
-                </defs>
-                {/* Base Chassis */}
-                <ellipse cx="100" cy="98" rx="76" ry="38" fill="#07070b" stroke="url(#vacRim)" strokeWidth="2.5" />
-                {/* Glossy Top Dome */}
-                <ellipse cx="100" cy="84" rx="72" ry="34" fill="url(#vacTopChrome)" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5" />
-                {/* Center LiDAR Turret Ring */}
-                <ellipse cx="100" cy="76" rx="22" ry="10.5" fill="#18181f" stroke="#ffffff" strokeWidth="2" />
-                <ellipse cx="100" cy="75" rx="10" ry="4.8" fill="#ffffff" />
-                {/* Front Button Pill */}
-                <rect x="93" y="94" width="14" height="12" rx="6" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.65)" strokeWidth="1.2" />
-              </svg>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem' }}>
+              <span
+                style={{
+                  padding: '0.38rem 0.9rem',
+                  borderRadius: '999px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.78rem',
+                  fontWeight: 900
+                }}
+              >
+                {lang === 'ar' ? '📖 اقرأ الآن' : '📖 Read Now'}
+              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+                🇰🇷 🇯🇵 🇨🇳
+              </span>
             </div>
-          </div>
-        </div>
-
-        {/* 2. Bottom Row of Right Column: 1:1 Reference Dock ([ 🏠 Home ] ( 🔍 ) ( 🎛️ ) ( ⊕ ) ( 📄 )) */}
-        <div
-          className="ios-lg-capsule-track"
-          style={{
-            padding: '0.62rem 0.85rem',
-            justifyContent: 'space-between',
-            gap: '0.65rem'
-          }}
-        >
-          <button
-            type="button"
-            className="ios-lg-active-pill"
-            onClick={() => {
-              setActiveDockBtn('home');
-              navigate('/');
-            }}
-            style={{
-              padding: '0.68rem 1.45rem',
-              fontSize: '0.9rem'
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-flex',
-                color: '#ffffff',
-                filter: 'drop-shadow(0 0 10px #ffffff) drop-shadow(0 0 20px rgba(255,255,255,0.95))'
-              }}
-            >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3L4 9.5V20a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5L12 3z" />
-              </svg>
-            </span>
-            <span>Home</span>
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.62rem' }}>
-            <button
-              type="button"
-              className="ios-lg-orb"
-              onClick={() => {
-                setActiveDockBtn('search');
-                navigate('/trending');
-              }}
-              title={lang === 'ar' ? 'بحث الأنمي' : 'Search'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <circle cx="11" cy="11" r="7" />
-                <line x1="16.5" y1="16.5" x2="21" y2="21" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              className="ios-lg-orb"
-              onClick={() => {
-                setActiveDockBtn('sliders');
-                navigate('/rankings');
-              }}
-              title={lang === 'ar' ? 'الترتيب والفلاتر' : 'Filters'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="7" x2="20" y2="7" />
-                <circle cx="9" cy="7" r="2" fill="#ffffff" />
-                <line x1="4" y1="12" x2="20" y2="12" />
-                <circle cx="15" cy="12" r="2" fill="#ffffff" />
-                <line x1="4" y1="17" x2="20" y2="17" />
-                <circle cx="10" cy="17" r="2" fill="#ffffff" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              className="ios-lg-orb"
-              onClick={() => {
-                setActiveDockBtn('add');
-                if (user) navigate('/profile');
-                else onOpenAuth?.('login');
-              }}
-              title={lang === 'ar' ? 'إضافة / حسابي' : 'Add / Profile'}
-            >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="8.5" />
-                <line x1="12" y1="8.5" x2="12" y2="15.5" />
-                <line x1="8.5" y1="12" x2="15.5" y2="12" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              className="ios-lg-orb"
-              onClick={() => {
-                setActiveDockBtn('docs');
-                navigate('/browse');
-              }}
-              title={lang === 'ar' ? 'مكتبة المانهوا والمانجا' : 'Manga & Manhwa'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="8.5" />
-                <line x1="9" y1="10" x2="15" y2="10" />
-                <line x1="9" y1="12.5" x2="15" y2="12.5" />
-                <line x1="9" y1="15" x2="13" y2="15" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>

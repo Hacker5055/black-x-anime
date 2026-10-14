@@ -5025,7 +5025,6 @@ export default function MobileApkApp() {
             fontSize: '0.82rem',
             fontWeight: 900,
             boxShadow: '0 12px 32px rgba(0, 0, 0, 0.9)',
-            backdropFilter: 'blur(16px)',
             whiteSpace: 'nowrap'
           }}
         >
@@ -5140,7 +5139,6 @@ export default function MobileApkApp() {
             inset: 0,
             zIndex: 9700,
             background: 'rgba(0,0,0,0.88)',
-            backdropFilter: 'blur(16px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5336,8 +5334,6 @@ export default function MobileApkApp() {
           justifyContent: 'space-between',
           padding: '0.65rem 1rem',
           background: 'rgba(0, 0, 0, 0.84)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.07)'
         }}
       >
@@ -5491,90 +5487,17 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* ==================== TAB 1: HOME (iOS 26 LIQUID GLASS — PURE MONOCHROME EDITION) ==================== */}
+      {/* ==================== TAB 1: HOME (iOS 26 LIQUID GLASS — PURE MONOCHROME ANIME & MANHWA EDITION) ==================== */}
       {activeTab === 'home' && !selectedAnime && (
-        <main style={{ animation: 'bxSlideUp 0.22s ease-out', position: 'relative', zIndex: 2 }}>
-          {/* 1:1 iOS Liquid Glass Smart Home UI Control Deck (Pure Monochrome Liquid Glass) */}
-          <section style={{ padding: '0.85rem 0.95rem 0.65rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }} dir="ltr">
-            {/* Top Row: Profile Capsule + Bell Orb (with glowing white dot) + 4-Dot Grid Orb */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem' }}>
-              <div
-                className="ios-lg-capsule-track"
-                onClick={() => setActiveTab('profile')}
-                style={{ padding: '0.36rem 1.05rem 0.36rem 0.42rem', gap: '0.65rem', cursor: 'pointer' }}
-              >
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '50%',
-                    overflow: 'hidden',
-                    border: '1.5px solid rgba(255,255,255,0.72)',
-                    boxShadow: '0 0 12px rgba(255,255,255,0.28)',
-                    background: '#0a0a0f',
-                    flexShrink: 0
-                  }}
-                >
-                  <img
-                    src={user?.photoURL || '/blackx-logo.png'}
-                    alt="BLACK X"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-                  <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
-                    Hello,
-                  </span>
-                  <span style={{ fontSize: '0.92rem', color: '#ffffff', fontWeight: 800 }}>
-                    {user?.displayName || 'Michael'}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                <button
-                  type="button"
-                  className="ios-lg-orb"
-                  onClick={() => {
-                    try {
-                      if (window.BlackXNative?.sendPhoneNotification) {
-                        window.BlackXNative.sendPhoneNotification(
-                          '🎬 BLACK X 120Hz • iOS Liquid Glass',
-                          isRtl ? 'نظام إشعارات الحلقات والفصول الجديدة نشط!' : 'Episode & Chapter notifications active!',
-                          9001
-                        );
-                      }
-                    } catch (_) {}
-                  }}
-                  style={{ width: '42px', height: '42px' }}
-                >
-                  <span className="ios-lg-orb-dot" />
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className="ios-lg-orb"
-                  onClick={() => setActiveTab('manga')}
-                  style={{ width: '42px', height: '42px' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-                    <circle cx="5.5" cy="5.5" r="2.2" />
-                    <circle cx="14.5" cy="5.5" r="2.2" />
-                    <circle cx="5.5" cy="14.5" r="2.2" />
-                    <circle cx="14.5" cy="14.5" r="2.2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Category Capsule Track (+ Orb | Living Room / Anime / Manhwa / Series) */}
+        <main style={{ animation: 'bxSlideUp 0.18s ease-out', position: 'relative' }}>
+          {/* iOS Liquid Glass Anime & Manhwa Command Bar (Pure Monochrome) */}
+          <section style={{ padding: '0.75rem 0.9rem 0.55rem', display: 'flex', flexDirection: 'column', gap: '0.72rem' }}>
+            {/* Category Capsule Track (🔥 الكل | 📺 مسلسلات | 🎬 أفلام | ⚡ يعرض الآن | 📖 المانهوا والمانجا) */}
             <div
               className="ios-lg-capsule-track bx-mob-scroll"
               style={{
-                padding: '0.35rem 0.5rem',
-                gap: '0.32rem',
+                padding: '0.35rem 0.48rem',
+                gap: '0.35rem',
                 overflowX: 'auto'
               }}
             >
@@ -5582,15 +5505,17 @@ export default function MobileApkApp() {
                 type="button"
                 className="ios-lg-orb"
                 onClick={() => setActiveTab('catalog')}
-                style={{ width: '34px', height: '34px', fontSize: '1.05rem', fontWeight: 700 }}
+                style={{ width: '34px', height: '34px', fontSize: '0.9rem', fontWeight: 800 }}
+                title={isRtl ? 'بحث شامل' : 'Search All'}
               >
-                +
+                🔍
               </button>
               {[
-                { id: 'all', ar: 'Living Room', en: 'Living Room' },
-                { id: 'series', ar: 'Kitchen • مسلسلات', en: 'Kitchen' },
-                { id: 'movies', ar: 'Bathroom • أفلام', en: 'Bathroom' },
-                { id: 'manhwa', ar: 'Bedroom • مانهوا', en: 'Bedroom' }
+                { id: 'all', ar: '🔥 الكل', en: '🔥 All' },
+                { id: 'series', ar: '📺 مسلسلات الأنمي', en: '📺 Series' },
+                { id: 'movies', ar: '🎬 أفلام الأنمي', en: '🎬 Movies' },
+                { id: 'simulcast', ar: '⚡ يعرض الآن', en: '⚡ Simulcast' },
+                { id: 'manhwa', ar: '📖 المانهوا والمانجا (+120K)', en: '📖 Manga & Manhwa' }
               ].map((cat) => {
                 const active = homeCategoryFilter === cat.id;
                 return (
@@ -5607,14 +5532,14 @@ export default function MobileApkApp() {
                     }}
                     style={
                       active
-                        ? { padding: '0.42rem 0.95rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }
+                        ? { padding: '0.4rem 0.92rem', fontSize: '0.74rem', whiteSpace: 'nowrap' }
                         : {
                             background: 'transparent',
                             border: 'none',
-                            color: 'rgba(255,255,255,0.62)',
-                            fontWeight: 600,
-                            fontSize: '0.74rem',
-                            padding: '0.4rem 0.65rem',
+                            color: 'rgba(255,255,255,0.68)',
+                            fontWeight: 700,
+                            fontSize: '0.73rem',
+                            padding: '0.38rem 0.65rem',
                             whiteSpace: 'nowrap',
                             cursor: 'pointer'
                           }
@@ -5626,72 +5551,64 @@ export default function MobileApkApp() {
               })}
             </div>
 
-            {/* Wide Card (Air Conditioner / LG XM70_125 + 16° 18° 20° [22°] 24° 26° Scale) */}
-            <div className="ios-lg-surface" style={{ padding: '1.15rem 1.25rem 1rem', borderRadius: '28px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
-                <div onClick={() => heroAnime && handleOpenAnime(heroAnime)} style={{ cursor: 'pointer' }}>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ffffff' }}>
-                    Air Conditioner
-                  </div>
-                  <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.52)', fontWeight: 600, marginTop: '0.15rem' }}>
-                    LG XM70_125 • 120Hz Cinema
-                  </div>
-                </div>
-                <div className="ios-lg-toggle is-on">
-                  <span className="ios-lg-toggle__thumb" />
-                </div>
-              </div>
-              <div className="ios-lg-ruler" style={{ marginTop: '0.95rem', padding: '0.75rem 0.65rem 0.3rem' }}>
-                {['16°', '18°', '20°', '22°', '24°', '26°'].map((deg) => {
-                  const isCenter = deg === '22°';
-                  return (
-                    <span
-                      key={deg}
-                      style={{
-                        color: isCenter ? '#ffffff' : 'rgba(255,255,255,0.44)',
-                        fontSize: isCenter ? '1.65rem' : '0.78rem',
-                        fontWeight: isCenter ? 800 : 600,
-                        textShadow: isCenter ? '0 0 18px rgba(255,255,255,0.65)' : 'none'
-                      }}
-                    >
-                      {deg}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Dual Square Bento Squircles (Door Lock & MOP/VAC) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            {/* Dual iOS Liquid Glass Quick-Launch Bento Cards (100% Anime & Manhwa) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.68rem' }}>
               <div
                 className="ios-lg-surface"
                 onClick={() => setActiveTab('catalog')}
-                style={{ padding: '1rem 0.95rem 0.75rem', borderRadius: '26px', cursor: 'pointer' }}
+                style={{ padding: '0.88rem 0.95rem', borderRadius: '24px', cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
                   <div>
-                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#ffffff' }}>Door Lock</div>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.15rem' }}>🔒 Locked</div>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#ffffff' }}>
+                      {isRtl ? '🎬 مكتبة الأنمي' : '🎬 Anime Hub'}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.18rem', fontWeight: 700 }}>
+                      {isRtl ? '⚡ 6,973 أنمي • FHD 120Hz' : '⚡ 6,973 Anime • FHD'}
+                    </div>
                   </div>
-                  <div className="ios-lg-toggle is-on" style={{ transform: 'scale(0.84)', transformOrigin: 'top right' }}>
-                    <span className="ios-lg-toggle__thumb" />
-                  </div>
+                  <span
+                    style={{
+                      padding: '0.2rem 0.52rem',
+                      borderRadius: '999px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontSize: '0.65rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    120Hz
+                  </span>
                 </div>
               </div>
 
               <div
                 className="ios-lg-surface"
                 onClick={() => setActiveTab('manga')}
-                style={{ padding: '1rem 0.95rem 0.75rem', borderRadius: '26px', cursor: 'pointer' }}
+                style={{ padding: '0.88rem 0.95rem', borderRadius: '24px', cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
                   <div>
-                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#ffffff' }}>MOP/VAC</div>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.15rem' }}>✨ Cleaning</div>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#ffffff' }}>
+                      {isRtl ? '📖 المانهوا والمانجا' : '📖 Manga & Manhwa'}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.68)', marginTop: '0.18rem', fontWeight: 700 }}>
+                      {isRtl ? '✨ +120,000 عمل وفصل' : '✨ +120,000 Works'}
+                    </div>
                   </div>
-                  <div className="ios-lg-toggle" style={{ transform: 'scale(0.84)', transformOrigin: 'top right' }}>
-                    <span className="ios-lg-toggle__thumb" />
-                  </div>
+                  <span
+                    style={{
+                      padding: '0.2rem 0.52rem',
+                      borderRadius: '999px',
+                      background: 'rgba(255,255,255,0.14)',
+                      border: '1px solid rgba(255,255,255,0.38)',
+                      color: '#ffffff',
+                      fontSize: '0.65rem',
+                      fontWeight: 900
+                    }}
+                  >
+                    8 مصادر
+                  </span>
                 </div>
               </div>
             </div>
@@ -5742,7 +5659,6 @@ export default function MobileApkApp() {
                     padding: '0.26rem 0.65rem 0.26rem 0.35rem',
                     borderRadius: '999px',
                     background: 'rgba(0,0,0,0.65)',
-                    backdropFilter: 'blur(12px)',
                     border: '1px solid rgba(255,255,255,0.18)'
                   }}
                 >
@@ -5794,7 +5710,6 @@ export default function MobileApkApp() {
                             padding: '0.2rem 0.68rem',
                             borderRadius: '999px',
                             background: 'rgba(255,255,255,0.12)',
-                            backdropFilter: 'blur(12px)',
                             border: '1px solid rgba(255,255,255,0.28)',
                             color: '#ffffff',
                             fontSize: '0.66rem',
@@ -5894,7 +5809,6 @@ export default function MobileApkApp() {
                         borderRadius: '999px',
                         border: '1px solid rgba(255,255,255,0.28)',
                         background: 'rgba(20, 20, 26, 0.88)',
-                        backdropFilter: 'blur(16px)',
                         color: '#ffffff',
                         fontWeight: 900,
                         fontSize: '0.82rem',
@@ -5923,7 +5837,6 @@ export default function MobileApkApp() {
                       background: favorites.some((f) => f.objectID === heroAnime.objectID)
                         ? 'rgba(255,255,255,0.2)'
                         : 'rgba(255,255,255,0.07)',
-                      backdropFilter: 'blur(14px)',
                       color: '#ffffff',
                       fontWeight: 800,
                       fontSize: '0.78rem',
@@ -6062,7 +5975,6 @@ export default function MobileApkApp() {
                           padding: '0.18rem 0.52rem',
                           borderRadius: '8px',
                           background: 'rgba(0,0,0,0.72)',
-                          backdropFilter: 'blur(8px)',
                           border: '1px solid rgba(255,255,255,0.22)',
                           fontSize: '0.64rem',
                           fontWeight: 900,
@@ -6200,7 +6112,6 @@ export default function MobileApkApp() {
                     padding: '0.28rem 0.65rem',
                     borderRadius: '99px',
                     background: 'rgba(18,18,24,0.78)',
-                    backdropFilter: 'blur(12px)',
                     border: '1px solid rgba(255,255,255,0.24)',
                     fontSize: '0.74rem',
                     fontWeight: 900,
@@ -6228,7 +6139,6 @@ export default function MobileApkApp() {
                         padding: '0.32rem 0.75rem',
                         borderRadius: '99px',
                         background: 'rgba(20,20,26,0.82)',
-                        backdropFilter: 'blur(14px)',
                         border: '1px solid rgba(255,255,255,0.18)',
                         fontSize: '0.68rem',
                         fontWeight: 800,
@@ -7383,7 +7293,6 @@ export default function MobileApkApp() {
                             background: favorites.some((f) => f.objectID === item.objectID)
                               ? '#ffffff'
                               : 'rgba(12,12,16,0.78)',
-                            backdropFilter: 'blur(10px)',
                             border: '1px solid rgba(255,255,255,0.32)',
                             color: favorites.some((f) => f.objectID === item.objectID) ? '#000000' : '#ffffff',
                             fontSize: '0.68rem',
@@ -7408,7 +7317,6 @@ export default function MobileApkApp() {
                             padding: '0.14rem 0.45rem',
                             borderRadius: '8px',
                             background: 'rgba(12,12,18,0.88)',
-                            backdropFilter: 'blur(10px)',
                             border: '1px solid rgba(255,255,255,0.28)',
                             color: '#ffffff',
                             fontSize: '0.62rem',
@@ -7972,7 +7880,6 @@ export default function MobileApkApp() {
                             padding: '0.2rem 0.55rem',
                             borderRadius: '99px',
                             background: 'rgba(14,14,20,0.82)',
-                            backdropFilter: 'blur(10px)',
                             border: '1px solid rgba(255,255,255,0.22)',
                             fontSize: '0.66rem',
                             fontWeight: 900
@@ -8069,7 +7976,6 @@ export default function MobileApkApp() {
                           padding: '0.26rem 0.65rem',
                           borderRadius: '99px',
                           background: 'rgba(18,18,24,0.78)',
-                          backdropFilter: 'blur(12px)',
                           border: '1px solid rgba(255,255,255,0.24)',
                           fontSize: '0.72rem',
                           fontWeight: 900,
@@ -8129,7 +8035,6 @@ export default function MobileApkApp() {
                               padding: '0.26rem 0.7rem',
                               borderRadius: '99px',
                               background: 'rgba(20,20,28,0.82)',
-                              backdropFilter: 'blur(14px)',
                               border: '1px solid rgba(255,255,255,0.18)',
                               fontSize: '0.66rem',
                               fontWeight: 800,
@@ -8147,7 +8052,6 @@ export default function MobileApkApp() {
                               padding: '0.26rem 0.65rem',
                               borderRadius: '99px',
                               background: 'rgba(20,20,28,0.82)',
-                              backdropFilter: 'blur(14px)',
                               border: '1px solid rgba(255,255,255,0.18)',
                               fontSize: '0.66rem',
                               fontWeight: 800,
@@ -8519,7 +8423,6 @@ export default function MobileApkApp() {
                         padding: '0.22rem 0.6rem',
                         borderRadius: '10px',
                         background: 'rgba(0,0,0,0.75)',
-                        backdropFilter: 'blur(10px)',
                         border: '1px solid rgba(255,255,255,0.24)',
                         fontSize: '0.68rem',
                         fontWeight: 900,
@@ -8679,7 +8582,6 @@ export default function MobileApkApp() {
                     gap: '0.42rem',
                     padding: '0.65rem 0.8rem',
                     background: 'rgba(0, 0, 0, 0.92)',
-                    backdropFilter: 'blur(20px)',
                     borderBottom: '1px solid rgba(255,255,255,0.16)'
                   }}
                 >
@@ -9281,7 +9183,6 @@ export default function MobileApkApp() {
                       onClick={() => setSelectedManga(null)}
                       style={{
                         background: 'rgba(14,14,20,0.82)',
-                        backdropFilter: 'blur(14px)',
                         color: '#ffffff',
                         border: '1px solid rgba(255,255,255,0.24)',
                         borderRadius: '999px',
@@ -9758,7 +9659,6 @@ export default function MobileApkApp() {
                       padding: '0.24rem 0.65rem',
                       borderRadius: '999px',
                       background: 'rgba(10,10,15,0.82)',
-                      backdropFilter: 'blur(12px)',
                       border: '1px solid rgba(255,255,255,0.22)'
                     }}
                   >
@@ -9845,7 +9745,6 @@ export default function MobileApkApp() {
                           padding: '0.58rem 0.8rem',
                           borderRadius: '999px',
                           background: 'rgba(22,22,30,0.85)',
-                          backdropFilter: 'blur(12px)',
                           color: '#ffffff',
                           border: '1px solid rgba(255,255,255,0.24)',
                           fontWeight: 900,
@@ -11280,7 +11179,6 @@ export default function MobileApkApp() {
                       padding: '0.16rem 0.5rem',
                       borderRadius: '8px',
                       background: 'rgba(0,0,0,0.76)',
-                      backdropFilter: 'blur(8px)',
                       border: '1px solid rgba(255,255,255,0.24)',
                       fontSize: '0.64rem',
                       fontWeight: 900,
@@ -13204,7 +13102,6 @@ export default function MobileApkApp() {
               justifyContent: 'space-between',
               padding: '0.65rem 1rem',
               background: 'rgba(0,0,0,0.88)',
-              backdropFilter: 'blur(18px)',
               borderBottom: '1px solid rgba(255,255,255,0.08)'
             }}
           >
@@ -13284,8 +13181,6 @@ export default function MobileApkApp() {
                       bottom: '16px',
                       zIndex: 520,
                       background: 'rgba(8, 8, 12, 0.96)',
-                      backdropFilter: 'blur(26px)',
-                      WebkitBackdropFilter: 'blur(26px)',
                       border: '1.5px solid rgba(255, 255, 255, 0.32)',
                       borderRadius: '18px',
                       padding: '0.45rem 0.65rem',
@@ -13318,7 +13213,6 @@ export default function MobileApkApp() {
                     gap: '0.5rem',
                     padding: '0.65rem 0.9rem',
                     background: 'rgba(0,0,0,0.92)',
-                    backdropFilter: 'blur(20px)',
                     borderBottom: '1px solid rgba(255,255,255,0.12)'
                   }}
                 >
@@ -15165,7 +15059,6 @@ export default function MobileApkApp() {
                             padding: '0.16rem 0.5rem',
                             borderRadius: '8px',
                             background: 'rgba(0,0,0,0.75)',
-                            backdropFilter: 'blur(8px)',
                             border: '1px solid rgba(255,255,255,0.24)',
                             fontSize: '0.64rem',
                             fontWeight: 900,
@@ -15791,7 +15684,6 @@ export default function MobileApkApp() {
             inset: 0,
             zIndex: 9850,
             background: 'rgba(0,0,0,0.82)',
-            backdropFilter: 'blur(12px)',
             display: 'flex',
             alignItems: 'flex-end',
             justifyContent: 'center'
@@ -16197,7 +16089,6 @@ export default function MobileApkApp() {
             inset: 0,
             zIndex: 9600,
             background: 'rgba(0,0,0,0.82)',
-            backdropFilter: 'blur(20px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

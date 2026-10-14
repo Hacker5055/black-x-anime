@@ -22,91 +22,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 
 /**
- * 1:1 3D Obsidian & Liquid Chrome Wave Ribbon Stage + SVG Optical Refraction Filter
- * Matches the flowing metallic S-curve background behind the glass cards in
- * https://liquidglassdesign.com/gallery/ios-liquid-glass-effect-smart-home-ui
- */
-function IosLiquidGlassWaveStage() {
-  return (
-    <div className="ios-lg-wave-stage" aria-hidden="true">
-      <svg className="ios-lg-wave-svg" viewBox="0 0 1600 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="ios-liquid-glass-refraction" x="-15%" y="-15%" width="130%" height="130%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.011 0.017" numOctaves="2" seed="7" result="noise" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="16" xChannelSelector="R" yChannelSelector="G" result="displaced" />
-            <feSpecularLighting in="noise" surfaceScale="3.5" specularConstant="1.15" specularExponent="34" lightingColor="#ffffff" result="spec">
-              <fePointLight x="320" y="180" z="260" />
-            </feSpecularLighting>
-            <feComposite in="spec" in2="SourceAlpha" operator="in" result="specMask" />
-            <feMerge>
-              <feMergeNode in="displaced" />
-              <feMergeNode in="specMask" />
-            </feMerge>
-          </filter>
-
-          <linearGradient id="iosLgRibbonMain" x1="260" y1="120" x2="1280" y2="1080" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#000000" stopOpacity="0" />
-            <stop offset="18%" stopColor="#1e1e24" stopOpacity="0.68" />
-            <stop offset="36%" stopColor="#d4d4dc" stopOpacity="0.52" />
-            <stop offset="48%" stopColor="#09090c" stopOpacity="0.95" />
-            <stop offset="63%" stopColor="#ffffff" stopOpacity="0.62" />
-            <stop offset="79%" stopColor="#1c1c22" stopOpacity="0.74" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
-          </linearGradient>
-
-          <linearGradient id="iosLgRibbonRim" x1="360" y1="180" x2="1160" y2="1020" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
-            <stop offset="30%" stopColor="#ffffff" stopOpacity="0.45" />
-            <stop offset="52%" stopColor="#27272f" stopOpacity="0.18" />
-            <stop offset="72%" stopColor="#ffffff" stopOpacity="0.72" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-          </linearGradient>
-
-          <radialGradient id="iosLgCenterChrome" cx="52%" cy="52%" r="42%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
-            <stop offset="48%" stopColor="#71717a" stopOpacity="0.08" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-
-        <ellipse cx="830" cy="600" rx="540" ry="420" fill="url(#iosLgCenterChrome)" />
-
-        {/* Deep 3D Liquid Chrome S-Curve Fold 1 */}
-        <path
-          d="M360 150 C 640 190, 960 390, 820 590 C 680 790, 510 860, 860 1050 C 1090 1160, 1250 960, 1110 740 C 970 520, 740 420, 880 240 Z"
-          fill="url(#iosLgRibbonMain)"
-          filter="blur(12px)"
-        />
-
-        {/* Razor Specular Chrome Fold 2 (passes right behind the glass cards' bottom-right edges) */}
-        <path
-          d="M420 220 C 700 280, 910 430, 770 620 C 630 810, 620 940, 940 1030"
-          stroke="url(#iosLgRibbonRim)"
-          strokeWidth="64"
-          strokeLinecap="round"
-          filter="blur(8px)"
-        />
-        <path
-          d="M440 240 C 720 300, 920 440, 780 625 C 640 810, 640 935, 955 1020"
-          stroke="url(#iosLgRibbonRim)"
-          strokeWidth="14"
-          strokeLinecap="round"
-          filter="blur(1.5px)"
-        />
-        <path
-          d="M520 310 C 780 370, 860 510, 725 690 C 590 870, 730 960, 1020 990"
-          stroke="rgba(255,255,255,0.34)"
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
-  );
-}
-
-/**
- * 1:1 Floating Bottom Navigation Dock from iOS Liquid Glass Effect - Smart Home UI
- * Active item is an expanded glowing capsule pill ([ 🏠 Home ]) + 4 circular glass orbs (( 🔍 ) ( 🎛️ ) ( ⊕ ) ( 📄 ))
+ * Floating Bottom Navigation Dock (iOS Liquid Glass — Pure Monochrome)
  */
 function IosLiquidGlassFloatingDock({ onOpenAuth }) {
   const location = useLocation();
@@ -525,7 +441,6 @@ export default function App() {
   if (isApkRuntime) {
     return (
       <MobileErrorBoundary>
-        <IosLiquidGlassWaveStage />
         {splashConfig.active && (
           <BlackXSplashVortex
             durationMs={splashConfig.durationMs}
@@ -556,7 +471,6 @@ export default function App() {
         />
       )}
       <GooFilter />
-      <IosLiquidGlassWaveStage />
       <Backdrop />
       <ScrollToTop />
       <div className="app-shell" style={{ position: 'relative', zIndex: 1, paddingBottom: '88px' }}>
