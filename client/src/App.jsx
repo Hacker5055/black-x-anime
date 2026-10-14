@@ -22,7 +22,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 
 /**
- * Floating Bottom Navigation Dock (1:1 Match to Reference Screenshot)
+ * Floating Bottom Navigation Dock (Website — Custom Monochrome Liquid Glass SVG Icon Pack)
  */
 function IosLiquidGlassFloatingDock({ onOpenAuth }) {
   const location = useLocation();
@@ -38,7 +38,19 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/',
       labelAr: 'الرئيسية',
       labelEn: 'Home',
-      icon: '🏠'
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.3' : '1.9'} strokeLinecap="round" strokeLinejoin="round">
+          <path
+            d="M3.5 10.2L12 3.2l8.5 7V19a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-8.8z"
+            fill={active ? 'currentColor' : 'rgba(255,255,255,0.08)'}
+          />
+          <path
+            d="M9.5 21v-6a2.5 2.5 0 0 1 5 0v6"
+            stroke={active ? '#ffffff' : 'currentColor'}
+            strokeWidth="2"
+          />
+        </svg>
+      )
     },
     {
       id: 'search',
@@ -46,7 +58,13 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/trending',
       labelAr: 'البحث',
       labelEn: 'Search',
-      icon: '🔍'
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.4' : '2'} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" fill={active ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.07)'} />
+          <path d="M8.5 8.8A3.5 3.5 0 0 1 11 7.5" strokeWidth="1.6" opacity="0.75" />
+          <line x1="16.2" y1="16.2" x2="21" y2="21" strokeWidth="2.4" />
+        </svg>
+      )
     },
     {
       id: 'schedule',
@@ -54,7 +72,19 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/discover',
       labelAr: 'الجدول',
       labelEn: 'Radar',
-      icon: '📅'
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.2' : '1.9'} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3.5" y="4.5" width="17" height="16" rx="3.5" fill={active ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.07)'} />
+          <line x1="8" y1="2.8" x2="8" y2="6.2" strokeWidth="2.2" />
+          <line x1="16" y1="2.8" x2="16" y2="6.2" strokeWidth="2.2" />
+          <line x1="3.5" y1="9.5" x2="20.5" y2="9.5" />
+          <circle cx="8.5" cy="13.5" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="13.5" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="15.5" cy="13.5" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="8.5" cy="17" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="17" r="1.15" fill="currentColor" stroke="none" />
+        </svg>
+      )
     },
     {
       id: 'manga',
@@ -62,7 +92,19 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/browse',
       labelAr: 'المانجا',
       labelEn: 'Manga',
-      icon: '📖'
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.2' : '1.9'} strokeLinecap="round" strokeLinejoin="round">
+          <path
+            d="M2.5 5.5A3.5 3.5 0 0 1 6 4h4.5a2 2 0 0 1 1.5.7A2 2 0 0 1 13.5 4H18a3.5 3.5 0 0 1 3.5 1.5v13A2.5 2.5 0 0 0 18 17h-4.5a1.5 1.5 0 0 0-1.5 1.5A1.5 1.5 0 0 0 10.5 17H6a2.5 2.5 0 0 0-3.5 1.5v-13z"
+            fill={active ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.07)'}
+          />
+          <line x1="12" y1="5" x2="12" y2="18.5" />
+          <line x1="6" y1="8.5" x2="9.5" y2="8.5" strokeWidth="1.6" />
+          <line x1="6" y1="11.5" x2="9.5" y2="11.5" strokeWidth="1.6" />
+          <line x1="14.5" y1="8.5" x2="18" y2="8.5" strokeWidth="1.6" />
+          <line x1="14.5" y1="11.5" x2="18" y2="11.5" strokeWidth="1.6" />
+        </svg>
+      )
     },
     {
       id: 'community',
@@ -70,7 +112,17 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/community',
       labelAr: 'الساحة',
       labelEn: 'Arena',
-      icon: '🔮'
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.2' : '1.9'} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="11.5" r="7.5" fill={active ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.07)'} />
+          <path
+            d="M12 6.8l1.45 3.25 3.25 1.45-3.25 1.45L12 16.2l-1.45-3.25-3.25-1.45 3.25-1.45L12 6.8z"
+            fill="currentColor"
+            stroke="none"
+          />
+          <path d="M7.5 20.5h9" strokeWidth="2.1" />
+        </svg>
+      )
     },
     {
       id: 'profile',
@@ -78,7 +130,15 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/profile',
       labelAr: 'حسابي',
       labelEn: 'Profile',
-      icon: '👤'
+      renderIcon: (active) => (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? '2.2' : '1.9'} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="8.2" r="3.6" fill={active ? 'currentColor' : 'rgba(255,255,255,0.12)'} />
+          <path
+            d="M5 19.5c0-3.4 3.1-5.8 7-5.8s7 2.4 7 5.8"
+            fill={active ? 'currentColor' : 'rgba(255,255,255,0.08)'}
+          />
+        </svg>
+      )
     }
   ];
 
@@ -103,14 +163,17 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
                 onClick={() => navigate(item.to)}
                 style={{
                   height: '44px',
-                  minWidth: '94px',
-                  padding: '0 0.95rem',
+                  minWidth: '96px',
+                  padding: '0 1rem',
                   fontSize: '0.82rem',
                   fontWeight: 900,
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  gap: '0.45rem'
                 }}
               >
-                <span style={{ fontSize: '1.02rem', lineHeight: 1 }}>{item.icon}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                  {item.renderIcon(true)}
+                </span>
                 <span style={{ whiteSpace: 'nowrap' }}>{lang === 'ar' ? item.labelAr : item.labelEn}</span>
               </button>
             );
@@ -129,9 +192,11 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
                 }
                 navigate(item.to);
               }}
-              style={{ width: '42px', height: '42px', fontSize: '0.98rem' }}
+              style={{ width: '42px', height: '42px' }}
             >
-              <span style={{ fontSize: '0.98rem', lineHeight: 1 }}>{item.icon}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                {item.renderIcon(false)}
+              </span>
             </button>
           );
         })}
@@ -445,8 +510,7 @@ export default function App() {
       <Backdrop />
       <ScrollToTop />
       <div className="app-shell" style={{ position: 'relative', zIndex: 1, paddingBottom: '88px' }}>
-        <Navbar onOpenAuth={openAuth} />
-        <main className="main">
+        <main className="main" style={{ paddingTop: '0.85rem' }}>
           <div className="container">
             <Routes>
               <Route path="/" element={<Dashboard onOpenAuth={openAuth} />} />
