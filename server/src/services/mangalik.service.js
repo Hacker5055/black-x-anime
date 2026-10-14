@@ -1636,6 +1636,467 @@ class MangalikService {
   }
 
   /* =========================================================================
+   * MASTER GLOBAL INDEX (AniList GraphQL + MangaDex API v5 + Dilar Search)
+   * +100,000 Works (Manga JP, Manhwa KR, Manhua CN) + Synonym Expansion
+   * ========================================================================= */
+
+  async getAniListMasterCatalog(page = 1, countryOfOrigin = null, search = '') {
+    const cacheKey = `anilist_master:${page}:${countryOfOrigin || 'ALL'}:${search || ''}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const gqlQuery = `
+        query ($page: Int, $perPage: Int, $countryOfOrigin: CountryCode, $search: String, $sort: [MediaSort]) {
+          Page(page: $page, perPage: $perPage) {
+            media(type: MANGA, countryOfOrigin: $countryOfOrigin, search: $search, sort: $sort, isAdult: false) {
+              id
+              title { romaji english native }
+              synonyms
+              countryOfOrigin
+              status
+              chapters
+              averageScore
+              popularity
+              genres
+              description(asHtml: false)
+              coverImage { extraLarge large }
+              bannerImage
+              startDate { year }
+            }
+          }
+        }
+      `;
+      const variables = {
+        page: Math.max(1, Number(page) || 1),
+        perPage: 28,
+        sort: search ? ['SEARCH_MATCH', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC']
+      };
+      if (countryOfOrigin && ['KR', 'JP', 'CN', 'TW'].includes(String(countryOfOrigin).toUpperCase())) {
+        variables.countryOfOrigin = String(countryOfOrigin).toUpperCase();
+      }
+      if (search && String(search).trim()) {
+        variables.search = String(search).trim();
+      }
+
+      const { data } = await axios.post(
+        'https://graphql.anilist.co',
+        { query: gqlQuery, variables },
+        {
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT },
+          timeout: 10000
+        }
+      );
+
+      const mediaList = data?.data?.Page?.media || [];
+      const items = mediaList.map((m) => {
+        const titleEn = m.title?.english || m.title?.romaji || m.title?.native || `Manga #${m.id}`;
+        const titleRomaji = m.title?.romaji || titleEn;
+        const country = String(m.countryOfOrigin || 'JP').toUpperCase();
+        const typeLabel = country === 'KR' ? 'MANHWA' : country === 'CN' || country === 'TW' ? 'MANHUA' : 'MANGA';
+        const poster = m.coverImage?.extraLarge || m.coverImage?.large || '';
+        const banner = m.bannerImage || poster;
+        const cleanDesc = String(m.description || '')
+          .replace(/<[^>]+>/g, '')
+          .trim();
+        const allSynonyms = Array.from(
+          new Set(
+            [m.title?.english, m.title?.romaji, m.title?.native, ...(Array.isArray(m.synonyms) ? m.synonyms : [])]
+              .map((s) => String(s || '').trim())
+              .filter((s) => s.length >= 2)
+          )
+        );
+        return {
+          id: `al:${m.id}`,
+          mangalikSlug: `al:${m.id}`,
+          anilistId: m.id,
+          title: titleEn,
+          title_ar: titleEn,
+          title_en: titleEn,
+          title_romaji: titleRomaji,
+          synonyms: allSynonyms,
+          countryOfOrigin: country,
+          poster,
+          coverImage: poster,
+          banner,
+          type: typeLabel,
+          status: m.status === 'FINISHED' ? 'COMPLETED' : 'ONGOING',
+          rating: m.averageScore ? +(m.averageScore / 10).toFixed(1) : 9.4,
+          chapters_count: m.chapters || (country === 'KR' ? 120 : 180),
+          author: country === 'KR' ? 'مانهوا كورية • BLACK X' : country === 'CN' ? 'مانهاوا صينية • BLACK X' : 'مانجا يابانية • BLACK X',
+          description_ar: cleanDesc || `اقرأ ${titleEn} مباشرة عبر الفهرس العالمي الشامل ومصادر BLACK X.`,
+          description_en: cleanDesc || `Read ${titleEn} on BLACK X Global Master Index.`,
+          genres: Array.isArray(m.genres) && m.genres.length > 0 ? m.genres : [typeLabel],
+          release_year: m.startDate?.year || 2025,
+          source: 'BLACK X 3',
+          server: 'bx3'
+        };
+      });
+
+      if (items.length > 0) setCache(cacheKey, items);
+      return items;
+    } catch (err) {
+      console.error('AniList Master Catalog error:', err.message);
+      return [];
+    }
+  }
+
+  async getAniListMangaDetails(anilistId) {
+    const cleanId = String(anilistId || '').replace(/^al:/, '').trim();
+    if (!cleanId) return null;
+    const cacheKey = `anilist_detail:${cleanId}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const gqlQuery = `
+        query ($id: Int) {
+          Media(id: $id, type: MANGA) {
+            id
+            title { romaji english native }
+            synonyms
+            countryOfOrigin
+            status
+            chapters
+            averageScore
+            genres
+            description(asHtml: false)
+            coverImage { extraLarge large }
+            bannerImage
+            startDate { year }
+          }
+        }
+      `;
+      const { data } = await axios.post(
+        'https://graphql.anilist.co',
+        { query: gqlQuery, variables: { id: Number(cleanId) } },
+        {
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT },
+          timeout: 9000
+        }
+      );
+      const m = data?.data?.Media;
+      if (!m) return null;
+      const titleEn = m.title?.english || m.title?.romaji || m.title?.native || `Manga #${m.id}`;
+      const country = String(m.countryOfOrigin || 'JP').toUpperCase();
+      const typeLabel = country === 'KR' ? 'MANHWA' : country === 'CN' || country === 'TW' ? 'MANHUA' : 'MANGA';
+      const poster = m.coverImage?.extraLarge || m.coverImage?.large || '';
+      const cleanDesc = String(m.description || '').replace(/<[^>]+>/g, '').trim();
+      const allSynonyms = Array.from(
+        new Set(
+          [m.title?.english, m.title?.romaji, m.title?.native, ...(Array.isArray(m.synonyms) ? m.synonyms : [])]
+            .map((s) => String(s || '').trim())
+            .filter((s) => s.length >= 2)
+        )
+      );
+      const detail = {
+        id: `al:${m.id}`,
+        anilistId: m.id,
+        title: titleEn,
+        title_ar: titleEn,
+        title_en: titleEn,
+        synonyms: allSynonyms,
+        countryOfOrigin: country,
+        poster,
+        banner: m.bannerImage || poster,
+        type: typeLabel,
+        status: m.status === 'FINISHED' ? 'COMPLETED' : 'ONGOING',
+        rating: m.averageScore ? +(m.averageScore / 10).toFixed(1) : 9.5,
+        chapters_count: m.chapters || 120,
+        author: country === 'KR' ? 'مانهوا كورية • BLACK X' : country === 'CN' ? 'مانهاوا صينية • BLACK X' : 'مانجا يابانية • BLACK X',
+        description_ar: cleanDesc || `اقرأ ${titleEn} عبر محرك BLACK X الشامل.`,
+        description_en: cleanDesc || `Read ${titleEn} on BLACK X.`,
+        genres: Array.isArray(m.genres) && m.genres.length > 0 ? m.genres : [typeLabel],
+        release_year: m.startDate?.year || 2025,
+        source: 'BLACK X 3',
+        server: 'bx3'
+      };
+      setCache(cacheKey, detail);
+      return detail;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async searchDilar(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    try {
+      const { data } = await axios.post(
+        'https://dilar.tube/api/search/quick_search',
+        { query: q, includes: ['Manga'] },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Referer: 'https://dilar.tube/',
+            'User-Agent': USER_AGENT
+          },
+          timeout: 8000
+        }
+      );
+      const rows = data?.[0]?.data || [];
+      return rows.map((row) => {
+        const cleanCov = String(row.cover || '').replace(/\.webp$/i, '');
+        const poster = cleanCov
+          ? `https://dilar.tube/uploads/manga/cover/${row.id}/large_${cleanCov}.webp`
+          : '';
+        const title = String(row.title || row.english || `Manga #${row.id}`).trim();
+        return {
+          id: `dt:${row.id}`,
+          mangalikSlug: `dt:${row.id}`,
+          title,
+          title_ar: title,
+          title_en: String(row.english || title).trim(),
+          poster,
+          coverImage: poster,
+          banner: poster,
+          type: 'MANHWA',
+          status: 'ONGOING',
+          rating: 9.4,
+          chapters_count: 80,
+          author: 'سيرفر BLACK X 2',
+          description_ar: row.summary || `اقرأ ${title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
+          description_en: row.summary || `Read ${title} on BLACK X 2.`,
+          genres: ['مانهوا', 'مانجا عربية'],
+          release_year: 2026,
+          source: 'BLACK X 2',
+          server: 'bx2'
+        };
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async searchMangaDex(query, limit = 16) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    try {
+      const { data } = await axios.get(`${MANGADEX_API}/manga`, {
+        params: {
+          title: q,
+          limit,
+          'includes[]': ['cover_art'],
+          'contentRating[]': ['safe', 'suggestive'],
+          'order[followedCount]': 'desc'
+        },
+        headers: { 'User-Agent': USER_AGENT },
+        timeout: 9000
+      });
+      const list = data?.data || [];
+      return list.map((item) => {
+        const attrs = item.attributes || {};
+        const titleObj = attrs.title || {};
+        const altTitles = Array.isArray(attrs.altTitles) ? attrs.altTitles : [];
+        const arAlt = altTitles.find((t) => t.ar)?.ar;
+        const enAlt = altTitles.find((t) => t.en)?.en;
+        const titleEn = titleObj.en || enAlt || Object.values(titleObj)[0] || 'Manga';
+        const titleAr = arAlt || titleEn;
+        const coverRel = (item.relationships || []).find((r) => r.type === 'cover_art');
+        const fileName = coverRel?.attributes?.fileName;
+        const poster = fileName ? `https://uploads.mangadex.org/covers/${item.id}/${fileName}.512.jpg` : '';
+        const origLang = String(attrs.originalLanguage || 'ja').toLowerCase();
+        const typeLabel = origLang === 'ko' ? 'MANHWA' : origLang.startsWith('zh') ? 'MANHUA' : 'MANGA';
+        return {
+          id: `md:${item.id}`,
+          mangalikSlug: `md:${item.id}`,
+          title: titleAr,
+          title_ar: titleAr,
+          title_en: titleEn,
+          poster,
+          coverImage: poster,
+          banner: poster,
+          type: typeLabel,
+          status: attrs.status === 'completed' ? 'COMPLETED' : 'ONGOING',
+          rating: 9.5,
+          chapters_count: Number(attrs.lastChapter) || 100,
+          author: 'سيرفر BLACK X 3 (Global HD)',
+          description_ar: attrs.description?.ar || attrs.description?.en || `اقرأ ${titleAr} عبر سيرفر BLACK X 3.`,
+          description_en: attrs.description?.en || `Read ${titleEn} on BLACK X 3.`,
+          genres: [typeLabel],
+          release_year: attrs.year || 2025,
+          source: 'BLACK X 3',
+          server: 'bx3'
+        };
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async getMangaDexChapters(mdMangaId) {
+    const cleanId = String(mdMangaId || '').replace(/^md:/, '').trim();
+    if (!cleanId) return [];
+    const cacheKey = `md_chapters:${cleanId}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(`${MANGADEX_API}/manga/${encodeURIComponent(cleanId)}/feed`, {
+        params: {
+          limit: 300,
+          'translatedLanguage[]': ['ar', 'en'],
+          'order[chapter]': 'asc',
+          'contentRating[]': ['safe', 'suggestive', 'erotica']
+        },
+        headers: { 'User-Agent': USER_AGENT },
+        timeout: 10000
+      });
+      const rows = data?.data || [];
+      const byNum = new Map();
+      for (const ch of rows) {
+        const attrs = ch.attributes || {};
+        if (attrs.externalUrl) continue;
+        const chNum = String(attrs.chapter || '1').trim();
+        const lang = attrs.translatedLanguage || 'en';
+        const existing = byNum.get(chNum);
+        if (!existing || (existing.lang !== 'ar' && lang === 'ar')) {
+          byNum.set(chNum, {
+            chapterId: `md:${ch.id}`,
+            slug: `md:${ch.id}`,
+            chapterNumber: chNum,
+            title:
+              lang === 'ar'
+                ? `الفصل ${chNum}${attrs.title ? ` — ${attrs.title}` : ''} (عربي)`
+                : `الفصل ${chNum}${attrs.title ? ` — ${attrs.title}` : ''} (Global HD)`,
+            releaseDate: attrs.publishAt ? String(attrs.publishAt).slice(0, 10) : '2026',
+            server: 'bx3',
+            lang,
+            scanlationGroup: lang === 'ar' ? 'ترجمة عربية • BLACK X 3' : 'الفصل الرسمي • BLACK X 3 Global'
+          });
+        }
+      }
+      const list = Array.from(byNum.values()).sort((a, b) => parseFloat(a.chapterNumber) - parseFloat(b.chapterNumber));
+      if (list.length > 0) setCache(cacheKey, list);
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async getMangaDexChapterPages(mdChId) {
+    const cleanChId = String(mdChId || '').replace(/^md:/, '').trim();
+    if (!cleanChId) return [];
+    const cacheKey = `md_pages:${cleanChId}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const { data } = await axios.get(`${MANGADEX_API}/at-home/server/${encodeURIComponent(cleanChId)}`, {
+        headers: { 'User-Agent': USER_AGENT },
+        timeout: 10000
+      });
+      const baseUrl = data?.baseUrl;
+      const hash = data?.chapter?.hash;
+      const files = data?.chapter?.data || data?.chapter?.dataSaver || [];
+      const mode = data?.chapter?.data?.length ? 'data' : 'data-saver';
+      if (!baseUrl || !hash || !files.length) return [];
+      const pages = files.map((file, idx) => ({
+        pageNumber: idx + 1,
+        imageUrl: `${baseUrl}/${mode}/${hash}/${file}`
+      }));
+      setCache(cacheKey, pages);
+      return pages;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /**
+   * Smart Multi-Title & Synonym Chapter Resolver + Hybrid Arabic/Global Chapter Merger:
+   * Searches all Arabic servers (`MangaMello`, `Azora`, `MangaSwat`, `Olympus`, `3asq`)
+   * AND Global servers (`WeebCentral`, `MangaDex`) across all candidate titles/synonyms,
+   * and merges any newer untranslated global chapters (`N+1..Latest`) onto the Arabic list!
+   */
+  async resolveChaptersByCandidateTitles(candidateTitles = [], preferredServer = '') {
+    const uniqueCandidates = Array.from(
+      new Set(
+        (candidateTitles || [])
+          .map((t) => String(t || '').replace(/\([^)]*\)/g, '').trim())
+          .filter((t) => t.length >= 2)
+      )
+    ).slice(0, 4);
+
+    if (uniqueCandidates.length === 0) return [];
+
+    let arabicChapters = [];
+    let globalChapters = [];
+
+    for (const candidate of uniqueCandidates) {
+      const [mmRes, azRes, swRes, osRes, asqRes] = await Promise.allSettled([
+        this.searchMangaMello(candidate),
+        this.searchAzorafly(candidate),
+        this.searchMangaSwat(candidate),
+        this.searchOlympus(candidate),
+        this.search3asq(candidate)
+      ]);
+
+      const tryFetch = async (res, getter, prefixLen) => {
+        if (res.status === 'fulfilled' && Array.isArray(res.value) && res.value.length > 0) {
+          for (const hit of res.value.slice(0, 2)) {
+            const chs = await getter.call(this, hit.id.slice(prefixLen));
+            if (Array.isArray(chs) && chs.length > arabicChapters.length) {
+              arabicChapters = chs;
+            }
+          }
+        }
+      };
+
+      await Promise.allSettled([
+        tryFetch(mmRes, this.getMangaMelloChapters, 3),
+        tryFetch(azRes, this.getAzoraflyChapters, 3),
+        tryFetch(swRes, this.getMangaSwatChapters, 3),
+        tryFetch(osRes, this.getOlympusChapters, 3),
+        tryFetch(asqRes, this.get3asqChapters, 4)
+      ]);
+
+      if (arabicChapters.length >= 10) break;
+    }
+
+    // Also query Global HD (WeebCentral + MangaDex) for full chapter coverage
+    const primaryQuery = uniqueCandidates[0];
+    const [wcHitsRes, mdHitsRes] = await Promise.allSettled([
+      this.searchWeebCentral(primaryQuery),
+      this.searchMangaDex(primaryQuery, 5)
+    ]);
+
+    if (wcHitsRes.status === 'fulfilled' && wcHitsRes.value.length > 0) {
+      const [seriesId, slug] = wcHitsRes.value[0].id.slice(3).split(':');
+      const wcChs = await this.getWeebCentralChapters(seriesId, slug);
+      if (wcChs.length > globalChapters.length) globalChapters = wcChs;
+    }
+    if (globalChapters.length === 0 && mdHitsRes.status === 'fulfilled' && mdHitsRes.value.length > 0) {
+      const mdChs = await this.getMangaDexChapters(mdHitsRes.value[0].id);
+      if (mdChs.length > globalChapters.length) globalChapters = mdChs;
+    }
+
+    if (preferredServer === 'bx3' && globalChapters.length > 0) {
+      return globalChapters;
+    }
+
+    if (arabicChapters.length === 0) {
+      return globalChapters;
+    }
+
+    // Hybrid Merge: Keep all Arabic chapters (1..N) and append any newer chapters (> N) from Global HD!
+    if (globalChapters.length > 0) {
+      const existingNums = new Set(arabicChapters.map((c) => parseFloat(c.chapterNumber)));
+      const extraGlobal = globalChapters.filter((g) => {
+        const num = parseFloat(g.chapterNumber);
+        return !Number.isNaN(num) && !existingNums.has(num);
+      });
+      if (extraGlobal.length > 0) {
+        return [...arabicChapters, ...extraGlobal].sort(
+          (a, b) => parseFloat(a.chapterNumber) - parseFloat(b.chapterNumber)
+        );
+      }
+    }
+
+    return arabicChapters;
+  }
+
+  /* =========================================================================
    * UNIFIED MULTI-SERVER ROUTER (BLACK X 1 + BLACK X 2 + BLACK X 3)
    * ========================================================================= */
 
@@ -1655,13 +2116,19 @@ class MangalikService {
       return handles;
     }
 
-    // 2. Check explicit prefixes (`mm:`, `az:`, `sw:`, `dt:`, `os:`, `asq:`, `wc:`)
+    // 2. Check explicit prefixes (`mm:`, `az:`, `sw:`, `dt:`, `os:`, `asq:`, `wc:`, `al:`, `md:`)
     if (id.startsWith('mm:') || id.startsWith('az:') || id.startsWith('os:')) {
       handles.bx1 = id;
       return handles;
     }
     if (id.startsWith('sw:') || id.startsWith('dt:') || id.startsWith('asq:')) {
       handles.bx2 = id;
+      return handles;
+    }
+    if (id.startsWith('al:') || id.startsWith('md:')) {
+      handles.bx1 = id;
+      handles.bx2 = id;
+      handles.bx3 = id;
       return handles;
     }
     if (id.startsWith('wc:')) {
@@ -1693,7 +2160,7 @@ class MangalikService {
   }
 
   /**
-   * Unified search across all 3 BLACK X Manga & Manhwa servers (including MangaMello Plus 14,331 + Azorafly 2,453 + MangaSwat 1,669).
+   * Unified search across all 8 BLACK X Manga, Manhwa & Manhua engines + AniList Global Master Index (+100,000 works) + Synonym Expansion!
    */
   async searchArabicManga(query, serverFilter = 'all') {
     const q = String(query || '').trim();
@@ -1707,22 +2174,52 @@ class MangalikService {
     }
     if (serverFilter === 'all' || serverFilter === 'bx2') {
       tasks.push(this.searchMangaSwat(q));
+      tasks.push(this.searchDilar(q));
       tasks.push(this.search3asq(q));
     }
     if (serverFilter === 'all' || serverFilter === 'bx3') {
+      tasks.push(this.getAniListMasterCatalog(1, null, q));
+      tasks.push(this.searchMangaDex(q, 16));
       tasks.push(this.searchWeebCentral(q));
     }
 
     const settled = await Promise.allSettled(tasks);
     const merged = [];
     const seenIds = new Set();
+    const seenTitles = new Set();
 
     for (const res of settled) {
       if (res.status === 'fulfilled' && Array.isArray(res.value)) {
         for (const item of res.value) {
           if (seenIds.has(item.id)) continue;
+          const normTitle = String(item.title_en || item.title_ar || item.title || '').toLowerCase().trim();
+          if (normTitle && seenTitles.has(normTitle) && item.id.startsWith('al:')) continue;
           seenIds.add(item.id);
+          if (normTitle) seenTitles.add(normTitle);
           merged.push(item);
+        }
+      }
+    }
+
+    // Smart Synonym Expansion: if AniList found alternative synonyms for the query, also search Arabic engines by the primary synonym!
+    const topAl = merged.find((it) => it.id?.startsWith('al:') && Array.isArray(it.synonyms) && it.synonyms.length > 0);
+    if (topAl && merged.filter((m) => !m.id?.startsWith('al:')).length < 4) {
+      const altName = topAl.synonyms.find((s) => s.toLowerCase() !== q.toLowerCase());
+      if (altName) {
+        const [altMm, altAz, altSw] = await Promise.allSettled([
+          this.searchMangaMello(altName),
+          this.searchAzorafly(altName),
+          this.searchMangaSwat(altName)
+        ]);
+        for (const r of [altMm, altAz, altSw]) {
+          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+            for (const item of r.value) {
+              if (!seenIds.has(item.id)) {
+                seenIds.add(item.id);
+                merged.unshift(item);
+              }
+            }
+          }
         }
       }
     }
@@ -1735,37 +2232,59 @@ class MangalikService {
   }
 
   /**
-   * Unified chapter list fetcher with optional preferred server (`bx1`, `bx2`, `bx3`).
+   * Unified chapter list fetcher with Smart Synonym Resolver & Hybrid Arabic + Global HD Chapter Completion.
    */
   async getArabicChapters(mangaId, preferredServer = '') {
     const id = String(mangaId || '').trim();
     if (!id) return [];
 
+    // 0a. AniList Master Global Index ID (`al:{anilistId}`) -> Smart Multi-Title Synonym Resolver + Hybrid Merger
+    if (id.startsWith('al:')) {
+      const detail = await this.getAniListMangaDetails(id.slice(3));
+      const candidates = detail?.synonyms?.length
+        ? detail.synonyms
+        : [detail?.title_en, detail?.title_ar].filter(Boolean);
+      const resolved = await this.resolveChaptersByCandidateTitles(candidates, preferredServer);
+      if (resolved.length > 0) return resolved;
+      return [];
+    }
+
+    // 0b. MangaDex Official v5 ID (`md:{uuid}`)
+    if (id.startsWith('md:')) {
+      const mdId = id.slice(3);
+      if (preferredServer !== 'bx3') {
+        try {
+          const { data } = await axios.get(`${MANGADEX_API}/manga/${encodeURIComponent(mdId)}`, { timeout: 7000 });
+          const titleObj = data?.data?.attributes?.title || {};
+          const altTitles = (data?.data?.attributes?.altTitles || []).flatMap((o) => Object.values(o));
+          const candidates = [...Object.values(titleObj), ...altTitles].filter(Boolean);
+          const resolved = await this.resolveChaptersByCandidateTitles(candidates.slice(0, 4), preferredServer);
+          if (resolved.length > 0) return resolved;
+        } catch (_) {}
+      }
+      return this.getMangaDexChapters(mdId);
+    }
+
     // Direct prefixed IDs from Manga Peak engines
     if (id.startsWith('mm:')) {
-      return this.getMangaMelloChapters(id.slice(3));
+      const chs = await this.getMangaMelloChapters(id.slice(3));
+      if (chs.length > 0) return chs;
     }
     if (id.startsWith('az:')) {
-      return this.getAzoraflyChapters(id.slice(3));
+      const chs = await this.getAzoraflyChapters(id.slice(3));
+      if (chs.length > 0) return chs;
     }
     if (id.startsWith('sw:')) {
-      return this.getMangaSwatChapters(id.slice(3));
+      const chs = await this.getMangaSwatChapters(id.slice(3));
+      if (chs.length > 0) return chs;
     }
     if (id.startsWith('dt:')) {
       const dtId = id.slice(3);
       try {
         const { data } = await axios.get(`${DILAR_API}/series/${encodeURIComponent(dtId)}`, { timeout: 8000 });
-        const title = data?.title || data?.synonyms?.english || data?.synonyms?.arabic;
-        if (title) {
-          const mmHits = await this.searchMangaMello(title);
-          if (mmHits.length > 0) {
-            return this.getMangaMelloChapters(mmHits[0].id.slice(3));
-          }
-          const swHits = await this.searchMangaSwat(title);
-          if (swHits.length > 0) {
-            return this.getMangaSwatChapters(swHits[0].id.slice(3));
-          }
-        }
+        const candidates = [data?.title, data?.synonyms?.english, data?.synonyms?.arabic].filter(Boolean);
+        const resolved = await this.resolveChaptersByCandidateTitles(candidates, preferredServer);
+        if (resolved.length > 0) return resolved;
       } catch (_) {}
       return [];
     }
@@ -1824,11 +2343,19 @@ class MangalikService {
    * - `os:{slug}:{ch}` -> BLACK X 1 (OlympusStaff)
    * - `asq:{slug}:{ch}` -> BLACK X 2 (3asq)
    * - `wc:{chId}` -> BLACK X 3 (WeebCentral)
+   * - `md:{chUuid}` -> BLACK X 3 (MangaDex Official v5)
    * - `{flagshipSlug}:{chNum}` -> Auto-resolves across BLACK X 1 -> BLACK X 2 -> BLACK X 3
    */
   async getArabicChapterPages(chapterIdentifier, preferredServer = '') {
     const raw = String(chapterIdentifier || '').trim();
     if (!raw) return [];
+
+    // 00. Explicit MangaDex chapter ID (`md:{chUuid}`)
+    if (raw.startsWith('md:')) {
+      const mdChId = raw.slice(3).split(':')[0];
+      const pages = await this.getMangaDexChapterPages(mdChId);
+      if (pages.length > 0) return pages;
+    }
 
     // 0a. Explicit MangaMello Plus chapter ID (`mm:{mangaId}:{chId}`)
     if (raw.startsWith('mm:')) {
@@ -2082,6 +2609,45 @@ class MangalikService {
         genres: ['مانجا يابانية', 'أكشن'],
         release_year: 2025
       };
+    }
+
+    if (cleanId.startsWith('al:')) {
+      const detail = await this.getAniListMangaDetails(cleanId.slice(3));
+      if (detail) return detail;
+    }
+
+    if (cleanId.startsWith('md:')) {
+      const mdId = cleanId.slice(3);
+      try {
+        const { data } = await axios.get(`${MANGADEX_API}/manga/${encodeURIComponent(mdId)}?includes[]=cover_art`, {
+          timeout: 8000
+        });
+        const item = data?.data;
+        if (item) {
+          const attrs = item.attributes || {};
+          const titleObj = attrs.title || {};
+          const titleEn = titleObj.en || Object.values(titleObj)[0] || 'Manga';
+          const coverRel = (item.relationships || []).find((r) => r.type === 'cover_art');
+          const fileName = coverRel?.attributes?.fileName;
+          const poster = fileName ? `https://uploads.mangadex.org/covers/${item.id}/${fileName}.512.jpg` : '';
+          return {
+            id: cleanId,
+            title_ar: titleEn,
+            title_en: titleEn,
+            type: attrs.originalLanguage === 'ko' ? 'MANHWA' : attrs.originalLanguage?.startsWith('zh') ? 'MANHUA' : 'MANGA',
+            poster,
+            banner: poster,
+            status: attrs.status === 'completed' ? 'COMPLETED' : 'ONGOING',
+            rating: 9.6,
+            chapters_count: Number(attrs.lastChapter) || 100,
+            author: 'سيرفر BLACK X 3 (Global HD)',
+            description_ar: attrs.description?.ar || attrs.description?.en || `${titleEn} — متاح عبر سيرفر BLACK X 3.`,
+            description_en: attrs.description?.en || `${titleEn} — Available on BLACK X 3.`,
+            genres: ['مانجا عالمية', 'أكشن'],
+            release_year: attrs.year || 2025
+          };
+        }
+      } catch (_) {}
     }
 
     if (cleanId.startsWith('wc:')) {

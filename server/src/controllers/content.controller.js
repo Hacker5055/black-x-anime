@@ -191,6 +191,11 @@ export async function getLibrary(req, res) {
         dynamicTasks.push(mangalikService.getDilarCatalog(page));
         dynamicTasks.push(mangalikService.get3asqCatalog());
       }
+      if (server === 'all' || server === 'bx3') {
+        dynamicTasks.push(mangalikService.getAniListMasterCatalog(page, 'KR'));
+        dynamicTasks.push(mangalikService.getAniListMasterCatalog(page, 'JP'));
+        dynamicTasks.push(mangalikService.getAniListMasterCatalog(page, 'CN'));
+      }
     }
 
     const settled = await Promise.allSettled(dynamicTasks);
@@ -210,7 +215,7 @@ export async function getLibrary(req, res) {
       if (resTask.status === 'fulfilled' && Array.isArray(resTask.value)) {
         for (const dyn of resTask.value) {
           if (type !== 'ALL' && dyn.type !== type) continue;
-          const rawSlug = dyn.id.replace(/^(os|asq|wc|mm|az|sw|dt):/, '');
+          const rawSlug = dyn.id.replace(/^(os|asq|wc|mm|az|sw|dt|al|md):/, '');
           if (mappedOsSlugs.has(rawSlug) || mappedAsqSlugs.has(rawSlug)) continue;
           const normTitle = String(dyn.title_en || dyn.title || '').toLowerCase().trim();
           if (existingTitles.has(normTitle)) continue;
@@ -225,7 +230,7 @@ export async function getLibrary(req, res) {
 
     return res.json({
       success: true,
-      totalCount: 30000,
+      totalCount: 120000,
       page,
       items
     });

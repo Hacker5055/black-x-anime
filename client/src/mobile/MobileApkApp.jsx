@@ -3201,25 +3201,93 @@ export default function MobileApkApp() {
       }
     };
 
+    const fetchAniListMaster = async () => {
+      try {
+        const gql = `
+          query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort]) {
+            Page(page: $page, perPage: $perPage) {
+              media(type: MANGA, search: $search, sort: $sort, isAdult: false) {
+                id
+                title { romaji english native }
+                synonyms
+                countryOfOrigin
+                status
+                chapters
+                averageScore
+                genres
+                description(asHtml: false)
+                coverImage { extraLarge large }
+              }
+            }
+          }
+        `;
+        const variables = {
+          page: pageNum,
+          perPage: 28,
+          sort: q ? ['SEARCH_MATCH', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC']
+        };
+        if (q) variables.search = q;
+        const txt = await nativeHttpCall(
+          'https://graphql.anilist.co',
+          'POST',
+          { 'Content-Type': 'application/json', Accept: 'application/json' },
+          JSON.stringify({ query: gql, variables })
+        );
+        const json = txt ? JSON.parse(txt) : null;
+        const list = json?.data?.Page?.media || [];
+        return list.map((m) => {
+          const titleEn = m.title?.english || m.title?.romaji || m.title?.native || `Manga #${m.id}`;
+          const c = String(m.countryOfOrigin || 'JP').toUpperCase();
+          const typeAr = c === 'KR' ? 'مانهوا كورية' : c === 'CN' || c === 'TW' ? 'مانهاوا صينية' : 'مانجا يابانية';
+          const coverUrl = m.coverImage?.extraLarge || m.coverImage?.large || '/blackx-logo.png';
+          const allSyns = Array.from(
+            new Set([m.title?.english, m.title?.romaji, ...(m.synonyms || [])].filter(Boolean))
+          );
+          return {
+            objectID: `al:${m.id}`,
+            source: 'anilist_master',
+            sourceLabel: 'BLACK X Master',
+            anilistId: m.id,
+            name: titleEn,
+            name_en: m.title?.english || titleEn,
+            name_romaji: m.title?.romaji || titleEn,
+            synonyms: allSyns,
+            countryOfOrigin: c,
+            poster_uri: coverUrl,
+            poster: { large: coverUrl, medium: coverUrl },
+            type: typeAr,
+            story_ar: (m.description || '').replace(/<[^>]+>/g, '').trim() || `اقرأ ${titleEn} عبر الفهرس العالمي الشامل BLACK X.`,
+            rate: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4'
+          };
+        });
+      } catch (_) {
+        return [];
+      }
+    };
+
     if (srcMode === 'mello') return fetchMello();
     if (srcMode === 'azora') return fetchAzora();
     if (srcMode === 'swat') return fetchSwat();
     if (srcMode === 'dilar') return fetchDilar();
-    if (srcMode === 'mangadex') return fetchAlgoliaManga();
+    if (srcMode === 'mangadex') {
+      const [alRes, algRes] = await Promise.all([fetchAniListMaster(), fetchAlgoliaManga()]);
+      return [...alRes, ...algRes];
+    }
 
-    const [mello, azora, swat, dilar, alg] = await Promise.all([
+    const [mello, azora, swat, dilar, alMaster, alg] = await Promise.all([
       fetchMello(),
       fetchAzora(),
       fetchSwat(),
       fetchDilar(),
+      fetchAniListMaster(),
       pageNum === 1 ? fetchAlgoliaManga() : Promise.resolve([])
     ]);
 
     const merged = [];
     const seen = new Set();
-    const maxLen = Math.max(mello.length, azora.length, swat.length, dilar.length, alg.length);
+    const maxLen = Math.max(mello.length, azora.length, swat.length, dilar.length, alMaster.length, alg.length);
     for (let i = 0; i < maxLen; i++) {
-      for (const list of [mello, azora, swat, dilar, alg]) {
+      for (const list of [mello, azora, swat, dilar, alMaster, alg]) {
         const it = list[i];
         if (!it) continue;
         const normKey = String(it.name || '').toLowerCase().replace(/[^a-z0-9\u0621-\u064A]+/g, '');
@@ -4133,8 +4201,26 @@ export default function MobileApkApp() {
         }
       }
 
-      // 4. Cross-Engine Resolution across Mello Plus (?relations=genres,chapters), Azora, and Manga Swat (by full title & short title)
-      const searchCandidates = Array.from(new Set([title, shortTitle].filter(Boolean)));
+      // 4. Smart Multi-Title & Synonym Cross-Engine Resolution across Mello Plus (?relations=genres,chapters), Azora, and Manga Swat
+      let extraSyns = Array.isArray(mangaHit.synonyms) ? mangaHit.synonyms : [];
+      if (extraSyns.length === 0 && title) {
+        try {
+          const gql = `query ($s: String) { Media(type: MANGA, search: $s) { title { romaji english native } synonyms } }`;
+          const txt = await nativeHttpCall(
+            'https://graphql.anilist.co',
+            'POST',
+            { 'Content-Type': 'application/json', Accept: 'application/json' },
+            JSON.stringify({ query: gql, variables: { s: shortTitle || title } })
+          );
+          const m = txt ? JSON.parse(txt)?.data?.Media : null;
+          if (m) {
+            extraSyns = [m.title?.english, m.title?.romaji, ...(m.synonyms || [])].filter(Boolean);
+          }
+        } catch (_) {}
+      }
+      const searchCandidates = Array.from(
+        new Set([title, shortTitle, mangaHit.name_en, mangaHit.name_romaji, ...extraSyns].map((s) => String(s || '').trim()).filter((s) => s.length >= 2))
+      ).slice(0, 5);
       for (const qCandidate of searchCandidates) {
         const [melloSearch, azoraSearch, swatSearch] = await Promise.all([
           nativeGetJson(

@@ -46,43 +46,136 @@ export default function Browse() {
 
   // Server tabs configuration (Exclusive BLACK X Branding)
   const serverTabs = [
-    { id: 'all', labelAr: '🌐 جميع سيرفرات BLACK X', labelEn: '🌐 All BLACK X Servers' },
+    { id: 'all', labelAr: '🌐 جميع سيرفرات BLACK X (8 مصادر + الفهرس العالمي)', labelEn: '🌐 All BLACK X Servers (8 Sources + Global Index)' },
     { id: 'bx1', labelAr: '⚡ سيرفر BLACK X 1 (مانهوا عربية)', labelEn: '⚡ BLACK X 1 (AR Manhwa)' },
     { id: 'bx2', labelAr: '📖 سيرفر BLACK X 2 (مانجا عربية)', labelEn: '📖 BLACK X 2 (AR Manga)' },
-    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (المكتبة الشاملة)', labelEn: '👑 BLACK X 3 (Global HD)' }
+    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (الفهرس العالمي الشامل +120,000 عمل)', labelEn: '👑 BLACK X 3 (Master Global Index +120K)' }
   ];
 
-  // Filter chips configuration
+  // Filter chips configuration (including Korean Manhwa, Japanese Manga, Chinese Manhua)
   const filterChips = [
-    { id: 'ALL', labelAr: '🌟 الكل (الرائجة والشائعة)', labelEn: '🌟 All Trending' },
-    { id: 'MANHWA', labelAr: '⚡ مانهوا كورية', labelEn: '⚡ Manhwa' },
-    { id: 'MANGA', labelAr: '📖 مانجا يابانية', labelEn: '📖 Manga' },
+    { id: 'ALL', labelAr: '🌟 الكل (+120,000 عمل)', labelEn: '🌟 All (+120K Works)' },
+    { id: 'MANHWA', labelAr: '🇰🇷 مانهوا كورية (Manhwa)', labelEn: '🇰🇷 Korean Manhwa' },
+    { id: 'MANGA', labelAr: '🇯🇵 مانجا يابانية (Manga)', labelEn: '🇯🇵 Japanese Manga' },
+    { id: 'MANHUA', labelAr: '🇨🇳 مانهاوا صينية (Manhua)', labelEn: '🇨🇳 Chinese Manhua' },
     { id: 'TOP_RATED', labelAr: '⭐ الأعلى تقييماً', labelEn: '⭐ Top Rated' },
     { id: 'ONGOING', labelAr: '⌛ مستمرة', labelEn: '⌛ Ongoing' },
     { id: 'COMPLETED', labelAr: '✔ مكتملة', labelEn: '✔ Completed' }
   ];
 
-  // Fetch trending items from server
+  // Direct AniList Master Global Index helper (+100,000 Manga/Manhwa/Manhua works with synonym support)
+  const fetchAniListMasterClient = useCallback(async (pageNum = 1, country = null, searchQ = '') => {
+    try {
+      const gql = `
+        query ($page: Int, $perPage: Int, $countryOfOrigin: CountryCode, $search: String, $sort: [MediaSort]) {
+          Page(page: $page, perPage: $perPage) {
+            media(type: MANGA, countryOfOrigin: $countryOfOrigin, search: $search, sort: $sort, isAdult: false) {
+              id
+              title { romaji english native }
+              synonyms
+              countryOfOrigin
+              status
+              chapters
+              averageScore
+              genres
+              description(asHtml: false)
+              coverImage { extraLarge large }
+              bannerImage
+            }
+          }
+        }
+      `;
+      const variables = {
+        page: pageNum,
+        perPage: 24,
+        sort: searchQ ? ['SEARCH_MATCH', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC']
+      };
+      if (country) variables.countryOfOrigin = country;
+      if (searchQ) variables.search = searchQ;
+      const resp = await fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ query: gql, variables })
+      });
+      if (!resp.ok) return [];
+      const json = await resp.json();
+      const media = json?.data?.Page?.media || [];
+      return media.map((m) => {
+        const titleEn = m.title?.english || m.title?.romaji || m.title?.native || `Manga #${m.id}`;
+        const c = String(m.countryOfOrigin || 'JP').toUpperCase();
+        const typeLabel = c === 'KR' ? 'MANHWA' : c === 'CN' || c === 'TW' ? 'MANHUA' : 'MANGA';
+        const poster = m.coverImage?.extraLarge || m.coverImage?.large || '/blackx-logo.png';
+        const desc = String(m.description || '').replace(/<[^>]+>/g, '').trim();
+        return {
+          id: `al:${m.id}`,
+          mangalikSlug: `al:${m.id}`,
+          title_ar: titleEn,
+          title_en: titleEn,
+          synonyms: [m.title?.english, m.title?.romaji, ...(m.synonyms || [])].filter(Boolean),
+          type: typeLabel,
+          poster,
+          banner: m.bannerImage || poster,
+          author: c === 'KR' ? 'مانهوا كورية • BLACK X' : c === 'CN' ? 'مانهاوا صينية • BLACK X' : 'مانجا يابانية • BLACK X',
+          rating: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4',
+          description_ar: desc || `اقرأ ${titleEn} عبر الفهرس العالمي الشامل ومصادر BLACK X.`,
+          description_en: desc || `Read ${titleEn} on BLACK X Master Global Index.`,
+          chapters_count: m.chapters || (c === 'KR' ? 120 : 180),
+          status: m.status === 'FINISHED' ? 'COMPLETED' : 'ONGOING',
+          genres: Array.isArray(m.genres) && m.genres.length ? m.genres : [typeLabel],
+          source: 'BLACK X 3',
+          server: 'bx3'
+        };
+      });
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Fetch trending items from server + Master Global Index
   const loadLibrary = useCallback(async (srv = serverFilter) => {
     setLoading(true);
     setPage(1);
     try {
-      const res = await api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(srv)}&page=1`);
-      setLibraryItems(res.items || []);
+      const tasks = [api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(srv)}&page=1`).catch(() => ({ items: [] }))];
+      if (srv === 'all' || srv === 'bx3') {
+        tasks.push(fetchAniListMasterClient(1, 'KR'));
+        tasks.push(fetchAniListMasterClient(1, 'JP'));
+        tasks.push(fetchAniListMasterClient(1, 'CN'));
+      }
+      const [res, krList = [], jpList = [], cnList = []] = await Promise.all(tasks);
+      const baseItems = res?.items || [];
+      const seenTitles = new Set(baseItems.map((x) => String(x.title_en || x.title_ar || '').toLowerCase().trim()));
+      const merged = [...baseItems];
+      for (const extra of [...krList, ...jpList, ...cnList]) {
+        const key = String(extra.title_en || '').toLowerCase().trim();
+        if (key && !seenTitles.has(key)) {
+          seenTitles.add(key);
+          merged.push(extra);
+        }
+      }
+      setLibraryItems(merged);
     } catch {
       setLibraryItems([]);
     } finally {
       setLoading(false);
     }
-  }, [serverFilter]);
+  }, [serverFilter, fetchAniListMasterClient]);
 
   const loadMoreLibrary = useCallback(async () => {
     if (loadingMore) return;
     const nextPage = page + 1;
     setLoadingMore(true);
     try {
-      const res = await api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(serverFilter)}&page=${nextPage}`);
-      const nextItems = res.items || [];
+      const tasks = [
+        api.get(`/api/content/library?type=ALL&server=${encodeURIComponent(serverFilter)}&page=${nextPage}`).catch(() => ({ items: [] }))
+      ];
+      if (serverFilter === 'all' || serverFilter === 'bx3') {
+        tasks.push(fetchAniListMasterClient(nextPage, 'KR'));
+        tasks.push(fetchAniListMasterClient(nextPage, 'JP'));
+        tasks.push(fetchAniListMasterClient(nextPage, 'CN'));
+      }
+      const [res, krList = [], jpList = [], cnList = []] = await Promise.all(tasks);
+      const nextItems = [...(res?.items || []), ...krList, ...jpList, ...cnList];
       if (nextItems.length > 0) {
         setPage(nextPage);
         setLibraryItems((prev) => {
@@ -95,16 +188,16 @@ export default function Browse() {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, page, serverFilter]);
+  }, [loadingMore, page, serverFilter, fetchAniListMasterClient]);
 
   useEffect(() => {
     loadLibrary(serverFilter);
   }, [loadLibrary, serverFilter]);
 
-  // Live search against BLACK X 1 / 2 / 3 engines
-  const handleSearch = async (e, srvOverride) => {
+  // Live search against all 8 BLACK X engines + AniList Master Global Index
+  const handleSearch = useCallback(async (e, srvOverride, customQuery) => {
     e?.preventDefault?.();
-    const q = query.trim();
+    const q = (customQuery !== undefined ? customQuery : query).trim();
     const activeSrv = srvOverride || serverFilter;
     if (!q) {
       setLiveSearchResults(null);
@@ -113,65 +206,74 @@ export default function Browse() {
 
     setSearchingLive(true);
     try {
-      const res = await api.get(
-        `/api/search?query=${encodeURIComponent(q)}&type=manga&server=${encodeURIComponent(activeSrv)}`
-      );
+      const [res, alHits] = await Promise.all([
+        api.get(`/api/search?query=${encodeURIComponent(q)}&type=manga&server=${encodeURIComponent(activeSrv)}`).catch(() => ({})),
+        fetchAniListMasterClient(1, null, q)
+      ]);
       const rawList = res?.manga || res?.results || [];
-      if (rawList.length > 0) {
-        const mapped = rawList.map((r, i) => ({
-          id: r.id || r.mangalikSlug || r.slug || `res_${i}`,
-          mangalikSlug: r.mangalikSlug || r.id || r.slug,
-          title_ar: r.title_ar || r.arabicTitle || r.title || r.romajiTitle,
-          title_en: r.title_en || r.englishTitle || r.romajiTitle || r.title || 'Manga',
-          type: (r.type || 'MANHWA').toUpperCase(),
-          poster:
-            r.poster ||
-            r.coverImage ||
-            r.coverUrl ||
-            'https://olympustaff.com/images/manga/thumbnail_b05147568d52f22c663c084172fc0dac.png',
-          banner: r.banner || r.poster || r.coverImage || r.coverUrl,
-          author: r.author || r.source || 'سيرفرات BLACK X',
-          rating: r.rating || (r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.8'),
-          description_ar: r.description_ar || r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر BLACK X.',
-          description_en: r.description_en || r.description || 'Full high-resolution chapters on BLACK X.',
-          chapters_count: r.chapters_count || r.chaptersCount || 100,
-          status: r.status || 'مستمر',
-          genres: r.genres || ['أكشن', 'فانتازيا'],
-          source: r.source || 'BLACK X',
-          server: r.server || 'bx1'
-        }));
-        setLiveSearchResults(mapped);
-      } else {
-        setLiveSearchResults([]);
+      const mappedServer = rawList.map((r, i) => ({
+        id: r.id || r.mangalikSlug || r.slug || `res_${i}`,
+        mangalikSlug: r.mangalikSlug || r.id || r.slug,
+        title_ar: r.title_ar || r.arabicTitle || r.title || r.romajiTitle,
+        title_en: r.title_en || r.englishTitle || r.romajiTitle || r.title || 'Manga',
+        type: (r.type || 'MANHWA').toUpperCase(),
+        poster:
+          r.poster ||
+          r.coverImage ||
+          r.coverUrl ||
+          '/blackx-logo.png',
+        banner: r.banner || r.poster || r.coverImage || r.coverUrl,
+        author: r.author || r.source || 'سيرفرات BLACK X',
+        rating: r.rating || (r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.8'),
+        description_ar: r.description_ar || r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر BLACK X.',
+        description_en: r.description_en || r.description || 'Full high-resolution chapters on BLACK X.',
+        chapters_count: r.chapters_count || r.chaptersCount || 100,
+        status: r.status || 'مستمر',
+        genres: r.genres || ['أكشن', 'فانتازيا'],
+        source: r.source || 'BLACK X',
+        server: r.server || 'bx1'
+      }));
+
+      const seenIds = new Set(mappedServer.map((m) => m.id));
+      const combined = [...mappedServer];
+      for (const al of alHits) {
+        if (!seenIds.has(al.id)) {
+          seenIds.add(al.id);
+          combined.push(al);
+        }
       }
+      setLiveSearchResults(combined);
     } catch {
       setLiveSearchResults([]);
     } finally {
       setSearchingLive(false);
     }
-  };
+  }, [query, serverFilter, fetchAniListMasterClient]);
+
+  // Automatic debounced live search (380ms) while typing
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setLiveSearchResults(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleSearch(null, serverFilter, q);
+    }, 380);
+    return () => clearTimeout(timer);
+  }, [query, serverFilter, handleSearch]);
 
   // Filtered display items
   const displayedItems = useMemo(() => {
-    if (liveSearchResults !== null) return liveSearchResults;
-
-    let items = [...libraryItems];
-
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
-      items = items.filter(
-        (it) =>
-          (it.title_ar && it.title_ar.toLowerCase().includes(q)) ||
-          (it.title_en && it.title_en.toLowerCase().includes(q)) ||
-          (it.author && it.author.toLowerCase().includes(q))
-      );
-    }
+    let items = liveSearchResults !== null ? [...liveSearchResults] : [...libraryItems];
 
     switch (filter) {
       case 'MANHWA':
         return items.filter((it) => it.type === 'MANHWA');
       case 'MANGA':
         return items.filter((it) => it.type === 'MANGA');
+      case 'MANHUA':
+        return items.filter((it) => it.type === 'MANHUA');
       case 'TOP_RATED':
         return [...items].sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
       case 'ONGOING':
@@ -182,7 +284,7 @@ export default function Browse() {
       default:
         return items;
     }
-  }, [libraryItems, liveSearchResults, filter, query]);
+  }, [libraryItems, liveSearchResults, filter]);
 
   // Featured Spotlight item (Solo Leveling or first manhwa in list)
   const spotlightItem = useMemo(() => {
