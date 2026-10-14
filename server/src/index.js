@@ -18,7 +18,7 @@ import gamificationRoutes from './routes/gamification.routes.js';
 import supportRoutes from './routes/support.routes.js';
 import mangaNovelRoutes from './routes/mangaNovel.routes.js';
 import { animeScraperRouter } from './routes/animeScraper.routes.js';
-import { optionalAuth } from './auth.js';
+import { optionalAuth, isAuthConfigured } from './auth.js';
 import { db } from './db.js';
 
 // Keep local Node development resilient to client-abort and background-task
@@ -108,7 +108,13 @@ app.get('/api/health', (req, res) => {
   try {
     // Verify the schema used by authentication, not just that Express is alive.
     db.prepare('SELECT id, username, email, password_hash FROM users LIMIT 0').all();
-    res.json({ ok: true, name: 'BLACK X API', database: 'ok', time: new Date().toISOString() });
+    res.json({
+      ok: true,
+      name: 'BLACK X API',
+      database: 'ok',
+      authentication: isAuthConfigured() ? 'ok' : 'unavailable',
+      time: new Date().toISOString()
+    });
   } catch (err) {
     const requestId = req.get('x-vercel-id') || req.get('x-request-id') || null;
     console.error('[health database failure]', JSON.stringify({
