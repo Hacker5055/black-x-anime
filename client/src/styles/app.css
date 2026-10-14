@@ -8171,23 +8171,20 @@ body {
   box-shadow: 0 0 10px #ffffff;
 }
 
-/* 4. Active Glowing Capsule Pill inside Category Track or Bottom Dock */
+/* 4. Active Glowing White Capsule Pill inside Category Track or Bottom Dock (Matches image-1.jpeg 1:1) */
 .ios-lg-active-pill {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  gap: 0.45rem;
   padding: 0.58rem 1.25rem;
   border-radius: 999px;
-  background:
-    radial-gradient(circle at 28% 50%, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.14) 58%, rgba(255, 255, 255, 0.08) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.68);
-  box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.9),
-    inset 0 -1px 1.5px rgba(255, 255, 255, 0.38),
-    0 0 20px rgba(255, 255, 255, 0.22);
-  color: #ffffff;
-  font-weight: 800;
+  background: #ffffff !important;
+  border: 1.5px solid #ffffff !important;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.28) !important;
+  color: #000000 !important;
+  font-weight: 900 !important;
   cursor: pointer;
 }
 

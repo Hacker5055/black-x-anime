@@ -22,7 +22,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 
 /**
- * Floating Bottom Navigation Dock (iOS Liquid Glass — Pure Monochrome)
+ * Floating Bottom Navigation Dock (1:1 Match to Reference Screenshot)
  */
 function IosLiquidGlassFloatingDock({ onOpenAuth }) {
   const location = useLocation();
@@ -38,70 +38,47 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
       to: '/',
       labelAr: 'الرئيسية',
       labelEn: 'Home',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 3L4 9.5V20a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5L12 3z" />
-        </svg>
-      )
+      icon: '🏠'
     },
     {
       id: 'search',
-      match: (p) => p.startsWith('/trending') || p.startsWith('/discover'),
+      match: (p) => p.startsWith('/trending'),
       to: '/trending',
-      labelAr: 'بحث الأنمي',
+      labelAr: 'البحث',
       labelEn: 'Search',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-          <circle cx="11" cy="11" r="7" />
-          <line x1="16.5" y1="16.5" x2="21" y2="21" />
-        </svg>
-      )
+      icon: '🔍'
     },
     {
-      id: 'filters',
-      match: (p) => p.startsWith('/rankings') || p.startsWith('/community'),
-      to: '/rankings',
-      labelAr: 'التصنيفات',
-      labelEn: 'Filters',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <line x1="4" y1="6" x2="20" y2="6" />
-          <circle cx="9" cy="6" r="2" fill="#ffffff" />
-          <line x1="4" y1="12" x2="20" y2="12" />
-          <circle cx="15" cy="12" r="2" fill="#ffffff" />
-          <line x1="4" y1="18" x2="20" y2="18" />
-          <circle cx="10" cy="18" r="2" fill="#ffffff" />
-        </svg>
-      )
-    },
-    {
-      id: 'add',
-      match: (p) => p.startsWith('/profile') || p.startsWith('/mylist'),
-      to: '/profile',
-      labelAr: 'حسابي',
-      labelEn: 'Profile',
-      icon: (
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <circle cx="12" cy="12" r="8.5" />
-          <line x1="12" y1="8.5" x2="12" y2="15.5" />
-          <line x1="8.5" y1="12" x2="15.5" y2="12" />
-        </svg>
-      )
+      id: 'schedule',
+      match: (p) => p.startsWith('/discover') || p.startsWith('/rankings'),
+      to: '/discover',
+      labelAr: 'الجدول',
+      labelEn: 'Radar',
+      icon: '📅'
     },
     {
       id: 'manga',
       match: (p) => p.startsWith('/browse'),
       to: '/browse',
-      labelAr: 'المانهوا والمانجا',
+      labelAr: 'المانجا',
       labelEn: 'Manga',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <rect x="5" y="3.5" width="14" height="17" rx="3" />
-          <line x1="8.5" y1="8.5" x2="15.5" y2="8.5" />
-          <line x1="8.5" y1="12" x2="15.5" y2="12" />
-          <line x1="8.5" y1="15.5" x2="12.5" y2="15.5" />
-        </svg>
-      )
+      icon: '📖'
+    },
+    {
+      id: 'community',
+      match: (p) => p.startsWith('/community'),
+      to: '/community',
+      labelAr: 'الساحة',
+      labelEn: 'Arena',
+      icon: '🔮'
+    },
+    {
+      id: 'profile',
+      match: (p) => p.startsWith('/profile') || p.startsWith('/mylist'),
+      to: '/profile',
+      labelAr: 'حسابي',
+      labelEn: 'Profile',
+      icon: '👤'
     }
   ];
 
@@ -111,8 +88,8 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
         className="ios-lg-capsule-track"
         aria-label="iOS Liquid Glass Dock"
         style={{
-          padding: '0.52rem 0.68rem',
-          gap: '0.55rem'
+          padding: '0.45rem 0.6rem',
+          gap: '0.45rem'
         }}
       >
         {dockItems.map((item) => {
@@ -125,22 +102,16 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
                 className="ios-lg-active-pill"
                 onClick={() => navigate(item.to)}
                 style={{
-                  padding: '0.62rem 1.25rem',
-                  fontSize: '0.86rem'
+                  height: '44px',
+                  minWidth: '94px',
+                  padding: '0 0.95rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 900,
+                  justifyContent: 'center'
                 }}
               >
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    filter: 'drop-shadow(0 0 10px #ffffff) drop-shadow(0 0 18px rgba(255,255,255,0.85))'
-                  }}
-                >
-                  {item.icon}
-                </span>
-                <span>{lang === 'ar' ? item.labelAr : item.labelEn}</span>
+                <span style={{ fontSize: '1.02rem', lineHeight: 1 }}>{item.icon}</span>
+                <span style={{ whiteSpace: 'nowrap' }}>{lang === 'ar' ? item.labelAr : item.labelEn}</span>
               </button>
             );
           }
@@ -152,15 +123,15 @@ function IosLiquidGlassFloatingDock({ onOpenAuth }) {
               className="ios-lg-orb"
               title={lang === 'ar' ? item.labelAr : item.labelEn}
               onClick={() => {
-                if (item.id === 'add' && !user && typeof onOpenAuth === 'function') {
+                if (item.id === 'profile' && !user && typeof onOpenAuth === 'function') {
                   onOpenAuth('login');
                   return;
                 }
                 navigate(item.to);
               }}
-              style={{ width: '44px', height: '44px' }}
+              style={{ width: '42px', height: '42px', fontSize: '0.98rem' }}
             >
-              {item.icon}
+              <span style={{ fontSize: '0.98rem', lineHeight: 1 }}>{item.icon}</span>
             </button>
           );
         })}

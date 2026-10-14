@@ -108,11 +108,13 @@ const DEFAULT_HERO_SLIDES = [
   }
 ];
 
-/* --------------------------- 0. Official slothUI Pro 2.0 Cinema Hero Banner ("Handmaiden Tales" + "Houses & Dragons") --------------------------- */
+/* --------------------------- 0. Exact 1:1 Reference Cinema Hero + All Episodes + Anime/Manga Portals + Stories --------------------------- */
 function Hero3DStage({ items = [], trending = [] }) {
-  const { lang, formatNumber } = useI18n();
+  const { lang } = useI18n();
   const navigate = useNavigate();
   const [activeIdx, setActiveIdx] = useState(0);
+  const [inPlaylist, setInPlaylist] = useState(false);
+  const isRtl = lang === 'ar';
 
   const heroPool = useMemo(() => {
     const merged = [];
@@ -122,7 +124,7 @@ function Hero3DStage({ items = [], trending = [] }) {
       if (!key || seen.has(key)) continue;
       seen.add(key);
       merged.push(item);
-      if (merged.length >= 6) break;
+      if (merged.length >= 12) break;
     }
     return merged.length > 0 ? merged : DEFAULT_HERO_SLIDES;
   }, [items, trending]);
@@ -130,7 +132,7 @@ function Hero3DStage({ items = [], trending = [] }) {
   useEffect(() => {
     if (heroPool.length <= 1) return undefined;
     const id = setInterval(() => {
-      setActiveIdx((prev) => (prev + 1) % heroPool.length);
+      setActiveIdx((prev) => (prev + 1) % Math.min(6, heroPool.length));
     }, 6500);
     return () => clearInterval(id);
   }, [heroPool.length]);
@@ -142,113 +144,169 @@ function Hero3DStage({ items = [], trending = [] }) {
     current.titleRomaji ||
     current.titleAr ||
     current.titleArabic ||
-    current.slug;
-  const arabicSub = current.titleAr || current.titleArabic;
-  const subLine =
-    arabicSub && arabicSub !== displayTitle
-      ? arabicSub
-      : lang === 'ar'
-      ? 'القسم الجديد من الموسم متاح الآن بجودة FHD 1080p وسرعة 120Hz عبر سيرفرات BLACK X.'
-      : 'New season episodes streaming now in Full HD 1080p on BLACK X.';
-  const epCount = current.episodes || current.episode || 12;
-  const score = current.score ? (Number(current.score) / 10).toFixed(1) : '9.4';
+    current.slug ||
+    'DEMON SLAYER: KIMETSU NO YAIBA';
+  const score = current.score ? (Number(current.score) / 10).toFixed(1) : '8.8';
   const artwork =
-    current.banner ||
-    current.bannerUrl ||
     current.poster ||
     current.coverUrl ||
+    current.banner ||
+    current.bannerUrl ||
     '/blackx-logo.png';
 
-  const heroGenres =
-    lang === 'ar'
-      ? ['أكشن', 'فانتازيا', 'شونين']
-      : ['Action', 'Fantasy', 'Shonen'];
+  const heroGenres = isRtl ? ['اكشن', 'تاريخي', 'شونين'] : ['Action', 'Historical', 'Shonen'];
+
+  const handleWatchCurrent = (item = current, ep = 1) => {
+    if (item?.slug) {
+      navigate(`/watch/${item.slug}/${item.episode || ep}`);
+    } else {
+      navigate(`/trending?q=${encodeURIComponent(item?.titleEn || displayTitle)}`);
+    }
+  };
+
+  const handleOpenDetails = (item = current) => {
+    if (item?.slug) {
+      navigate(`/show/${item.slug}`);
+    } else {
+      navigate(`/trending?q=${encodeURIComponent(item?.titleEn || displayTitle)}`);
+    }
+  };
 
   return (
-    <div style={{ marginBottom: '1.6rem' }}>
+    <div style={{ marginBottom: '1.75rem' }}>
+      {/* 1. Full-Bleed Cinema Hero Showcase (Matches Reference Screenshot 1:1) */}
       <section
-        className="wit-cinema-hero sloth-pro-hero"
         style={{
           position: 'relative',
-          borderRadius: '28px',
+          width: '100%',
+          minHeight: '515px',
+          borderRadius: '26px',
           overflow: 'hidden',
-          minHeight: '440px',
-          background: '#050508',
-          border: '1px solid rgba(255,255,255,0.2)',
-          boxShadow: '0 28px 70px rgba(0,0,0,0.95)'
+          background: '#000000',
+          border: '1px solid rgba(255,255,255,0.12)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.95)'
         }}
       >
-        {/* Full-Bleed Artwork with slothUI Pro Bottom & Side Vignette */}
-        <div className="wit-cinema-hero__art-wrap" aria-hidden="true">
-          <img
-            src={artwork}
-            alt={displayTitle}
-            className="wit-cinema-hero__art"
-            referrerPolicy="no-referrer"
-          />
-          <div className="wit-cinema-hero__fade" />
-        </div>
-
-        {/* Top-Right/Left Official [BLACK X] original Seal */}
+        <img
+          src={artwork}
+          alt={displayTitle}
+          referrerPolicy="no-referrer"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center 18%',
+            filter: 'brightness(0.7) contrast(1.12)'
+          }}
+        />
+        {/* Multi-Stop Pitch-Black Vignette */}
         <div
           style={{
             position: 'absolute',
-            top: '20px',
-            insetInlineStart: '22px',
+            inset: 0,
+            background:
+              'linear-gradient(180deg, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.06) 24%, rgba(0,0,0,0.82) 64%, #000000 100%)'
+          }}
+        />
+
+        {/* Top-Left Official "[BLACK X original | X]" Seal */}
+        <div
+          onClick={() => navigate('/trending')}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '18px',
             zIndex: 4,
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.32rem 0.85rem 0.32rem 0.42rem',
+            gap: '0.45rem',
+            padding: '0.28rem 0.7rem 0.28rem 0.38rem',
             borderRadius: '999px',
-            background: 'rgba(0,0,0,0.72)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255,255,255,0.24)'
+            background: 'rgba(0,0,0,0.68)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            cursor: 'pointer'
           }}
         >
           <img
             src="/blackx-logo.png"
             alt="BLACK X"
             style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '7px',
+              width: '22px',
+              height: '22px',
+              borderRadius: '6px',
               objectFit: 'cover',
               border: '1px solid rgba(255,255,255,0.35)'
             }}
           />
-          <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
+          <span style={{ fontSize: '0.74rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
             BLACK X <span style={{ fontWeight: 500, opacity: 0.78 }}>original</span>
-          </span>
-          <span
-            style={{
-              padding: '0.1rem 0.5rem',
-              borderRadius: '999px',
-              background: '#ffffff',
-              color: '#000000',
-              fontSize: '0.64rem',
-              fontWeight: 900
-            }}
-          >
-            4K • 120Hz
           </span>
         </div>
 
-        {/* Right/Center Content Area (Official slothUI Pro Layout) */}
-        <div className="wit-cinema-hero__content" style={{ position: 'relative', zIndex: 3, paddingTop: '3.6rem' }}>
-          {/* 1. slothUI Pro Genre Pills ABOVE Title */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.7rem' }}>
-            {heroGenres.map((g, i) => (
+        {/* Top-Right Slide Indicator Dots ([━━] • • • • •) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '18px',
+            zIndex: 4,
+            display: 'flex',
+            gap: '4px'
+          }}
+        >
+          {heroPool.slice(0, 6).map((_, idx) => (
+            <span
+              key={idx}
+              onClick={() => setActiveIdx(idx)}
+              style={{
+                width: activeIdx === idx ? '18px' : '6px',
+                height: '6px',
+                borderRadius: '99px',
+                background: activeIdx === idx ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer'
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Centered Hero Content at Bottom */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '18px',
+            left: '16px',
+            right: '16px',
+            zIndex: 3,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center'
+          }}
+        >
+          {/* Genre Pills + TV-MA Badge ABOVE Title */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.42rem',
+              flexWrap: 'wrap',
+              marginBottom: '0.58rem'
+            }}
+          >
+            {heroGenres.map((g, gIdx) => (
               <span
-                key={i}
+                key={gIdx}
                 style={{
-                  padding: '0.26rem 0.82rem',
+                  padding: '0.22rem 0.72rem',
                   borderRadius: '999px',
                   background: 'rgba(255,255,255,0.12)',
-                  backdropFilter: 'blur(14px)',
                   border: '1px solid rgba(255,255,255,0.28)',
                   color: '#ffffff',
-                  fontSize: '0.74rem',
+                  fontSize: '0.7rem',
                   fontWeight: 800
                 }}
               >
@@ -257,208 +315,442 @@ function Hero3DStage({ items = [], trending = [] }) {
             ))}
             <span
               style={{
-                padding: '0.26rem 0.75rem',
+                padding: '0.22rem 0.62rem',
                 borderRadius: '999px',
                 background: '#ffffff',
                 color: '#000000',
-                fontSize: '0.72rem',
+                fontSize: '0.68rem',
                 fontWeight: 900
               }}
             >
-              TV-MA • 2026
+              TV-MA • 2024
             </span>
           </div>
 
-          {/* 2. Giant Bold Title */}
+          {/* Giant Bold Uppercase Title */}
           <h1
-            className="wit-cinema-hero__title"
             style={{
-              fontSize: 'clamp(1.75rem, 3.5vw, 2.85rem)',
+              margin: '0 0 0.38rem',
+              maxWidth: '720px',
+              fontSize: 'clamp(1.55rem, 3.2vw, 2.35rem)',
               fontWeight: 900,
               lineHeight: 1.12,
-              marginBottom: '0.6rem',
-              textShadow: '0 8px 28px rgba(0,0,0,0.95)'
+              letterSpacing: '0.03em',
+              textTransform: 'uppercase',
+              color: '#ffffff',
+              textShadow: '0 6px 24px rgba(0,0,0,0.95)',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden'
             }}
           >
             {displayTitle}
           </h1>
 
-          {/* 3. slothUI Pro Metadata Bar */}
-          <div className="wit-cinema-hero__meta" style={{ marginBottom: '0.75rem' }}>
-            <span
-              style={{
-                padding: '0.2rem 0.65rem',
-                borderRadius: '999px',
-                background: '#ffffff',
-                color: '#000000',
-                fontWeight: 900,
-                fontSize: '0.76rem'
-              }}
-            >
-              ★ {score}
-            </span>
-            <span
-              style={{
-                padding: '0.2rem 0.65rem',
-                borderRadius: '999px',
-                background: 'rgba(255,255,255,0.12)',
-                border: '1px solid rgba(255,255,255,0.24)',
-                color: '#ffffff',
-                fontWeight: 800,
-                fontSize: '0.74rem'
-              }}
-            >
-              🧬 98% Match
-            </span>
-            <span className="wit-cinema-hero__meta-text" style={{ fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>
-              • {formatNumber(epCount)} {lang === 'ar' ? 'حلقات' : 'Episodes'} • FHD 1080p
-            </span>
+          {/* Episode Subtitle Line */}
+          <div
+            style={{
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.82)',
+              marginBottom: '0.9rem'
+            }}
+          >
+            {isRtl
+              ? `م1 ح1 • بداية أسطورة ${displayTitle.slice(0, 26)} • ★ ${score}`
+              : `S1 E1 • The Origins Of ${displayTitle.slice(0, 26)} • ★ ${score}`}
           </div>
 
-          <p className="wit-cinema-hero__desc" style={{ maxWidth: '620px', color: 'rgba(255,255,255,0.78)' }}>
-            {subLine}
-          </p>
-
-          {/* 4. slothUI Pro Dual Capsule CTA + Circular Orbs */}
+          {/* Dual Capsule Pill Row: [▶ تشغيل م1 ح1 (Play S1 E1)] + [ⓘ التفاصيل (Details)] */}
           <div
-            className="wit-cinema-hero__cta-row"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', marginTop: '0.9rem' }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1.15fr 0.85fr',
+              gap: '0.65rem',
+              width: '100%',
+              maxWidth: '410px',
+              marginBottom: '0.55rem'
+            }}
           >
             <button
               type="button"
-              className="wit-watch-pill-btn"
-              onClick={() =>
-                navigate(
-                  current.episode && current.slug
-                    ? `/watch/${current.slug}/${current.episode}`
-                    : current.slug
-                    ? `/show/${current.slug}`
-                    : `/trending?q=${encodeURIComponent(displayTitle)}`
-                )
-              }
+              onClick={() => handleWatchCurrent(current, 1)}
               style={{
-                padding: '0.76rem 1.65rem',
+                minHeight: '62px',
+                padding: '0.88rem 1rem',
                 borderRadius: '999px',
+                border: 'none',
                 background: '#ffffff',
                 color: '#000000',
-                border: '1.5px solid #ffffff',
                 fontWeight: 900,
-                fontSize: '0.9rem',
-                display: 'inline-flex',
+                fontSize: '0.86rem',
+                display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem',
-                boxShadow: '0 10px 30px rgba(255,255,255,0.25)',
+                justifyContent: 'center',
+                gap: '0.45rem',
+                boxShadow: '0 8px 24px rgba(255,255,255,0.22)',
                 cursor: 'pointer'
               }}
             >
               <span>▶</span>
-              <span>{lang === 'ar' ? 'شاهد الآن' : 'Watch Now'}</span>
+              <span>{isRtl ? 'تشغيل م1 ح1 (Play S1 E1)' : 'Play S1 E1'}</span>
             </button>
 
             <button
               type="button"
-              onClick={() =>
-                navigate(
-                  current.slug
-                    ? `/show/${current.slug}`
-                    : `/trending?q=${encodeURIComponent(displayTitle)}`
-                )
-              }
+              onClick={() => handleOpenDetails(current)}
               style={{
-                padding: '0.76rem 1.35rem',
+                minHeight: '62px',
+                padding: '0.88rem 1rem',
                 borderRadius: '999px',
-                background: 'rgba(255,255,255,0.1)',
-                backdropFilter: 'blur(16px)',
+                border: '1px solid rgba(255,255,255,0.24)',
+                background: 'rgba(20, 20, 26, 0.88)',
                 color: '#ffffff',
-                border: '1.5px solid rgba(255,255,255,0.3)',
                 fontWeight: 900,
-                fontSize: '0.86rem',
-                display: 'inline-flex',
+                fontSize: '0.84rem',
+                display: 'flex',
                 alignItems: 'center',
-                gap: '0.45rem',
+                justifyContent: 'center',
+                gap: '0.4rem',
                 cursor: 'pointer'
               }}
             >
-              <span>ℹ️</span>
-              <span>{lang === 'ar' ? 'تفاصيل الأنمي' : 'Show Hub'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/discover')}
-              title={lang === 'ar' ? 'عجلة الاكتشاف الذكية' : 'Smart Discovery'}
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.28)',
-                color: '#ffffff',
-                fontSize: '1rem',
-                fontWeight: 900,
-                cursor: 'pointer'
-              }}
-            >
-              🎲
+              <span>ⓘ</span>
+              <span>{isRtl ? 'التفاصيل (Details)' : 'Details'}</span>
             </button>
           </div>
 
-          {/* Pagination Capsule Dots */}
-          <div className="wit-hero-dots" role="tablist" style={{ marginTop: '1.15rem' }}>
-            {heroPool.map((it, idx) => (
-              <button
-                key={it.slug || it.id || idx}
-                type="button"
-                className={`wit-hero-dot ${idx === activeIdx ? 'active' : ''}`}
-                onClick={() => setActiveIdx(idx)}
-                aria-label={`Slide ${idx + 1}`}
-              />
-            ))}
+          {/* Full-Width Outlined Pill: [+ أضف إلى قائمتي (Add To Playlist)] */}
+          <button
+            type="button"
+            onClick={() => setInPlaylist((v) => !v)}
+            style={{
+              width: '100%',
+              maxWidth: '410px',
+              minHeight: '46px',
+              padding: '0.68rem 1rem',
+              borderRadius: '999px',
+              border: '1px solid rgba(255,255,255,0.22)',
+              background: inPlaylist ? 'rgba(255,255,255,0.2)' : 'rgba(18, 18, 22, 0.85)',
+              color: '#ffffff',
+              fontWeight: 800,
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.45rem',
+              cursor: 'pointer'
+            }}
+          >
+            <span>{inPlaylist ? '✓' : '＋'}</span>
+            <span>
+              {inPlaylist
+                ? isRtl
+                  ? 'مضاف في قائمتي (In Playlist)'
+                  : 'Saved in Playlist'
+                : isRtl
+                ? 'أضف إلى قائمتي (Add To Playlist)'
+                : 'Add To Playlist'}
+            </span>
+          </button>
+        </div>
+      </section>
+
+      {/* 2. "حلقات مختارة (All Episodes)" ↔ "⇅ الأكثر شهرة (Most Popular)" 16:9 Strip */}
+      <section style={{ padding: '1rem 0.15rem 0.25rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '0.65rem'
+          }}
+        >
+          <span style={{ fontWeight: 900, fontSize: '0.98rem', letterSpacing: '0.01em', color: '#ffffff' }}>
+            {isRtl ? 'حلقات مختارة (All Episodes)' : 'All Episodes'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveIdx((s) => (s + 1) % Math.max(1, Math.min(6, heroPool.length)))}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.75)',
+              fontSize: '0.78rem',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.32rem',
+              cursor: 'pointer'
+            }}
+          >
+            <span>⇅</span>
+            <span>{isRtl ? 'الأكثر شهرة (Most Popular)' : 'Most Popular'}</span>
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.75rem',
+            overflowX: 'auto',
+            paddingBottom: '0.35rem',
+            scrollbarWidth: 'none'
+          }}
+        >
+          {heroPool.slice(0, 8).map((epItem, epIdx) => {
+            const epTitle = epItem.titleEn || epItem.titleEnglish || epItem.titleRomaji || epItem.titleAr || epItem.slug;
+            const epArt = epItem.banner || epItem.bannerUrl || epItem.poster || epItem.coverUrl || artwork;
+            return (
+              <div
+                key={`web-ep-${epItem.slug || epIdx}`}
+                onClick={() => handleWatchCurrent(epItem, epIdx + 1)}
+                style={{
+                  position: 'relative',
+                  width: '215px',
+                  height: '120px',
+                  borderRadius: '18px',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  background: '#0a0a0f',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  cursor: 'pointer'
+                }}
+              >
+                <img
+                  src={epArt}
+                  alt={epTitle}
+                  loading="lazy"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    filter: 'brightness(0.82) contrast(1.08)'
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 45%, rgba(0,0,0,0.88) 100%)'
+                  }}
+                />
+                {/* Top-Left Badge: "E1  24:00" */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    left: '8px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.18rem 0.52rem',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.75)',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    fontSize: '0.65rem',
+                    fontWeight: 900,
+                    color: '#ffffff'
+                  }}
+                >
+                  <span>E{epItem.episode || epIdx + 1}</span>
+                  <span style={{ opacity: 0.75 }}>24:00</span>
+                </div>
+
+                {/* Bottom Title + Circular [X] Seal */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    left: '10px',
+                    right: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 900,
+                      color: '#ffffff',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {epTitle}
+                  </div>
+                  <span
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: '#ffffff',
+                      color: '#000000',
+                      fontSize: '0.62rem',
+                      fontWeight: 900,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    X
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 3. Dual Artwork Portal Banner Cards: [🎬 قائمة الأنمي (ANIME LIST)] & [📖 قائمة المانجا (MANGA LIST)] */}
+      <section style={{ padding: '0.7rem 0.15rem 0.2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+          <div
+            onClick={() => navigate('/trending')}
+            style={{
+              position: 'relative',
+              height: '70px',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.22)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <img
+              src={artwork}
+              alt="Anime List"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                filter: 'brightness(0.38)'
+              }}
+            />
+            <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.82rem', letterSpacing: '0.03em', color: '#ffffff' }}>
+              🎬 {isRtl ? 'قائمة الأنمي (ANIME LIST)' : 'ANIME LIST'}
+            </span>
+            <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '42px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
+          </div>
+
+          <div
+            onClick={() => navigate('/browse')}
+            style={{
+              position: 'relative',
+              height: '70px',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.22)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <img
+              src={heroPool[1]?.poster || heroPool[1]?.coverUrl || artwork}
+              alt="Manga List"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                filter: 'brightness(0.38)'
+              }}
+            />
+            <span style={{ position: 'relative', zIndex: 2, fontWeight: 900, fontSize: '0.82rem', letterSpacing: '0.03em', color: '#ffffff' }}>
+              📖 {isRtl ? 'قائمة المانجا (MANGA LIST)' : 'MANGA LIST'}
+            </span>
+            <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '42px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
           </div>
         </div>
       </section>
 
-      {/* Official slothUI Pro 2.0 Quick Category Capsule Strip */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.55rem',
-          overflowX: 'auto',
-          padding: '0.85rem 0.15rem 0.15rem',
-          scrollbarWidth: 'none'
-        }}
-      >
-        {[
-          { ar: '🔥 جميع الأنميات (6,973)', en: '🔥 All Anime (6,973)', to: '/trending', active: true },
-          { ar: '⚔️ أكشن وقتال', en: '⚔️ Action', to: '/trending?q=Action' },
-          { ar: '🔮 خيال وسحر', en: '🔮 Fantasy', to: '/trending?q=Fantasy' },
-          { ar: '🎬 أفلام الأنمي', en: '🎬 Anime Movies', to: '/trending?type=movie' },
-          { ar: '📖 المانجا والمانهوا (30,000+)', en: '📖 Manga & Manhwa', to: '/browse' },
-          { ar: '🏆 تصنيفات الأوتاكو', en: '🏆 Rankings', to: '/rankings' },
-          { ar: '💬 ساحة المجتمع', en: '💬 Community Arena', to: '/community' }
-        ].map((pill, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => navigate(pill.to)}
-            style={{
-              padding: '0.52rem 1.05rem',
-              borderRadius: '999px',
-              background: pill.active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-              color: pill.active ? '#000000' : '#ffffff',
-              border: pill.active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
-              fontWeight: 900,
-              fontSize: '0.78rem',
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              boxShadow: pill.active ? '0 8px 22px rgba(255,255,255,0.2)' : 'none'
-            }}
-          >
-            {lang === 'ar' ? pill.ar : pill.en}
-          </button>
-        ))}
-      </div>
+      {/* 4. "⚡ معاينات سريعة (Stories)" ↔ "اضغط للمعاينة والتشغيل الفوري" */}
+      <section style={{ padding: '0.75rem 0.15rem 0.15rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+          <h2 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 900, letterSpacing: '0.01em', color: '#ffffff' }}>
+            ⚡ {isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}
+          </h2>
+          <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.52)', fontWeight: 800 }}>
+            {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '0.78rem', overflowX: 'auto', paddingBottom: '0.35rem', scrollbarWidth: 'none' }}>
+          {heroPool.slice(0, 12).map((item, idx) => {
+            const stTitle = item.titleEn || item.titleEnglish || item.titleRomaji || item.titleAr || item.slug;
+            const stArt = item.poster || item.coverUrl || item.banner || artwork;
+            return (
+              <div
+                key={`web-story-${item.slug || idx}`}
+                onClick={() => handleOpenDetails(item)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  minWidth: '70px',
+                  maxWidth: '70px',
+                  cursor: 'pointer'
+                }}
+              >
+                <div
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    padding: '2.5px',
+                    background: idx < 3 ? '#ffffff' : 'rgba(255,255,255,0.45)',
+                    boxShadow: idx < 3 ? '0 0 14px rgba(255,255,255,0.22)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src={stArt}
+                    alt={stTitle}
+                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '2px solid #000000'
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    marginTop: '0.28rem',
+                    fontSize: '0.66rem',
+                    fontWeight: 800,
+                    color: 'rgba(255,255,255,0.88)',
+                    maxWidth: '68px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    textAlign: 'center'
+                  }}
+                >
+                  {stTitle}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1259,10 +1551,7 @@ export default function Dashboard({ onOpenAuth }) {
 
   return (
     <div className="wit-home-wrap">
-      {/* 00. 1:1 iOS Liquid Glass Smart Home UI Control Deck (Pure Monochrome Liquid Glass) */}
-      <IosLiquidGlassSmartDeck onOpenAuth={onOpenAuth} featuredItems={pinnedItems} />
-
-      {/* 0. Exact WitAnime Cinema Hero Banner */}
+      {/* 0. Exact 1:1 Cinema Hero + All Episodes + Anime/Manga Portals + Stories */}
       <Hero3DStage items={pinnedItems} trending={trending || []} />
 
       {/* 1. Continue Watching (if logged in) */}
