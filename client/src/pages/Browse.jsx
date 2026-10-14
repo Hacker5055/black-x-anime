@@ -285,17 +285,18 @@ export default function Browse() {
         </p>
       </div>
 
-      {/* Featured Hero Banner for Top Trending Hit */}
+      {/* Featured Hero Banner for Top Trending Hit (slothUI Pro 2.0 Monochrome) */}
       {spotlightItem && !query && (
         <div
-          className="library-spotlight reveal glass"
+          className="library-spotlight reveal glass sloth-pro-hero"
           style={{
             position: 'relative',
-            borderRadius: '20px',
+            borderRadius: '28px',
             overflow: 'hidden',
             marginBottom: '2rem',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 27, 75, 0.85))'
+            border: '1px solid rgba(255, 255, 255, 0.22)',
+            background: '#050508',
+            boxShadow: '0 28px 70px rgba(0, 0, 0, 0.94)'
           }}
         >
           <div
@@ -311,9 +312,10 @@ export default function Browse() {
             <div style={{ position: 'relative', maxWidth: '300px', margin: '0 auto', width: '100%' }}>
               <div
                 style={{
-                  borderRadius: '16px',
+                  borderRadius: '24px',
                   overflow: 'hidden',
-                  boxShadow: '0 20px 35px -10px rgba(0, 0, 0, 0.7), 0 0 25px rgba(34, 211, 238, 0.25)',
+                  border: '1.5px solid rgba(255, 255, 255, 0.24)',
+                  boxShadow: '0 24px 48px rgba(0, 0, 0, 0.92)',
                   aspectRatio: '3/4',
                   position: 'relative'
                 }}
@@ -329,13 +331,12 @@ export default function Browse() {
                     position: 'absolute',
                     top: '12px',
                     insetInlineStart: '12px',
-                    background: 'rgba(239, 68, 68, 0.9)',
-                    color: '#fff',
-                    fontWeight: 800,
-                    fontSize: '0.78rem',
-                    padding: '0.25rem 0.65rem',
-                    borderRadius: '8px',
-                    backdropFilter: 'blur(8px)'
+                    background: '#ffffff',
+                    color: '#000000',
+                    fontWeight: 900,
+                    fontSize: '0.76rem',
+                    padding: '0.26rem 0.72rem',
+                    borderRadius: '999px'
                   }}
                 >
                   🔥 {lang === 'ar' ? 'الأكثر رواجاً #1' : '#1 Trending'}
@@ -345,12 +346,13 @@ export default function Browse() {
                     position: 'absolute',
                     top: '12px',
                     insetInlineEnd: '12px',
-                    background: 'rgba(0, 0, 0, 0.8)',
-                    color: '#fbbf24',
-                    fontWeight: 800,
+                    background: 'rgba(0, 0, 0, 0.85)',
+                    border: '1px solid rgba(255,255,255,0.28)',
+                    color: '#ffffff',
+                    fontWeight: 900,
                     fontSize: '0.82rem',
-                    padding: '0.25rem 0.6rem',
-                    borderRadius: '8px'
+                    padding: '0.26rem 0.72rem',
+                    borderRadius: '999px'
                   }}
                 >
                   ★ {spotlightItem.rating}
@@ -360,27 +362,44 @@ export default function Browse() {
 
             {/* Information & Action buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <span
                   style={{
-                    background: 'rgba(34, 211, 238, 0.18)',
-                    color: '#38bdf8',
-                    border: '1px solid rgba(34, 211, 238, 0.4)',
-                    padding: '0.2rem 0.65rem',
-                    borderRadius: '99px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    padding: '0.2rem 0.65rem 0.2rem 0.35rem',
+                    borderRadius: '999px',
+                    fontSize: '0.76rem',
+                    fontWeight: 900
+                  }}
+                >
+                  <img src="/blackx-logo.png" alt="BLACK X" style={{ width: '18px', height: '18px', borderRadius: '5px', objectFit: 'cover' }} />
+                  <span>BLACK X original</span>
+                </span>
+                <span
+                  style={{
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: '1px solid #ffffff',
+                    padding: '0.2rem 0.72rem',
+                    borderRadius: '999px',
                     fontSize: '0.78rem',
-                    fontWeight: 800
+                    fontWeight: 900
                   }}
                 >
                   {spotlightItem.type === 'MANHWA' ? '⚡ مانهوا كورية' : '📖 مانجا يابانية'}
                 </span>
                 <span
                   style={{
-                    background: 'rgba(52, 211, 153, 0.18)',
-                    color: '#34d399',
-                    border: '1px solid rgba(52, 211, 153, 0.4)',
-                    padding: '0.2rem 0.65rem',
-                    borderRadius: '99px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    padding: '0.2rem 0.72rem',
+                    borderRadius: '999px',
                     fontSize: '0.78rem',
                     fontWeight: 800
                   }}
@@ -390,11 +409,12 @@ export default function Browse() {
                 <span
                   style={{
                     background: 'rgba(255, 255, 255, 0.08)',
-                    color: '#cbd5e1',
-                    padding: '0.2rem 0.65rem',
-                    borderRadius: '99px',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.18)',
+                    padding: '0.2rem 0.72rem',
+                    borderRadius: '999px',
                     fontSize: '0.78rem',
-                    fontWeight: 700
+                    fontWeight: 800
                   }}
                 >
                   {spotlightItem.chapters_count} {lang === 'ar' ? 'فصلاً مترجماً' : 'Chapters'}
@@ -404,13 +424,13 @@ export default function Browse() {
               <h2 style={{ fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', fontWeight: 900, margin: 0, lineHeight: 1.25 }}>
                 {lang === 'ar' ? spotlightItem.title_ar : spotlightItem.title_en}
               </h2>
-              <div style={{ color: 'var(--ink-dim)', fontSize: '0.9rem', fontWeight: 600 }}>
+              <div style={{ color: 'rgba(255,255,255,0.68)', fontSize: '0.9rem', fontWeight: 600 }}>
                 {spotlightItem.title_en} · ✍️ {spotlightItem.author}
               </div>
 
               <p
                 style={{
-                  color: '#e2e8f0',
+                  color: 'rgba(255,255,255,0.82)',
                   fontSize: '0.9rem',
                   lineHeight: 1.6,
                   margin: 0,
@@ -423,33 +443,38 @@ export default function Browse() {
                 {lang === 'ar' ? spotlightItem.description_ar : spotlightItem.description_en}
               </p>
 
-              {/* Action Buttons */}
+              {/* Action Buttons (slothUI Pro 2.0 Capsules) */}
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                 <button
                   type="button"
-                  className="btn btn--primary"
                   onClick={() => launchReader(spotlightItem)}
                   style={{
                     padding: '0.75rem 1.6rem',
                     fontSize: '0.96rem',
-                    fontWeight: 800,
-                    background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
-                    boxShadow: '0 8px 20px -4px rgba(6, 182, 212, 0.5)'
+                    fontWeight: 900,
+                    borderRadius: '999px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: '1.5px solid #ffffff',
+                    boxShadow: '0 8px 24px rgba(255, 255, 255, 0.22)',
+                    cursor: 'pointer'
                   }}
                 >
-                  <span className="btn__shine" />
                   📖 {lang === 'ar' ? 'اقرأ الآن (الفصل الأول)' : 'Read Chapter 1'}
                 </button>
 
                 <button
                   type="button"
-                  className="btn btn--ghost"
                   onClick={() => openItemDetails(spotlightItem)}
                   style={{
-                    padding: '0.75rem 1.3rem',
+                    padding: '0.75rem 1.35rem',
                     fontSize: '0.92rem',
-                    fontWeight: 700,
-                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                    fontWeight: 800,
+                    borderRadius: '999px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#ffffff',
+                    border: '1.5px solid rgba(255, 255, 255, 0.25)',
+                    cursor: 'pointer'
                   }}
                 >
                   📑 {lang === 'ar' ? 'فهرس الفصول والتفاصيل' : 'Chapters & Details'}
@@ -502,13 +527,15 @@ export default function Browse() {
           className="chip"
           style={{
             cursor: 'default',
-            background: 'rgba(34, 211, 238, 0.1)',
-            borderColor: 'rgba(34, 211, 238, 0.3)',
-            color: '#38bdf8',
-            fontSize: '0.82rem'
+            borderRadius: '999px',
+            background: '#ffffff',
+            borderColor: '#ffffff',
+            color: '#000000',
+            fontWeight: 900,
+            fontSize: '0.8rem'
           }}
         >
-          ⚡ {lang === 'ar' ? 'قراءة مباشرة عالية الدقة' : 'Direct High-Res Arabic Reader'}
+          ⚡ {lang === 'ar' ? 'قراءة مباشرة عالية الدقة 120Hz' : 'Direct High-Res Arabic Reader'}
         </span>
       </div>
 
@@ -522,9 +549,9 @@ export default function Browse() {
           marginBottom: '1rem',
           alignItems: 'center',
           padding: '0.75rem 1rem',
-          borderRadius: '14px',
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.08)'
+          borderRadius: '20px',
+          background: 'rgba(255, 255, 255, 0.04)',
+          border: '1px solid rgba(255, 255, 255, 0.14)'
         }}
       >
         <span style={{ fontSize: '0.84rem', color: 'var(--ink-dim)', marginInlineEnd: '0.35rem', fontWeight: 800 }}>
@@ -541,15 +568,15 @@ export default function Browse() {
               }
             }}
             style={{
-              padding: '0.42rem 0.9rem',
-              borderRadius: '99px',
+              padding: '0.45rem 0.95rem',
+              borderRadius: '999px',
               fontSize: '0.82rem',
-              fontWeight: 800,
+              fontWeight: 900,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              border: serverFilter === srv.id ? '1px solid #fff' : '1px solid rgba(255, 255, 255, 0.12)',
-              background: serverFilter === srv.id ? '#fff' : 'rgba(255, 255, 255, 0.04)',
-              color: serverFilter === srv.id ? '#000' : '#e2e8f0'
+              border: serverFilter === srv.id ? '1.5px solid #fff' : '1px solid rgba(255, 255, 255, 0.16)',
+              background: serverFilter === srv.id ? '#fff' : 'rgba(255, 255, 255, 0.06)',
+              color: serverFilter === srv.id ? '#000' : '#ffffff'
             }}
           >
             {lang === 'ar' ? srv.labelAr : srv.labelEn}
@@ -557,7 +584,7 @@ export default function Browse() {
         ))}
       </div>
 
-      {/* Filter Chips Pills */}
+      {/* Filter Chips Pills (slothUI Pro Monochrome) */}
       <div
         className="reveal"
         style={{
@@ -581,14 +608,14 @@ export default function Browse() {
             }}
             style={{
               padding: '0.45rem 0.95rem',
-              borderRadius: '99px',
+              borderRadius: '999px',
               fontSize: '0.84rem',
-              fontWeight: 700,
+              fontWeight: 900,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              border: filter === chip.id ? '1px solid var(--cyan)' : '1px solid rgba(255, 255, 255, 0.12)',
-              background: filter === chip.id ? 'rgba(34, 211, 238, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-              color: filter === chip.id ? '#38bdf8' : '#e2e8f0'
+              border: filter === chip.id ? '1.5px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.16)',
+              background: filter === chip.id ? '#ffffff' : 'rgba(255, 255, 255, 0.06)',
+              color: filter === chip.id ? '#000000' : '#ffffff'
             }}
           >
             {lang === 'ar' ? chip.labelAr : chip.labelEn}

@@ -269,17 +269,18 @@ export default function Watch({ onOpenAuth }) {
                   minHeight: '390px',
                   padding: '2.5rem 1.5rem',
                   textAlign: 'center',
-                  background: 'radial-gradient(circle at 50% 25%, rgba(168, 85, 247, 0.28), rgba(6, 8, 16, 0.96) 75%)'
+                  background: '#050508',
+                  border: '1px solid rgba(255, 255, 255, 0.2)'
                 }}
               >
                 <div style={{ fontSize: '3.2rem', marginBottom: '0.75rem' }}>⏳👑</div>
                 <span
                   style={{
-                    padding: '0.3rem 0.9rem',
+                    padding: '0.32rem 0.95rem',
                     borderRadius: '999px',
-                    background: 'rgba(245, 158, 11, 0.2)',
-                    border: '1px solid #f59e0b',
-                    color: '#fde047',
+                    background: '#ffffff',
+                    border: '1px solid #ffffff',
+                    color: '#000000',
                     fontWeight: 900,
                     fontSize: '0.8rem',
                     marginBottom: '0.85rem'
@@ -294,7 +295,7 @@ export default function Watch({ onOpenAuth }) {
                     ? `الحلقة ${formatNumber(episode)} متاحة الآن لمشتركي VIP، وتفتح للنسخة المجانية بعد 24 ساعة`
                     : `Episode ${formatNumber(episode)} is live now for VIP members, and unlocks for Free users in 24 hours`}
                 </h2>
-                <p style={{ maxWidth: '560px', color: 'var(--ink-dim)', fontSize: '0.92rem', lineHeight: 1.65, marginBottom: '1.25rem' }}>
+                <p style={{ maxWidth: '560px', color: 'rgba(255,255,255,0.72)', fontSize: '0.92rem', lineHeight: 1.65, marginBottom: '1.25rem' }}>
                   {lang === 'ar'
                     ? 'مشتركو باقات ⚡ VIP Basic و 🔮 VIP Monarch يشاهدون الحلقات الرسمية في نفس يوم صدورها وبجودة FHD 1080p / 4K بدون تأخير.'
                     : '⚡ VIP Basic and 🔮 VIP Monarch members watch official episodes on release day in FHD 1080p / 4K with zero delay.'}
@@ -303,13 +304,13 @@ export default function Watch({ onOpenAuth }) {
                 <div
                   style={{
                     padding: '0.65rem 1.4rem',
-                    borderRadius: '14px',
-                    background: 'rgba(0,0,0,0.55)',
-                    border: '1px solid rgba(34,211,238,0.4)',
+                    borderRadius: '999px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.28)',
                     fontFamily: 'monospace',
-                    fontSize: '1.15rem',
+                    fontSize: '1.1rem',
                     fontWeight: 900,
-                    color: 'var(--cyan)',
+                    color: '#ffffff',
                     marginBottom: '1.5rem'
                   }}
                 >
@@ -319,14 +320,15 @@ export default function Watch({ onOpenAuth }) {
                 <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                   <button
                     type="button"
-                    className="btn btn--primary"
                     onClick={() => navigate('/profile?tab=referrals')}
                     style={{
-                      background: 'linear-gradient(135deg, #f59e0b, #a855f7)',
-                      color: '#fff',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: '1.5px solid #ffffff',
                       fontWeight: 900,
-                      padding: '0.85rem 1.5rem',
-                      borderRadius: '14px'
+                      padding: '0.85rem 1.6rem',
+                      borderRadius: '999px',
+                      cursor: 'pointer'
                     }}
                   >
                     👑 {lang === 'ar' ? 'اشترك في VIP أو فعّل كودك للمشاهدة فوراً' : 'Upgrade to VIP / Redeem Code to Watch Now'}
@@ -336,7 +338,7 @@ export default function Watch({ onOpenAuth }) {
                       type="button"
                       className="btn btn--ghost"
                       onClick={() => navigate(`/watch/${slug}/${prevEp.episode}`)}
-                      style={{ fontWeight: 800, padding: '0.85rem 1.35rem', borderRadius: '14px' }}
+                      style={{ fontWeight: 800, padding: '0.85rem 1.35rem', borderRadius: '999px' }}
                     >
                       🎬 {lang === 'ar' ? `مشاهدة الحلقة السابقة المتاحة مجاناً (${formatNumber(prevEp.episode)})` : `Watch Previous Free Episode (${formatNumber(prevEp.episode)})`}
                     </button>
@@ -419,8 +421,9 @@ export default function Watch({ onOpenAuth }) {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 900, color: '#cbd5e1' }}>
-                📡 {lang === 'ar' ? 'محرك البث (Streaming Engine):' : 'Streaming Engine:'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', fontWeight: 900, color: '#ffffff' }}>
+                <img src="/blackx-logo.png" alt="BLACK X" style={{ width: '18px', height: '18px', borderRadius: '5px', objectFit: 'cover' }} />
+                <span>{lang === 'ar' ? 'محرك البث (Streaming Engine):' : 'Streaming Engine:'}</span>
               </span>
 
               <button
@@ -440,14 +443,14 @@ export default function Watch({ onOpenAuth }) {
                   pushToast(lang === 'ar' ? '🚀 تم التبديل إلى سيرفر VIP Fast CDN فائق السرعة بدون ضغط!' : '🚀 Switched to VIP Fast CDN!', 'success');
                 }}
                 style={{
-                  padding: '0.35rem 0.85rem',
-                  borderRadius: '99px',
-                  fontWeight: 800,
+                  padding: '0.38rem 0.9rem',
+                  borderRadius: '999px',
+                  fontWeight: 900,
                   fontSize: '0.78rem',
                   cursor: 'pointer',
-                  background: vipFastCdn ? 'linear-gradient(135deg, #f59e0b, #eab308)' : 'rgba(255,255,255,0.06)',
-                  color: vipFastCdn ? '#090d16' : '#fde047',
-                  border: '1px solid rgba(245,158,11,0.5)'
+                  background: vipFastCdn ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                  color: vipFastCdn ? '#000000' : '#ffffff',
+                  border: vipFastCdn ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)'
                 }}
               >
                 ⚡ VIP Fast CDN {vipFastCdn ? '✓' : '🔒'}
@@ -470,21 +473,21 @@ export default function Watch({ onOpenAuth }) {
                   pushToast(lang === 'ar' ? '🔮 تم تفعيل معالج البث 4K HDR • 60FPS الفائق!' : '🔮 4K HDR • 60FPS Mode Active!', 'success');
                 }}
                 style={{
-                  padding: '0.35rem 0.85rem',
-                  borderRadius: '99px',
-                  fontWeight: 800,
+                  padding: '0.38rem 0.9rem',
+                  borderRadius: '999px',
+                  fontWeight: 900,
                   fontSize: '0.78rem',
                   cursor: 'pointer',
-                  background: monarch4kHdr ? 'linear-gradient(135deg, #a855f7, #ec4899)' : 'rgba(255,255,255,0.06)',
-                  color: '#fff',
-                  border: '1px solid rgba(168,85,247,0.55)'
+                  background: monarch4kHdr ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                  color: monarch4kHdr ? '#000000' : '#ffffff',
+                  border: monarch4kHdr ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)'
                 }}
               >
                 🔮 4K HDR • 60FPS {monarch4kHdr ? '✓' : '🔒'}
               </button>
 
               {vipTier === 'vip_monarch' && (
-                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#34d399', padding: '0.2rem 0.6rem', borderRadius: '99px', background: 'rgba(16,185,129,0.14)' }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 900, color: '#000000', padding: '0.2rem 0.65rem', borderRadius: '999px', background: '#ffffff' }}>
                   ⏳ {lang === 'ar' ? 'وصول مبكر (Early Access مفعّل)' : 'Early Access Unlocked'}
                 </span>
               )}
@@ -493,9 +496,17 @@ export default function Watch({ onOpenAuth }) {
             {vipTier === 'free' && (
               <button
                 type="button"
-                className="btn btn--ghost btn--sm"
                 onClick={() => navigate('/profile?tab=referrals')}
-                style={{ fontSize: '0.75rem', color: '#fde047', borderColor: 'rgba(250,204,21,0.4)', fontWeight: 800 }}
+                style={{
+                  fontSize: '0.76rem',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  borderRadius: '999px',
+                  padding: '0.42rem 0.95rem',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
               >
                 👑 {lang === 'ar' ? 'ترقية إلى VIP / تفعيل كود اشتراك' : 'Upgrade to VIP / Redeem Code'}
               </button>
@@ -503,12 +514,12 @@ export default function Watch({ onOpenAuth }) {
           </div>
 
           {/* ---------- meta under player ---------- */}
-          <div className="watch-meta glass reveal">
+          <div className="watch-meta glass reveal" style={{ borderRadius: '26px', background: '#050508', border: '1px solid rgba(255,255,255,0.2)' }}>
             <div style={{ flex: 1, minWidth: '220px' }}>
               <div className="watch-meta__kicker" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-                <Link to={`/show/${slug}${srcSuffix}`}>{title}</Link>
+                <Link to={`/show/${slug}${srcSuffix}`} style={{ color: '#ffffff', fontWeight: 800 }}>{title}</Link>
                 {show?.titleAr && lang !== 'ar' && <span> · {show.titleAr}</span>}
-                <span style={{ fontSize: '0.72rem', padding: '0.12rem 0.55rem', borderRadius: '8px', background: 'rgba(34, 211, 238, 0.14)', border: '1px solid rgba(34, 211, 238, 0.35)', color: '#22d3ee', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.72rem', padding: '0.16rem 0.65rem', borderRadius: '999px', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.28)', color: '#ffffff', fontWeight: 900 }}>
                   {show?.sourceName || (sourceParam === 'english' ? '🌐 سيرفر BLACK X 3' : sourceParam === 'anime3rb' ? '⚡ سيرفر BLACK X 2' : '👑 سيرفر BLACK X 1')}
                 </span>
               </div>
@@ -527,18 +538,13 @@ export default function Watch({ onOpenAuth }) {
                       slug,
                       titleAr: show?.titleAr || title,
                       titleEn: show?.titleEn || title,
-                      poster: show?.poster || '',
+                      poster: show?.poster || '/blackx-logo.png',
                       latestEpisode: maxEpisodeNum || episode
                     },
                     lang
                   );
                   setAlertEnabled(nextState);
                 }}
-                style={
-                  alertEnabled
-                    ? { background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#041016', fontWeight: 900 }
-                    : { borderColor: 'rgba(34,211,238,0.45)', color: 'var(--cyan)', fontWeight: 800 }
-                }
               >
                 {alertEnabled
                   ? (lang === 'ar' ? '🔔 إشعارات الجهاز مفعّلة ✓' : '🔔 Device Alerts On ✓')
@@ -548,16 +554,10 @@ export default function Watch({ onOpenAuth }) {
                 type="button"
                 className="btn btn--primary btn--sm"
                 onClick={() => setDownloadModalOpen(true)}
-                style={{
-                  background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
-                  color: '#fff',
-                  fontWeight: 700
-                }}
               >
-                <span className="btn__shine" />
                 📥 {t('watch.downloadEpisode')}
               </button>
-              <button type="button" className={`btn btn--sm ${fav ? 'btn--violet' : 'btn--ghost'}`} onClick={toggleFav}>
+              <button type="button" className={`btn btn--sm ${fav ? 'btn--primary' : 'btn--ghost'}`} onClick={toggleFav}>
                 {fav ? '♥' : '♡'} {fav ? t('show.unfavorite') : t('show.favorite')}
               </button>
               {user && (
@@ -571,7 +571,6 @@ export default function Watch({ onOpenAuth }) {
               )}
               {nextEp && (
                 <button type="button" className="btn btn--primary btn--sm" onClick={() => navigate(`/watch/${slug}/${nextEp.episode}${srcSuffix}`)}>
-                  <span className="btn__shine" />
                   {t('watch.nextEpisode')} →
                 </button>
               )}

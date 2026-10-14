@@ -494,26 +494,45 @@ export default function TrendingAnime() {
 
   return (
     <div className="bx-trending-page" style={{ display: 'flex', flexDirection: 'column', gap: '1.35rem' }}>
-      {/* Hero Banner & Dedicated Anime Search Engine */}
+      {/* Official slothUI Pro 2.0 Hero Banner & Dedicated Anime Search Engine */}
       <section
-        className="glass bx-trending-hero"
+        className="glass bx-trending-hero sloth-pro-hero"
         style={{
-          padding: '2.25rem 2rem',
-          borderRadius: '26px',
-          background: 'radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.32), rgba(6, 9, 20, 0.96) 70%)',
-          border: '1px solid rgba(34, 211, 238, 0.35)',
-          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65)'
+          padding: '2.2rem 2rem',
+          borderRadius: '28px',
+          background: '#050508',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 28px 70px rgba(0, 0, 0, 0.94)'
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.25rem', marginBottom: '1.5rem' }}>
           <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.28rem 0.85rem', borderRadius: '99px', background: 'rgba(245, 158, 11, 0.18)', border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fde047', fontSize: '0.76rem', fontWeight: 900, marginBottom: '0.65rem' }}>
-              🔥 {lang === 'ar' ? 'قسم الأنمي الحصري • بث FHD 1080p لمشتركي VIP' : 'DEDICATED ANIME HUB • FHD 1080P VIP'}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.3rem 0.85rem 0.3rem 0.42rem',
+                borderRadius: '999px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.24)',
+                color: '#ffffff',
+                fontSize: '0.76rem',
+                fontWeight: 900,
+                marginBottom: '0.65rem'
+              }}
+            >
+              <img
+                src="/blackx-logo.png"
+                alt="BLACK X"
+                style={{ width: '22px', height: '22px', borderRadius: '6px', objectFit: 'cover' }}
+              />
+              <span>BLACK X <span style={{ fontWeight: 500, opacity: 0.78 }}>original • 6,973 ANIME</span></span>
             </div>
             <h1 style={{ margin: 0, fontSize: 'clamp(1.75rem, 3.2vw, 2.45rem)', fontWeight: 900 }}>
-              🔥 {lang === 'ar' ? 'الأعمال الرائجة (Trending Anime)' : 'Trending Anime Hub'}
+              🔥 {lang === 'ar' ? 'الأعمال الرائجة ومكتبة الأنمي الشاملة' : 'Trending & Complete Anime Hub'}
             </h1>
-            <p style={{ margin: '0.45rem 0 0', color: 'var(--ink-dim)', fontSize: '0.94rem', maxWidth: '680px', lineHeight: 1.6 }}>
+            <p style={{ margin: '0.45rem 0 0', color: 'rgba(255,255,255,0.72)', fontSize: '0.94rem', maxWidth: '680px', lineHeight: 1.6 }}>
               {lang === 'ar'
                 ? 'استكشف أقوى أعمال الأنمي الرائجة عالمياً مع محرك بحث فوري، وفعل إشعارات الحلقات الجديدة لتصلك مباشرة على هاتفك أو جهاز الكمبيوتر فور نزولها!'
                 : 'Explore top trending anime with an instant search engine, and enable real-time Phone/PC episode notifications!'}
@@ -522,12 +541,11 @@ export default function TrendingAnime() {
 
           <button
             type="button"
-            className="btn btn--primary btn--sm"
             onClick={async () => {
               const sample = unifiedAnime[0] || {
                 titleAr: 'سولو ليفلينج (Solo Leveling)',
                 titleEn: 'Solo Leveling',
-                poster: '',
+                poster: '/blackx-logo.png',
                 slug: 'solo-leveling'
               };
               const ok = await sendNativeDeviceNotification({
@@ -536,7 +554,7 @@ export default function TrendingAnime() {
                   lang === 'ar'
                     ? 'الحلقة الجديدة متاحة الآن للمشاهدة الفورية لمشتركي VIP بجودة FHD 1080p على BLACK X!'
                     : 'The new episode is now streaming in FHD 1080p on BLACK X!',
-                icon: sample.poster,
+                icon: sample.poster || '/blackx-logo.png',
                 url: sample.slug ? `/show/${sample.slug}` : '/trending'
               });
               if (ok) {
@@ -556,33 +574,36 @@ export default function TrendingAnime() {
               }
             }}
             style={{
-              background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
-              color: '#fff',
+              background: '#ffffff',
+              color: '#000000',
+              border: '1.5px solid #ffffff',
               fontWeight: 900,
-              padding: '0.65rem 1.15rem',
-              borderRadius: '14px'
+              padding: '0.72rem 1.35rem',
+              borderRadius: '999px',
+              boxShadow: '0 8px 24px rgba(255,255,255,0.22)',
+              cursor: 'pointer'
             }}
           >
-            📲 {lang === 'ar' ? 'تجربة إشعار حلقة على جهازك الآن' : 'Test Device Notification Now'}
+            🔔 {lang === 'ar' ? 'تجربة إشعار حلقة على جهازك الآن' : 'Test Device Notification Now'}
           </button>
         </div>
 
-        {/* Dedicated Instant Anime Search Bar */}
+        {/* Dedicated Instant Anime Search Bar (slothUI Pro Capsule) */}
         <div
           className="bx-trending-search"
           style={{
             display: 'flex',
             gap: '0.65rem',
             flexWrap: 'wrap',
-            padding: '0.65rem',
-            borderRadius: '18px',
-            background: 'rgba(0, 0, 0, 0.55)',
-            border: '1px solid rgba(34, 211, 238, 0.45)',
+            padding: '0.55rem 0.65rem',
+            borderRadius: '999px',
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.24)',
             marginBottom: '1.15rem'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '180px', paddingInlineStart: '0.6rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>🔍</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '180px', paddingInlineStart: '0.75rem' }}>
+            <span style={{ fontSize: '1.15rem' }}>🔍</span>
             <input
               type="search"
               value={query}
@@ -604,7 +625,7 @@ export default function TrendingAnime() {
                 background: 'transparent',
                 border: 'none',
                 color: '#fff',
-                fontSize: '0.96rem',
+                fontSize: '0.94rem',
                 fontWeight: 700,
                 outline: 'none',
                 padding: '0.45rem 0'
@@ -618,7 +639,7 @@ export default function TrendingAnime() {
                   setSearchResults(null);
                   setSearchParams({}, { replace: true });
                 }}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem' }}
+                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '1rem' }}
               >
                 ✕
               </button>
@@ -626,22 +647,23 @@ export default function TrendingAnime() {
           </div>
           <button
             type="button"
-            className="btn btn--primary"
             onClick={() => runSearch(query)}
             disabled={searching}
             style={{
-              background: 'linear-gradient(135deg, #22d3ee, #8b5cf6)',
-              color: '#050814',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
               fontWeight: 900,
-              borderRadius: '12px',
-              padding: '0.65rem 1.4rem'
+              borderRadius: '999px',
+              padding: '0.65rem 1.55rem',
+              cursor: 'pointer'
             }}
           >
             {searching ? (lang === 'ar' ? 'جارٍ البحث...' : 'Searching...') : (lang === 'ar' ? 'بحث الأنمي' : 'Search Anime')}
           </button>
         </div>
 
-        {/* Release Policy & VIP FHD Banner */}
+        {/* Release Policy & VIP FHD Banner (Pure Monochrome slothUI Pro) */}
         <div
           style={{
             display: 'flex',
@@ -649,27 +671,35 @@ export default function TrendingAnime() {
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '0.75rem',
-            padding: '0.75rem 1.1rem',
-            borderRadius: '14px',
-            background: isVip ? 'rgba(16, 185, 129, 0.14)' : 'rgba(245, 158, 11, 0.12)',
-            border: isVip ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)'
+            padding: '0.75rem 1.15rem',
+            borderRadius: '20px',
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.18)'
           }}
         >
-          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: isVip ? '#34d399' : '#fde047' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ffffff' }}>
             {isVip
               ? (lang === 'ar'
                   ? '👑 امتيازات VIP مفعّلة لك: الحلقات الرسمية تنزل لك فور صدورها في نفس اليوم + مشاهدة وتحميل بجودة FHD 1080p!'
                   : '👑 VIP Active: Same-day official episodes + FHD 1080p streaming & downloads unlocked!')
               : (lang === 'ar'
-                  ? '⏳ نظام العرض الرسمي: الحلقات الجديدة تنزل لمشتركي VIP في يوم صدورها (وتتأخر 24 ساعة للنسخة المجانية) • سيرفرات FHD 1080p حصرية لـ VIP.'
-                  : '⏳ Official Release Policy: New episodes drop on release day for VIP (24h delay for Free) • FHD 1080p is VIP exclusive.')}
+                  ? '⏳ نظام العرض الرسمي: الحلقات الجديدة تنزل لمشتركي VIP في يوم صدورها • سيرفرات FHD 1080p متاحة عبر BLACK X.'
+                  : '⏳ Official Release Policy: New episodes drop on release day for VIP • FHD 1080p on BLACK X.')}
           </span>
           {!isVip && (
             <button
               type="button"
-              className="btn btn--primary btn--sm"
               onClick={() => navigate('/profile?tab=referrals')}
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #eab308)', color: '#090d16', fontWeight: 900 }}
+              style={{
+                background: '#ffffff',
+                color: '#000000',
+                border: 'none',
+                borderRadius: '999px',
+                padding: '0.45rem 1.05rem',
+                fontWeight: 900,
+                fontSize: '0.78rem',
+                cursor: 'pointer'
+              }}
             >
               👑 {lang === 'ar' ? 'اشترك في VIP الآن (99 ج.م)' : 'Get VIP Now (99 EGP)'}
             </button>
