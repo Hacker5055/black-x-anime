@@ -424,10 +424,10 @@ export function logSystemEvent(level, category, message, details = null) {
 }
 
 /* ---------------- cache helpers ---------------- */
-function cacheGet(table, key) {
+function cacheGet(table, key, { allowExpired = false } = {}) {
   const row = db.prepare(`SELECT value, expires_at FROM ${table} WHERE key = ?`).get(key);
   if (!row) return null;
-  if (row.expires_at < Date.now()) {
+  if (!allowExpired && row.expires_at < Date.now()) {
     db.prepare(`DELETE FROM ${table} WHERE key = ?`).run(key);
     return null;
   }
@@ -441,6 +441,8 @@ function cacheSet(table, key, value, ttlMs = 30 * 60 * 1000) {
 }
 
 export const apiGet = (key) => cacheGet('api_cache', key);
+// Used only for stale-while-error fallback; regular reads still enforce expiry.
+export const apiGetStale = (key) => cacheGet('api_cache', key, { allowExpired: true });
 export const apiSet = (key, value, ttl) => cacheSet('api_cache', key, value, ttl);
 export const streamGet = (key) => cacheGet('stream_cache', key);
 export const streamSet = (key, value, ttl) => cacheSet('stream_cache', key, value, ttl);

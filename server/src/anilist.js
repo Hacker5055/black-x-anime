@@ -1,4 +1,4 @@
-import { apiGet as cacheGet, apiSet as cacheSet, upsertAnime, getAnimeRow, parseAnimeRow } from './db.js';
+import { apiGet as cacheGet, apiGetStale, apiSet as cacheSet, upsertAnime, getAnimeRow, parseAnimeRow } from './db.js';
 
 const ANILIST_URL = 'https://graphql.anilist.co';
 

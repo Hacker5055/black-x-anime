@@ -71,7 +71,26 @@ app.use(cookieParser());
 app.use(optionalAuth);
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, name: 'BLACK X API', time: new Date().toISOString() });
+  try {
+    // Verify the schema used by authentication, not just that Express is alive.
+    db.prepare('SELECT id, username, email, password_hash FROM users LIMIT 0').all();
+    res.json({ ok: true, name: 'BLACK X API', database: 'ok', time: new Date().toISOString() });
+  } catch (err) {
+    const requestId = req.get('cf-ray') || req.get('x-vercel-id') || req.get('x-request-id') || null;
+    console.error('[health database failure]', JSON.stringify({
+      requestId,
+      name: err?.name || 'Error',
+      code: err?.code || null,
+      message: err?.message || String(err)
+    }));
+    res.status(503).json({
+      ok: false,
+      name: 'BLACK X API',
+      database: 'error',
+      requestId,
+      time: new Date().toISOString()
+    });
+  }
 });
 
 /**
@@ -152,8 +171,22 @@ if (!IS_CLOUDFLARE_WORKER && fs.existsSync(clientDist)) {
 }
 
 app.use((err, req, res, next) => {
-  console.error('[server error]', err);
-  res.status(500).json({ error: 'server_error', message: 'Something went wrong' });
+  const requestId = req.get('cf-ray') || req.get('x-vercel-id') || req.get('x-request-id') || null;
+  const safePath = String(req.originalUrl || req.path || '').split('?')[0];
+  const error = err instanceof Error ? err : new Error(String(err || 'Unknown server error'));
+  console.error('[server error]', JSON.stringify({
+    requestId,
+    method: req.method,
+    path: safePath,
+    name: error.name,
+    code: error.code || null,
+    message: error.message,
+    stack: error.stack || null
+  }));
+
+  if (res.headersSent) return next(error);
+  if (requestId) res.setHeader('x-blackx-request-id', requestId);
+  res.status(500).json({ error: 'server_error', message: 'Something went wrong', requestId });
 });
 
 if (!IS_CLOUDFLARE_WORKER && !process.env.VERCEL) {

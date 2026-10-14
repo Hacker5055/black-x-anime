@@ -34,6 +34,13 @@ export function isNativeApk() {
 }
 
 export function getServerUrl() {
+  // Browser deployments use same-origin /api routes (Vercel rewrites or the
+  // Worker router). Never let a stale desktop-browser override send website
+  // traffic to an old workers.dev deployment. Explicit backend URLs remain
+  // supported for the native APK, which cannot use the website's same-origin
+  // API route.
+  if (!isNativeApk()) return '';
+
   try {
     const saved = localStorage.getItem(SERVER_URL_KEY);
     if (saved && saved.trim()) {
@@ -42,11 +49,6 @@ export function getServerUrl() {
   } catch {
     /* ignore */
   }
-  // The Workers deployment now runs the API on the same origin as the SPA.
-  // Prefer that local Worker endpoint even if an old VITE_API_BASE_URL was
-  // configured during the earlier static-only deployment.
-  const host = typeof window !== 'undefined' ? String(window.location.hostname || '').toLowerCase() : '';
-  if (host.endsWith('.workers.dev') || host.endsWith('.pages.dev')) return '';
 
   const envUrl = import.meta.env?.VITE_API_BASE_URL || '';
   if (envUrl && String(envUrl).trim()) {

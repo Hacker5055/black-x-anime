@@ -1,21 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import Backdrop, { Toasts } from './components/Backdrop.jsx';
 import { AuthModal } from './components/Modals.jsx';
 import { GooFilter } from './components/Loading.jsx';
 import { useI18n } from './i18n/I18nProvider.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Browse from './pages/Browse.jsx';
-import TrendingAnime from './pages/TrendingAnime.jsx';
-import ShowDetail from './pages/ShowDetail.jsx';
-import Watch from './pages/Watch.jsx';
-import MyList from './pages/MyList.jsx';
-import ProfileDashboard from './pages/ProfileDashboard.jsx';
-import Rankings from './pages/Rankings.jsx';
-import Community from './pages/Community.jsx';
-import AnimeDiscover from './components/AnimeDiscover.jsx';
-import MobileApkApp from './mobile/MobileApkApp.jsx';
+const Dashboard = React.lazy(() => import('./pages/Dashboard.jsx'));
+const Browse = React.lazy(() => import('./pages/Browse.jsx'));
+const TrendingAnime = React.lazy(() => import('./pages/TrendingAnime.jsx'));
+const ShowDetail = React.lazy(() => import('./pages/ShowDetail.jsx'));
+const Watch = React.lazy(() => import('./pages/Watch.jsx'));
+const MyList = React.lazy(() => import('./pages/MyList.jsx'));
+const ProfileDashboard = React.lazy(() => import('./pages/ProfileDashboard.jsx'));
+const Rankings = React.lazy(() => import('./pages/Rankings.jsx'));
+const Community = React.lazy(() => import('./pages/Community.jsx'));
+const AnimeDiscover = React.lazy(() => import('./components/AnimeDiscover.jsx'));
+const MobileApkApp = React.lazy(() => import('./mobile/MobileApkApp.jsx'));
 import BlackXSplashVortex from './components/BlackXSplashVortex.jsx';
 import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
 import { useAuth } from './context/AuthContext.jsx';
@@ -1216,7 +1216,9 @@ export default function App() {
             onComplete={handleSplashDone}
           />
         )}
-        <MobileApkApp />
+        <Suspense fallback={<div role="status" aria-live="polite" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#000000', color: '#ffffff', fontWeight: 800 }}>{lang === 'ar' ? 'جارٍ تحميل التطبيق…' : 'Loading app…'}</div>}>
+          <MobileApkApp />
+        </Suspense>
       </MobileErrorBoundary>
     );
   }
@@ -1240,26 +1242,28 @@ export default function App() {
       <div className="app-shell" style={{ position: 'relative', zIndex: 1, paddingBottom: '88px' }}>
         <main className="main" style={{ paddingTop: '0.85rem' }}>
           <div className="container">
-            <Routes>
-              <Route path="/" element={<Dashboard onOpenAuth={openAuth} />} />
-              <Route path="/discover" element={<AnimeDiscover />} />
-              <Route path="/trending" element={<TrendingAnime />} />
-              <Route path="/browse" element={<Browse />} />
-              <Route path="/community" element={<Community onOpenAuth={openAuth} />} />
-              <Route path="/rankings" element={<Rankings onOpenAuth={openAuth} />} />
-              <Route path="/show/:slug" element={<ShowDetail onOpenAuth={openAuth} />} />
-              <Route path="/watch/:slug/:ep" element={<Watch onOpenAuth={openAuth} />} />
-              <Route path="/mylist" element={<MyList onOpenAuth={openAuth} />} />
-              <Route path="/profile" element={<ProfileDashboard onOpenAuth={openAuth} />} />
-              <Route path="/account" element={<Navigate to="/profile" replace />} />
-              <Route path="/settings" element={<Navigate to="/profile" replace />} />
-              {/* legacy prediction-engine routes → home */}
-              <Route path="/arena" element={<Navigate to="/" replace />} />
-              <Route path="/leaderboard" element={<Navigate to="/" replace />} />
-              <Route path="/watchlist" element={<Navigate to="/mylist" replace />} />
-              <Route path="/anime/:id" element={<Navigate to="/" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense fallback={<div role="status" aria-live="polite" style={{ minHeight: '52vh', display: 'grid', placeItems: 'center', background: '#000000', color: '#ffffff', fontWeight: 800 }}>{lang === 'ar' ? 'جارٍ تحميل الصفحة…' : 'Loading page…'}</div>}>
+              <Routes>
+                <Route path="/" element={<Dashboard onOpenAuth={openAuth} />} />
+                <Route path="/discover" element={<AnimeDiscover />} />
+                <Route path="/trending" element={<TrendingAnime />} />
+                <Route path="/browse" element={<Browse />} />
+                <Route path="/community" element={<Community onOpenAuth={openAuth} />} />
+                <Route path="/rankings" element={<Rankings onOpenAuth={openAuth} />} />
+                <Route path="/show/:slug" element={<ShowDetail onOpenAuth={openAuth} />} />
+                <Route path="/watch/:slug/:ep" element={<Watch onOpenAuth={openAuth} />} />
+                <Route path="/mylist" element={<MyList onOpenAuth={openAuth} />} />
+                <Route path="/profile" element={<ProfileDashboard onOpenAuth={openAuth} />} />
+                <Route path="/account" element={<Navigate to="/profile" replace />} />
+                <Route path="/settings" element={<Navigate to="/profile" replace />} />
+                {/* legacy prediction-engine routes → home */}
+                <Route path="/arena" element={<Navigate to="/" replace />} />
+                <Route path="/leaderboard" element={<Navigate to="/" replace />} />
+                <Route path="/watchlist" element={<Navigate to="/mylist" replace />} />
+                <Route path="/anime/:id" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </div>
         </main>
         <Footer />
