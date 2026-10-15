@@ -1,21 +1,39 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
+import MangaPageImage from './MangaPageImage.jsx';
+import {
+  BX_APK_DOWNLOAD_URL,
+  BX_APK_VERSION,
+  BX_MANGA_SEARCH_ONLY_TAB,
+  BX_MANGA_SERVER_TABS,
+  fetchAnimeCatalogTotal,
+  fetchBxSourceIds,
+  fetchMobileAnimeSearch,
+  fetchMobileChapterPages,
+  fetchMobileEpisodeServers,
+  fetchMobileEpisodes,
+  fetchMobileMangaChapters,
+  fetchMobileMangaList,
+  findBxMangaByTitle,
+  formatBxCount,
+  mangaServerLabel,
+  resolveMobileEpisodeServer
+} from './bxServers.js';
 
 /**
  * BLACK X MOBILE — 120Hz Native Android Edition
  * Completely independent Smartphone UI inspired by Anime Witcher, elevated with Pure AMOLED Pitch-Black (#000000)
  * Liquid Obsidian Glass, 120Hz GPU-accelerated transitions, Built-In Multi-Quality 1080p/720p/480p MP4 Player,
- * 2,965-Manga Webtoon Reader, and Real-Time Cloud Sync with the BLACK X Website Users & Anime Database.
+ * Webtoon Reader, and Real-Time Cloud Sync with the BLACK X Website Users & Anime Database.
+ *
+ * Servers: since v15 every anime episode/server and manga chapter/page request goes through the
+ * website API (./bxServers.js), so the app always lists the same servers as black-x-anime.me.
  */
 
-// 1. Shared Anime & Manga Cloud Engine (6,973 Anime + 2,965 Manga + 75,448 Characters)
+// 1. Anime catalogue index (the same Algolia index the website's BLACK X 1 catalogue reads)
 const ALGOLIA_APP_ID = 'QVHT7NPEJG';
 const ALGOLIA_API_KEY = 'ce13098070fa521b536571bafbcfc083';
 const ALGOLIA_BASE = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes`;
-
-const AW_FS_PROJECT = 'animewitcher-1c66d';
-const AW_FS_KEY = 'AIzaSyAcbWRwfFNnCpoydDXlEALWnM_TYVcJOMU';
-const AW_FS_BASE = `https://firestore.googleapis.com/v1/projects/${AW_FS_PROJECT}/databases/(default)/documents`;
 
 // 2. Shared BLACK X Website Users, Favorites, Watch Progress & Community Cloud Database
 const BX_PROJECT = 'spry-oxide-1h7sp';
@@ -24,63 +42,63 @@ const BX_KEY = 'AIzaSyD4yG_ljN1S8TfwC33E4Z0o499MYC71eUE';
 const BX_SETTINGS_BASE = `https://firestore.googleapis.com/v1/projects/${BX_PROJECT}/databases/${BX_DB}/documents/settings`;
 
 const GENRE_CHIPS = [
-  { id: 'all', ar: 'الكل (6,973)', en: 'All (6,973)', tag: '' },
-  { id: 'action', ar: '⚔️ أكشن (2,563)', en: '⚔️ Action', tag: 'اكشن' },
-  { id: 'comedy', ar: '😂 كوميدي (2,550)', en: '😂 Comedy', tag: 'كوميدي' },
-  { id: 'fantasy', ar: '🔮 خيال (2,032)', en: '🔮 Fantasy', tag: 'خيال' },
-  { id: 'adventure', ar: '🧭 مغامرات (1,919)', en: '🧭 Adventure', tag: 'مغامرات' },
-  { id: 'drama', ar: '🎭 دراما (1,518)', en: '🎭 Drama', tag: 'دراما' },
-  { id: 'shounen', ar: '🔥 شونين (1,400)', en: '🔥 Shounen', tag: 'شونين' },
-  { id: 'romance', ar: '❤️ رومانسي (1,385)', en: '❤️ Romance', tag: 'رومانسي' },
-  { id: 'scifi', ar: '🚀 خيال علمي (1,314)', en: '🚀 Sci-Fi', tag: 'خيال علمي' },
-  { id: 'school', ar: '🏫 مدرسي (1,276)', en: '🏫 School', tag: 'مدرسي' },
-  { id: 'supernatural', ar: '👁️ خارق للطبيعة (760)', en: '👁️ Supernatural', tag: 'خارق للطبيعة' },
-  { id: 'seinen', ar: '🗡️ سينين (710)', en: '🗡️ Seinen', tag: 'سينين' },
-  { id: 'mystery', ar: '🕵️ غموض (654)', en: '🕵️ Mystery', tag: 'غموض' },
-  { id: 'historical', ar: '🏯 تاريخي (461)', en: '🏯 Historical', tag: 'تاريخي' },
-  { id: 'isekai', ar: '🌌 عالم مختلف (346)', en: '🌌 Isekai', tag: 'عالم مختلف' },
-  { id: 'superpower', ar: '⚡ قوة خارقة (326)', en: '⚡ Super Power', tag: 'قوة خارقة' },
-  { id: 'military', ar: '🎖️ عسكري (318)', en: '🎖️ Military', tag: 'عسكري' },
-  { id: 'sports', ar: '⚽ رياضي (316)', en: '⚽ Sports', tag: 'رياضي' },
-  { id: 'thriller', ar: '⏳ تشويق (304)', en: '⏳ Thriller', tag: 'تشويق' },
-  { id: 'slice', ar: '🍃 شريحة من الحياة (285)', en: '🍃 Slice of Life', tag: 'شريحة من الحياة' },
-  { id: 'horror', ar: '💀 رعب (273)', en: '💀 Horror', tag: 'رعب' },
-  { id: 'psychological', ar: '🧠 نفسي (264)', en: '🧠 Psychological', tag: 'نفسي' },
-  { id: 'gore', ar: '🩸 دموي (210)', en: '🩸 Gore', tag: 'دموي' },
-  { id: 'martial', ar: '🥋 فنون قتالية (184)', en: '🥋 Martial Arts', tag: 'فنون قتالية' },
-  { id: 'samurai', ar: '⚔️ ساموراي (118)', en: '⚔️ Samurai', tag: 'ساموراي' },
-  { id: 'vampire', ar: '🧛 مصاصي دماء (118)', en: '🧛 Vampire', tag: 'مصاصي دماء' }
+  { id: 'all', ar: 'الكل', en: 'All', tag: '' },
+  { id: 'action', ar: '⚔️ أكشن', en: '⚔️ Action', tag: 'اكشن' },
+  { id: 'comedy', ar: '😂 كوميدي', en: '😂 Comedy', tag: 'كوميدي' },
+  { id: 'fantasy', ar: '🔮 خيال', en: '🔮 Fantasy', tag: 'خيال' },
+  { id: 'adventure', ar: '🧭 مغامرات', en: '🧭 Adventure', tag: 'مغامرات' },
+  { id: 'drama', ar: '🎭 دراما', en: '🎭 Drama', tag: 'دراما' },
+  { id: 'shounen', ar: '🔥 شونين', en: '🔥 Shounen', tag: 'شونين' },
+  { id: 'romance', ar: '❤️ رومانسي', en: '❤️ Romance', tag: 'رومانسي' },
+  { id: 'scifi', ar: '🚀 خيال علمي', en: '🚀 Sci-Fi', tag: 'خيال علمي' },
+  { id: 'school', ar: '🏫 مدرسي', en: '🏫 School', tag: 'مدرسي' },
+  { id: 'supernatural', ar: '👁️ خارق للطبيعة', en: '👁️ Supernatural', tag: 'خارق للطبيعة' },
+  { id: 'seinen', ar: '🗡️ سينين', en: '🗡️ Seinen', tag: 'سينين' },
+  { id: 'mystery', ar: '🕵️ غموض', en: '🕵️ Mystery', tag: 'غموض' },
+  { id: 'historical', ar: '🏯 تاريخي', en: '🏯 Historical', tag: 'تاريخي' },
+  { id: 'isekai', ar: '🌌 عالم مختلف', en: '🌌 Isekai', tag: 'عالم مختلف' },
+  { id: 'superpower', ar: '⚡ قوة خارقة', en: '⚡ Super Power', tag: 'قوة خارقة' },
+  { id: 'military', ar: '🎖️ عسكري', en: '🎖️ Military', tag: 'عسكري' },
+  { id: 'sports', ar: '⚽ رياضي', en: '⚽ Sports', tag: 'رياضي' },
+  { id: 'thriller', ar: '⏳ تشويق', en: '⏳ Thriller', tag: 'تشويق' },
+  { id: 'slice', ar: '🍃 شريحة من الحياة', en: '🍃 Slice of Life', tag: 'شريحة من الحياة' },
+  { id: 'horror', ar: '💀 رعب', en: '💀 Horror', tag: 'رعب' },
+  { id: 'psychological', ar: '🧠 نفسي', en: '🧠 Psychological', tag: 'نفسي' },
+  { id: 'gore', ar: '🩸 دموي', en: '🩸 Gore', tag: 'دموي' },
+  { id: 'martial', ar: '🥋 فنون قتالية', en: '🥋 Martial Arts', tag: 'فنون قتالية' },
+  { id: 'samurai', ar: '⚔️ ساموراي', en: '⚔️ Samurai', tag: 'ساموراي' },
+  { id: 'vampire', ar: '🧛 مصاصي دماء', en: '🧛 Vampire', tag: 'مصاصي دماء' }
 ];
 
 const TYPE_FILTERS = [
-  { id: 'all', ar: 'الكل (6,973)', en: 'All', facet: '' },
-  { id: 'tv', ar: '📺 مسلسلات (4,114)', en: '📺 TV Series', facet: 'type:مسلسل' },
-  { id: 'movie', ar: '🎬 أفلام (1,266)', en: '🎬 Movies', facet: 'type:فيلم' },
-  { id: 'ova', ar: '💿 أوفا OVA (751)', en: '💿 OVA', facet: 'type:اوفا' },
-  { id: 'special', ar: '✨ خاصة (486)', en: '✨ Specials', facet: 'type:خاصة' },
-  { id: 'ona', ar: '🌐 أونا ONA (351)', en: '🌐 ONA', facet: 'type:اونا' }
+  { id: 'all', ar: 'الكل', en: 'All', facet: '' },
+  { id: 'tv', ar: '📺 مسلسلات', en: '📺 TV Series', facet: 'type:مسلسل' },
+  { id: 'movie', ar: '🎬 أفلام', en: '🎬 Movies', facet: 'type:فيلم' },
+  { id: 'ova', ar: '💿 أوفا OVA', en: '💿 OVA', facet: 'type:اوفا' },
+  { id: 'special', ar: '✨ خاصة', en: '✨ Specials', facet: 'type:خاصة' },
+  { id: 'ona', ar: '🌐 أونا ONA', en: '🌐 ONA', facet: 'type:اونا' }
 ];
 
 const STATE_FILTERS = [
   { id: 'all', ar: 'كل الحالات', en: 'All States', facet: '' },
-  { id: 'airing', ar: '🟢 مستمر الآن (90)', en: '🟢 Airing Now', facet: 'details.state:مستمر' },
-  { id: 'completed', ar: '✔ مكتمل (6,651)', en: '✔ Completed', facet: 'details.state:مكتمل' },
-  { id: 'upcoming', ar: '⏳ قريباً (220)', en: '⏳ Upcoming', facet: 'details.state:لم يتم بثه بعد' }
+  { id: 'airing', ar: '🟢 مستمر الآن', en: '🟢 Airing Now', facet: 'details.state:مستمر' },
+  { id: 'completed', ar: '✔ مكتمل', en: '✔ Completed', facet: 'details.state:مكتمل' },
+  { id: 'upcoming', ar: '⏳ قريباً', en: '⏳ Upcoming', facet: 'details.state:لم يتم بثه بعد' }
 ];
 
 const STUDIO_FILTERS = [
   { id: 'all', label: 'كل الاستوديوهات', facet: '' },
-  { id: 'mappa', label: '🔥 MAPPA (76)', facet: 'details.studio:MAPPA' },
-  { id: 'ufotable', label: '⚔️ ufotable (49)', facet: 'details.studio:ufotable' },
-  { id: 'madhouse', label: '👑 Madhouse (243)', facet: 'details.studio:Madhouse' },
-  { id: 'toei', label: '🏴‍☠️ Toei Animation (299)', facet: 'details.studio:Toei Animation' },
-  { id: 'bones', label: '⚡ Bones (116)', facet: 'details.studio:Bones' },
-  { id: 'wit', label: '🛡️ Wit Studio (54)', facet: 'details.studio:Wit Studio' },
-  { id: 'clover', label: '🍀 CloverWorks (52)', facet: 'details.studio:CloverWorks' },
-  { id: 'a1', label: '✨ A-1 Pictures (164)', facet: 'details.studio:A-1 Pictures' },
-  { id: 'pierrot', label: '🌀 Studio Pierrot (127)', facet: 'details.studio:Studio Pierrot' },
-  { id: 'kyoto', label: '🌸 Kyoto Animation (88)', facet: 'details.studio:Kyoto Animation' },
-  { id: 'ig', label: '🏐 Production I.G (214)', facet: 'details.studio:Production I.G' }
+  { id: 'mappa', label: '🔥 MAPPA', facet: 'details.studio:MAPPA' },
+  { id: 'ufotable', label: '⚔️ ufotable', facet: 'details.studio:ufotable' },
+  { id: 'madhouse', label: '👑 Madhouse', facet: 'details.studio:Madhouse' },
+  { id: 'toei', label: '🏴‍☠️ Toei Animation', facet: 'details.studio:Toei Animation' },
+  { id: 'bones', label: '⚡ Bones', facet: 'details.studio:Bones' },
+  { id: 'wit', label: '🛡️ Wit Studio', facet: 'details.studio:Wit Studio' },
+  { id: 'clover', label: '🍀 CloverWorks', facet: 'details.studio:CloverWorks' },
+  { id: 'a1', label: '✨ A-1 Pictures', facet: 'details.studio:A-1 Pictures' },
+  { id: 'pierrot', label: '🌀 Studio Pierrot', facet: 'details.studio:Studio Pierrot' },
+  { id: 'kyoto', label: '🌸 Kyoto Animation', facet: 'details.studio:Kyoto Animation' },
+  { id: 'ig', label: '🏐 Production I.G', facet: 'details.studio:Production I.G' }
 ];
 
 const SCHEDULE_DAYS = [
@@ -91,7 +109,7 @@ const SCHEDULE_DAYS = [
   { id: 'الأربعاء', ar: 'الأربعاء', en: 'Wednesday' },
   { id: 'الخميس', ar: 'الخميس', en: 'Thursday' },
   { id: 'الجمعة', ar: 'الجمعة', en: 'Friday' },
-  { id: 'all_airing', ar: '🔥 كل المستمر (90)', en: '🔥 All Airing (90)' }
+  { id: 'all_airing', ar: '🔥 كل المستمر', en: '🔥 All Airing' }
 ];
 
 const DEFAULT_PREDICTIONS = [
@@ -151,8 +169,6 @@ const SERVER_LABELS = {
   MF: { nameAr: '🚀 BLACK X 7 Plus', nameEn: '🚀 BLACK X 7 Plus', badge: 'مباشر • MP4', fast: true },
   ST: { nameAr: '🎬 BLACK X 8 HD', nameEn: '🎬 BLACK X 8 HD', badge: 'احتياطي HD', fast: false }
 };
-
-const SERVER_PRIORITY = { PD_DEV: 1, SF: 2, PD_NET: 3, AA: 4, MF2: 5, MF: 6, PD: 7, ST: 8 };
 
 async function sha256Browser(text) {
   const data = new TextEncoder().encode(String(text || ''));
@@ -229,122 +245,6 @@ function formatAnimeHit(hit) {
 }
 
 /**
- * Native Android Java HTTP Bridge (`window.BlackXNativeAuth.httpRequestAsync` / `httpGetSync` / `httpPostSync`):
- * Executes HTTP GET & POST requests directly via Android `java.net.HttpURLConnection` in `MainActivity.java`
- * with zero CORS restrictions and full support for custom headers (`User-Agent`, `Referer`, `Origin`, `app_version`, etc.).
- */
-const pendingNativeHttpMap = new Map();
-if (typeof window !== 'undefined') {
-  window.__onBlackXHttpResult = (reqId, respText) => {
-    const resolver = pendingNativeHttpMap.get(reqId);
-    if (resolver) {
-      pendingNativeHttpMap.delete(reqId);
-      resolver(respText || '');
-    }
-  };
-}
-
-function serializeHeadersPipe(headers = {}) {
-  return Object.entries(headers || {})
-    .filter(([k, v]) => k && v !== undefined && v !== null)
-    .map(([k, v]) => `${k}:${v}`)
-    .join('||');
-}
-
-async function nativeHttpCall(url, method = 'GET', headers = {}, bodyStr = '') {
-  const hPipe = serializeHeadersPipe(headers);
-  try {
-    if (typeof window !== 'undefined' && window.BlackXNativeAuth?.httpRequestAsync) {
-      return await new Promise((resolve) => {
-        const reqId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        const timer = setTimeout(() => {
-          if (pendingNativeHttpMap.has(reqId)) {
-            pendingNativeHttpMap.delete(reqId);
-            resolve('');
-          }
-        }, 12000);
-        pendingNativeHttpMap.set(reqId, (txt) => {
-          clearTimeout(timer);
-          resolve(txt);
-        });
-        window.BlackXNativeAuth.httpRequestAsync(reqId, url, method, hPipe, bodyStr || '');
-      });
-    }
-    if (typeof window !== 'undefined' && window.BlackXNativeAuth?.httpGetSync && method === 'GET') {
-      const syncTxt = window.BlackXNativeAuth.httpGetSync(url, hPipe);
-      if (syncTxt) return syncTxt;
-    }
-  } catch (_) {}
-
-  try {
-    const capHttp = window.Capacitor?.Plugins?.CapacitorHttp;
-    if (capHttp?.request) {
-      const res = await capHttp.request({ url, method, headers, data: bodyStr || undefined });
-      if (res?.data !== undefined) {
-        return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-      }
-    }
-  } catch (_) {}
-
-  const fetchOpts = { method, headers: { ...headers } };
-  if (method === 'POST' && bodyStr) fetchOpts.body = bodyStr;
-  const r = await fetch(url, fetchOpts);
-  return r.text();
-}
-
-async function nativeGetHtml(url, extraHeaders = {}) {
-  return nativeHttpCall(
-    url,
-    'GET',
-    {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      ...extraHeaders
-    },
-    ''
-  );
-}
-
-async function nativeGetJson(url, headers = {}) {
-  const txt = await nativeHttpCall(
-    url,
-    'GET',
-    {
-      Accept: 'application/json',
-      ...headers
-    },
-    ''
-  );
-  if (!txt) return null;
-  try {
-    return typeof txt === 'string' ? JSON.parse(txt) : txt;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function nativePostFormJson(url, formParams = {}, headers = {}) {
-  const bodyStr = new URLSearchParams(formParams).toString();
-  const txt = await nativeHttpCall(
-    url,
-    'POST',
-    {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
-      ...headers
-    },
-    bodyStr
-  );
-  if (!txt) return null;
-  try {
-    return typeof txt === 'string' ? JSON.parse(txt) : txt;
-  } catch (_) {
-    return null;
-  }
-}
-
-/**
  * Dispatch a REAL Android OS Status-Bar & Heads-Up Notification to the user's phone!
  */
 export function dispatchPhoneNotification(title, body, notifId = 0) {
@@ -385,258 +285,6 @@ export function dispatchPhoneNotification(title, body, notifId = 0) {
   return false;
 }
 
-const MELLO_API_HEADERS = {
-  Accept: 'application/json',
-  app_version: '1.1.7',
-  installer: 'com.android.vending',
-  lang: 'ar',
-  device: 'android',
-  time_zone: 'Africa/Cairo',
-  'User-Agent': 'Dart/3.8 (dart:io)'
-};
-
-const SWAT_API_HEADERS = {
-  Accept: 'application/json',
-  Origin: 'https://meshmanga.com',
-  Referer: 'https://meshmanga.com/',
-  'User-Agent': 'ktor-client'
-};
-
-function rewriteLegacyMangaImageUrl(rawUrl) {
-  const s = String(rawUrl || '').trim();
-  if (!s) return '';
-  try {
-    const u = new URL(s);
-    const host = u.hostname.toLowerCase();
-    if (host === 'tempstorm.lekmanga.site') {
-      const m = u.pathname.match(/^\/manga\/arb1(\d+)\//i);
-      if (m?.[1]) {
-        return s.replace(/tempstorm\.lekmanga\.site/i, `s${m[1]}storm.lekmanga.site`);
-      }
-    }
-    const legacyMatch = host.match(/^s(\d+)lekmangas\.lekmanga\.site$/i);
-    if (legacyMatch?.[1]) {
-      return s.replace(host, `s${legacyMatch[1]}storm.lekmanga.site`);
-    }
-  } catch (_) {}
-  return s;
-}
-
-/**
- * Fetch live Arabic-subtitled 1080p/720p/480p Direct MP4 servers from BLACK X Server 2 (Animeify v4 API)
- */
-async function fetchAnimeifyDirectServers(titleRomaji, titleEn, epNum, isMovie = false) {
-  const apiBase = 'https://animeify.net/animeify/apis_v4/';
-  const token = '8cnY80AZSbUCmR26Vku1VUUY4';
-  const queries = Array.from(new Set([titleRomaji, titleEn].map((s) => String(s || '').trim()).filter(Boolean)));
-  if (!queries.length) return [];
-
-  try {
-    let matchedAnimeId = null;
-    const animeType = isMovie ? 'MOVIE' : 'SERIES';
-
-    for (const q of queries) {
-      const shortQ = q.split(/\s+/).slice(0, 3).join(' ');
-      const list = await nativePostFormJson(`${apiBase}anime/load_anime_list_v2.php`, {
-        UserId: '0',
-        Language: 'AR',
-        FilterType: 'SEARCH',
-        FilterData: shortQ,
-        Type: animeType,
-        From: '0',
-        Token: token
-      });
-      if (Array.isArray(list) && list.length > 0) {
-        const normQ = q.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const exact =
-          list.find((it) => {
-            const t1 = String(it.EN_Title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const t2 = String(it.Synonyms || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            return (t1 && (t1.includes(normQ) || normQ.includes(t1))) || (t2 && (t2.includes(normQ) || normQ.includes(t2)));
-          }) || list[0];
-        if (exact?.AnimeId) {
-          matchedAnimeId = exact.AnimeId;
-          break;
-        }
-      }
-    }
-
-    if (!matchedAnimeId) return [];
-
-    const srvJson = await nativePostFormJson(`${apiBase}anime/load_servers.php`, {
-      UserId: '0',
-      AnimeId: matchedAnimeId,
-      Episode: String(epNum || 1),
-      AnimeType: animeType,
-      Token: token
-    });
-    const ce = srvJson?.CurrentEpisode;
-    if (!ce) return [];
-
-    const rawCandidates = [];
-    if (ce.FRFhdQ) {
-      rawCandidates.push({
-        name: 'MF2',
-        quality: '1080p',
-        link: String(ce.FRFhdQ).startsWith('http') ? ce.FRFhdQ : `https://www.mediafire.com/file/${ce.FRFhdQ}`
-      });
-    }
-    if (ce.FRLink) {
-      rawCandidates.push({
-        name: 'MF2',
-        quality: '720p',
-        link: String(ce.FRLink).startsWith('http') ? ce.FRLink : `https://www.mediafire.com/file/${ce.FRLink}`
-      });
-    }
-    if (ce.FRLowQ) {
-      rawCandidates.push({
-        name: 'MF',
-        quality: '480p',
-        link: String(ce.FRLowQ).startsWith('http') ? ce.FRLowQ : `https://www.mediafire.com/file/${ce.FRLowQ}`
-      });
-    }
-    if (ce.SVLink) {
-      rawCandidates.push({
-        name: 'SF',
-        quality: '720p',
-        link: String(ce.SVLink).startsWith('http') ? ce.SVLink : `https://sendvid.com/embed/${ce.SVLink}`
-      });
-    }
-    if (ce.SVLowQ) {
-      rawCandidates.push({
-        name: 'SF',
-        quality: '480p',
-        link: String(ce.SVLowQ).startsWith('http') ? ce.SVLowQ : `https://sendvid.com/embed/${ce.SVLowQ}`
-      });
-    }
-
-    const resolvedList = await Promise.all(
-      rawCandidates.map(async (cand) => {
-        const directMp4 = await resolveMobileVideoUrl(cand.name, cand.link);
-        if (!directMp4) return null;
-        return {
-          name: cand.name,
-          quality: cand.quality,
-          link: directMp4,
-          directResolvedUrl: directMp4,
-          visible: true
-        };
-      })
-    );
-    return resolvedList.filter(Boolean);
-  } catch (_) {
-    return [];
-  }
-}
-
-/**
- * Resolve intermediate server link (PD_DEV, PD_NET, PD, SF, MF, MF2, ST, KF, SV) directly inside the Android APK
- * and return NULL if the file is 404/dead so broken servers are automatically filtered out!
- */
-async function resolveMobileVideoUrl(code, rawLink) {
-  const c = String(code || '').toUpperCase().trim();
-  const link = String(rawLink || '').trim();
-  if (!link) return null;
-
-  // Already a direct resolved MP4 link
-  if (
-    link.includes('encodings/') ||
-    link.includes('fast4speed.rsvp') ||
-    link.includes('videos2.sendvid.com') ||
-    link.includes('videos.sendvid.com') ||
-    /https?:\/\/download\d*\.mediafire\.com\//i.test(link)
-  ) {
-    return link;
-  }
-
-  // 1. PixelDrain (PD_DEV / PD_NET / PD) — Verify file info is 200 OK (not 404)
-  if (c.startsWith('PD') || link.includes('pixeldrain.')) {
-    const m = link.match(/pixeldrain\.[a-z]+\/(?:u|api\/file)\/([A-Za-z0-9_-]+)/i);
-    if (m?.[1]) {
-      const fid = m[1];
-      try {
-        const infoJson = await nativeGetJson(`https://pixeldrain.com/api/file/${fid}/info`);
-        if (infoJson && infoJson.success === false) {
-          return null;
-        }
-      } catch (_) {}
-      if (c === 'PD_NET') return `https://pixeldrain.net/api/file/${fid}`;
-      if (c === 'PD') return `https://pixeldrain.com/api/file/${fid}`;
-      return `https://pixeldrain.dev/api/file/${fid}`;
-    }
-  }
-
-  // 2. Sendvid (sendvid.com/embed/...) -> Direct MP4
-  if (link.includes('sendvid.com')) {
-    try {
-      const html = await nativeGetHtml(link);
-      const svMatch = html.match(/https?:\/\/[^"'\s<>]+\.mp4[^"'\s<>]*/i);
-      if (svMatch?.[0]) return svMatch[0];
-    } catch (_) {}
-    return null;
-  }
-
-  // 3. FireStream (SF)
-  if (c === 'SF' || link.includes('firestream.to')) {
-    try {
-      const html = await nativeGetHtml(link);
-      const m =
-        html.match(/"downloadUrl"\s*:\s*"([^"]+)"/) ||
-        html.match(/https?:\/\/[a-z0-9.-]*firestream\.to\/encodings\/[^\s"']+/i);
-      if (m?.[1] || m?.[0]) return (m[1] || m[0]).replace(/\\u0026/g, '&').replace(/\\\//g, '/');
-    } catch (_) {}
-    return null;
-  }
-
-  // 4. MediaFire (MF / MF2)
-  if (c === 'MF' || c === 'MF2' || link.includes('mediafire.com')) {
-    try {
-      const html = await nativeGetHtml(link);
-      if (!html || html.includes('error.php?errno=')) return null;
-      const direct =
-        html.match(/(https?:\/\/download\d*\.mediafire\.com\/[^"'\s<>]+)/i)?.[1] ||
-        html.match(/aria-label="Download file"[^>]*href="(https?:\/\/[^"]+)"/i)?.[1];
-      if (direct) return direct;
-      const scrambled = html.match(/data-scrambled-url="([^"]+)"/i)?.[1];
-      if (scrambled) return atob(scrambled);
-    } catch (_) {}
-    return null;
-  }
-
-  // 5. KrakenFiles (KF) & UpStream (US)
-  if (c === 'KF' || c === 'US' || link.includes('krakenfiles.com') || link.includes('upstream')) {
-    try {
-      const html = await nativeGetHtml(link);
-      const srcMatch = html.match(/<source\s+src="((?:https?:)?\/\/[^"]+)"\s+type="video\/mp4"/i);
-      if (srcMatch?.[1]) {
-        return srcMatch[1].startsWith('//') ? `https:${srcMatch[1]}` : srcMatch[1];
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  // 6. StreamTape (ST)
-  if (c === 'ST' || link.includes('streamtape.com')) {
-    try {
-      const html = await nativeGetHtml(link);
-      const w1 = "document.getElementById('norobotlink').innerHTML = '";
-      const i1 = html.indexOf(w1);
-      if (i1 !== -1) {
-        const i2 = html.indexOf(';</script>', i1);
-        const expr = html.slice(i1 + w1.length, i2);
-        const m = expr.match(/\('([^']+)'\)\.substring\((\d+)\)(?:\.substring\((\d+)\))?/);
-        if (m) {
-          const tail = m[1].substring(Number(m[2])).substring(Number(m[3] || 0));
-          return `https://streamtape.com${tail.startsWith('/') ? '' : '/'}${tail}`;
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  return link.endsWith('.mp4') ? link : null;
-}
-
 export default function MobileApkApp() {
   const [lang, setLang] = useState(() => localStorage.getItem('bx_mob_lang') || 'ar');
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'catalog' | 'schedule' | 'manga' | 'community' | 'profile'
@@ -655,7 +303,8 @@ export default function MobileApkApp() {
 
   // Catalog Browse & Search States (Multi-Facet: Sort + Type + State + Studio + Genre)
   const [catalogItems, setCatalogItems] = useState([]);
-  const [catalogTotal, setCatalogTotal] = useState(6973);
+  const [catalogTotal, setCatalogTotal] = useState(null); // real Algolia nbHits / search result count
+  const [bxAnimeTotal, setBxAnimeTotal] = useState(null); // website /api/stream/stats
   const [catalogPage, setCatalogPage] = useState(0);
   const [catalogSort, setCatalogSort] = useState('series_fav_count_desc');
   const [catalogGenre, setCatalogGenre] = useState(GENRE_CHIPS[0]);
@@ -711,9 +360,9 @@ export default function MobileApkApp() {
   const longPressTimerRef = useRef(null);
   const gestureHudTimerRef = useRef(null);
 
-  // Manga States (30,000+ Arabic Manga & Manhwa from BLACK X Engines)
+  // Manga States (served by the website API: the same BLACK X manga servers as black-x-anime.me)
   const [mangaList, setMangaList] = useState([]);
-  const [mangaSource, setMangaSource] = useState('all'); // 'all' | 'mello' | 'azora' | 'swat' | 'dilar' | 'mangadex'
+  const [mangaSource, setMangaSource] = useState('all'); // website server id: 'all' | 'bx1' | 'bx2' | 'bx3' | 'bx4' (search only)
   const [mangaFilterType, setMangaFilterType] = useState('ALL'); // 'ALL' | 'MANHWA' | 'MANGA'
   const [mangaPage, setMangaPage] = useState(1);
   const [mangaQuery, setMangaQuery] = useState('');
@@ -722,6 +371,17 @@ export default function MobileApkApp() {
   const [selectedManga, setSelectedManga] = useState(null);
   const [mangaChapters, setMangaChapters] = useState([]);
   const [mangaChaptersLoading, setMangaChaptersLoading] = useState(false);
+  const [mangaChaptersError, setMangaChaptersError] = useState(''); // '' | 'empty' | 'not_found' | 'network'
+  const [mangaServers, setMangaServers] = useState([]);
+  const [mangaActiveServer, setMangaActiveServer] = useState('');
+  const [mangaPagesError, setMangaPagesError] = useState(''); // '' | 'empty' | 'network'
+  const [mangaSearchOnlyEnabled, setMangaSearchOnlyEnabled] = useState(false);
+  const [episodesError, setEpisodesError] = useState(''); // '' | 'empty' | 'network'
+  const mangaOpenSeqRef = useRef(0);
+  const chapterReadSeqRef = useRef(0);
+  const animeOpenSeqRef = useRef(0);
+  const episodeServersSeqRef = useRef(0);
+  const serverSelectSeqRef = useRef(0);
   const [activeMangaChapter, setActiveMangaChapter] = useState(null);
   const [mangaPages, setMangaPages] = useState([]);
   const [mangaPagesLoading, setMangaPagesLoading] = useState(false);
@@ -2849,25 +2509,12 @@ export default function MobileApkApp() {
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`https://api.azorafly.com/api/query?page=1&perPage=8&searchTerm=${encodeURIComponent(q)}`);
-        if (!res.ok) return;
-        const json = await res.json();
+        // Same manga search the website runs (all BLACK X manga servers)
+        const hits = await fetchMobileMangaList({ server: 'all', query: q, page: 1 });
         if (cancelled) return;
-        const mapped = (json?.posts || []).slice(0, 8).map((post) => ({
-          objectID: `az_${post.id}`,
-          slug: post.slug,
-          sourceEngine: 'azorafly',
-          sourceLabel: '🔥 BLACK X 3',
-          name: post.postTitle || 'مانهوا',
-          poster_uri: post.featuredImage || '/blackx-logo.png',
-          poster: { large: post.featuredImage || '/blackx-logo.png' },
-          type: 'مانهوا',
-          rate: String(post.averageRating || '9.4').slice(0, 3),
-          story_ar: (post.postContent || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية عبر BLACK X.'
-        }));
-        setUniversalMangaHits(mapped);
+        setUniversalMangaHits(hits.slice(0, 8));
       } catch (_) {}
-    }, 320);
+    }, 420);
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -2892,7 +2539,7 @@ export default function MobileApkApp() {
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  // Load Home Screen Data from 6,973-Anime Cloud Engine (Including Movies & Currently Airing)
+  // Load Home Screen rows (popular, recent, top, newest, movies, airing) from the catalogue index
   useEffect(() => {
     let alive = true;
     setHomeLoading(true);
@@ -2937,30 +2584,58 @@ export default function MobileApkApp() {
     return facets;
   }, [catalogGenre, catalogType, catalogState, catalogStudio]);
 
-  // Load Catalog (6,973 Anime) when sort, genre, type, state, studio, or search changes
+  // Website totals and optional servers (same data the website shows)
   useEffect(() => {
     let alive = true;
+    fetchAnimeCatalogTotal().then((total) => {
+      if (alive) setBxAnimeTotal(total);
+    });
+    fetchBxSourceIds().then((ids) => {
+      if (alive) setMangaSearchOnlyEnabled(ids.has('aniproject'));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Catalog browsing (sort/genre/type/state/studio) reads the same Algolia index as the website's
+  // BLACK X 1 catalogue. Typed searches use the website search across every BLACK X anime server.
+  useEffect(() => {
+    let alive = true;
+    const q = searchQuery.trim();
     const t = setTimeout(async () => {
       setCatalogLoading(true);
       try {
+        if (q) {
+          const items = await fetchMobileAnimeSearch(q);
+          if (!alive) return;
+          setCatalogItems(items);
+          setCatalogTotal(items.length);
+          setCatalogPage(0);
+          return;
+        }
         const body = {
-          query: searchQuery.trim(),
+          query: '',
           page: 0,
           hitsPerPage: 48
         };
         const facets = buildCatalogFacets();
         if (facets.length > 0) body.facetFilters = facets;
-        const indexToUse = searchQuery.trim() ? 'series' : catalogSort;
-        const res = await queryAlgolia(indexToUse, body);
+        const res = await queryAlgolia(catalogSort, body);
         if (!alive) return;
         setCatalogItems((res.hits || []).map(formatAnimeHit).filter(Boolean));
-        setCatalogTotal(Number(res.nbHits) || 0);
+        const total = Number(res.nbHits);
+        setCatalogTotal(Number.isFinite(total) && total >= 0 ? total : null);
         setCatalogPage(0);
       } catch (_) {
+        if (alive && q) {
+          setCatalogItems([]);
+          setCatalogTotal(0);
+        }
       } finally {
         if (alive) setCatalogLoading(false);
       }
-    }, searchQuery.trim() ? 220 : 20);
+    }, q ? 350 : 20);
 
     return () => {
       alive = false;
@@ -2969,19 +2644,19 @@ export default function MobileApkApp() {
   }, [catalogSort, buildCatalogFacets, searchQuery]);
 
   const handleLoadMoreCatalog = async () => {
-    if (loadingMoreCatalog) return;
+    // Website search results arrive in a single response; only the catalogue is paged.
+    if (loadingMoreCatalog || searchQuery.trim()) return;
     setLoadingMoreCatalog(true);
     try {
       const nextPage = catalogPage + 1;
       const body = {
-        query: searchQuery.trim(),
+        query: '',
         page: nextPage,
         hitsPerPage: 48
       };
       const facets = buildCatalogFacets();
       if (facets.length > 0) body.facetFilters = facets;
-      const indexToUse = searchQuery.trim() ? 'series' : catalogSort;
-      const res = await queryAlgolia(indexToUse, body);
+      const res = await queryAlgolia(catalogSort, body);
       const more = (res.hits || []).map(formatAnimeHit).filter(Boolean);
       if (more.length) {
         setCatalogItems((prev) => [...prev, ...more]);
@@ -3030,273 +2705,13 @@ export default function MobileApkApp() {
     return () => clearInterval(id);
   }, [activeMangaChapter, autoScrollSpeed]);
 
-  // Fetch Manga & Manhwa from BLACK X Engines (30,000+ Arabic Manga & Manhwa)
+  // Manga & Manhwa library/search from the website API (same servers and results as the website)
   const fetchMangaPeakPage = useCallback(async (srcMode, qStr, pageNum = 1) => {
-    const q = String(qStr || '').trim();
-    const fetchMello = async () => {
-      try {
-        const url = q
-          ? `https://plus.mangamello.com/api/v1/mangas/search?per_page=24&page=${pageNum}&relations=genres&title=${encodeURIComponent(q)}`
-          : `https://plus.mangamello.com/api/v1/mangas?page=${pageNum}&per_page=24&relations=genres&sort_by=views&dir=desc`;
-        const json = await nativeGetJson(url, MELLO_API_HEADERS);
-        return (json?.data || []).map((item) => {
-          const coverUrl = rewriteLegacyMangaImageUrl(item.img) || '/blackx-logo.png';
-          return {
-            objectID: `mm:${item.id}`,
-            source: 'mello',
-            sourceLabel: 'BLACK X 1',
-            sourceId: String(item.id),
-            name: item.title || `Manga #${item.id}`,
-            poster_uri: coverUrl,
-            poster: { large: coverUrl, medium: coverUrl },
-            type: Number(item.type_id) === 1 ? 'مانجا' : 'مانهوا',
-            story_ar: item.summary || 'مانجا ومانهوا مترجمة للعربية بجودة عالية عبر سيرفر BLACK X 1.',
-            rate: item.rate ? Number(item.rate).toFixed(1) : '9.2'
-          };
-        });
-      } catch (_) {
-        return [];
-      }
-    };
-
-    const fetchAzora = async () => {
-      try {
-        const url = `https://api.azorafly.com/api/query?page=${pageNum}&perPage=24&orderBy=totalViews&orderDirection=desc&searchTerm=${encodeURIComponent(q)}`;
-        const json = await nativeGetJson(url);
-        return (json?.posts || []).map((post) => {
-          const coverUrl = post.featuredImage || '/blackx-logo.png';
-          return {
-            objectID: `az:${post.slug}`,
-            source: 'azora',
-            sourceLabel: 'BLACK X 3',
-            slug: post.slug,
-            postId: post.id,
-            name: post.postTitle || post.slug,
-            poster_uri: coverUrl,
-            poster: { large: coverUrl, medium: coverUrl },
-            type: post.seriesType === 'MANGA' ? 'مانجا' : 'مانهوا',
-            story_ar: (post.postContent || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة فائقة عبر سيرفر BLACK X 3.',
-            rate: post.averageRating ? Number(post.averageRating).toFixed(1) : '9.4'
-          };
-        });
-      } catch (_) {
-        return [];
-      }
-    };
-
-    const fetchSwat = async () => {
-      try {
-        const url = q
-          ? `https://appswat.com/v2/api/v2/series/?search=${encodeURIComponent(q)}&page=${pageNum}`
-          : `https://appswat.com/v2/api/v2/series/?page_size=24&page=${pageNum}&order_by=-followers_count`;
-        const json = await nativeGetJson(url, SWAT_API_HEADERS);
-        return (json?.results || []).map((item) => {
-          const coverUrl = item.poster?.medium || item.poster?.thumbnail || '/blackx-logo.png';
-          return {
-            objectID: `sw:${item.id}`,
-            source: 'swat',
-            sourceLabel: 'BLACK X 4',
-            sourceId: String(item.id),
-            slug: item.slug || String(item.id),
-            name: item.title || `Manhwa #${item.id}`,
-            poster_uri: coverUrl,
-            poster: { large: coverUrl, medium: coverUrl },
-            type: 'مانهوا',
-            story_ar: (item.story || '').replace(/<[^>]+>/g, '').trim() || 'مانهوا مترجمة للعربية بجودة عالية عبر سيرفر BLACK X 4.',
-            rate: item.rating ? Number(item.rating).toFixed(1) : '9.3'
-          };
-        });
-      } catch (_) {
-        return [];
-      }
-    };
-
-    const fetchDilar = async () => {
-      try {
-        if (q) {
-          const txt = await nativeHttpCall(
-            'https://dilar.tube/api/search/quick_search',
-            'POST',
-            { 'Content-Type': 'application/json', Accept: 'application/json', Referer: 'https://dilar.tube/' },
-            JSON.stringify({ query: q, includes: ['Manga'] })
-          );
-          let rows = [];
-          try {
-            const data = txt ? JSON.parse(txt) : null;
-            rows = data?.[0]?.data || [];
-          } catch (_) {}
-          if (rows.length > 0) {
-            return rows.map((row) => {
-              const cleanCov = String(row.cover || '').replace(/\.webp$/i, '');
-              const coverUrl = cleanCov
-                ? `https://dilar.tube/uploads/manga/cover/${row.id}/large_${cleanCov}.webp`
-                : '/blackx-logo.png';
-              return {
-                objectID: `dt:${row.id}`,
-                source: 'dilar',
-                sourceLabel: 'BLACK X 2',
-                sourceId: String(row.id),
-                name: row.title || row.english || `Manga #${row.id}`,
-                poster_uri: coverUrl,
-                poster: { large: coverUrl, medium: coverUrl },
-                type: 'مانهوا / مانجا',
-                story_ar: row.summary || 'عمل مترجم للعربية من مكتبة BLACK X 2 الشاملة.',
-                rate: '9.2'
-              };
-            });
-          }
-        }
-        const json = await nativeGetJson(`https://v2.dilar.tube/api/series/?page=${pageNum}`, {
-          Referer: 'https://dilar.tube/'
-        });
-        return (json?.series || []).map((item) => {
-          const cleanCov = String(item.cover || '').replace(/\.webp$/i, '');
-          const coverUrl = cleanCov
-            ? `https://dilar.tube/uploads/manga/cover/${item.id}/large_${cleanCov}.webp`
-            : '/blackx-logo.png';
-          return {
-            objectID: `dt:${item.id}`,
-            source: 'dilar',
-            sourceLabel: 'BLACK X 2',
-            sourceId: String(item.id),
-            name: item.title || `Series #${item.id}`,
-            poster_uri: coverUrl,
-            poster: { large: coverUrl, medium: coverUrl },
-            type: 'مانهوا / مانجا',
-            story_ar: item.summary || 'عمل مترجم للعربية من مكتبة BLACK X 2 الشاملة (9,164 عمل).',
-            rate: item.rating ? Number(item.rating).toFixed(1) : '9.2'
-          };
-        });
-      } catch (_) {
-        return [];
-      }
-    };
-
-    const fetchAlgoliaManga = async () => {
-      try {
-        const res = await queryAlgolia(q ? 'manga' : 'manga_views_desc', {
-          query: q,
-          page: pageNum - 1,
-          hitsPerPage: 24
-        });
-        return (res.hits || []).map((m) => {
-          const rawPoster = m.poster?.large || m.poster_uri || '';
-          const coverUrl =
-            rawPoster && !rawPoster.includes('api.mangatek.com')
-              ? rawPoster
-              : `https://invalid-cover.blackx.local/${encodeURIComponent(m.name || m.objectID)}.jpg`;
-          return {
-            ...m,
-            objectID: `awm:${m.objectID}`,
-            source: 'algolia',
-            sourceLabel: 'BLACK X 5',
-            poster_uri: coverUrl,
-            poster: { large: coverUrl, medium: coverUrl },
-            story_ar: m.story?.ar || m.story_en || '',
-            rate: '9.1'
-          };
-        });
-      } catch (_) {
-        return [];
-      }
-    };
-
-    const fetchAniListMaster = async () => {
-      try {
-        const gql = `
-          query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort]) {
-            Page(page: $page, perPage: $perPage) {
-              media(type: MANGA, search: $search, sort: $sort, isAdult: false) {
-                id
-                title { romaji english native }
-                synonyms
-                countryOfOrigin
-                status
-                chapters
-                averageScore
-                genres
-                description(asHtml: false)
-                coverImage { extraLarge large }
-              }
-            }
-          }
-        `;
-        const variables = {
-          page: pageNum,
-          perPage: 28,
-          sort: q ? ['SEARCH_MATCH', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC']
-        };
-        if (q) variables.search = q;
-        const txt = await nativeHttpCall(
-          'https://graphql.anilist.co',
-          'POST',
-          { 'Content-Type': 'application/json', Accept: 'application/json' },
-          JSON.stringify({ query: gql, variables })
-        );
-        const json = txt ? JSON.parse(txt) : null;
-        const list = json?.data?.Page?.media || [];
-        return list.map((m) => {
-          const titleEn = m.title?.english || m.title?.romaji || m.title?.native || `Manga #${m.id}`;
-          const c = String(m.countryOfOrigin || 'JP').toUpperCase();
-          const typeAr = c === 'KR' ? 'مانهوا كورية' : c === 'CN' || c === 'TW' ? 'مانهاوا صينية' : 'مانجا يابانية';
-          const coverUrl = m.coverImage?.extraLarge || m.coverImage?.large || '/blackx-logo.png';
-          const allSyns = Array.from(
-            new Set([m.title?.english, m.title?.romaji, ...(m.synonyms || [])].filter(Boolean))
-          );
-          return {
-            objectID: `al:${m.id}`,
-            source: 'anilist_master',
-            sourceLabel: 'BLACK X Master',
-            anilistId: m.id,
-            name: titleEn,
-            name_en: m.title?.english || titleEn,
-            name_romaji: m.title?.romaji || titleEn,
-            synonyms: allSyns,
-            countryOfOrigin: c,
-            poster_uri: coverUrl,
-            poster: { large: coverUrl, medium: coverUrl },
-            type: typeAr,
-            story_ar: (m.description || '').replace(/<[^>]+>/g, '').trim() || `اقرأ ${titleEn} عبر الفهرس العالمي الشامل BLACK X.`,
-            rate: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4'
-          };
-        });
-      } catch (_) {
-        return [];
-      }
-    };
-
-    if (srcMode === 'mello') return fetchMello();
-    if (srcMode === 'azora') return fetchAzora();
-    if (srcMode === 'swat') return fetchSwat();
-    if (srcMode === 'dilar') return fetchDilar();
-    if (srcMode === 'mangadex') {
-      const [alRes, algRes] = await Promise.all([fetchAniListMaster(), fetchAlgoliaManga()]);
-      return [...alRes, ...algRes];
+    try {
+      return await fetchMobileMangaList({ server: srcMode, query: qStr, page: pageNum });
+    } catch (_) {
+      return [];
     }
-
-    const [mello, azora, swat, dilar, alMaster, alg] = await Promise.all([
-      fetchMello(),
-      fetchAzora(),
-      fetchSwat(),
-      fetchDilar(),
-      fetchAniListMaster(),
-      pageNum === 1 ? fetchAlgoliaManga() : Promise.resolve([])
-    ]);
-
-    const merged = [];
-    const seen = new Set();
-    const maxLen = Math.max(mello.length, azora.length, swat.length, dilar.length, alMaster.length, alg.length);
-    for (let i = 0; i < maxLen; i++) {
-      for (const list of [mello, azora, swat, dilar, alMaster, alg]) {
-        const it = list[i];
-        if (!it) continue;
-        const normKey = String(it.name || '').toLowerCase().replace(/[^a-z0-9\u0621-\u064A]+/g, '');
-        if (!normKey || seen.has(normKey)) continue;
-        seen.add(normKey);
-        merged.push(it);
-      }
-    }
-    return merged;
   }, []);
 
   useEffect(() => {
@@ -3362,7 +2777,7 @@ export default function MobileApkApp() {
         role: 'developer',
         avatarColor: '#ffffff',
         time: 'الآن',
-        text: 'مرحباً بكم في تطبيق BLACK X Mobile 120Hz الرسمي! جميع حساباتكم ومفضلاتكم متزامنة لحظياً مع الموقع وقاعدة بيانات الـ 6,973 أنمي.',
+        text: 'مرحباً بكم في تطبيق BLACK X Mobile 120Hz الرسمي! حساباتكم ومفضلاتكم متزامنة مع الموقع، وسيرفرات الأنمي والمانجا في التطبيق هي نفس سيرفرات الموقع.',
         likes: 128
       }
     ]);
@@ -3743,51 +3158,29 @@ export default function MobileApkApp() {
       })
       .catch(() => {});
 
+    // 4. Episodes: the same /api/stream/show list the website's Watch page uses
+    const openSeq = ++animeOpenSeqRef.current;
+    setAnimeEpisodes([]);
+    setEpisodesError('');
     try {
-      const enc = encodeURIComponent(anime.objectID);
-      const res = await fetch(`${AW_FS_BASE}/anime_list/${enc}/episodes_summery/summery?key=${AW_FS_KEY}`);
-      if (res.ok) {
-        const doc = await res.json();
-        const vals = doc?.fields?.episodes?.arrayValue?.values || [];
-        const rawEps = vals.map((item, idx) => {
-          const f = item?.mapValue?.fields || {};
-          const docId = f.doc_id?.stringValue || String(idx + 1).padStart(3, '0');
-          const rawName = f.name?.stringValue || `الحلقة ${idx + 1}`;
-          const numMatch = rawName.match(/(\d+(?:\.\d+)?)/) || docId.match(/(\d+)/);
-          const number = numMatch ? Number(numMatch[1]) : idx + 1;
-          return {
-            number,
-            episode: number,
-            docId,
-            name: rawName,
-            titleAr: f.title_translated?.stringValue || '',
-            thumb: f.thumb_uri?.stringValue || anime.banner || anime.poster,
-            filler: Boolean(f.filler?.booleanValue)
-          };
-        });
-        const seenNums = new Map();
-        for (const ep of rawEps) {
-          const existing = seenNums.get(ep.number);
-          if (!existing || String(ep.docId).length > String(existing.docId).length) {
-            seenNums.set(ep.number, ep);
-          }
-        }
-        const eps = Array.from(seenNums.values());
-        eps.sort((a, b) => a.number - b.number);
-        setAnimeEpisodes(eps);
-      } else {
-        setAnimeEpisodes([{ number: 1, docId: '001', name: 'الحلقة 1', titleAr: '', thumb: anime.poster, filler: false }]);
-      }
+      const { episodes } = await fetchMobileEpisodes(anime);
+      if (animeOpenSeqRef.current !== openSeq) return;
+      setAnimeEpisodes(episodes);
+      if (!episodes.length) setEpisodesError('empty');
     } catch (_) {
-      setAnimeEpisodes([{ number: 1, docId: '001', name: 'الحلقة 1', titleAr: '', thumb: anime.poster, filler: false }]);
+      if (animeOpenSeqRef.current !== openSeq) return;
+      setAnimeEpisodes([]);
+      setEpisodesError('network');
     } finally {
-      setEpisodesLoading(false);
+      if (animeOpenSeqRef.current === openSeq) setEpisodesLoading(false);
     }
   }, []);
 
-  // Select and play a specific server (with instant pre-resolved URL support & automatic fallback to next working server)
+  // Select and play a server. Servers that still need resolving go through the website's
+  // /api/stream/resolve, and a server that cannot be played hands over to the next one.
   const handleSelectServer = useCallback(async (srv, allCandidateServers = []) => {
     if (!srv) return;
+    const selectSeq = ++serverSelectSeqRef.current;
     setSelectedServer(srv);
     if (srv.directResolvedUrl) {
       setPlayingVideoUrl(srv.directResolvedUrl);
@@ -3795,35 +3188,33 @@ export default function MobileApkApp() {
       return;
     }
     setResolvingVideo(true);
-    try {
-      const directMp4 = await resolveMobileVideoUrl(srv.name, srv.link);
-      if (directMp4) {
-        srv.directResolvedUrl = directMp4;
-        setPlayingVideoUrl(directMp4);
-        setResolvingVideo(false);
-        return;
+    const resolveCandidate = async (candidate) => {
+      if (candidate.directResolvedUrl) return candidate.directResolvedUrl;
+      try {
+        const url = await resolveMobileEpisodeServer(candidate);
+        if (url) {
+          candidate.directResolvedUrl = url;
+          candidate.link = url;
+        }
+        return url;
+      } catch (_) {
+        return '';
       }
-      // If this server link failed to resolve (e.g. dead MediaFire file), auto-try next server
-      if (allCandidateServers.length > 0) {
-        const curIdx = allCandidateServers.indexOf(srv);
-        for (let i = 0; i < allCandidateServers.length; i++) {
-          if (i === curIdx) continue;
-          const nextSrv = allCandidateServers[i];
-          const nextMp4 = nextSrv.directResolvedUrl || (await resolveMobileVideoUrl(nextSrv.name, nextSrv.link));
-          if (nextMp4) {
-            nextSrv.directResolvedUrl = nextMp4;
-            setSelectedServer(nextSrv);
-            setPlayingVideoUrl(nextMp4);
-            setResolvingVideo(false);
-            return;
-          }
+    };
+    try {
+      const ordered = [srv, ...allCandidateServers.filter((s) => s !== srv)];
+      for (const candidate of ordered) {
+        const url = await resolveCandidate(candidate);
+        if (serverSelectSeqRef.current !== selectSeq) return;
+        if (url) {
+          setSelectedServer(candidate);
+          setPlayingVideoUrl(url);
+          return;
         }
       }
       setPlayingVideoUrl('');
-    } catch (_) {
-      setPlayingVideoUrl('');
     } finally {
-      setResolvingVideo(false);
+      if (serverSelectSeqRef.current === selectSeq) setResolvingVideo(false);
     }
   }, []);
 
@@ -3850,7 +3241,7 @@ export default function MobileApkApp() {
     }
   }, [playingVideoUrl, episodeServers, selectedServer, handleSelectServer]);
 
-  // Open an Episode and fetch + pre-verify all its multi-quality servers from AW Firestore + Animeify v4 Live API
+  // Open an Episode: its servers are the same manifest the website's Watch page loads
   const handlePlayEpisode = useCallback(
     async (anime, epObj) => {
       if (!anime || !epObj) return;
@@ -3889,165 +3280,19 @@ export default function MobileApkApp() {
         });
       }
 
-      const encId = encodeURIComponent(anime.objectID);
-      const docIdsToTry = Array.from(
-        new Set([
-          String(epObj.docId || '001'),
-          String(epObj.number || 1).padStart(3, '0'),
-          String(epObj.number || 1).padStart(4, '0'),
-          String(epObj.number || 1)
-        ])
-      );
-
+      const reqSeq = ++episodeServersSeqRef.current;
       try {
-        // Fetch BOTH AnimeWitcher Firestore servers AND Animeify v4 live direct MP4 servers in parallel
-        const fetchAwPromise = (async () => {
-          const combinedRaw = [];
-          for (const candidateDocId of docIdsToTry) {
-            const encEp = encodeURIComponent(candidateDocId);
-            const [r2, r1] = await Promise.all([
-              fetch(`${AW_FS_BASE}/anime_list/${encId}/episodes/${encEp}/servers2/all_servers?key=${AW_FS_KEY}`).catch(() => null),
-              fetch(`${AW_FS_BASE}/anime_list/${encId}/episodes/${encEp}/servers?key=${AW_FS_KEY}`).catch(() => null)
-            ]);
-
-            if (r2 && r2.ok) {
-              const d2 = await r2.json();
-              const vals = d2?.fields?.servers?.arrayValue?.values || [];
-              for (const v of vals) {
-                const f = v?.mapValue?.fields || {};
-                const lnk = String(f.link?.stringValue || '').trim();
-                const nm = String(f.name?.stringValue || '').toUpperCase().trim();
-                if (lnk && nm) {
-                  combinedRaw.push({
-                    name: nm,
-                    quality: f.quality?.stringValue || '1080p',
-                    link: lnk,
-                    visible: f.visible?.booleanValue !== false
-                  });
-                }
-              }
-            }
-
-            if (r1 && r1.ok) {
-              const d1 = await r1.json();
-              for (const doc of d1.documents || []) {
-                const f = doc.fields || {};
-                const lnk = String(f.link?.stringValue || '').trim();
-                const nm = String(f.name?.stringValue || '').toUpperCase().trim();
-                if (lnk && nm) {
-                  combinedRaw.push({
-                    name: nm,
-                    quality: f.quality?.stringValue || '1080p',
-                    link: lnk,
-                    visible: f.visible?.booleanValue !== false
-                  });
-                }
-              }
-            }
-
-            if (combinedRaw.length > 0) break;
-          }
-          return combinedRaw;
-        })();
-
-        const fetchAnimeifyPromise = fetchAnimeifyDirectServers(
-          anime.titleRomaji,
-          anime.titleEn,
-          epObj.number,
-          anime.type === 'فيلم'
-        ).catch(() => []);
-
-        const [combinedRaw, animeifyServers] = await Promise.all([fetchAwPromise, fetchAnimeifyPromise]);
-
-        // Expand PixelDrain (PD) into Anti-Block Mirrors (PD_DEV, PD_NET, PD) + keep SF, MF2, MF, KF, ST
-        const expanded = [];
-        const seen = new Set();
-
-        for (const s of combinedRaw) {
-          if (!s.link || s.visible === false || s.name === 'MG' || s.name === 'XS') {
-            continue;
-          }
-          const key = `${s.name}|${s.quality}|${s.link}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-
-          if (s.name === 'PD' || s.link.includes('pixeldrain.')) {
-            const m = s.link.match(/pixeldrain\.[a-z]+\/(?:u|api\/file)\/([A-Za-z0-9_-]+)/i);
-            if (m?.[1]) {
-              const fid = m[1];
-              // Check PixelDrain file info once so dead 404 PixelDrain files are skipped
-              let pdAlive = true;
-              try {
-                const pdInfo = await nativeGetJson(`https://pixeldrain.com/api/file/${fid}/info`);
-                if (pdInfo && pdInfo.success === false) pdAlive = false;
-              } catch (_) {}
-              if (pdAlive) {
-                expanded.push({
-                  name: 'PD_DEV',
-                  quality: s.quality || '1080p',
-                  link: `https://pixeldrain.dev/api/file/${fid}`,
-                  directResolvedUrl: `https://pixeldrain.dev/api/file/${fid}`,
-                  visible: true
-                });
-                expanded.push({
-                  name: 'PD_NET',
-                  quality: s.quality || '1080p',
-                  link: `https://pixeldrain.net/api/file/${fid}`,
-                  directResolvedUrl: `https://pixeldrain.net/api/file/${fid}`,
-                  visible: true
-                });
-                expanded.push({
-                  name: 'PD',
-                  quality: s.quality || '1080p',
-                  link: `https://pixeldrain.com/api/file/${fid}`,
-                  directResolvedUrl: `https://pixeldrain.com/api/file/${fid}`,
-                  visible: true
-                });
-              }
-              continue;
-            }
-          }
-          expanded.push(s);
-        }
-
-        // Pre-resolve non-PixelDrain servers in parallel and filter out dead 404 MediaFire/StreamTape links!
-        const verifiedAwServers = (
-          await Promise.all(
-            expanded.map(async (srv) => {
-              if (srv.directResolvedUrl) return srv;
-              const resolvedMp4 = await resolveMobileVideoUrl(srv.name, srv.link);
-              if (!resolvedMp4) return null;
-              return { ...srv, directResolvedUrl: resolvedMp4 };
-            })
-          )
-        ).filter(Boolean);
-
-        // Merge verified AnimeWitcher servers + verified Animeify v4 Direct MP4 servers
-        const mergedVerified = [];
-        const seenResolved = new Set();
-        for (const srv of [...verifiedAwServers, ...animeifyServers]) {
-          const urlKey = srv.directResolvedUrl || srv.link;
-          if (!urlKey || seenResolved.has(urlKey)) continue;
-          seenResolved.add(urlKey);
-          mergedVerified.push(srv);
-        }
-
-        const usable = mergedVerified.sort((a, b) => {
-          const pA = SERVER_PRIORITY[a.name] || 99;
-          const pB = SERVER_PRIORITY[b.name] || 99;
-          if (pA !== pB) return pA - pB;
-          const qA = parseInt(a.quality, 10) || 720;
-          const qB = parseInt(b.quality, 10) || 720;
-          return qB - qA;
-        });
-
-        setEpisodeServers(usable);
-        if (usable.length > 0) {
-          await handleSelectServer(usable[0], usable);
+        const servers = await fetchMobileEpisodeServers(anime, epObj.number);
+        if (episodeServersSeqRef.current !== reqSeq) return;
+        setEpisodeServers(servers);
+        if (servers.length > 0) {
+          await handleSelectServer(servers[0], servers);
         } else {
           setResolvingVideo(false);
         }
       } catch (_) {
+        if (episodeServersSeqRef.current !== reqSeq) return;
+        setEpisodeServers([]);
         setResolvingVideo(false);
       }
     },
@@ -4140,229 +3385,43 @@ export default function MobileApkApp() {
     [user, watchHistory, syncUserStateToCloud, showToast, lang]
   );
 
-  // Open Manga from Manga Peak Engines (Mello Plus 14,331 + Azora 2,453 + Swat 1,669 + Dilar 9,164) & MangaDex API v5
-  const handleOpenManga = useCallback(async (mangaHit) => {
+  // Open a manga/manhwa: chapters and servers come from the website API, exactly like the website's
+  // library. Nothing falls back to another title: an empty server says so and offers the others.
+  const handleOpenManga = useCallback(async (mangaHit, preferredServer = '') => {
+    if (!mangaHit) return;
+    const openSeq = ++mangaOpenSeqRef.current;
     setSelectedManga(mangaHit);
     setActiveMangaChapter(null);
     setMangaPages([]);
+    setMangaPagesError('');
     setMangaChapters([]);
+    setMangaChaptersError('');
+    if (!preferredServer) setMangaServers([]);
+    setMangaActiveServer(preferredServer || mangaHit.bxServer || '');
     setMangaChaptersLoading(true);
     try {
-      const src = mangaHit.source || mangaHit.sourceEngine || 'algolia';
-      const title = String(mangaHit.name || '').trim();
-      const shortTitle = title
-        .replace(/[^\w\s\u0621-\u064A]/g, ' ')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 3)
-        .join(' ');
-
-      const loadMelloChaptersById = async (melloId) => {
-        if (!melloId) return [];
-        const json = await nativeGetJson(
-          `https://plus.mangamello.com/api/v1/mangas/${melloId}?relations=genres,chapters`,
-          MELLO_API_HEADERS
-        );
-        const rawList = json?.data?.chapters || [];
-        return rawList.map((ch, idx) => ({
-          id: `mm:${melloId}:${ch.id}`,
-          source: 'mello',
-          mangaId: String(melloId),
-          chapterId: String(ch.id),
-          chapter: ch.order ?? idx + 1,
-          title: ch.title ? `الفصل ${ch.title}` : `الفصل ${ch.order ?? idx + 1}`,
-          lang: 'ar'
-        }));
-      };
-
-      // 1. Mello Plus (plus.mangamello.com — ?relations=genres,chapters returns 200 OK with full chapter list!)
-      if (src === 'mello' && mangaHit.sourceId) {
-        const chs = await loadMelloChaptersById(mangaHit.sourceId);
-        if (chs.length > 0) {
-          setMangaChapters(chs);
+      let hit = mangaHit;
+      if (!hit.bxId) {
+        // Entries saved by older builds have no website id: exact-title lookup only.
+        const found = await findBxMangaByTitle(hit.name_en || hit.name);
+        if (mangaOpenSeqRef.current !== openSeq) return;
+        if (!found) {
+          setMangaChaptersError('not_found');
           return;
         }
+        hit = found;
+        setSelectedManga(found);
       }
-
-      // 2. Azora Moon / Azorafly (api.azorafly.com)
-      if ((src === 'azora' || src === 'azorafly') && (mangaHit.slug || mangaHit.postId)) {
-        let postId = mangaHit.postId || (String(mangaHit.objectID || '').startsWith('az_') ? String(mangaHit.objectID).slice(3) : null);
-        if (!postId && mangaHit.slug) {
-          const pJson = await nativeGetJson(
-            `https://api.azorafly.com/api/post?postSlug=${encodeURIComponent(mangaHit.slug)}`
-          );
-          postId = pJson?.post?.id;
-        }
-        if (postId) {
-          const chJson = await nativeGetJson(
-            `https://api.azorafly.com/api/chapters?postId=${postId}&skip=0&take=900&order=desc&userid=`
-          );
-          const list = chJson?.post?.chapters || [];
-          const chs = list.map((ch) => ({
-            id: `az:${ch.id}`,
-            source: 'azora',
-            chapterId: String(ch.id),
-            chapter: ch.number ?? '1',
-            title: ch.title || `الفصل ${ch.number ?? ''}`,
-            lang: 'ar'
-          }));
-          if (chs.length > 0) {
-            setMangaChapters(chs);
-            return;
-          }
-        }
-      }
-
-      // 3. Manga Swat (appswat.com)
-      if (src === 'swat' && mangaHit.sourceId) {
-        const chJson = await nativeGetJson(
-          `https://appswat.com/v2/api/v2/chapters/?serie=${mangaHit.sourceId}&order_by=order&page_size=500&page=1`,
-          SWAT_API_HEADERS
-        );
-        const list = chJson?.results || [];
-        const chs = list.map((ch, idx) => ({
-          id: `sw:${ch.id}`,
-          source: 'swat',
-          chapterId: String(ch.id),
-          chapter: ch.chapter || idx + 1,
-          title: ch.title || `الفصل ${ch.chapter || idx + 1}`,
-          lang: 'ar'
-        }));
-        if (chs.length > 0) {
-          setMangaChapters(chs);
-          return;
-        }
-      }
-
-      // 4. Smart Multi-Title & Synonym Cross-Engine Resolution across Mello Plus (?relations=genres,chapters), Azora, and Manga Swat
-      let extraSyns = Array.isArray(mangaHit.synonyms) ? mangaHit.synonyms : [];
-      if (extraSyns.length === 0 && title) {
-        try {
-          const gql = `query ($s: String) { Media(type: MANGA, search: $s) { title { romaji english native } synonyms } }`;
-          const txt = await nativeHttpCall(
-            'https://graphql.anilist.co',
-            'POST',
-            { 'Content-Type': 'application/json', Accept: 'application/json' },
-            JSON.stringify({ query: gql, variables: { s: shortTitle || title } })
-          );
-          const m = txt ? JSON.parse(txt)?.data?.Media : null;
-          if (m) {
-            extraSyns = [m.title?.english, m.title?.romaji, ...(m.synonyms || [])].filter(Boolean);
-          }
-        } catch (_) {}
-      }
-      const searchCandidates = Array.from(
-        new Set([title, shortTitle, mangaHit.name_en, mangaHit.name_romaji, ...extraSyns].map((s) => String(s || '').trim()).filter((s) => s.length >= 2))
-      ).slice(0, 5);
-      for (const qCandidate of searchCandidates) {
-        const [melloSearch, azoraSearch, swatSearch] = await Promise.all([
-          nativeGetJson(
-            `https://plus.mangamello.com/api/v1/mangas/search?per_page=5&page=1&relations=genres&title=${encodeURIComponent(qCandidate)}`,
-            MELLO_API_HEADERS
-          ).catch(() => null),
-          nativeGetJson(
-            `https://api.azorafly.com/api/query?page=1&perPage=5&searchTerm=${encodeURIComponent(qCandidate)}`
-          ).catch(() => null),
-          nativeGetJson(
-            `https://appswat.com/v2/api/v2/series/?search=${encodeURIComponent(qCandidate)}&page=1`,
-            SWAT_API_HEADERS
-          ).catch(() => null)
-        ]);
-
-        const melloMatch = melloSearch?.data?.[0];
-        if (melloMatch?.id) {
-          const chs = await loadMelloChaptersById(melloMatch.id).catch(() => []);
-          if (chs.length > 0) {
-            setMangaChapters(chs);
-            return;
-          }
-        }
-
-        const azoraMatch = azoraSearch?.posts?.[0];
-        if (azoraMatch?.id) {
-          const chJson = await nativeGetJson(
-            `https://api.azorafly.com/api/chapters?postId=${azoraMatch.id}&skip=0&take=900&order=desc&userid=`
-          ).catch(() => null);
-          const list = chJson?.post?.chapters || [];
-          if (list.length > 0) {
-            setMangaChapters(
-              list.map((ch) => ({
-                id: `az:${ch.id}`,
-                source: 'azora',
-                chapterId: String(ch.id),
-                chapter: ch.number ?? '1',
-                title: ch.title || `الفصل ${ch.number ?? ''}`,
-                lang: 'ar'
-              }))
-            );
-            return;
-          }
-        }
-
-        const swatMatch = swatSearch?.results?.[0];
-        if (swatMatch?.id) {
-          const chJson = await nativeGetJson(
-            `https://appswat.com/v2/api/v2/chapters/?serie=${swatMatch.id}&order_by=order&page_size=500&page=1`,
-            SWAT_API_HEADERS
-          ).catch(() => null);
-          const list = chJson?.results || [];
-          if (list.length > 0) {
-            setMangaChapters(
-              list.map((ch, idx) => ({
-                id: `sw:${ch.id}`,
-                source: 'swat',
-                chapterId: String(ch.id),
-                chapter: ch.chapter || idx + 1,
-                title: ch.title || `الفصل ${ch.chapter || idx + 1}`,
-                lang: 'ar'
-              }))
-            );
-            return;
-          }
-        }
-      }
-
-      // 5. Fallback to MangaDex API v5
-      for (const qCandidate of searchCandidates) {
-        const mdRes = await nativeGetJson(
-          `https://api.mangadex.org/manga?title=${encodeURIComponent(qCandidate)}&limit=5&order[followedCount]=desc`
-        );
-        const mdId = mdRes?.data?.[0]?.id;
-        if (mdId) {
-          const feed = await nativeGetJson(
-            `https://api.mangadex.org/manga/${mdId}/feed?limit=96&translatedLanguage[]=ar&translatedLanguage[]=en&order[chapter]=asc`
-          );
-          const seenCh = new Set();
-          const chs = [];
-          for (const item of feed?.data || []) {
-            const chNum = item.attributes?.chapter || '1';
-            const langCode = item.attributes?.translatedLanguage || 'en';
-            const key = `${chNum}`;
-            if (seenCh.has(key) && langCode !== 'ar') continue;
-            seenCh.add(key);
-            chs.push({
-              id: item.id,
-              source: 'mangadex',
-              chapter: chNum,
-              title: item.attributes?.title || `الفصل ${chNum}`,
-              lang: langCode
-            });
-          }
-          if (chs.length > 0) {
-            setMangaChapters(chs);
-            return;
-          }
-        }
-      }
-
-      // 6. Ultimate Guarantee: If an obscure title wasn't indexed under the same spelling, load Mello Plus #1 series chapters so the reader never shows 0 chapters
-      const guaranteedChs = await loadMelloChaptersById('3278').catch(() => []);
-      if (guaranteedChs.length > 0) {
-        setMangaChapters(guaranteedChs);
-      }
+      const { chapters, availableServers, activeServer } = await fetchMobileMangaChapters(hit, preferredServer);
+      if (mangaOpenSeqRef.current !== openSeq) return;
+      setMangaServers(availableServers);
+      setMangaActiveServer(activeServer || preferredServer || hit.bxServer || '');
+      setMangaChapters(chapters);
+      if (!chapters.length) setMangaChaptersError('empty');
     } catch (_) {
+      if (mangaOpenSeqRef.current === openSeq) setMangaChaptersError('network');
     } finally {
-      setMangaChaptersLoading(false);
+      if (mangaOpenSeqRef.current === openSeq) setMangaChaptersLoading(false);
     }
   }, []);
 
@@ -4371,37 +3430,7 @@ export default function MobileApkApp() {
     if (prefetchedChapterRef.current[ch.id]?.length) {
       return prefetchedChapterRef.current[ch.id];
     }
-    let imgs = [];
-    if (ch.source === 'mello' && ch.mangaId && ch.chapterId) {
-      const json = await nativeGetJson(
-        `https://plus.mangamello.com/api/v1/mangas/${ch.mangaId}/chapters/${ch.chapterId}?relations=chapterImages`,
-        MELLO_API_HEADERS
-      );
-      imgs = (json?.data?.chapterImages || [])
-        .map((img) => rewriteLegacyMangaImageUrl(img.src))
-        .filter(Boolean);
-    } else if (ch.source === 'azora' && ch.chapterId) {
-      const json = await nativeGetJson(`https://api.azorafly.com/api/chapter?chapterId=${ch.chapterId}`);
-      imgs = (json?.chapter?.images || []).map((img) => img.url).filter(Boolean);
-    } else if (ch.source === 'swat' && ch.chapterId) {
-      const json = await nativeGetJson(
-        `https://appswat.com/v2/api/v2/chapters/${ch.chapterId}/`,
-        SWAT_API_HEADERS
-      );
-      imgs = (json?.images || [])
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map((img) => img.image)
-        .filter(Boolean);
-    } else {
-      const atHome = await fetch(`https://api.mangadex.org/at-home/server/${ch.id}`).then((r) => r.json());
-      const baseUrl = atHome?.baseUrl;
-      const hash = atHome?.chapter?.hash;
-      const files = atHome?.chapter?.dataSaver || atHome?.chapter?.data || [];
-      const mode = atHome?.chapter?.dataSaver ? 'data-saver' : 'data';
-      if (baseUrl && hash && files.length) {
-        imgs = files.map((f) => `${baseUrl}/${mode}/${hash}/${f}`);
-      }
-    }
+    const imgs = ch.source === 'bx' ? await fetchMobileChapterPages(ch) : [];
     if (imgs.length > 0) {
       prefetchedChapterRef.current[ch.id] = imgs;
     }
@@ -4418,6 +3447,8 @@ export default function MobileApkApp() {
     const handleGlobalImgError = (ev) => {
       const img = ev?.target;
       if (!img || img.tagName !== 'IMG') return;
+      // Reader pages are never swapped for a cover: MangaPageImage handles its own retries.
+      if (img.dataset?.bxNoHeal === '1') return;
       const curSrc = String(img.getAttribute('src') || '');
       if (curSrc.endsWith('/blackx-logo.png') || img.dataset.bxHealed === 'done') return;
 
@@ -4515,7 +3546,9 @@ export default function MobileApkApp() {
         `🕳️ الفصل ${ch.chapter} · كسوف الثقب الأسود 120Hz`,
         `🕳️ CHAPTER ${ch.chapter} · ECLIPSE SINGULARITY 120Hz`
       );
+      const readSeq = ++chapterReadSeqRef.current;
       setActiveMangaChapter(ch);
+      setMangaPagesError('');
       setCurrentPageIdx(0);
       setReadProgressPct(0);
       setAutoScrollSpeed(0);
@@ -4541,6 +3574,11 @@ export default function MobileApkApp() {
           sourceId: selectedManga.sourceId,
           slug: selectedManga.slug,
           postId: selectedManga.postId,
+          bxId: selectedManga.bxId,
+          bxServer: selectedManga.bxServer,
+          mangaId: selectedManga.objectID,
+          chapter: ch.chapter,
+          chapterId: ch.id,
           lastChapter: ch.chapter,
           lastChapterId: ch.id,
           updatedAt: new Date().toISOString()
@@ -4555,7 +3593,9 @@ export default function MobileApkApp() {
       try {
         if (!offlineSaved?.length) {
           const imgs = await fetchChapterPagesList(ch);
+          if (chapterReadSeqRef.current !== readSeq) return;
           setMangaPages(imgs);
+          if (!imgs.length) setMangaPagesError('empty');
         }
         // Smart Background Next-Chapter Prefetching (Zero-Wait Transition)
         const chIdx = mangaChapters.findIndex((c) => c.id === ch.id);
@@ -4572,8 +3612,9 @@ export default function MobileApkApp() {
           }, 1200);
         }
       } catch (_) {
+        if (chapterReadSeqRef.current === readSeq) setMangaPagesError('network');
       } finally {
-        setMangaPagesLoading(false);
+        if (chapterReadSeqRef.current === readSeq) setMangaPagesLoading(false);
       }
     },
     [selectedManga, mangaChapters, fetchChapterPagesList]
@@ -5405,7 +4446,9 @@ export default function MobileApkApp() {
               </span>
             </div>
             <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.52)', fontWeight: 700 }}>
-              {isRtl ? 'إصدار v14.0 الشامل • 6,973 أنمي و 30,000 مانجا' : 'v14.0 Full System • 6,973 Anime'}
+              {isRtl
+                ? `إصدار v${BX_APK_VERSION} • ${bxAnimeTotal ? `${formatBxCount(bxAnimeTotal)} أنمي • ` : ''}نفس سيرفرات الموقع`
+                : `v${BX_APK_VERSION} • ${bxAnimeTotal ? `${formatBxCount(bxAnimeTotal)} anime • ` : ''}same servers as the website`}
             </div>
           </div>
         </div>
@@ -5676,8 +4719,8 @@ export default function MobileApkApp() {
                     }}
                   >
                     {isRtl
-                      ? `م1 ح1 • بداية أسطورة ${heroAnime.titleEn.slice(0, 26)} • ★ ${heroAnime.rating || '9.4'}`
-                      : `S1 E1 • The Origins Of ${heroAnime.titleEn.slice(0, 26)} • ★ ${heroAnime.rating || '9.4'}`}
+                      ? `م1 ح1 • بداية أسطورة ${heroAnime.titleEn.slice(0, 26)}${heroAnime.rating ? ` • ★ ${heroAnime.rating}` : ''}`
+                      : `S1 E1 • The Origins Of ${heroAnime.titleEn.slice(0, 26)}${heroAnime.rating ? ` • ★ ${heroAnime.rating}` : ''}`}
                   </div>
 
                   {/* 4. Official slothUI Dual Pill Row ("[▶ Play S1 E1]" + "[Details]") */}
@@ -7071,8 +6114,8 @@ export default function MobileApkApp() {
             },
             {
               cat: 'series',
-              titleAr: '👑 الأكثر شعبية في BLACK X (6,973)',
-              titleEn: '👑 Most Popular Anime (6,973)',
+              titleAr: '👑 الأكثر شعبية في BLACK X',
+              titleEn: '👑 Most Popular Anime',
               items: popularList,
               sortKey: 'series_fav_count_desc'
             },
@@ -7085,8 +6128,8 @@ export default function MobileApkApp() {
             },
             {
               cat: 'movies',
-              titleAr: '🎬 أفلام الأنمي السينمائية (1,266 فيلم)',
-              titleEn: '🎬 Blockbuster Anime Movies (1,266)',
+              titleAr: '🎬 أفلام الأنمي السينمائية',
+              titleEn: '🎬 Blockbuster Anime Movies',
               items: moviesList,
               sortKey: 'series_fav_count_desc'
             },
@@ -7386,7 +6429,7 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 2: FULL 6,973 ANIME CATALOG & TRENDING SEARCH (MATCHES IMAGE 1 MIDDLE SCREEN) ==================== */}
+      {/* ==================== TAB 2: ANIME CATALOG & SEARCH (search = every BLACK X anime server, like the website) ==================== */}
       {activeTab === 'catalog' && !selectedAnime && (
         <main style={{ padding: '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
           {/* Rounded Pill Search Input (Matches Image 1 Middle Screen) */}
@@ -7682,9 +6725,15 @@ export default function MobileApkApp() {
                 {isRtl ? 'الأعمال الأكثر شعبية (Popular Titles)' : 'Popular Titles'}
               </h3>
               <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700, marginTop: '2px' }}>
-                {isRtl
-                  ? `📚 إجمالي الأعمال المتوفرة: ${catalogTotal.toLocaleString()} أنمي وفيلم`
-                  : `📚 Total Available: ${catalogTotal.toLocaleString()} Anime & Movies`}
+                {Number.isFinite(catalogTotal)
+                  ? searchQuery.trim()
+                    ? isRtl
+                      ? `📚 نتائج البحث في كل سيرفرات BLACK X: ${catalogTotal.toLocaleString()}`
+                      : `📚 Results across all BLACK X servers: ${catalogTotal.toLocaleString()}`
+                    : isRtl
+                      ? `📚 إجمالي الأعمال المتوفرة: ${catalogTotal.toLocaleString()} أنمي وفيلم`
+                      : `📚 Total Available: ${catalogTotal.toLocaleString()} Anime & Movies`
+                  : ''}
               </div>
             </div>
 
@@ -8076,7 +7125,7 @@ export default function MobileApkApp() {
                 </div>
               )}
 
-              {catalogItems.length < catalogTotal && (
+              {!searchQuery.trim() && Number.isFinite(catalogTotal) && catalogItems.length < catalogTotal && (
                 <button
                   type="button"
                   onClick={handleLoadMoreCatalog}
@@ -8457,7 +7506,7 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 3: MANGA & MANHWA (30,000+ BLACK X ENGINES + 100% FULLSCREEN 120Hz READER) ==================== */}
+      {/* ==================== TAB 3: MANGA & MANHWA (website BLACK X manga servers + FULLSCREEN 120Hz READER) ==================== */}
       {activeTab === 'manga' && !selectedAnime && (
         <main style={{ padding: activeMangaChapter ? '0' : '0.85rem 1rem', animation: 'bxSlideUp 0.2s ease-out' }}>
           {activeMangaChapter ? (
@@ -8783,6 +7832,69 @@ export default function MobileApkApp() {
                 <div style={{ textAlign: 'center', padding: '6rem 1.5rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? '⏳ جاري تحميل صفحات الفصل بشاشة كاملة...' : '⏳ Loading fullscreen chapter pages...'}
                 </div>
+              ) : mangaPages.length === 0 ? (
+                <div
+                  style={{
+                    minHeight: '70vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.8rem',
+                    padding: '2rem 1.4rem',
+                    textAlign: 'center',
+                    color: 'rgba(255,255,255,0.78)',
+                    fontSize: '0.84rem',
+                    fontWeight: 800,
+                    lineHeight: 1.6
+                  }}
+                >
+                  <div>
+                    {mangaPagesError === 'network'
+                      ? isRtl
+                        ? 'تعذّر الاتصال بسيرفرات BLACK X — تأكد من الإنترنت ثم أعد المحاولة.'
+                        : 'Could not reach the BLACK X servers — check your connection and retry.'
+                      : isRtl
+                        ? `لا توجد صفحات لهذا الفصل على ${mangaServerLabel(activeMangaChapter?.server || mangaActiveServer)} حالياً — جرّب سيرفر آخر من صفحة العمل.`
+                        : `No pages for this chapter on ${mangaServerLabel(activeMangaChapter?.server || mangaActiveServer)} right now — try another server on the title page.`}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!activeMangaChapter) return;
+                        delete prefetchedChapterRef.current[activeMangaChapter.id];
+                        handleReadMangaChapter(activeMangaChapter);
+                      }}
+                      style={{
+                        padding: '0.55rem 1.1rem',
+                        borderRadius: '999px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        border: 'none',
+                        fontWeight: 900,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? '↻ إعادة المحاولة' : '↻ Retry'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveMangaChapter(null)}
+                      style={{
+                        padding: '0.55rem 1.1rem',
+                        borderRadius: '999px',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#ffffff',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        fontWeight: 900,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? '→ قائمة الفصول والسيرفرات' : '← Chapters & servers'}
+                    </button>
+                  </div>
+                </div>
               ) : readerMode === 'page' && mangaPages.length > 0 ? (
                 <div style={{ textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div
@@ -8799,9 +7911,11 @@ export default function MobileApkApp() {
                       alignItems: 'center'
                     }}
                   >
-                    <img
+                    <MangaPageImage
+                      isRtl={isRtl}
+                      loading="eager"
                       src={mangaPages[currentPageIdx]}
-                      alt={`Page ${currentPageIdx + 1}`}
+                      alt={isRtl ? `الصفحة ${currentPageIdx + 1}` : `Page ${currentPageIdx + 1}`}
                       onClick={() => {
                         if (currentPageIdx + (dualPageSpread ? 2 : 1) < mangaPages.length)
                           setCurrentPageIdx((p) => p + (dualPageSpread ? 2 : 1));
@@ -8823,9 +7937,11 @@ export default function MobileApkApp() {
                       }}
                     />
                     {dualPageSpread && mangaPages[currentPageIdx + 1] && (
-                      <img
+                      <MangaPageImage
+                        isRtl={isRtl}
+                        loading="eager"
                         src={mangaPages[currentPageIdx + 1]}
-                        alt={`Page ${currentPageIdx + 2}`}
+                        alt={isRtl ? `الصفحة ${currentPageIdx + 2}` : `Page ${currentPageIdx + 2}`}
                         onClick={() => {
                           if (currentPageIdx + 2 < mangaPages.length) setCurrentPageIdx((p) => p + 2);
                           else setReaderHudVisible((v) => !v);
@@ -8904,10 +8020,11 @@ export default function MobileApkApp() {
                   }}
                 >
                   {mangaPages.map((pg, idx) => (
-                    <img
-                      key={idx}
+                    <MangaPageImage
+                      key={`${idx}-${pg}`}
+                      isRtl={isRtl}
                       src={pg}
-                      alt={`Page ${idx + 1}`}
+                      alt={isRtl ? `الصفحة ${idx + 1}` : `Page ${idx + 1}`}
                       loading="lazy"
                       style={{
                         width: `${readerZoom}%`,
@@ -9129,7 +8246,7 @@ export default function MobileApkApp() {
                         X
                       </span>
                       <span style={{ fontSize: '0.66rem', fontWeight: 900 }}>
-                        {selectedManga.sourceLabel || 'BLACK X MANGA'}
+                        {mangaActiveServer ? mangaServerLabel(mangaActiveServer) : selectedManga.sourceLabel || 'BLACK X MANGA'}
                       </span>
                     </div>
                   </div>
@@ -9161,10 +8278,10 @@ export default function MobileApkApp() {
 
                   <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                     <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.66rem', fontWeight: 800 }}>
-                      {selectedManga.type || (isRtl ? 'مانهوا ملونة' : 'Manhwa')}
+                      {selectedManga.type || (isRtl ? 'مانجا / مانهوا' : 'Manga / Manhwa')}
                     </span>
                     <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.66rem', fontWeight: 800 }}>
-                      ★ {selectedManga.rate || '9.5'}
+                      ★ {selectedManga.rate || '—'}
                     </span>
                     <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: '#ffffff', color: '#000000', fontSize: '0.66rem', fontWeight: 900 }}>
                       120Hz Webtoon
@@ -9185,22 +8302,69 @@ export default function MobileApkApp() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{mangaChapters.length}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'فصل مترجم' : 'Chapters'}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{mangaChaptersLoading ? '…' : mangaChapters.length}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'فصل متاح' : 'Chapters'}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>★ {selectedManga.rate || '9.5'}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>★ {selectedManga.rate || '—'}</div>
                       <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'التقييم' : 'Rating'}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{isRtl ? 'مستمر' : 'Ongoing'}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>
+                        {selectedManga.status === 'completed'
+                          ? isRtl
+                            ? 'مكتمل'
+                            : 'Completed'
+                          : selectedManga.status === 'ongoing'
+                            ? isRtl
+                              ? 'مستمر'
+                              : 'Ongoing'
+                            : '—'}
+                      </div>
                       <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'الحالة' : 'Status'}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>FHD</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'الجودة' : 'Quality'}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{mangaActiveServer ? mangaServerLabel(mangaActiveServer).replace('BLACK X ', 'BX ') : '—'}</div>
+                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'السيرفر' : 'Server'}</div>
                     </div>
                   </div>
+
+                  {/* Servers for this title: the same list the website library modal shows */}
+                  {mangaServers.length > 0 && (
+                    <div style={{ marginBottom: '0.85rem', textAlign: isRtl ? 'right' : 'left' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 900, color: 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>
+                        🛰️ {isRtl ? 'سيرفرات هذا العمل (نفس سيرفرات الموقع):' : 'Servers for this title (same as the website):'}
+                      </div>
+                      <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.15rem' }}>
+                        {mangaServers.map((srv) => {
+                          const active = srv.id === mangaActiveServer;
+                          return (
+                            <button
+                              key={srv.id}
+                              type="button"
+                              disabled={mangaChaptersLoading}
+                              onClick={() => {
+                                if (!active) handleOpenManga(selectedManga, srv.id);
+                              }}
+                              style={{
+                                padding: '0.38rem 0.8rem',
+                                borderRadius: '999px',
+                                fontSize: '0.7rem',
+                                fontWeight: 900,
+                                whiteSpace: 'nowrap',
+                                cursor: 'pointer',
+                                background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
+                                color: active ? '#000000' : '#ffffff',
+                                border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)'
+                              }}
+                            >
+                              {isRtl ? srv.ar : srv.en}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Synopsis Box with Audio Narrator (Matches MANGARA & Solo Leveling Description Box) */}
                   <div
@@ -9391,6 +8555,50 @@ export default function MobileApkApp() {
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? '⏳ جاري جلب جميع الفصول المترجمة...' : '⏳ Loading chapters...'}
                 </div>
+              ) : mangaChapters.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '1.4rem 1rem',
+                    borderRadius: '16px',
+                    background: '#0c0c11',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: 'rgba(255,255,255,0.75)',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    lineHeight: 1.6
+                  }}
+                >
+                  <div style={{ marginBottom: '0.7rem' }}>
+                    {mangaChaptersError === 'network'
+                      ? isRtl
+                        ? 'تعذّر الاتصال بسيرفرات BLACK X — تأكد من الإنترنت ثم أعد المحاولة.'
+                        : 'Could not reach the BLACK X servers — check your connection and retry.'
+                      : mangaChaptersError === 'not_found'
+                        ? isRtl
+                          ? 'لم نجد هذا العمل على سيرفرات BLACK X — ابحث عنه بالاسم من مكتبة المانجا.'
+                          : 'This title was not found on the BLACK X servers — search for it in the library.'
+                        : isRtl
+                          ? 'لا توجد فصول لهذا العمل على هذا السيرفر حالياً — جرّب سيرفر آخر من الأعلى.'
+                          : 'No chapters on this server right now — try another server above.'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenManga(selectedManga, mangaActiveServer)}
+                    style={{
+                      padding: '0.5rem 1.1rem',
+                      borderRadius: '999px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: 'none',
+                      fontWeight: 900,
+                      fontSize: '0.76rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isRtl ? '↻ إعادة المحاولة' : '↻ Retry'}
+                  </button>
+                </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                   {displayedMangaChapters.map((ch) => {
@@ -9437,7 +8645,9 @@ export default function MobileApkApp() {
                           </span>
                           <span>
                             {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}
-                            {ch.title ? ` — ${ch.title}` : ''}
+                            {ch.title && !/^(?:الفصل|Chapter)\s*[\d.]+\s*$/i.test(String(ch.title).trim())
+                              ? ` — ${String(ch.title).replace(/^(?:الفصل|Chapter)\s*[\d.]+\s*[-—–:]\s*/i, '')}`
+                              : ''}
                           </span>
                         </span>
                         <span
@@ -9479,7 +8689,7 @@ export default function MobileApkApp() {
                   type="search"
                   value={mangaQuery}
                   onChange={(e) => setMangaQuery(e.target.value)}
-                  placeholder={isRtl ? 'ابحث في +30,000 مانجا ومانهوا مترجمة (مثال: Solo Leveling)...' : 'Search 30,000+ Manga & Manhwa...'}
+                  placeholder={isRtl ? 'ابحث في سيرفرات المانجا والمانهوا (مثال: Solo Leveling)...' : 'Search the manga & manhwa servers...'}
                   style={{
                     flex: 1,
                     background: 'transparent',
@@ -9726,19 +8936,12 @@ export default function MobileApkApp() {
                 </div>
               )}
 
-              {/* BLACK X Multi-Engine Source Selector Tabs (All Named BLACK X) */}
+              {/* BLACK X manga servers: the same tabs as the website library */}
               <div
                 className="bx-mob-scroll"
                 style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.55rem', paddingBottom: '0.15rem' }}
               >
-                {[
-                  { id: 'all', ar: '🔥 مكتبة BLACK X الشاملة (+30,000)', en: '🔥 BLACK X All (30,000+)' },
-                  { id: 'mello', ar: '⚡ سيرفر BLACK X 1 (14,331)', en: '⚡ BLACK X Server 1 (14,331)' },
-                  { id: 'dilar', ar: '👑 سيرفر BLACK X 2 (9,164)', en: '👑 BLACK X Server 2 (9,164)' },
-                  { id: 'azora', ar: '💎 سيرفر BLACK X 3 مانهوا (2,453)', en: '💎 BLACK X Server 3 (2,453)' },
-                  { id: 'swat', ar: '🗡️ سيرفر BLACK X 4 مانهوا (1,669)', en: '🗡️ BLACK X Server 4 (1,669)' },
-                  { id: 'mangadex', ar: '🌐 سيرفر BLACK X 5 العالمي', en: '🌐 BLACK X Server 5 Global' }
-                ].map((srv) => {
+                {[...BX_MANGA_SERVER_TABS, ...(mangaSearchOnlyEnabled ? [BX_MANGA_SEARCH_ONLY_TAB] : [])].map((srv) => {
                   const active = mangaSource === srv.id;
                   return (
                     <button
@@ -9804,7 +9007,7 @@ export default function MobileApkApp() {
                     <div style={{ marginBottom: '1.05rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
                         <span style={{ fontWeight: 900, fontSize: '0.9rem' }}>
-                          ⚡ {isRtl ? 'أحدث الفصول المضافة (Latest Updates)' : 'Latest Updates'}
+                          ⚡ {isRtl ? 'مختارات من سيرفرات BLACK X' : 'Picks from the BLACK X servers'}
                         </span>
                         <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
                           120Hz FHD
@@ -9839,7 +9042,7 @@ export default function MobileApkApp() {
                                   {m.name}
                                 </div>
                                 <div style={{ fontSize: '0.66rem', color: '#ffffff', fontWeight: 800, marginTop: '2px' }}>
-                                  🟢 {isRtl ? 'فصل جديد متاح الآن' : 'New Chapter'} • ★ {m.rate || '9.4'}
+                                  🟢 {m.sourceLabel || 'BLACK X'} • ★ {m.rate || '—'}
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.3rem', marginTop: '4px' }}>
                                   <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.6rem', fontWeight: 800 }}>
@@ -9871,6 +9074,27 @@ export default function MobileApkApp() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {mangaList.length === 0 && (
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        padding: '2rem 1rem',
+                        color: 'rgba(255,255,255,0.68)',
+                        fontSize: '0.8rem',
+                        fontWeight: 800,
+                        lineHeight: 1.6
+                      }}
+                    >
+                      {mangaSource === 'bx4' && !mangaQuery.trim()
+                        ? isRtl
+                          ? '🔎 سيرفر BLACK X 4 للبحث فقط — اكتب اسم العمل في خانة البحث.'
+                          : '🔎 BLACK X 4 is search-only — type a title in the search box.'
+                        : isRtl
+                          ? 'لا توجد نتائج على هذا السيرفر الآن — جرّب سيرفر آخر من الأعلى.'
+                          : 'No results on this server right now — try another server above.'}
                     </div>
                   )}
 
@@ -9939,7 +9163,7 @@ export default function MobileApkApp() {
                                 borderRadius: '6px'
                               }}
                             >
-                              ★ {m.rate || '9.4'}
+                              ★ {m.rate || '—'}
                             </span>
                             {m.sourceLabel && (
                               <span
@@ -9977,7 +9201,7 @@ export default function MobileApkApp() {
                       ))}
                   </div>
 
-                  {mangaList.length > 0 && (
+                  {mangaList.length > 0 && !mangaQuery.trim() && mangaSource !== 'bx4' && (
                     <button
                       type="button"
                       onClick={handleLoadMoreManga}
@@ -12407,19 +11631,19 @@ export default function MobileApkApp() {
               </div>
               <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
                 {isRtl
-                  ? 'الإصدار الحالي: BLACK X Mobile v7.0 Apex (Clean Obsidian Edition)'
-                  : 'Current Version: BLACK X Mobile v7.0 Apex (Clean Obsidian Edition)'}
+                  ? `الإصدار الحالي: BLACK X Mobile v${BX_APK_VERSION} — نفس سيرفرات الموقع`
+                  : `Current version: BLACK X Mobile v${BX_APK_VERSION} — same servers as the website`}
               </div>
             </div>
             <a
-              href="https://github.com/Hacker5055/black-x-anime/releases/download/v3.0-mobile-120hz/BLACK-X-Mobile-120Hz.apk"
+              href={BX_APK_DOWNLOAD_URL}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() =>
                 showToast(
                   isRtl
-                    ? '✓ جاري تنزيل أحدث حزمة BLACK X Mobile v7.0 Apex المباشرة...'
-                    : '✓ Downloading latest BLACK X Mobile v7.0 Apex APK...'
+                    ? '✓ جاري تنزيل أحدث نسخة من تطبيق BLACK X من الموقع...'
+                    : '✓ Downloading the latest BLACK X APK from the website...'
                 )
               }
               style={{
@@ -13435,7 +12659,7 @@ export default function MobileApkApp() {
                     {!playerMinimized && (
                       <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>
                         {isRtl
-                          ? `جاري استخراج البث المباشر (${selectedServer?.quality || '1080p'})...`
+                          ? `جاري تجهيز البث المباشر${selectedServer?.quality ? ` (${selectedServer.quality})` : ''}...`
                           : 'Extracting direct MP4 stream...'}
                       </div>
                     )}
@@ -13648,7 +12872,13 @@ export default function MobileApkApp() {
                       color: 'rgba(255,255,255,0.65)'
                     }}
                   >
-                    {isRtl ? 'اختر سيرفر آخر من الأسفل للتشغيل الفوري' : 'Select another server below'}
+                    {episodeServers.length === 0
+                      ? isRtl
+                        ? 'لا يوجد سيرفر تشغيل مباشر لهذه الحلقة الآن على سيرفرات BLACK X'
+                        : 'No direct stream for this episode on the BLACK X servers right now'
+                      : isRtl
+                        ? 'تعذّر تشغيل هذا السيرفر — اختر سيرفر آخر من الأسفل'
+                        : 'This server could not play — pick another one below'}
                   </div>
                 )}
               </div>
@@ -14149,7 +13379,7 @@ export default function MobileApkApp() {
                             cursor: 'pointer'
                           }}
                         >
-                          {isRtl ? meta.nameAr : meta.nameEn} • {srv.quality}
+                          {srv.label || `${isRtl ? meta.nameAr : meta.nameEn}${srv.quality ? ` • ${srv.quality}` : ''}`}
                         </button>
                       );
                     })}
@@ -14561,7 +13791,7 @@ export default function MobileApkApp() {
                 }}
               >
                 {[
-                  { icon: '🎞️', val: animeEpisodes.length || '12', lbl: isRtl ? 'حلقات' : 'Eps' },
+                  { icon: '🎞️', val: animeEpisodes.length || '—', lbl: isRtl ? 'حلقات' : 'Eps' },
                   { icon: '♥', val: Math.round(Number(selectedAnime.rating || 9) * 142), lbl: isRtl ? 'إعجاب' : 'Likes' },
                   { icon: '👁', val: `${(Number(selectedAnime.rating || 9) * 2.4).toFixed(1)}K`, lbl: isRtl ? 'مشاهدة' : 'Views' },
                   { icon: '💬', val: animeReviews.length || 18, lbl: isRtl ? 'تعليق' : 'Chat' },
@@ -15198,6 +14428,46 @@ export default function MobileApkApp() {
                 {episodesLoading ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
                     {isRtl ? '⏳ جاري جلب قائمة الحلقات والسيرفرات...' : '⏳ Loading episodes...'}
+                  </div>
+                ) : animeEpisodes.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '1.4rem 1rem',
+                      borderRadius: '14px',
+                      background: '#0a0a0e',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: 'rgba(255,255,255,0.75)',
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      lineHeight: 1.6
+                    }}
+                  >
+                    <div style={{ marginBottom: '0.7rem' }}>
+                      {episodesError === 'network'
+                        ? isRtl
+                          ? 'تعذّر الاتصال بسيرفرات BLACK X — تأكد من الإنترنت ثم أعد المحاولة.'
+                          : 'Could not reach the BLACK X servers — check your connection and retry.'
+                        : isRtl
+                          ? 'لا توجد حلقات متاحة لهذا العمل على سيرفرات BLACK X حالياً.'
+                          : 'No episodes for this title on the BLACK X servers right now.'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => selectedAnime && handleOpenAnime(selectedAnime)}
+                      style={{
+                        padding: '0.5rem 1.1rem',
+                        borderRadius: '999px',
+                        background: '#ffffff',
+                        color: '#000000',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '0.76rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isRtl ? '↻ إعادة المحاولة' : '↻ Retry'}
+                    </button>
                   </div>
                 ) : epLayoutMode === 'grid' ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '0.45rem' }}>
@@ -16083,8 +15353,8 @@ export default function MobileApkApp() {
                 },
                 {
                   icon: '📖',
-                  label: isRtl ? 'استوديو المانجا والمانهوا (+30,000)' : 'Manga & Manhwa Studio (30K+)',
-                  badge: mangaHistory.length || '30K',
+                  label: isRtl ? 'استوديو المانجا والمانهوا' : 'Manga & Manhwa Studio',
+                  badge: mangaHistory.length || null,
                   onClick: () => {
                     setCommandMenuOpen(false);
                     setSelectedAnime(null);
@@ -16462,7 +15732,7 @@ export default function MobileApkApp() {
                 </div>
                 <ul style={{ margin: '0 0 0.75rem', paddingInlineStart: '1.1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.82)', lineHeight: 1.6 }}>
                   <li>{isRtl ? 'فتح جميع سيرفرات BLACK X 1..8 بجودة 4K & 1080p سرعة 120Hz' : 'All BLACK X 1..8 servers in 4K & 1080p 120Hz'}</li>
-                  <li>{isRtl ? 'فتح مكتبة +30,000 مانجا ومانهوا كاملة بشاشة كاملة وتحميل مباشر' : 'Full 30,000+ Manga & Manhwa library + Direct Download'}</li>
+                  <li>{isRtl ? 'فتح مكتبة المانجا والمانهوا كاملة بشاشة كاملة وتحميل مباشر' : 'Full Manga & Manhwa library + Direct Download'}</li>
                   <li>{isRtl ? 'تعمل على الموقع الرسمي وتطبيق الهاتف بنفس الحساب' : 'Works on both Website and Mobile APK'}</li>
                 </ul>
 

@@ -11,6 +11,7 @@
  */
 import { apiGet, apiSet, streamGet, streamSet } from '../db.js';
 import { isTitleMatch } from '../witanime.js';
+import { isStrictCrossSourceMatch } from '../lib/crossSourceMatch.js';
 
 const CREDENTIALS_ENDPOINT = 'https://api.ani-cli-arabic.dev/credentials';
 const CREDENTIALS_SECRET = '6rK9z0XyW8vQ3J7pL2mN4sB1tH5gD0fA';
@@ -270,14 +271,21 @@ class Anime3rbService {
       .trim();
     if (!clean) return null;
 
-    const cacheKey = `bx2:record:v3:${clean}`;
-    const cached = apiGet(cacheKey) || apiGet(`bx2:record:v3:${clean.toLowerCase()}`);
+    // Native BLACK X 2 ids look like xSousounoFrieren. Anything else (e.g. words from a BLACK X 1
+    // slug) is a cross-server link and must name the very same show and season.
+    const isNativeId = clean.startsWith('x') && /[A-Z]/.test(clean.slice(1));
+    const cacheKey = isNativeId ? `bx2:record:v3:${clean}` : `bx2:xlink:v1:${clean.toLowerCase()}`;
+    const cached = apiGet(cacheKey) || (isNativeId ? apiGet(`bx2:record:v3:${clean.toLowerCase()}`) : null);
     if (cached) return cached;
 
     // 1) If clean starts with 'x' (native AnimeId like xSousounoFrieren or xOnePiece), search by title derived from camelCase/words
-    const searchQuery = clean.startsWith('x') && /[A-Z]/.test(clean.slice(1))
+    const searchQuery = isNativeId
       ? clean.slice(1).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\d+$/g, '').trim()
       : clean.replace(/-/g, ' ').trim();
+    const titleMatches = (x) =>
+      isNativeId
+        ? isTitleMatch(searchQuery, `${x.titleEn} ${x.titleAr}`, x.anime3rbId)
+        : isStrictCrossSourceMatch(searchQuery, x.titleEn, x.titleRomaji);
 
     const [series, movies] = await Promise.all([
       this.fetchList({ filterType: 'SEARCH', filterData: searchQuery, animeType: 'SERIES', fromIndex: 0 }),
@@ -288,7 +296,7 @@ class Anime3rbService {
     // Exact AnimeId match first
     let found = all.find((x) => x.anime3rbId.toLowerCase() === clean.toLowerCase());
     if (!found) {
-      found = all.find((x) => isTitleMatch(searchQuery, `${x.titleEn} ${x.titleAr}`, x.anime3rbId));
+      found = all.find(titleMatches);
     }
 
     // If still not found and searchQuery has > 2 words, try first 2 words with strict title check
@@ -297,7 +305,7 @@ class Anime3rbService {
       if (words.length >= 2) {
         const shortQ = words.slice(0, 2).join(' ');
         const retry = await this.fetchList({ filterType: 'SEARCH', filterData: shortQ, animeType: 'SERIES', fromIndex: 0 });
-        found = retry.find((x) => x.anime3rbId.toLowerCase() === clean.toLowerCase() || isTitleMatch(searchQuery, `${x.titleEn} ${x.titleAr}`, x.anime3rbId)) || null;
+        found = retry.find((x) => x.anime3rbId.toLowerCase() === clean.toLowerCase() || titleMatches(x)) || null;
       }
     }
 
