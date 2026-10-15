@@ -38,6 +38,7 @@ Read this file before changing the repository. It records the user's durable req
 - `server/src/services/` — upstream scrapers/adapters for anime and manga/manhwa services.
 - `server/src/controllers/content.controller.js` — combined manga/manhwa library endpoint.
 - `server/src/services/mangalik.service.js` — manga/manhwa source engines.
+- `server/src/services/aniproject.service.js` — opt-in adapter for AniProject **v3.0.0 backend** (not the release page/website): Zoro anime search/show/episodes and MangaDex manga search/chapters/pages. The provider requires a separately deployed backend with its own Redis/Consumet; set `ANIPROJECT_API_URL` on the BLACK X server. `ANIPROJECT_MEDIA_HOSTS` is an optional exact CDN allowlist for proxied playback. The source is BLACK X 4 in UI, search-only with no latest/catalog feed. No AniProject code/assets are bundled (upstream is CC BY-NC-SA, non-commercial).
 - `server/src/db.js` — SQLite setup/cache. Vercel uses ephemeral `/tmp`; SQLite data there is not durable across deployments/instances.
 - `vercel.json` — SPA/API rewrites; Vercel builds the client into `client/dist`.
 - `client/dist/` — generated build output. Do not stage/commit generated deletions or builds unless explicitly requested. Verify builds into `/tmp` to avoid touching tracked distribution assets.
@@ -48,6 +49,7 @@ Read this file before changing the repository. It records the user's durable req
 - Project expects Node `22.x` (`package.json` `engines`).
 - Install reproducibly with `npm ci` (the repository has `package-lock.json`).
 - Frontend build: `npm run build`.
+- Optional AniProject v3 adapter tests (mocked upstream; no external services needed): `npm run test:aniproject`. Live playback and chapter images still require verification on a configured production backend.
 - Safer non-mutating build check: `npm run build -- --outDir /tmp/blackx-build-verify`.
 - Useful syntax/whitespace checks:
   ```bash
@@ -86,6 +88,7 @@ The official domain returned HTTP 200 for the following during the latest check:
 
 - Every "N anime" label on the website comes from `GET /api/stream/stats` (Algolia `nbHits` for BLACK X 1) through `useAnimeCatalogTotal()` in `client/src/hooks/useCatalogStats.js`. The endpoint answers 503 instead of guessing, and labels hide the number while it is unknown. The old hardcoded `6,973` / `+120K` labels were removed from the website on 2026-10-15; `client/src/mobile/MobileApkApp.jsx` still contains `6,973` (APK code, not touched without the user's go-ahead).
 - `/api/content/library` returns `count` (real unique items in the response) and `totalCount: null`: its upstream catalogs expose pages only, never a grand total. `/api/stream/catalog` returns `totalCount: null` (not the page size) when BLACK X 1's index did not answer.
+- BLACK X 4 (`aniproject`, opt-in) has no browsable catalog: `/api/stream/catalog?source=aniproject` returns an empty list with `totalCount: 0`, and its search responses report `totalCount` = results actually returned. Clients treat any missing or non-positive total as unknown and hide it (`Number(null)` is `0`, so never print a raw total).
 
 ### Known catalog-count caveats (do not misreport)
 
@@ -98,6 +101,7 @@ The official domain returned HTTP 200 for the following during the latest check:
 - Public, user-independent GET routes are listed once in `shared/publicCacheRoutes.js` (shared by server and client). `server/src/lib/cdnCache.js` adds `s-maxage` / `stale-while-revalidate` / `stale-if-error` to their successful responses, and `client/src/api.js` omits the `Authorization` header on those GETs because Vercel never caches a request that carries one.
 - Only 200/304 responses with real data are cached. Errors, JSON with only empty lists (upstream outage), `success:false`/`error` bodies and responses with `Set-Cookie` are sent `no-store`, so an outage is never frozen into the CDN.
 - Never add a route whose handler reads `req.user`, cookies or `Authorization` (for example `/api/anime/:id` watchlist state, `/api/stream/episode` VIP servers, library, auth, proxies, download links). A cached response is served to everyone.
+- `/api/stream/sources` is cached (`config`, 60 s) because it depends only on server configuration (`ANIPROJECT_API_URL` decides whether BLACK X 4 is listed), never on the user. BLACK X 4's empty latest/catalog responses fall under the empty-list rule and are not cached.
 - Verify after deploy: request a cached route twice and check `x-vercel-cache` goes `MISS` → `HIT`.
 
 ### Signed-in UI check

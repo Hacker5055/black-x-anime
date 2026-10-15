@@ -6,6 +6,7 @@ import { getPrisma } from '../lib/prisma.js';
 import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBroken } from '../lib/api.js';
 import { db, social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
 import { mangalikService, FLAGSHIP_MANGA_MAP } from '../services/mangalik.service.js';
+import { aniprojectService, isAniProjectConfigured, isAniProjectMangaId } from '../services/aniproject.service.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
 export async function rateContent(req, res) {
@@ -190,10 +191,21 @@ export async function listMyRatings(req, res) {
  */
 export async function getLibrary(req, res) {
   try {
-    ensureSocialTables();
     const type = String(req.query.type || 'ALL').trim().toUpperCase();
     const q = String(req.query.q || '').trim();
     const server = String(req.query.server || 'all').trim().toLowerCase();
+    if (server === 'bx4') {
+      if (!isAniProjectConfigured()) return res.status(503).json({ success: false, error: 'source_unavailable', items: [] });
+      const page = Math.max(1, Number(req.query.page) || 1);
+      try {
+        const found = q && page === 1 ? await aniprojectService.searchManga(q) : [];
+        const items = type === 'ALL' ? found : found.filter((item) => item.type === type);
+        return res.json({ success: true, totalCount: items.length, page, hasNext: false, items });
+      } catch {
+        return res.status(502).json({ success: false, error: 'upstream', items: [] });
+      }
+    }
+    ensureSocialTables();
 
     // Base curated flagship library items
     let items = social.getLibraryItems(type, q).map((it) => {
@@ -223,6 +235,9 @@ export async function getLibrary(req, res) {
     const dynamicTasks = [];
     if (q) {
       dynamicTasks.push(mangalikService.searchArabicManga(q, server));
+      if (server === 'all' && isAniProjectConfigured()) {
+        dynamicTasks.push(aniprojectService.searchManga(q));
+      }
     } else {
       if (server === 'all' || server === 'bx1') {
         dynamicTasks.push(mangalikService.getMangaMelloCatalog(page));
@@ -292,10 +307,27 @@ export async function getLibrary(req, res) {
  */
 export async function getLibraryItemDetail(req, res) {
   try {
-    ensureSocialTables();
     const { id } = req.params;
     const preferredServer = String(req.query.server || '').trim().toLowerCase();
 
+    if (isAniProjectMangaId(id)) {
+      if (!isAniProjectConfigured()) return res.status(503).json({ success: false, error: 'source_unavailable' });
+      const item = await aniprojectService.getManga(id);
+      if (!item) return res.status(404).json({ success: false, error: 'not_found' });
+      try {
+        const chapters = await aniprojectService.getMangaChapters(id);
+        return res.json({ success: true, item: {
+          ...item, chapters_count: chapters.length,
+          availableServers: [{ id: 'bx4', name: 'سيرفر BLACK X 4', labelEn: 'BLACK X Server 4' }],
+          activeServer: 'bx4',
+          chapters: chapters.map((chapter) => ({ ...chapter, number: chapter.chapterNumber }))
+        } });
+      } catch {
+        return res.status(502).json({ success: false, error: 'upstream' });
+      }
+    }
+
+    ensureSocialTables();
     let item = social.getLibraryItem(id);
     if (!item) {
       item = await mangalikService.getSeriesMetadata(id);

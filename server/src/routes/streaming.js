@@ -16,6 +16,10 @@ import { okanimeService } from '../services/okanime.service.js';
 import { animeblkomService } from '../services/animeblkom.service.js';
 import { englishAnimeService } from '../services/englishAnime.service.js';
 import {
+  aniprojectService, isAniProjectConfigured, isAniProjectAnimeSlug,
+  isAniProjectMediaHost
+} from '../services/aniproject.service.js';
+import {
   getTranslatedEpisodeSubtitles,
   parseSubtitles,
   translateLinesToArabic,
@@ -52,7 +56,14 @@ router.get('/sources', (req, res) => {
         nameAr: '🌐 سيرفر BLACK X 3',
         nameEn: 'BLACK X Server 3',
         badge: 'BLACK X 3'
-      }
+      },
+      ...(isAniProjectConfigured() ? [{
+        id: 'aniproject',
+        nameAr: 'سيرفر BLACK X 4 (بحث)',
+        nameEn: 'BLACK X Server 4 (Search)',
+        badge: 'BLACK X 4',
+        searchOnly: true
+      }] : [])
     ]
   });
 });
@@ -63,6 +74,12 @@ router.get('/catalog', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const sort = String(req.query.sort || 'popular').toLowerCase();
   const genre = String(req.query.genre || '').trim();
+
+  // AniProject v3 exposes a searchable provider, not a browsable streaming
+  // catalog. Never present AniList metadata as playable BLACK X 4 entries.
+  if (source === 'aniproject') {
+    return res.json({ items: [], count: 0, totalCount: 0, totalPages: 0, hasNext: false, page });
+  }
 
   try {
     let items = [];
@@ -152,7 +169,6 @@ router.get('/catalog', async (req, res) => {
   }
 });
 
-/** GET /api/stream/health — is the source reachable */
 /**
  * GET /api/stream/stats — real catalog size reported by BLACK X 1's search
  * index, used by every "N anime" label on the site. Answers 503 (never a
@@ -170,6 +186,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+/** GET /api/stream/health — is the source reachable */
 router.get('/health', async (req, res) => {
   res.json(await scrapeHealth());
 });
@@ -187,6 +204,9 @@ router.get('/diagnostics', async (req, res) => {
 router.get('/latest', async (req, res) => {
   const source = (req.query.source || 'all').toLowerCase();
   const page = Math.max(1, Number(req.query.page) || 1);
+  if (source === 'aniproject') {
+    return res.json({ items: [], count: 0, page }); // No latest-feed API in v3.
+  }
   try {
     let witaItems = [];
     let a3rbItems = [];
@@ -296,10 +316,18 @@ router.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   const source = (req.query.source || 'all').toLowerCase();
   if (!q) return res.json({ items: [], results: [] });
+  if (source === 'aniproject' && !isAniProjectConfigured()) {
+    return res.status(503).json({ error: 'source_unavailable', items: [], results: [] });
+  }
   try {
+    if (source === 'aniproject') {
+      const items = await aniprojectService.searchAnime(q);
+      return res.json({ items, results: items, totalCount: items.length });
+    }
     let witaResults = [];
     let a3rbResults = [];
     let enResults = [];
+    let apResults = [];
 
     const tasks = [];
     if (source === 'all' || source === 'witanime') {
@@ -369,11 +397,16 @@ router.get('/search', async (req, res) => {
       );
     }
 
+    if (isAniProjectConfigured() && (source === 'all' || source === 'aniproject')) {
+      tasks.push(aniprojectService.searchAnime(q)
+        .then((items) => { apResults = items; })
+        .catch(() => {}));
+    }
     await Promise.all(tasks);
 
     const seen = new Set();
     const merged = [];
-    for (const item of [...witaResults, ...a3rbResults, ...enResults]) {
+    for (const item of [...witaResults, ...a3rbResults, ...enResults, ...apResults]) {
       const key = `${item.source || 'src'}:${item.slug}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -392,11 +425,16 @@ router.get('/search', async (req, res) => {
 router.get('/show/:slug', async (req, res) => {
   const { slug } = req.params;
   const source = (req.query.source || '').toLowerCase();
+  if ((source === 'aniproject' || isAniProjectAnimeSlug(slug)) && !isAniProjectConfigured()) {
+    return res.status(503).json({ error: 'source_unavailable' });
+  }
 
   try {
     let show = null;
 
-    if (source === 'english' || slug.startsWith('en-') || slug.startsWith('mal-') || slug.startsWith('en_anime:')) {
+    if (source === 'aniproject' || isAniProjectAnimeSlug(slug)) {
+      show = await aniprojectService.getShow(slug);
+    } else if (source === 'english' || slug.startsWith('en-') || slug.startsWith('mal-') || slug.startsWith('en_anime:')) {
       show = await englishAnimeService.getShow(slug);
       if (!show) {
         show = await fetchWitcherShow(slug).catch(() => null);
@@ -476,11 +514,16 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
   if (!Number.isInteger(episode) || episode < 1) {
     return res.status(400).json({ error: 'invalid_episode', message: 'Invalid episode number' });
   }
+  if ((sourceParam === 'aniproject' || isAniProjectAnimeSlug(req.params.slug)) && !isAniProjectConfigured()) {
+    return res.status(503).json({ error: 'source_unavailable' });
+  }
 
   try {
     let data = null;
 
-    if (sourceParam === 'english' || req.params.slug.startsWith('en-') || req.params.slug.startsWith('mal-') || req.params.slug.startsWith('en_anime:')) {
+    if (sourceParam === 'aniproject' || isAniProjectAnimeSlug(req.params.slug)) {
+      data = await aniprojectService.getEpisode(req.params.slug, episode);
+    } else if (sourceParam === 'english' || req.params.slug.startsWith('en-') || req.params.slug.startsWith('mal-') || req.params.slug.startsWith('en_anime:')) {
       data = await englishAnimeService.getEpisode(req.params.slug, episode);
       // Cross-enrich with BLACK X 1 (Anime Witcher) Arabic 1080p MP4 servers if available
       if (data) {
@@ -572,12 +615,13 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
 
     const rawEntries = Array.isArray(data.entries) ? [...data.entries] : [];
     const prioritizedEntries = rawEntries.map((e) => {
-      const isFastCdn =
+      const isFastCdn = !isAniProjectAnimeSlug(req.params.slug) && (
         Boolean(e.isFastCdn) ||
         Boolean(e.directUrl) ||
         e.server?.toLowerCase().includes('direct') ||
         e.server?.toLowerCase().includes('stream') ||
-        e.server?.toLowerCase().includes('cloud');
+        e.server?.toLowerCase().includes('cloud')
+      );
 
       return {
         ...e,
@@ -589,7 +633,7 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
 
     let entriesWithVip = prioritizedEntries;
     const resolvedMap = { ...(data.resolved || {}) };
-    if (isVipMonarch && prioritizedEntries.length > 0) {
+    if (isVipMonarch && prioritizedEntries.length > 0 && !isAniProjectAnimeSlug(req.params.slug)) {
       const firstReal = prioritizedEntries[0];
       const vipId = `vip-monarch-4k-${cleanSlug}-${episode}`;
       let firstResolved = resolvedMap[firstReal.id] || null;
@@ -643,6 +687,15 @@ router.post('/resolve', async (req, res) => {
   const ep = Number(episode);
   if (!slug || !Number.isInteger(ep) || ep < 1 || !entryId) {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
+  }
+  if (isAniProjectAnimeSlug(slug)) {
+    if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable' });
+    try {
+      const source = await aniprojectService.resolveEntry(slug, ep, String(entryId));
+      return source ? res.json({ source }) : res.status(404).json({ error: 'not_found' });
+    } catch {
+      return res.status(502).json({ error: 'upstream' });
+    }
   }
 
   // Handle VIP Monarch 4K synthetic entry by resolving the primary entry of the episode
@@ -755,6 +808,15 @@ router.post('/resolve-download', async (req, res) => {
   if (!slug || !Number.isInteger(ep) || ep < 1 || !entryId) {
     return res.status(400).json({ error: 'bad_request', message: 'slug, episode, entryId required' });
   }
+  if (isAniProjectAnimeSlug(slug)) {
+    if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable' });
+    try {
+      const source = await aniprojectService.resolveDownload(slug, ep, String(entryId));
+      return source ? res.json({ source }) : res.status(404).json({ error: 'not_found' });
+    } catch {
+      return res.status(502).json({ error: 'upstream' });
+    }
+  }
 
   // If this is an Anime Witcher (BLACK X 1) download entry
   if (String(entryId).startsWith('dl-aw-')) {
@@ -833,6 +895,20 @@ router.get('/download-sources/:slug/:ep', async (req, res) => {
   const ep = Number(req.params.ep);
   if (!slug || !Number.isInteger(ep) || ep < 1) {
     return res.status(400).json({ error: 'bad_request', message: 'Valid slug and episode required' });
+  }
+  if (isAniProjectAnimeSlug(slug)) {
+    if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable' });
+    try {
+      const data = await aniprojectService.getEpisode(slug, ep);
+      if (!data) return res.status(404).json({ error: 'not_found' });
+      const cloudHosts = (data.downloads || []).map((dl) => ({
+        id: dl.id, server: dl.server, quality: dl.quality,
+        url: dl.downloadUrl, directUrl: dl.downloadUrl
+      }));
+      return res.json({ slug, episode: ep, cloudHosts, qualities: {}, count: cloudHosts.length });
+    } catch {
+      return res.status(502).json({ error: 'upstream', cloudHosts: [], qualities: {} });
+    }
   }
 
   try {
@@ -1047,7 +1123,20 @@ function unwrapProxyUrl(raw) {
 
 function hostAllowed(hostname) {
   const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
-  return ALLOWED_HOSTS.some((a) => h === a || h.endsWith(`.${a}`));
+  return ALLOWED_HOSTS.some((a) => h === a || h.endsWith(`.${a}`)) || isAniProjectMediaHost(h);
+}
+
+function safeAniProjectReferer(raw) {
+  if (typeof raw !== 'string' || raw.length > 512) return null;
+  try {
+    const url = new URL(raw);
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password ||
+        /^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[|0\.)/i.test(url.hostname) ||
+        url.hostname.endsWith('.local') || url.hostname.endsWith('.internal')) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 
 function isAllowedRemoteStreamUrl(target) {
@@ -1115,7 +1204,11 @@ router.get('/download', optionalAuth, async (req, res) => {
       Accept: '*/*'
     };
 
-    if (target.hostname.includes('mp4upload')) {
+    const apReferer = isAniProjectMediaHost(target.hostname) ? safeAniProjectReferer(req.query.ref) : null;
+    if (apReferer) {
+      headers.Referer = apReferer;
+      headers.Origin = new URL(apReferer).origin;
+    } else if (target.hostname.includes('mp4upload')) {
       headers.Referer = 'https://www.mp4upload.com/';
       headers.Origin = 'https://www.mp4upload.com';
     } else if (target.hostname.includes('mediafire')) {
@@ -1131,11 +1224,15 @@ router.get('/download', optionalAuth, async (req, res) => {
       headers.Range = req.headers.range;
     }
 
-    const upstream = await fetch(target.href, {
-      headers,
-      redirect: 'follow',
-      signal: AbortSignal.timeout(120000)
-    });
+    // Newly configured media hosts must not be able to redirect our proxy to
+    // private/unapproved destinations. Existing provider behavior is unchanged.
+    const upstream = isAniProjectMediaHost(target.hostname)
+      ? (await fetchAllowedHlsUrl(target.href, headers)).response
+      : await fetch(target.href, {
+          headers,
+          redirect: 'follow',
+          signal: AbortSignal.timeout(120000)
+        });
 
     if (!upstream.ok && upstream.status !== 206) {
       console.warn(`[stream/download] upstream returned ${upstream.status} for ${target.href}`);
@@ -1183,7 +1280,8 @@ router.get('/download', optionalAuth, async (req, res) => {
   } catch (err) {
     if (res.headersSent || res.destroyed) return;
     console.error('[stream/download]', err.message);
-    res.status(502).json({ error: 'upstream', message: 'Download failed' });
+    res.status(err.code === 'hls_host_not_allowed' ? 403 : 502)
+      .json({ error: err.code || 'upstream', message: 'Download failed' });
   }
 });
 
@@ -1290,7 +1388,11 @@ router.get('/proxy', optionalAuth, async (req, res) => {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       Accept: '*/*'
     };
-    if (isAh) {
+    const apReferer = isAniProjectMediaHost(target.hostname) ? safeAniProjectReferer(req.query.ref) : null;
+    if (apReferer) {
+      headers.Referer = apReferer;
+      headers.Origin = new URL(apReferer).origin;
+    } else if (isAh) {
       headers.Referer = 'https://animeheaven.me/';
       headers.Origin = 'https://animeheaven.me';
     } else if (isMf) {
@@ -1305,11 +1407,13 @@ router.get('/proxy', optionalAuth, async (req, res) => {
     // Always send a capped Range header (<= 4 MB) so Cloud Run / Google Frontend never returns HTTP 500
     headers.Range = buildCappedRangeHeader(req.headers.range);
 
-    let upstream = await fetch(fetchHref, {
-      headers,
-      redirect: 'follow',
-      signal: AbortSignal.timeout(25000)
-    });
+    let upstream = isAniProjectMediaHost(target.hostname)
+      ? (await fetchAllowedHlsUrl(fetchHref, headers)).response
+      : await fetch(fetchHref, {
+          headers,
+          redirect: 'follow',
+          signal: AbortSignal.timeout(25000)
+        });
 
     // Self-heal expired or IP-mismatched MediaFire downloadXXXX.mediafire.com URLs that redirect to download_repair.php (text/html)
     const initialCt = (upstream.headers.get('content-type') || '').toLowerCase();
@@ -1362,7 +1466,8 @@ router.get('/proxy', optionalAuth, async (req, res) => {
   } catch (err) {
     if (res.headersSent || res.destroyed) return;
     console.error('[stream/proxy]', err.message);
-    res.status(502).json({ error: 'upstream', message: 'Stream fetch failed' });
+    res.status(err.code === 'hls_host_not_allowed' ? 403 : 502)
+      .json({ error: err.code || 'upstream', message: 'Stream fetch failed' });
   }
 });
 
@@ -1402,8 +1507,10 @@ router.get('/hls-proxy', async (req, res) => {
       target.hostname.includes('zokoanime') ||
       target.hostname.endsWith('.cfd') ||
       target.hostname.endsWith('.top');
-    const referer = isZoko ? 'https://zokoanime.video/' : 'https://vibuxer.com/';
-    const origin = isZoko ? 'https://zokoanime.video' : 'https://vibuxer.com';
+    const apReferer = isAniProjectMediaHost(target.hostname) ? safeAniProjectReferer(req.query.ref) : null;
+    const referer = apReferer || (isZoko ? 'https://zokoanime.video/' : 'https://vibuxer.com/');
+    const origin = apReferer ? new URL(apReferer).origin : (isZoko ? 'https://zokoanime.video' : 'https://vibuxer.com');
+    const refParam = apReferer ? `&ref=${encodeURIComponent(apReferer)}` : '';
     const { response: upstream, finalUrl } = await fetchAllowedHlsUrl(target.href, {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       Accept: '*/*',
@@ -1433,8 +1540,8 @@ router.get('/hls-proxy', async (req, res) => {
               return line.replace(/URI="([^"]+)"/g, (_, uri) => {
                 try {
                   const full = new URL(uri, finalUrl);
-                  if (!isAllowedRemoteStreamUrl(full)) return `URI="${full.href}"`;
-                  return `URI="/api/stream/hls-proxy?url=${encodeURIComponent(full.href)}"`;
+                  if (!isAllowedRemoteStreamUrl(full)) return 'URI=""';
+                  return `URI="/api/stream/hls-proxy?url=${encodeURIComponent(full.href)}${refParam}"`;
                 } catch {
                   return `URI="${uri}"`;
                 }
@@ -1442,8 +1549,8 @@ router.get('/hls-proxy', async (req, res) => {
             }
             try {
               const full = new URL(trimmed, finalUrl);
-              if (!isAllowedRemoteStreamUrl(full)) return full.href;
-              return `/api/stream/hls-proxy?url=${encodeURIComponent(full.href)}`;
+              if (!isAllowedRemoteStreamUrl(full)) return '';
+              return `/api/stream/hls-proxy?url=${encodeURIComponent(full.href)}${refParam}`;
             } catch {
               return line;
             }
