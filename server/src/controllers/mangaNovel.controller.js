@@ -4,6 +4,9 @@
 
 import axios from 'axios';
 import { mangalikService } from '../services/mangalik.service.js';
+import {
+  aniprojectService, isAniProjectConfigured, isAniProjectMangaId, isAniProjectChapterId
+} from '../services/aniproject.service.js';
 import { anilistService } from '../services/anilist.service.js';
 import { scraperService } from '../services/scraper.service.js';
 import { getPrisma } from '../lib/prisma.js';
@@ -64,16 +67,26 @@ export const mangaNovelController = {
       };
 
       const promises = [];
+      const mangaResults = [];
+      const serverId = String(server || 'all').toLowerCase();
+      if (serverId === 'bx4') {
+        if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable', manga: [] });
+        try {
+          results.manga = (type === 'all' || type === 'manga')
+            ? await aniprojectService.searchManga(query) : [];
+          return res.json({ ...results, results: results.manga });
+        } catch {
+          return res.status(502).json({ error: 'upstream', manga: [] });
+        }
+      }
 
       if (type === 'all' || type === 'manga') {
-        promises.push(
-          mangalikService
-            .searchArabicManga(query, String(server || 'all').toLowerCase())
-            .then((data) => {
-              results.manga = data;
-            })
-            .catch(() => {})
-        );
+        promises.push(mangalikService.searchArabicManga(query, serverId)
+          .then((data) => { mangaResults.push(...(data || [])); }).catch(() => {}));
+        if (isAniProjectConfigured() && serverId === 'all') {
+          promises.push(aniprojectService.searchManga(query)
+            .then((data) => { mangaResults.push(...data); }).catch(() => {}));
+        }
       }
 
       if ((type === 'all' || type === 'novel') && typeof scraperService?.searchArabicNovels === 'function') {
@@ -99,6 +112,7 @@ export const mangaNovelController = {
       }
 
       await Promise.allSettled(promises);
+      results.manga = [...new Map(mangaResults.map((item) => [item.id, item])).values()];
       return res.json({
         ...results,
         results: results.manga
@@ -115,6 +129,11 @@ export const mangaNovelController = {
   async getMangaDetails(req, res) {
     try {
       const { id } = req.params;
+      if (isAniProjectMangaId(id)) {
+        if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable' });
+        const item = await aniprojectService.getManga(id);
+        return item ? res.json(item) : res.status(404).json({ error: 'not_found' });
+      }
       const meta = await mangalikService.getSeriesMetadata(id);
       if (meta) {
         return res.json(meta);
@@ -136,6 +155,17 @@ export const mangaNovelController = {
     try {
       const { id } = req.params;
       const preferredServer = String(req.query.server || '').trim().toLowerCase();
+      if (isAniProjectMangaId(id)) {
+        if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable', chapters: [] });
+        const item = await aniprojectService.getManga(id);
+        if (!item) return res.status(404).json({ error: 'not_found', chapters: [] });
+        const chapters = await aniprojectService.getMangaChapters(id);
+        return res.json({
+          chapters,
+          availableServers: [{ id: 'bx4', name: 'سيرفر BLACK X 4', labelEn: 'BLACK X Server 4' }],
+          activeServer: 'bx4'
+        });
+      }
 
       const handles = await mangalikService.resolveSeriesHandles(id);
       const availableServers = [];
@@ -181,6 +211,11 @@ export const mangaNovelController = {
     try {
       const { chapter_id } = req.params;
       const preferredServer = String(req.query.server || '').trim().toLowerCase();
+      if (isAniProjectChapterId(chapter_id)) {
+        if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable', pages: [] });
+        const pages = await aniprojectService.getChapterPages(chapter_id);
+        return res.json({ pages });
+      }
       const pages = await mangalikService.getArabicChapterPages(chapter_id, preferredServer);
       return res.json({ pages });
     } catch (error) {
@@ -196,24 +231,29 @@ export const mangaNovelController = {
     try {
       const { chapter_id } = req.params;
       const preferredServer = String(req.query.server || '').trim().toLowerCase();
-      const title = String(req.query.title || 'BLACK X Manga').trim();
-      const chapterNum = String(req.query.chapter || '1').trim();
-
-      const pages = await mangalikService.getArabicChapterPages(chapter_id, preferredServer);
+      const title = String(req.query.title || 'BLACK X Manga').trim().slice(0, 120);
+      const chapterNum = String(req.query.chapter || '1').trim().slice(0, 30);
+      if (isAniProjectChapterId(chapter_id) && !isAniProjectConfigured()) {
+        return res.status(503).json({ error: 'source_unavailable' });
+      }
+      const pages = isAniProjectChapterId(chapter_id)
+        ? await aniprojectService.getChapterPages(chapter_id)
+        : await mangalikService.getArabicChapterPages(chapter_id, preferredServer);
       if (!pages || pages.length === 0) {
         return res.status(404).json({ error: 'No pages found for this chapter' });
       }
 
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const host = req.get('host');
+      const protocol = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0] === 'https' ? 'https' : 'http';
+      const host = /^[a-z0-9.-]+(?::\d+)?$/i.test(req.get('host') || '') ? req.get('host') : 'black-x-anime.me';
       const baseUrl = `${protocol}://${host}`;
-
-      const safeFilename = `BLACK-X-${title.replace(/[^a-zA-Z0-9\u0600-\u06FF_-]+/g, '-')}-Ch-${chapterNum}.html`;
-
+      const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
       const imgTags = pages
         .map((p, idx) => {
-          const proxied = `${baseUrl}/api/proxy/image?url=${encodeURIComponent(p.url)}`;
-          return `<div class="page"><img src="${proxied}" data-direct="${p.url}" onerror="if(this.src!==this.dataset.direct)this.src=this.dataset.direct" alt="Page ${idx + 1}" loading="eager" /><span class="num">${idx + 1} / ${pages.length}</span></div>`;
+          const image = p.url || p.imageUrl;
+          const proxied = `${baseUrl}/api/proxy/image?url=${encodeURIComponent(image)}`;
+          return `<div class="page"><img src="${escapeHtml(proxied)}" data-direct="${escapeHtml(image)}" onerror="if(this.src!==this.dataset.direct)this.src=this.dataset.direct" alt="Page ${idx + 1}" loading="eager" /><span class="num">${idx + 1} / ${pages.length}</span></div>`;
         })
         .join('\n');
 
@@ -222,7 +262,7 @@ export const mangaNovelController = {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title} - الفصل ${chapterNum} | BLACK X</title>
+  <title>${escapeHtml(title)} - الفصل ${escapeHtml(chapterNum)} | BLACK X</title>
   <style>
     body { margin: 0; background: #000; color: #fff; font-family: system-ui, -apple-system, sans-serif; text-align: center; }
     header { position: sticky; top: 0; z-index: 10; background: rgba(5,5,8,0.92); backdrop-filter: blur(12px); padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.12); display: flex; justify-content: space-between; align-items: center; }
@@ -236,7 +276,7 @@ export const mangaNovelController = {
 <body>
   <header>
     <div class="brand">BLACK X MANGA</div>
-    <div>${title} — الفصل ${chapterNum} (${pages.length} صفحة)</div>
+    <div>${escapeHtml(title)} — الفصل ${escapeHtml(chapterNum)} (${pages.length} صفحة)</div>
   </header>
   <div class="container">
     ${imgTags}

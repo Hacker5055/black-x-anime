@@ -37,6 +37,7 @@ Read this file before changing the repository. It records the user's durable req
 - `server/src/services/` — upstream scrapers/adapters for anime and manga/manhwa services.
 - `server/src/controllers/content.controller.js` — combined manga/manhwa library endpoint.
 - `server/src/services/mangalik.service.js` — manga/manhwa source engines.
+- `server/src/services/aniproject.service.js` — opt-in adapter for AniProject **v3.0.0 backend** (not the release page/website): Zoro anime search/show/episodes and MangaDex manga search/chapters/pages. The provider requires a separately deployed backend with its own Redis/Consumet; set `ANIPROJECT_API_URL` on the BLACK X server. `ANIPROJECT_MEDIA_HOSTS` is an optional exact CDN allowlist for proxied playback. The source is BLACK X 4 in UI, search-only with no latest/catalog feed. No AniProject code/assets are bundled (upstream is CC BY-NC-SA, non-commercial).
 - `server/src/db.js` — SQLite setup/cache. Vercel uses ephemeral `/tmp`; SQLite data there is not durable across deployments/instances.
 - `vercel.json` — SPA/API rewrites; Vercel builds the client into `client/dist`.
 - `client/dist/` — generated build output. Do not stage/commit generated deletions or builds unless explicitly requested. Verify builds into `/tmp` to avoid touching tracked distribution assets.
@@ -47,6 +48,7 @@ Read this file before changing the repository. It records the user's durable req
 - Project expects Node `22.x` (`package.json` `engines`).
 - Install reproducibly with `npm ci` (the repository has `package-lock.json`).
 - Frontend build: `npm run build`.
+- Optional AniProject v3 adapter tests (mocked upstream; no external services needed): `npm run test:aniproject`. Live playback and chapter images still require verification on a configured production backend.
 - Safer non-mutating build check: `npm run build -- --outDir /tmp/blackx-build-verify`.
 - Useful syntax/whitespace checks:
   ```bash

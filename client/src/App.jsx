@@ -21,6 +21,21 @@ import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 import BxIcon from './components/BxIcon.jsx';
 
+function serverFourSearchItems(animeData, mangaData, query) {
+  return [
+    ...(animeData?.items || []).map((a) => ({
+      id: a.slug, kind: 'ANIME', badgeAr: 'أنمي', badgeEn: 'ANIME',
+      title: a.titleEn, poster: a.poster || '/blackx-logo.png', meta: 'BLACK X 4',
+      to: `/show/${encodeURIComponent(a.slug)}?source=aniproject`
+    })),
+    ...(mangaData?.manga || []).map((m) => ({
+      id: m.id, kind: 'MANGA', badgeAr: 'مانجا', badgeEn: 'MANGA',
+      title: m.title_en, poster: m.poster || '/blackx-logo.png', meta: 'BLACK X 4',
+      to: `/browse?q=${encodeURIComponent(query)}&server=bx4`
+    }))
+  ];
+}
+
 /**
  * Comprehensive Unified Monochrome Liquid Glass Search, Server & Category Hub (Anime + Manga/Manhwa)
  */
@@ -30,23 +45,34 @@ function SpotlightSearchModal({ open, onClose }) {
   const isRtl = lang === 'ar';
   const [q, setQ] = useState('');
   const [scope, setScope] = useState('ALL'); // 'ALL' | 'ANIME' | 'MANGA'
-  const [server, setServer] = useState('all'); // 'all' | 'bx1' | 'bx2' | 'bx3'
+  const [server, setServer] = useState('all'); // 'all' | 'bx1' | 'bx2' | 'bx3' | 'bx4'
+  const [serverFourEnabled, setServerFourEnabled] = useState(false);
   const [category, setCategory] = useState('ALL'); // 'ALL' | 'TRENDING' | 'TOP_RATED' | 'MANHWA' | 'MANGA_JP' | 'MANHUA' | 'Action' | 'Fantasy' | 'Adventure' | 'Romance' | 'Sci-Fi' | 'Mystery'
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
 
   const scopeTabs = [
     { id: 'ALL', ar: 'الكل (أنمي + مانجا)', en: 'All (Anime + Manga)', icon: 'sparkles' },
-    { id: 'ANIME', ar: 'الأنمي (6,973)', en: 'Anime (6,973)', icon: 'tv' },
-    { id: 'MANGA', ar: 'المانجا والمانهوا (+120K)', en: 'Manga & Manhwa (+120K)', icon: 'book' }
+    { id: 'ANIME', ar: 'الأنمي', en: 'Anime', icon: 'tv' },
+    { id: 'MANGA', ar: 'المانجا والمانهوا', en: 'Manga & Manhwa', icon: 'book' }
   ];
 
   const serverOptions = [
     { id: 'all', animeSrc: 'all', mangaSrv: 'all', ar: 'جميع سيرفرات BLACK X', en: 'All BLACK X Servers' },
     { id: 'bx1', animeSrc: 'witanime', mangaSrv: 'bx1', ar: 'سيرفر BLACK X 1', en: 'BLACK X Server 1' },
     { id: 'bx2', animeSrc: 'anime3rb', mangaSrv: 'bx2', ar: 'سيرفر BLACK X 2', en: 'BLACK X Server 2' },
-    { id: 'bx3', animeSrc: 'english', mangaSrv: 'bx3', ar: 'سيرفر BLACK X 3 (+120K)', en: 'BLACK X Server 3 (+120K)' }
+    { id: 'bx3', animeSrc: 'english', mangaSrv: 'bx3', ar: 'سيرفر BLACK X 3', en: 'BLACK X Server 3' },
+    { id: 'bx4', animeSrc: 'aniproject', mangaSrv: 'bx4', ar: 'سيرفر BLACK X 4 (بحث فقط)', en: 'BLACK X Server 4 (Search only)', disabled: !serverFourEnabled }
   ];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let active = true;
+    api.get('/api/stream/sources')
+      .then((data) => { if (active) setServerFourEnabled(data?.sources?.some((source) => source.id === 'aniproject') || false); })
+      .catch(() => { if (active) setServerFourEnabled(false); });
+    return () => { active = false; };
+  }, [open]);
 
   const categoryOptions = [
     { id: 'ALL', ar: 'الكل', en: 'All', genre: null },
@@ -68,10 +94,25 @@ function SpotlightSearchModal({ open, onClose }) {
     const trimmed = q.trim();
     const activeCat = categoryOptions.find((c) => c.id === category) || categoryOptions[0];
     const sortMode = category === 'TOP_RATED' ? ['SCORE_DESC', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC'];
+    let alive = true;
 
     const timer = setTimeout(async () => {
+      if (!alive) return;
       setLoading(true);
       try {
+        // Server 4 is a search-only provider: show its actual matches, not
+        // unrelated AniList titles dressed up as playable/readable results.
+        if (server === 'bx4') {
+          if (!trimmed || !serverFourEnabled) { if (alive) setResults([]); return; }
+          const [animeData, mangaData] = await Promise.all([
+            scope === 'MANGA' ? Promise.resolve({ items: [] }) :
+              api.get(`/api/stream/search?source=aniproject&q=${encodeURIComponent(trimmed)}`).catch(() => ({ items: [] })),
+            scope === 'ANIME' ? Promise.resolve({ manga: [] }) :
+              api.get(`/api/search?type=manga&server=bx4&query=${encodeURIComponent(trimmed)}`).catch(() => ({ manga: [] }))
+          ]);
+          if (alive) setResults(serverFourSearchItems(animeData, mangaData, trimmed));
+          return;
+        }
         const gql = `
           query ($s: String, $genre: String, $country: CountryCode, $sort: [MediaSort]) {
             anime: Page(page: 1, perPage: 10) {
@@ -102,12 +143,22 @@ function SpotlightSearchModal({ open, onClose }) {
         if (activeCat.genre) variables.genre = activeCat.genre;
         if (activeCat.country) variables.country = activeCat.country;
 
-        const resp = await fetch('https://graphql.anilist.co', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ query: gql, variables })
-        });
-        const json = await resp.json();
+        // In the all-server search, surface real BLACK X 4 matches alongside
+        // AniList discovery results; a failed metadata lookup must not hide
+        // playable/readable source matches.
+        const [json, bx4Anime, bx4Manga] = await Promise.all([
+          fetch('https://graphql.anilist.co', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ query: gql, variables })
+          }).then((resp) => resp.json()).catch(() => ({})),
+          server === 'all' && serverFourEnabled && trimmed && scope !== 'MANGA' && !activeCat.country
+            ? api.get(`/api/stream/search?source=aniproject&q=${encodeURIComponent(trimmed)}`).catch(() => ({ items: [] }))
+            : Promise.resolve({ items: [] }),
+          server === 'all' && serverFourEnabled && trimmed && scope !== 'ANIME'
+            ? api.get(`/api/search?type=manga&server=bx4&query=${encodeURIComponent(trimmed)}`).catch(() => ({ manga: [] }))
+            : Promise.resolve({ manga: [] })
+        ]);
 
         const srvObj = serverOptions.find((s) => s.id === server) || serverOptions[0];
         const animeGenreParam = activeCat.genre || 'all';
@@ -161,15 +212,15 @@ function SpotlightSearchModal({ open, onClose }) {
                 };
               });
 
-        setResults([...animeItems, ...mangaItems]);
+        if (alive) setResults([...serverFourSearchItems(bx4Anime, bx4Manga, trimmed), ...animeItems, ...mangaItems]);
       } catch {
-        setResults([]);
+        if (alive) setResults([]);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     }, 220);
-    return () => clearTimeout(timer);
-  }, [q, scope, server, category, open]);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [q, scope, server, category, open, serverFourEnabled]);
 
   if (!open) return null;
 
@@ -356,14 +407,17 @@ function SpotlightSearchModal({ open, onClose }) {
               <button
                 key={srv.id}
                 type="button"
-                onClick={() => setServer(srv.id)}
+                onClick={() => { setServer(srv.id); if (srv.id === 'bx4') setCategory('ALL'); }}
+                disabled={srv.disabled}
+                title={srv.disabled ? (isRtl ? 'يتطلب إعداد ANIPROJECT_API_URL' : 'Set ANIPROJECT_API_URL to enable') : undefined}
                 style={{
                   padding: '0.36rem 0.78rem',
                   borderRadius: '999px',
                   fontSize: '0.73rem',
                   fontWeight: 900,
                   whiteSpace: 'nowrap',
-                  cursor: 'pointer',
+                  cursor: srv.disabled ? 'not-allowed' : 'pointer',
+                  opacity: srv.disabled ? 0.5 : 1,
                   background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
                   color: active ? '#000000' : '#ffffff',
                   border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.15)'
@@ -396,13 +450,16 @@ function SpotlightSearchModal({ open, onClose }) {
                 key={cat.id}
                 type="button"
                 onClick={() => setCategory(cat.id)}
+                disabled={server === 'bx4' && cat.id !== 'ALL'}
+                title={server === 'bx4' && cat.id !== 'ALL' ? (isRtl ? 'تصفية التصنيفات غير متاحة لهذا المصدر' : 'Category filters are unavailable for this source') : undefined}
                 style={{
                   padding: '0.34rem 0.74rem',
                   borderRadius: '999px',
                   fontSize: '0.72rem',
                   fontWeight: 800,
                   whiteSpace: 'nowrap',
-                  cursor: 'pointer',
+                  cursor: server === 'bx4' && cat.id !== 'ALL' ? 'not-allowed' : 'pointer',
+                  opacity: server === 'bx4' && cat.id !== 'ALL' ? 0.45 : 1,
                   background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
                   color: active ? '#000000' : 'rgba(255,255,255,0.85)',
                   border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
@@ -476,7 +533,7 @@ function SpotlightSearchModal({ open, onClose }) {
                       >
                         {isRtl ? r.badgeAr : r.badgeEn}
                       </span>
-                      <span>★ {r.score}</span>
+                      {r.score != null && <span>★ {r.score}</span>}
                       <span>• {r.meta}</span>
                     </div>
                   </div>

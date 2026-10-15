@@ -14,7 +14,7 @@ import {
 } from '../utils/deviceNotifications.js';
 
 const ANIME_GENRES = [
-  { id: 'all', ar: '🌟 جميع التصنيفات (6,973)', en: '🌟 All Genres (6,973)' },
+  { id: 'all', ar: '🌟 جميع التصنيفات', en: '🌟 All Genres' },
   { id: 'Action', ar: '⚔️ أكشن وقتال', en: '⚔️ Action' },
   { id: 'Fantasy', ar: '🔮 خيال وسحر', en: '🔮 Fantasy' },
   { id: 'Adventure', ar: '🧭 مغامرات', en: '🧭 Adventure' },
@@ -41,7 +41,8 @@ export default function TrendingAnime() {
   const initialFilter = searchParams.get('filter') || 'trending';
   const initialGenre = searchParams.get('genre') || 'all';
   const [query, setQuery] = useState(initialQ);
-  const [selectedSource, setSelectedSource] = useState(initialSource); // 'all' | 'witanime' | 'anime3rb' | 'english'
+  const [selectedSource, setSelectedSource] = useState(initialSource); // 'all' | 'witanime' | 'anime3rb' | 'english' | 'aniproject'
+  const [serverFourEnabled, setServerFourEnabled] = useState(false);
   const [activeFilter, setActiveFilter] = useState(initialFilter); // 'trending' | 'latest' | 'top' | 'alerts' | 'random'
   const [selectedGenre, setSelectedGenre] = useState(initialGenre);
 
@@ -56,11 +57,19 @@ export default function TrendingAnime() {
     setSelectedGenre(gnrParam);
   }, [searchParams]);
 
+  useEffect(() => {
+    let active = true;
+    api.get('/api/stream/sources')
+      .then((data) => { if (active) setServerFourEnabled(data?.sources?.some((s) => s.id === 'aniproject') || false); })
+      .catch(() => { if (active) setServerFourEnabled(false); });
+    return () => { active = false; };
+  }, []);
+
   const [trendingList, setTrendingList] = useState([]);
   const [latestStreamList, setLatestStreamList] = useState([]);
   const [catalogList, setCatalogList] = useState([]);
   const [catalogPage, setCatalogPage] = useState(1);
-  const [totalCatalogCount, setTotalCatalogCount] = useState(6973);
+  const [totalCatalogCount, setTotalCatalogCount] = useState(0);
   const [hasNextCatalogPage, setHasNextCatalogPage] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [randomScraperList, setRandomScraperList] = useState([]);
@@ -140,7 +149,7 @@ export default function TrendingAnime() {
       if (!alive) return;
       setLatestStreamList(latestData?.items || []);
       setCatalogList(catalogData?.items || []);
-      setTotalCatalogCount(Number(catalogData?.totalCount) || (catalogData?.items?.length || 6973));
+      setTotalCatalogCount(Number.isFinite(Number(catalogData?.totalCount)) ? Number(catalogData?.totalCount) : (catalogData?.items?.length || 0));
       setHasNextCatalogPage(catalogData?.hasNext !== false);
       setRandomScraperList(randomData?.items || []);
       setTrendingList(trendData?.anime || []);
@@ -208,13 +217,13 @@ export default function TrendingAnime() {
             titleEn: s.titleEn || s.slug,
             titleAr: s.titleAr || s.titleEn || s.slug,
             poster: s.poster,
-            episodes: s.episode || s.episodes || null,
-            score: s.score || 94,
-            genres: s.genres || ['Action', 'Fantasy'],
+            episodes: s.episode ?? s.episodes ?? null,
+            score: s.source === 'aniproject' ? (s.score ?? null) : (s.score || 94),
+            genres: s.source === 'aniproject' ? (s.genres || []) : (s.genres || ['Action', 'Fantasy']),
             isDirectStream: true,
             isMalOnly: false,
             source: s.source || (String(s.slug).startsWith('a3rb-') ? 'anime3rb' : 'witanime'),
-            sourceLabel: s.sourceLabel || (s.source === 'anime3rb' ? 'سيرفر BLACK X 2' : s.source === 'english' ? 'سيرفر BLACK X 3' : 'سيرفر BLACK X 1')
+            sourceLabel: s.sourceLabel || (s.source === 'aniproject' ? 'سيرفر BLACK X 4' : s.source === 'anime3rb' ? 'سيرفر BLACK X 2' : s.source === 'english' ? 'سيرفر BLACK X 3' : 'سيرفر BLACK X 1')
           });
         }
 
@@ -273,6 +282,7 @@ export default function TrendingAnime() {
     }
 
     if (activeFilter === 'alerts') {
+      if (selectedSource === 'aniproject') return []; // No provider latest-feed/alert catalog.
       return getSubscribedAnimeList().map((sub) => ({
         id: `sub-${sub.slug}`,
         slug: sub.slug,
@@ -646,6 +656,67 @@ export default function TrendingAnime() {
         </div>
       </section>
 
+      <div className="glass" style={{ padding: '0.85rem', borderRadius: '16px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.7rem' }}>
+          {[
+            { id: 'all', ar: 'جميع سيرفرات BLACK X', en: 'All BLACK X Servers' },
+            { id: 'witanime', ar: 'BLACK X 1', en: 'BLACK X 1' },
+            { id: 'anime3rb', ar: 'BLACK X 2', en: 'BLACK X 2' },
+            { id: 'english', ar: 'BLACK X 3', en: 'BLACK X 3' },
+            { id: 'aniproject', ar: 'BLACK X 4 (بحث فقط)', en: 'BLACK X 4 (Search only)', disabled: !serverFourEnabled }
+          ].map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              disabled={option.disabled}
+              title={option.disabled ? (lang === 'ar' ? 'يتطلب إعداد ANIPROJECT_API_URL' : 'Set ANIPROJECT_API_URL to enable') : undefined}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                if (option.id === 'all') next.delete('source');
+                else next.set('source', option.id);
+                setSearchParams(next);
+              }}
+              style={{
+                background: selectedSource === option.id ? '#fff' : 'rgba(255,255,255,0.07)',
+                color: selectedSource === option.id ? '#000' : '#fff',
+                border: '1px solid rgba(255,255,255,0.26)', borderRadius: '99px',
+                padding: '0.4rem 0.75rem', fontSize: '0.76rem', fontWeight: 800,
+                opacity: option.disabled ? 0.48 : 1, cursor: option.disabled ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {lang === 'ar' ? option.ar : option.en}
+            </button>
+          ))}
+        </div>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          runSearch(query);
+          const next = new URLSearchParams(searchParams);
+          if (query.trim()) next.set('q', query.trim());
+          else next.delete('q');
+          setSearchParams(next);
+        }} style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label={lang === 'ar' ? 'بحث في الأنمي' : 'Search anime'}
+            placeholder={lang === 'ar' ? 'ابحث عن أنمي بالعنوان...' : 'Search anime by title...'}
+            style={{ flex: 1, minWidth: 0, background: '#090909', color: '#fff', border: '1px solid #555', borderRadius: '10px', padding: '0.55rem 0.7rem' }}
+          />
+          <button type="submit" className="btn btn--primary btn--sm">
+            {lang === 'ar' ? 'بحث' : 'Search'}
+          </button>
+        </form>
+        {selectedSource === 'aniproject' && (
+          <p style={{ margin: '0.6rem 0 0', color: 'var(--ink-dim)', fontSize: '0.8rem' }}>
+            {!serverFourEnabled
+              ? (lang === 'ar' ? 'مصدر BLACK X 4 غير مفعّل؛ أضف ANIPROJECT_API_URL إلى إعدادات الخادم.' : 'BLACK X 4 is not configured; set ANIPROJECT_API_URL on the server.')
+              : (lang === 'ar' ? 'هذا المصدر يدعم البحث بالعنوان، ولا يقدّم أحدث الحلقات أو فهرساً كاملاً.' : 'This source supports title search, not a latest-episode or full-catalog feed.')}
+          </p>
+        )}
+      </div>
+
       {/* Active Unified Search / Filter Status Pill (only shown when filtered via Unified Search Window) */}
       {(query || selectedSource !== 'all' || selectedGenre !== 'all' || activeFilter !== 'trending') && (
         <div
@@ -699,8 +770,12 @@ export default function TrendingAnime() {
         <div className="glass" style={{ padding: '2.5rem' }}>
           <EmptyState
             icon="🎬"
-            title={lang === 'ar' ? 'لا توجد أنميات مطابقة لبحثك حالياً' : 'No matching anime found'}
-            sub={lang === 'ar' ? 'جرب البحث بكلمة أخرى أو تصفح قائمة الأكثر رواجاً' : 'Try another keyword or browse Trending Now'}
+            title={selectedSource === 'aniproject' && !query
+              ? (lang === 'ar' ? 'ابحث عن عنوان أنمي في سيرفر BLACK X 4' : 'Search for an anime title on BLACK X 4')
+              : (lang === 'ar' ? 'لا توجد أنميات مطابقة لبحثك حالياً' : 'No matching anime found')}
+            sub={selectedSource === 'aniproject'
+              ? (lang === 'ar' ? 'هذا المصدر لا يوفّر قائمة تصفح؛ استخدم مربع البحث بالأعلى.' : 'This source has no browse feed; use the search box above.')
+              : (lang === 'ar' ? 'جرب البحث بكلمة أخرى أو تصفح قائمة الأكثر رواجاً' : 'Try another keyword or browse Trending Now')}
           />
         </div>
       ) : (
@@ -780,6 +855,10 @@ export default function TrendingAnime() {
                       >
                         📋 {lang === 'ar' ? 'فهرس BLACK X' : 'BLACK X Index'}
                       </span>
+                    ) : item.source === 'aniproject' ? (
+                      <span style={{ padding: '0.2rem 0.55rem', borderRadius: '8px', background: '#111', border: '1px solid #aaa', color: '#fff', fontSize: '0.68rem', fontWeight: 900 }}>
+                        BLACK X 4
+                      </span>
                     ) : (
                       <span
                         style={{
@@ -813,28 +892,24 @@ export default function TrendingAnime() {
                         ? (lang === 'ar' ? '📋 غير مدرج بالسيرفرات' : '📋 Not on Servers')
                         : isMalOnly
                         ? (lang === 'ar' ? '🔍 اضغط لفحص توفره' : '🔍 Tap to Check Stream')
+                        : item.source === 'aniproject'
+                        ? (lang === 'ar' ? '▶ عرض الحلقات المتاحة' : '▶ View available episodes')
                         : isVip
                         ? (lang === 'ar' ? '⚡ يعرض فور نزوله' : '⚡ Same-Day VIP')
                         : (lang === 'ar' ? '⏳ +24س للمجاني' : '⏳ 24h Free Delay')}
                     </span>
                   </div>
 
-                  {/* Score Badge */}
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '8px',
-                      insetInlineEnd: '8px',
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '8px',
-                      background: 'rgba(0, 0, 0, 0.82)',
-                      color: '#fbbf24',
-                      fontSize: '0.74rem',
-                      fontWeight: 900
-                    }}
-                  >
-                    ★ {((item.score || 90) / 10).toFixed(1)}
-                  </span>
+                  {(item.source !== 'aniproject' || item.score != null) && (
+                    <span style={{
+                      position: 'absolute', top: '8px', insetInlineEnd: '8px',
+                      padding: '0.2rem 0.5rem', borderRadius: '8px',
+                      background: 'rgba(0, 0, 0, 0.82)', color: '#fbbf24',
+                      fontSize: '0.74rem', fontWeight: 900
+                    }}>
+                      ★ {((item.score || 90) / 10).toFixed(1)}
+                    </span>
+                  )}
 
                   {/* Bell Alert Quick Toggle Button on Card */}
                   <button
@@ -906,6 +981,8 @@ export default function TrendingAnime() {
                           ? '⚡ سيرفر BLACK X 2'
                           : item.source === 'english'
                           ? '🌐 سيرفر BLACK X 3'
+                          : item.source === 'aniproject'
+                          ? 'سيرفر BLACK X 4'
                           : '👑 سيرفر BLACK X 1'}
                       </span>
                       {item.episodes && (
@@ -940,7 +1017,7 @@ export default function TrendingAnime() {
         </div>
       )}
 
-      {/* Load More / Full 6,973 Anime Catalog Pagination */}
+      {/* Pagination for sources that actually expose a catalog. */}
       {!loading && !searching && searchResults === null && activeFilter !== 'alerts' && hasNextCatalogPage && (
         <div
           className="glass"
@@ -958,8 +1035,8 @@ export default function TrendingAnime() {
         >
           <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.78)' }}>
             {lang === 'ar'
-              ? `📚 يتم عرض ${formatNumber(unifiedAnime.length)} أنمي من أصل ${formatNumber(totalCatalogCount)} أنمي متوفر للبث المباشر على سيرفر BLACK X 1`
-              : `📚 Showing ${formatNumber(unifiedAnime.length)} of ${formatNumber(totalCatalogCount)} anime available on BLACK X Server 1`}
+              ? `📚 تم تحميل ${formatNumber(unifiedAnime.length)} عمل • إجمالي الفهرس الذي يعلنه المصدر: ${formatNumber(totalCatalogCount)}`
+              : `📚 ${formatNumber(unifiedAnime.length)} loaded • source-reported catalog total: ${formatNumber(totalCatalogCount)}`}
           </div>
           <button
             type="button"
@@ -975,7 +1052,7 @@ export default function TrendingAnime() {
           >
             {loadingMore
               ? (lang === 'ar' ? '⏳ جاري تحميل المزيد من الأنميات...' : '⏳ Loading More Anime...')
-              : (lang === 'ar' ? '➕ عرض المزيد من الأنميات (تصفح المكتبة الكاملة)' : '➕ Load More Anime (Full Catalog)')}
+              : (lang === 'ar' ? '➕ عرض المزيد من الأنميات' : '➕ Load More Anime')}
           </button>
         </div>
       )}

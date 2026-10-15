@@ -17,7 +17,8 @@ export default function Browse() {
   const initialServer = searchParams.get('server') || 'all';
 
   const [filter, setFilter] = useState(initialFilter); // ALL | MANHWA | MANGA | MANHUA | TOP_RATED | ONGOING | COMPLETED
-  const [serverFilter, setServerFilter] = useState(initialServer); // all | bx1 | bx2 | bx3
+  const [serverFilter, setServerFilter] = useState(initialServer); // all | bx1 | bx2 | bx3 | bx4
+  const [serverFourEnabled, setServerFourEnabled] = useState(false);
   const [query, setQuery] = useState(initialQ);
   const [libraryItems, setLibraryItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -35,8 +36,16 @@ export default function Browse() {
     setServerFilter(srvParam);
   }, [searchParams]);
 
+  useEffect(() => {
+    let active = true;
+    api.get('/api/stream/sources')
+      .then((data) => { if (active) setServerFourEnabled(data?.sources?.some((s) => s.id === 'aniproject') || false); })
+      .catch(() => { if (active) setServerFourEnabled(false); });
+    return () => { active = false; };
+  }, []);
+
   const safeCover = useCallback((url) => {
-    if (!url) return 'https://olympustaff.com/images/manga/thumbnail_b05147568d52f22c663c084172fc0dac.png';
+    if (!url) return '/blackx-logo.png';
     if (/(lekmanga|azorafly|azoramoon|appswat|meshmanga|dilar\.tube|mangamello)/i.test(url)) {
       return resolveApiUrl(`/api/proxy/image?url=${encodeURIComponent(url)}`);
     }
@@ -56,15 +65,16 @@ export default function Browse() {
 
   // Server tabs configuration (Exclusive BLACK X Branding)
   const serverTabs = [
-    { id: 'all', labelAr: '🌐 جميع سيرفرات BLACK X (8 مصادر + الفهرس العالمي)', labelEn: '🌐 All BLACK X Servers (8 Sources + Global Index)' },
+    { id: 'all', labelAr: '🌐 جميع سيرفرات BLACK X', labelEn: '🌐 All BLACK X Servers' },
     { id: 'bx1', labelAr: '⚡ سيرفر BLACK X 1 (مانهوا عربية)', labelEn: '⚡ BLACK X 1 (AR Manhwa)' },
     { id: 'bx2', labelAr: '📖 سيرفر BLACK X 2 (مانجا عربية)', labelEn: '📖 BLACK X 2 (AR Manga)' },
-    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (الفهرس العالمي الشامل +120,000 عمل)', labelEn: '👑 BLACK X 3 (Master Global Index +120K)' }
+    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (الفهرس العالمي)', labelEn: '👑 BLACK X 3 (Global Index)' },
+    { id: 'bx4', labelAr: '🔎 سيرفر BLACK X 4 (بحث فقط)', labelEn: '🔎 BLACK X 4 (Search only)', disabled: !serverFourEnabled }
   ];
 
   // Filter chips configuration (including Korean Manhwa, Japanese Manga, Chinese Manhua)
   const filterChips = [
-    { id: 'ALL', labelAr: '🌟 الكل (+120,000 عمل)', labelEn: '🌟 All (+120K Works)' },
+    { id: 'ALL', labelAr: '🌟 الكل', labelEn: '🌟 All' },
     { id: 'MANHWA', labelAr: '🇰🇷 مانهوا كورية (Manhwa)', labelEn: '🇰🇷 Korean Manhwa' },
     { id: 'MANGA', labelAr: '🇯🇵 مانجا يابانية (Manga)', labelEn: '🇯🇵 Japanese Manga' },
     { id: 'MANHUA', labelAr: '🇨🇳 مانهاوا صينية (Manhua)', labelEn: '🇨🇳 Chinese Manhua' },
@@ -218,7 +228,8 @@ export default function Browse() {
     try {
       const [res, alHits] = await Promise.all([
         api.get(`/api/search?query=${encodeURIComponent(q)}&type=manga&server=${encodeURIComponent(activeSrv)}`).catch(() => ({})),
-        fetchAniListMasterClient(1, null, q)
+        activeSrv === 'all' || activeSrv === 'bx3'
+          ? fetchAniListMasterClient(1, null, q) : Promise.resolve([])
       ]);
       const rawList = res?.manga || res?.results || [];
       const mappedServer = rawList.map((r, i) => ({
@@ -234,12 +245,12 @@ export default function Browse() {
           '/blackx-logo.png',
         banner: r.banner || r.poster || r.coverImage || r.coverUrl,
         author: r.author || r.source || 'سيرفرات BLACK X',
-        rating: r.rating || (r.averageScore ? (r.averageScore / 10).toFixed(1) : '9.8'),
-        description_ar: r.description_ar || r.description || 'فصول مترجمة عالية الجودة متاحة مباشرة عبر BLACK X.',
-        description_en: r.description_en || r.description || 'Full high-resolution chapters on BLACK X.',
-        chapters_count: r.chapters_count || r.chaptersCount || 100,
-        status: r.status || 'مستمر',
-        genres: r.genres || ['أكشن', 'فانتازيا'],
+        rating: r.rating ?? (r.averageScore ? (r.averageScore / 10).toFixed(1) : null),
+        description_ar: r.description_ar || r.description || '',
+        description_en: r.description_en || r.description || '',
+        chapters_count: r.chapters_count ?? r.chaptersCount ?? null,
+        status: r.status || '',
+        genres: r.genres || [],
         source: r.source || 'BLACK X',
         server: r.server || 'bx1'
       }));
@@ -597,6 +608,62 @@ export default function Browse() {
         </div>
       )}
 
+      {/* Source 4 has no catalog feed: its search is available here as well as in the unified search. */}
+      <div className="glass" style={{ padding: '0.85rem', marginBottom: '1rem', borderRadius: '16px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.7rem' }}>
+          {serverTabs.map((srv) => (
+            <button
+              key={srv.id}
+              type="button"
+              disabled={srv.disabled}
+              title={srv.disabled ? (lang === 'ar' ? 'يتطلب إعداد ANIPROJECT_API_URL' : 'Set ANIPROJECT_API_URL to enable') : undefined}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                if (srv.id === 'all') next.delete('server');
+                else next.set('server', srv.id);
+                setLiveSearchResults(null);
+                setSearchParams(next);
+              }}
+              style={{
+                background: serverFilter === srv.id ? '#fff' : 'rgba(255,255,255,0.07)',
+                color: serverFilter === srv.id ? '#000' : '#fff',
+                border: '1px solid rgba(255,255,255,0.26)', borderRadius: '99px',
+                padding: '0.4rem 0.75rem', fontSize: '0.76rem', fontWeight: 800,
+                opacity: srv.disabled ? 0.48 : 1, cursor: srv.disabled ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {lang === 'ar' ? srv.labelAr : srv.labelEn}
+            </button>
+          ))}
+        </div>
+        <form onSubmit={(e) => {
+          handleSearch(e);
+          const next = new URLSearchParams(searchParams);
+          if (query.trim()) next.set('q', query.trim());
+          else next.delete('q');
+          setSearchParams(next);
+        }} style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label={lang === 'ar' ? 'بحث في المانجا' : 'Search manga'}
+            placeholder={lang === 'ar' ? 'ابحث عن مانجا بالعنوان...' : 'Search manga by title...'}
+            style={{ flex: 1, minWidth: 0, background: '#090909', color: '#fff', border: '1px solid #555', borderRadius: '10px', padding: '0.55rem 0.7rem' }}
+          />
+          <button type="submit" className="btn btn--primary btn--sm">
+            {lang === 'ar' ? 'بحث' : 'Search'}
+          </button>
+        </form>
+        {serverFilter === 'bx4' && (
+          <p style={{ margin: '0.6rem 0 0', color: 'var(--ink-dim)', fontSize: '0.8rem' }}>
+            {!serverFourEnabled
+              ? (lang === 'ar' ? 'مصدر BLACK X 4 غير مفعّل؛ أضف ANIPROJECT_API_URL إلى إعدادات الخادم.' : 'BLACK X 4 is not configured; set ANIPROJECT_API_URL on the server.')
+              : (lang === 'ar' ? 'BLACK X 4 مصدر للبحث والقراءة بالعنوان؛ لا يوفّر فهرس تصفح أو فصولاً عربية مضمونة.' : 'BLACK X 4 supports title search and reading; it has no browse feed or guaranteed Arabic chapters.')}
+          </p>
+        )}
+      </div>
+
       {/* Active Unified Search / Filter Status Pill (only shown when filtered via Unified Search Window) */}
       {(query || serverFilter !== 'all' || filter !== 'ALL') && (
         <div
@@ -671,7 +738,9 @@ export default function Browse() {
         <div className="glass reveal" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '16px' }}>
           <EmptyState
             icon="📚"
-            title={lang === 'ar' ? 'لم يتم العثور على أعمال مطابقة' : 'No titles matched your search'}
+            title={serverFilter === 'bx4' && !query
+              ? (lang === 'ar' ? 'ابحث عن عنوان مانجا في سيرفر BLACK X 4' : 'Search for a manga title on BLACK X 4')
+              : (lang === 'ar' ? 'لم يتم العثور على أعمال مطابقة' : 'No titles matched your search')}
           >
             <button
               type="button"
@@ -680,7 +749,9 @@ export default function Browse() {
                 setQuery('');
                 setFilter('ALL');
                 setLiveSearchResults(null);
-                loadLibrary();
+                setServerFilter('all');
+                setSearchParams({});
+                loadLibrary('all');
               }}
               style={{ marginTop: '1rem' }}
             >
@@ -733,39 +804,27 @@ export default function Browse() {
                   </span>
                 </div>
 
-                {/* Rating Badge */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '10px',
-                    insetInlineEnd: '10px',
-                    background: 'rgba(0, 0, 0, 0.78)',
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '8px',
-                    fontSize: '0.78rem',
-                    fontWeight: 800,
-                    color: '#fbbf24',
-                    backdropFilter: 'blur(6px)'
-                  }}
-                >
-                  ★ {item.rating}
-                </div>
+                {/* Only display scores actually reported by a source. */}
+                {item.rating != null && (
+                  <div style={{
+                    position: 'absolute', top: '10px', insetInlineEnd: '10px',
+                    background: 'rgba(0, 0, 0, 0.78)', padding: '0.2rem 0.55rem',
+                    borderRadius: '8px', fontSize: '0.78rem', fontWeight: 800, color: '#fbbf24'
+                  }}>
+                    ★ {item.rating}
+                  </div>
+                )}
 
-                  {/* Status Badge */}
+                {item.status && (
                   <div style={{ bottom: '10px', insetInlineStart: '10px', position: 'absolute' }}>
-                  <span
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.75)',
-                      color: '#e2e8f0',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      padding: '0.15rem 0.5rem',
-                      borderRadius: '6px'
-                    }}
-                  >
-                    {item.status}
-                  </span>
-                </div>
+                    <span style={{
+                      background: 'rgba(0, 0, 0, 0.75)', color: '#e2e8f0',
+                      fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '6px'
+                    }}>
+                      {item.status}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Card Details */}
@@ -785,7 +844,7 @@ export default function Browse() {
                 </h3>
 
                 <div style={{ fontSize: '0.78rem', color: 'var(--ink-dim)', marginBottom: '0.65rem' }}>
-                  ✍️ {item.author || 'BLACK X Manga'} · {item.release_year || '2024'}
+                  ✍️ {item.author || 'BLACK X Manga'}{(item.release_year || item.server !== 'bx4') && ` · ${item.release_year || '2024'}`}
                 </div>
 
                 {/* Genre chips */}
@@ -835,7 +894,7 @@ export default function Browse() {
                   }}
                 >
                   <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--cyan)' }}>
-                    {item.chapters_count} {lang === 'ar' ? 'فصلاً' : 'Chs'}
+                    {item.chapters_count != null ? `${item.chapters_count} ${lang === 'ar' ? 'فصلاً' : 'Chs'}` : (lang === 'ar' ? 'عرض الفصول' : 'View chapters')}
                   </span>
                   <div style={{ display: 'flex', gap: '0.4rem' }}>
                     <button
@@ -864,7 +923,7 @@ export default function Browse() {
         </div>
       )}
 
-      {!loading && liveSearchResults === null && displayedItems.length > 0 && (
+      {!loading && serverFilter !== 'bx4' && liveSearchResults === null && displayedItems.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem', marginBottom: '1rem' }}>
           <button
             type="button"
@@ -927,7 +986,9 @@ export default function Browse() {
                   {lang === 'ar' ? 'الحالة:' : 'Status:'} <strong style={{ color: '#34d399' }}>{selectedItem.status}</strong>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--ink-dim)', marginBottom: '0.35rem' }}>
-                  {lang === 'ar' ? 'التقييم:' : 'Score:'} <strong style={{ color: '#fbbf24' }}>★ {selectedItem.rating} / 10</strong>
+                  {selectedItem.rating != null
+                    ? <>{lang === 'ar' ? 'التقييم:' : 'Score:'} <strong style={{ color: '#fbbf24' }}>★ {selectedItem.rating} / 10</strong></>
+                    : (lang === 'ar' ? 'لا يوجد تقييم متاح' : 'No rating available')}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--ink-dim)' }}>
                   {lang === 'ar' ? 'المصدر:' : 'Source:'} <strong style={{ color: '#38bdf8' }}>سيرفرات BLACK X</strong>
