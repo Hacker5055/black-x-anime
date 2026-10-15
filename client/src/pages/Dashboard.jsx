@@ -10,6 +10,7 @@ import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import AnimeDiscover from '../components/AnimeDiscover.jsx';
 import BxIcon from '../components/BxIcon.jsx';
 import { sendNativeDeviceNotification } from '../utils/deviceNotifications.js';
+import { useAnimeCatalogTotal, formatCount } from '../hooks/useCatalogStats.js';
 
 const WEEK_DAYS = [
   { id: 6, ar: 'السبت', en: 'Saturday' },
@@ -1461,6 +1462,8 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
   const [vipAlertOn, setVipAlertOn] = useState(true);
   const [autoHealOn, setAutoHealOn] = useState(true);
   const [selectedQuality, setSelectedQuality] = useState('120Hz');
+  // Real catalog size (null until known). Manga sources report no total, so no number there.
+  const animeTotal = useAnimeCatalogTotal();
 
   const hubs = [
     { id: 'home', labelAr: '🔥 الرئيسية', labelEn: '🔥 All Hub', route: null },
@@ -1556,7 +1559,7 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
             <button
               type="button"
               className="ios-lg-orb"
-              title={lang === 'ar' ? 'مكتبة المانهوا والمانجا الشاملة (+120K)' : 'Master Library (+120K)'}
+              title={lang === 'ar' ? 'مكتبة المانهوا والمانجا الشاملة' : 'Master Library'}
               onClick={() => navigate('/browse')}
             >
               <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor">
@@ -1695,7 +1698,7 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', justifyContent: 'space-between' }}>
         {/* Two Side-by-Side Anime & Manhwa Bento Squircles */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.1rem', flex: 1 }}>
-          {/* Square Card 1: Full Anime Library (6,973 Anime) */}
+          {/* Square Card 1: Full Anime Library (real count from /api/stream/stats) */}
           <div
             className="ios-lg-surface"
             onClick={() => navigate('/trending')}
@@ -1715,7 +1718,15 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.22rem', fontWeight: 700 }}>
                   <span>⚡</span>
-                  <span>{lang === 'ar' ? '6,973 أنمي • 3 سيرفرات' : '6,973 Anime • 3 Servers'}</span>
+                  <span>
+                    {animeTotal
+                      ? lang === 'ar'
+                        ? `${formatCount(animeTotal)} أنمي • 3 سيرفرات`
+                        : `${formatCount(animeTotal)} Anime • 3 Servers`
+                      : lang === 'ar'
+                        ? '3 سيرفرات'
+                        : '3 Servers'}
+                  </span>
                 </div>
               </div>
               <button
@@ -1750,7 +1761,7 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
             </div>
           </div>
 
-          {/* Square Card 2: Master Manga, Manhwa & Manhua Library (+120,000 Works) */}
+          {/* Square Card 2: Master Manga, Manhwa & Manhua Library (sources report no total, so no count) */}
           <div
             className="ios-lg-surface"
             onClick={() => navigate('/browse')}
@@ -1770,7 +1781,7 @@ function IosLiquidGlassSmartDeck({ onOpenAuth, featuredItems = [] }) {
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)', marginTop: '0.22rem', fontWeight: 700 }}>
                   <span>📖</span>
-                  <span>{lang === 'ar' ? '+120,000 عمل • 8 مصادر' : '+120,000 Works • 8 Sources'}</span>
+                  <span>{lang === 'ar' ? '8 مصادر' : '8 Sources'}</span>
                 </div>
               </div>
               <button

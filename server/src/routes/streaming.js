@@ -57,7 +57,7 @@ router.get('/sources', (req, res) => {
   });
 });
 
-/** GET /api/stream/catalog — complete catalog of anime across all BLACK X servers (6,973+ on BLACK X 1) */
+/** GET /api/stream/catalog — catalog of anime across all BLACK X servers (total reported by BLACK X 1 when available) */
 router.get('/catalog', async (req, res) => {
   const source = (req.query.source || 'all').toLowerCase();
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -140,7 +140,9 @@ router.get('/catalog', async (req, res) => {
     res.json({
       items,
       count: items.length,
-      totalCount: totalCount || items.length,
+      // Real catalog size from BLACK X 1's search index; null when that source
+      // did not answer (never the page size presented as a total).
+      totalCount: totalCount || null,
       totalPages,
       hasNext,
       page
@@ -151,6 +153,23 @@ router.get('/catalog', async (req, res) => {
 });
 
 /** GET /api/stream/health — is the source reachable */
+/**
+ * GET /api/stream/stats — real catalog size reported by BLACK X 1's search
+ * index, used by every "N anime" label on the site. Answers 503 (never a
+ * guessed number) when the index is unreachable; the CDN then keeps serving
+ * the last good value thanks to stale-if-error.
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    const catalog = await fetchWitcherCatalog({ page: 1, hitsPerPage: 12 });
+    const animeTotal = Number(catalog?.totalCount) || null;
+    if (!animeTotal) return res.status(503).json({ animeTotal: null });
+    return res.json({ animeTotal });
+  } catch {
+    return res.status(503).json({ animeTotal: null });
+  }
+});
+
 router.get('/health', async (req, res) => {
   res.json(await scrapeHealth());
 });

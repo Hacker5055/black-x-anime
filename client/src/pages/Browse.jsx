@@ -59,12 +59,12 @@ export default function Browse() {
     { id: 'all', labelAr: '🌐 جميع سيرفرات BLACK X (8 مصادر + الفهرس العالمي)', labelEn: '🌐 All BLACK X Servers (8 Sources + Global Index)' },
     { id: 'bx1', labelAr: '⚡ سيرفر BLACK X 1 (مانهوا عربية)', labelEn: '⚡ BLACK X 1 (AR Manhwa)' },
     { id: 'bx2', labelAr: '📖 سيرفر BLACK X 2 (مانجا عربية)', labelEn: '📖 BLACK X 2 (AR Manga)' },
-    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (الفهرس العالمي الشامل +120,000 عمل)', labelEn: '👑 BLACK X 3 (Master Global Index +120K)' }
+    { id: 'bx3', labelAr: '👑 سيرفر BLACK X 3 (الفهرس العالمي الشامل)', labelEn: '👑 BLACK X 3 (Master Global Index)' }
   ];
 
   // Filter chips configuration (including Korean Manhwa, Japanese Manga, Chinese Manhua)
   const filterChips = [
-    { id: 'ALL', labelAr: '🌟 الكل (+120,000 عمل)', labelEn: '🌟 All (+120K Works)' },
+    { id: 'ALL', labelAr: '🌟 الكل', labelEn: '🌟 All' },
     { id: 'MANHWA', labelAr: '🇰🇷 مانهوا كورية (Manhwa)', labelEn: '🇰🇷 Korean Manhwa' },
     { id: 'MANGA', labelAr: '🇯🇵 مانجا يابانية (Manga)', labelEn: '🇯🇵 Japanese Manga' },
     { id: 'MANHUA', labelAr: '🇨🇳 مانهاوا صينية (Manhua)', labelEn: '🇨🇳 Chinese Manhua' },

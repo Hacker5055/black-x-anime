@@ -20,6 +20,8 @@ import mangaNovelRoutes from './routes/mangaNovel.routes.js';
 import { animeScraperRouter } from './routes/animeScraper.routes.js';
 import { optionalAuth, isAuthConfigured } from './auth.js';
 import { db } from './db.js';
+import { cdnCacheMiddleware } from './lib/cdnCache.js';
+import { getFirestoreAuthStatus, getFirestoreAuthHeaders, isServiceAccountConfigured } from './services/firestoreAuth.js';
 
 // Keep local Node development resilient to client-abort and background-task
 // rejections. Vercel should manage the serverless invocation lifecycle itself.
@@ -104,16 +106,25 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(optionalAuth);
+// Public, user-independent GET routes are cached on Vercel's CDN (see
+// shared/publicCacheRoutes.js); everything else is left untouched.
+app.use(cdnCacheMiddleware);
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   try {
     // Verify the schema used by authentication, not just that Express is alive.
     db.prepare('SELECT id, username, email, password_hash FROM users LIMIT 0').all();
+    // When a service-account key is configured, obtain a token once per
+    // instance so the reported status reflects whether the key really works.
+    if (isServiceAccountConfigured() && getFirestoreAuthStatus() === 'service_account_pending') {
+      await getFirestoreAuthHeaders();
+    }
     res.json({
       ok: true,
       name: 'BLACK X API',
       database: 'ok',
       authentication: isAuthConfigured() ? 'ok' : 'unavailable',
+      firestoreAuth: getFirestoreAuthStatus(),
       time: new Date().toISOString()
     });
   } catch (err) {

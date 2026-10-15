@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { imgFallback, pushToast } from '../hooks/hooks.js';
+import { useAnimeCatalogTotal, formatCount } from '../hooks/useCatalogStats.js';
 import { SkeletonGrid, EmptyState } from '../components/Loading.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import {
@@ -14,7 +15,7 @@ import {
 } from '../utils/deviceNotifications.js';
 
 const ANIME_GENRES = [
-  { id: 'all', ar: '🌟 جميع التصنيفات (6,973)', en: '🌟 All Genres (6,973)' },
+  { id: 'all', ar: '🌟 جميع التصنيفات', en: '🌟 All Genres' },
   { id: 'Action', ar: '⚔️ أكشن وقتال', en: '⚔️ Action' },
   { id: 'Fantasy', ar: '🔮 خيال وسحر', en: '🔮 Fantasy' },
   { id: 'Adventure', ar: '🧭 مغامرات', en: '🧭 Adventure' },
@@ -31,6 +32,7 @@ export default function TrendingAnime() {
   const { lang, formatNumber } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const animeTotal = useAnimeCatalogTotal();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const vipTier = resolveUserVipTier(user);
@@ -60,7 +62,8 @@ export default function TrendingAnime() {
   const [latestStreamList, setLatestStreamList] = useState([]);
   const [catalogList, setCatalogList] = useState([]);
   const [catalogPage, setCatalogPage] = useState(1);
-  const [totalCatalogCount, setTotalCatalogCount] = useState(6973);
+  // Real catalog size reported by the API; null until known (never a guess).
+  const [totalCatalogCount, setTotalCatalogCount] = useState(null);
   const [hasNextCatalogPage, setHasNextCatalogPage] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [randomScraperList, setRandomScraperList] = useState([]);
@@ -140,7 +143,8 @@ export default function TrendingAnime() {
       if (!alive) return;
       setLatestStreamList(latestData?.items || []);
       setCatalogList(catalogData?.items || []);
-      setTotalCatalogCount(Number(catalogData?.totalCount) || (catalogData?.items?.length || 6973));
+      const reportedTotal = Number(catalogData?.totalCount);
+      setTotalCatalogCount(Number.isFinite(reportedTotal) && reportedTotal > 0 ? reportedTotal : null);
       setHasNextCatalogPage(catalogData?.hasNext !== false);
       setRandomScraperList(randomData?.items || []);
       setTrendingList(trendData?.anime || []);
@@ -541,7 +545,12 @@ export default function TrendingAnime() {
                 alt="BLACK X"
                 style={{ width: '22px', height: '22px', borderRadius: '6px', objectFit: 'cover' }}
               />
-              <span>BLACK X <span style={{ fontWeight: 500, opacity: 0.78 }}>original • 6,973 ANIME</span></span>
+              <span>
+                BLACK X{' '}
+                <span style={{ fontWeight: 500, opacity: 0.78 }}>
+                  {animeTotal ? `original • ${formatCount(animeTotal)} ANIME` : 'original'}
+                </span>
+              </span>
             </div>
             <h1 style={{ margin: 0, fontSize: 'clamp(1.75rem, 3.2vw, 2.45rem)', fontWeight: 900 }}>
               🔥 {lang === 'ar' ? 'الأعمال الرائجة ومكتبة الأنمي الشاملة' : 'Trending & Complete Anime Hub'}
@@ -940,7 +949,7 @@ export default function TrendingAnime() {
         </div>
       )}
 
-      {/* Load More / Full 6,973 Anime Catalog Pagination */}
+      {/* Load More / full anime catalog pagination */}
       {!loading && !searching && searchResults === null && activeFilter !== 'alerts' && hasNextCatalogPage && (
         <div
           className="glass"
@@ -957,9 +966,13 @@ export default function TrendingAnime() {
           }}
         >
           <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.78)' }}>
-            {lang === 'ar'
-              ? `📚 يتم عرض ${formatNumber(unifiedAnime.length)} أنمي من أصل ${formatNumber(totalCatalogCount)} أنمي متوفر للبث المباشر على سيرفر BLACK X 1`
-              : `📚 Showing ${formatNumber(unifiedAnime.length)} of ${formatNumber(totalCatalogCount)} anime available on BLACK X Server 1`}
+            {totalCatalogCount
+              ? lang === 'ar'
+                ? `📚 يتم عرض ${formatNumber(unifiedAnime.length)} أنمي من أصل ${formatNumber(totalCatalogCount)} أنمي متوفر للبث المباشر على سيرفر BLACK X 1`
+                : `📚 Showing ${formatNumber(unifiedAnime.length)} of ${formatNumber(totalCatalogCount)} anime available on BLACK X Server 1`
+              : lang === 'ar'
+                ? `📚 يتم عرض ${formatNumber(unifiedAnime.length)} أنمي متوفر للبث المباشر`
+                : `📚 Showing ${formatNumber(unifiedAnime.length)} anime available to stream`}
           </div>
           <button
             type="button"

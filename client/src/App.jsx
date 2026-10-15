@@ -20,6 +20,7 @@ import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 import BxIcon from './components/BxIcon.jsx';
+import { useAnimeCatalogTotal, formatCount } from './hooks/useCatalogStats.js';
 
 /**
  * Comprehensive Unified Monochrome Liquid Glass Search, Server & Category Hub (Anime + Manga/Manhwa)
@@ -35,17 +36,21 @@ function SpotlightSearchModal({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
 
+  // Real catalog size (null until known); manga sources report no total, so no number.
+  const animeTotal = useAnimeCatalogTotal();
+  const animeCountSuffix = animeTotal ? ` (${formatCount(animeTotal)})` : '';
+
   const scopeTabs = [
     { id: 'ALL', ar: 'الكل (أنمي + مانجا)', en: 'All (Anime + Manga)', icon: 'sparkles' },
-    { id: 'ANIME', ar: 'الأنمي (6,973)', en: 'Anime (6,973)', icon: 'tv' },
-    { id: 'MANGA', ar: 'المانجا والمانهوا (+120K)', en: 'Manga & Manhwa (+120K)', icon: 'book' }
+    { id: 'ANIME', ar: `الأنمي${animeCountSuffix}`, en: `Anime${animeCountSuffix}`, icon: 'tv' },
+    { id: 'MANGA', ar: 'المانجا والمانهوا', en: 'Manga & Manhwa', icon: 'book' }
   ];
 
   const serverOptions = [
     { id: 'all', animeSrc: 'all', mangaSrv: 'all', ar: 'جميع سيرفرات BLACK X', en: 'All BLACK X Servers' },
     { id: 'bx1', animeSrc: 'witanime', mangaSrv: 'bx1', ar: 'سيرفر BLACK X 1', en: 'BLACK X Server 1' },
     { id: 'bx2', animeSrc: 'anime3rb', mangaSrv: 'bx2', ar: 'سيرفر BLACK X 2', en: 'BLACK X Server 2' },
-    { id: 'bx3', animeSrc: 'english', mangaSrv: 'bx3', ar: 'سيرفر BLACK X 3 (+120K)', en: 'BLACK X Server 3 (+120K)' }
+    { id: 'bx3', animeSrc: 'english', mangaSrv: 'bx3', ar: 'سيرفر BLACK X 3', en: 'BLACK X Server 3' }
   ];
 
   const categoryOptions = [

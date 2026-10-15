@@ -8,8 +8,9 @@ Read this file before changing the repository. It records the user's durable req
 - Official website: <https://black-x-anime.me/>.
 - Hosting decision: **Vercel only** for the website/API; the user prefers hosting without a credit card. Do not restore Cloudflare Workers deployment code or move hosting providers unless explicitly asked. A stale `Workers Builds` GitHub check may fail without affecting Vercel.
 - GitHub repository: <https://github.com/Hacker5055/black-x-anime>.
-- Latest public `main` verified on 2026-10-15: `939c132` (merge of PR #6). PR #4 (`6c44129`) and PR #5 (API/JWT and Firebase token fixes, head `b84f83d`) are merged. Re-check GitHub before relying on this snapshot.
-- The user works from a separate Linux clone, typically `~/black-x-anime`; `/home/user/black-x` is the Arena workspace path and does not exist on the user's laptop.
+- Latest public `main` verified on 2026-10-15: `97064a9` (merge of PR #8, website player fullscreen fix). PR #6 (`939c132`), PR #4 (`6c44129`) and PR #5 (API/JWT and Firebase token fixes, head `b84f83d`) are merged. Re-check GitHub before relying on this snapshot.
+- The user works from a separate Linux clone, typically `~/black-x-anime`; `/home/user/black-x-anime` is the Arena workspace path and does not exist on the user's laptop.
+- Communicate with the user in Arabic (Egyptian dialect). When the user says «ارفعه», commit the intended files, push the session branch, open a PR and merge it into `main` (this deploys production).
 
 ## 2. User requirements and guardrails
 
@@ -81,12 +82,27 @@ The official domain returned HTTP 200 for the following during the latest check:
 - `/api/stream/latest`: 135 latest items — BLACK X 1/Witanime 71, BLACK X 2/Anime3rb 40, BLACK X 3/English 24.
 - `/api/content/library?type=MANHWA&server=all&page=1`: 67 rows, about 65 unique normalized titles. Server-specific page-1 rows: `bx1=29`, `bx2=21`, `bx3=34`; servers overlap, so these counts are not additive. Pairwise title overlap observed: bx1/bx2=8, bx1/bx3=10, bx2/bx3=7.
 
-### Known catalog-count defects (do not misreport)
+### Catalog counts (never hardcode a count)
 
-- `/api/content/library` currently returns `totalCount: 120000` as a hardcoded value. It is not a verified total. Fix the API to surface real source counts/pagination before describing it as the number of works.
+- Every "N anime" label on the website comes from `GET /api/stream/stats` (Algolia `nbHits` for BLACK X 1) through `useAnimeCatalogTotal()` in `client/src/hooks/useCatalogStats.js`. The endpoint answers 503 instead of guessing, and labels hide the number while it is unknown. The old hardcoded `6,973` / `+120K` labels were removed from the website on 2026-10-15; `client/src/mobile/MobileApkApp.jsx` still contains `6,973` (APK code, not touched without the user's go-ahead).
+- `/api/content/library` returns `count` (real unique items in the response) and `totalCount: null`: its upstream catalogs expose pages only, never a grand total. `/api/stream/catalog` returns `totalCount: null` (not the page size) when BLACK X 1's index did not answer.
+
+### Known catalog-count caveats (do not misreport)
+
 - The anime catalog path for Witanime reports `totalCount=6994` but only exposes 17 pages at 60 items (page 17 has 40; page 18 is empty): **1,000 rows are reachable through this current path**, despite the higher reported source count. This appears consistent with an upstream Algolia pagination cap; investigate the upstream's actual limit before claiming all 6,994 are available.
 - `source=anime3rb` and `source=english` on `/api/stream/catalog` currently return 40 and 24 latest-feed entries, not full catalogs. They are not directly comparable to the Witanime catalog total.
 - The combined manhwa `all` list has cross-server duplicates. Report page counts and unique counts separately; never sum server rows as if they were distinct works.
+
+### Vercel CDN caching
+
+- Public, user-independent GET routes are listed once in `shared/publicCacheRoutes.js` (shared by server and client). `server/src/lib/cdnCache.js` adds `s-maxage` / `stale-while-revalidate` / `stale-if-error` to their successful responses, and `client/src/api.js` omits the `Authorization` header on those GETs because Vercel never caches a request that carries one.
+- Only 200/304 responses with real data are cached. Errors, JSON with only empty lists (upstream outage), `success:false`/`error` bodies and responses with `Set-Cookie` are sent `no-store`, so an outage is never frozen into the CDN.
+- Never add a route whose handler reads `req.user`, cookies or `Authorization` (for example `/api/anime/:id` watchlist state, `/api/stream/episode` VIP servers, library, auth, proxies, download links). A cached response is served to everyone.
+- Verify after deploy: request a cached route twice and check `x-vercel-cache` goes `MISS` → `HIT`.
+
+### Signed-in UI check
+
+- `ContinueCard` (client/src/components/ShowCard.jsx) accepts `item` or `entry`. Before 2026-10-15 every caller passed `entry` while the component read `item`, which crashed Home and My List to a black screen for any signed-in user with an unfinished episode. After UI changes, test Home and `/mylist` while signed in with a user that has progress.
 
 ## 6. Auth and runtime behavior
 
@@ -94,6 +110,18 @@ The official domain returned HTTP 200 for the following during the latest check:
 - `/api/health` includes an authentication status. `authentication: unavailable` means browsing may work but login/protected actions are disabled; add a random 32+ character `JWT_SECRET` in Vercel Production (and Preview if needed), then redeploy. Never use the development key in production.
 - `client/src/firebase.js` enriches the Firebase user. Preserve `getIdToken` as a bound method when returning that object; test Google login after client changes.
 - Use Vercel dashboard runtime/function logs for function failures. A successful build/check alone does not prove the serverless handler imported or served routes correctly.
+
+### Firestore `settings/*` security (phase 1 done, phase 2 pending)
+
+- `settings/*` (project `spry-oxide-1h7sp`, named database `ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c`) holds the shared website/APK account mirror (`settings/user_*`, `settings/email_*`: email, role, VIP status and an **unsalted** `passSha256`), `global_vip_system` (VIP codes and the enforcement flag) and `developer_profile`. On Vercel, SQLite lives in `/tmp`, so this mirror is the only durable account store and server login falls back to it.
+- Installed APKs are Capacitor builds with bundled web assets (no `server.url`): a website deploy does not update them, and they sign users in by reading `settings/*` directly from the device.
+- Phase 1 (2026-10-15, chosen by the user because it breaks nothing): `firestore.rules` denies `list` and `delete` on `settings/*` (no shipped client lists or deletes there); single-document get/create/update stay open for the APK. The rules file in the repo is **not** auto-deployed: publish it in the Firebase console (Firestore → the named database above → Rules → Publish).
+- The server supports `FIREBASE_SERVICE_ACCOUNT` (service-account JSON or its base64, set in Vercel env vars, never committed or pasted in chat). Server Firestore REST calls then carry an OAuth token checked by IAM instead of the rules. `/api/health` reports `firestoreAuth`: `api_key` (not set), `invalid_key`, `service_account_pending`, `service_account` (working) or `error`.
+- Phase 2 (needs the user's go-ahead): with the service account working, move web and APK account/VIP/watch-party logic behind the API, replace `passSha256` with salted hashes, rebuild and redistribute the APK, then set `settings/*` to `allow read, write: if false`. Old APK builds lose login/VIP at that point.
+
+### Dead code to keep in mind
+
+- `client/src/components/Navbar.jsx` is imported by `App.jsx` but never rendered (the live header is in `App.jsx`), and `IosLiquidGlassSmartDeck` in `Dashboard.jsx` is never used. Edits there do not change the live site.
 
 ## 7. Git/deployment workflow
 

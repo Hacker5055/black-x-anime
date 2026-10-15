@@ -271,9 +271,13 @@ export async function getLibrary(req, res) {
       }
     }
 
+    // The upstream catalogs only return pages, never a grand total, so the
+    // total is reported as unknown (null) instead of an invented number.
+    // `count` is the real number of unique items in this response.
     return res.json({
       success: true,
-      totalCount: 120000,
+      count: items.length,
+      totalCount: null,
       page,
       items
     });
