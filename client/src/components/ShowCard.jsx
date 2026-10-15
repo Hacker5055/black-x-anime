@@ -286,10 +286,15 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
 /**
  * Continue Watching Card with 3D Glassy Tilt
  */
-export function ContinueCard({ item, onRemove, delay = 0 }) {
+export function ContinueCard({ item: itemProp, entry, onRemove, delay = 0 }) {
   const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
   const tilt = useLuxury3DTilt();
+  // Dashboard and MyList pass the progress row as `entry`; accept `item` too.
+  // Without this, `item` was undefined and the whole page crashed (black
+  // screen) for every signed-in user with an unfinished episode.
+  const item = itemProp || entry;
+  if (!item) return null;
   const title = (lang === 'ar' ? item.titleAr : item.titleEn) || item.titleEn || item.slug;
   const pct = item.duration > 0 ? Math.min(1, item.position / item.duration) : 0;
 

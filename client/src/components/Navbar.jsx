@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { UserBadges } from './UserBadges.jsx';
 import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
 import NotificationBell from './NotificationBell.jsx';
+import { useAnimeCatalogTotal, formatCount } from '../hooks/useCatalogStats.js';
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -43,6 +44,7 @@ export default function Navbar({ onOpenAuth }) {
   const location = useLocation();
   const menuRef = useRef(null);
   const mobileSearchInputRef = useRef(null);
+  const animeTotal = useAnimeCatalogTotal();
 
   const isDev = user?.role === 'developer' || user?.email?.toLowerCase() === 'mz0970mmz@gmail.com' || user?.isDeveloper;
   const hasVerified = isDev || (user?.badges || []).includes('blue_verified') || (user?.badges || []).includes('gold_vip') || (user?.badges || []).length > 0;
@@ -144,7 +146,7 @@ export default function Navbar({ onOpenAuth }) {
                   </span>
                 </div>
                 <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(255,255,255,0.52)', marginTop: '2px' }}>
-                  slothUI Pro 2.0 • 6,973 ANIME
+                  {animeTotal ? `slothUI Pro 2.0 • ${formatCount(animeTotal)} ANIME` : 'slothUI Pro 2.0'}
                 </span>
               </div>
             </NavLink>

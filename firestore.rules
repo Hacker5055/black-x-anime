@@ -34,10 +34,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Site settings & developer state
+    // Site settings, developer state and the shared website/APK account mirror
+    // (settings/user_* and settings/email_*).
+    //
+    // Phase 1 hardening, compatible with every shipped client: nothing lists
+    // this collection or deletes from it, so both are denied. That stops anyone
+    // from downloading every account in one request or wiping the collection.
+    // Single-document get/create/update stay open because installed APK builds
+    // still sign users in by reading their own document directly.
+    //
+    // Phase 2 (planned): the server uses FIREBASE_SERVICE_ACCOUNT (IAM bypasses
+    // these rules), web + APK clients go through the API, and this match becomes
+    // `allow read, write: if false;`.
     match /settings/{settingId} {
-      allow read: if isValidId(settingId);
-      allow write: if isValidId(settingId);
+      allow get: if isValidId(settingId);
+      allow list: if false;
+      allow create, update: if isValidId(settingId);
+      allow delete: if false;
     }
 
     // Community Posts and comments

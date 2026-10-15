@@ -20,6 +20,7 @@ import { GlobalVipEnforcementGate } from './components/VipPlansAndDevCodes.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 import BxIcon from './components/BxIcon.jsx';
+import { useAnimeCatalogTotal, formatCount } from './hooks/useCatalogStats.js';
 
 function serverFourSearchItems(animeData, mangaData, query) {
   return [
@@ -51,9 +52,13 @@ function SpotlightSearchModal({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
 
+  // Real catalog size (null until known); manga sources report no total, so no number.
+  const animeTotal = useAnimeCatalogTotal();
+  const animeCountSuffix = animeTotal ? ` (${formatCount(animeTotal)})` : '';
+
   const scopeTabs = [
     { id: 'ALL', ar: 'الكل (أنمي + مانجا)', en: 'All (Anime + Manga)', icon: 'sparkles' },
-    { id: 'ANIME', ar: 'الأنمي', en: 'Anime', icon: 'tv' },
+    { id: 'ANIME', ar: `الأنمي${animeCountSuffix}`, en: `Anime${animeCountSuffix}`, icon: 'tv' },
     { id: 'MANGA', ar: 'المانجا والمانهوا', en: 'Manga & Manhwa', icon: 'book' }
   ];
 

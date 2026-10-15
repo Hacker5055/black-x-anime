@@ -7,6 +7,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { publicUser } from '../auth.js';
+import { getFirestoreAuthHeaders } from './firestoreAuth.js';
 
 const PROJECT_ID = 'spry-oxide-1h7sp';
 const DATABASE_ID = 'ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c';
@@ -173,16 +174,18 @@ export async function syncUserToCloud(userRow, rawPassword = null) {
   };
 
   try {
+    // Service-account token when FIREBASE_SERVICE_ACCOUNT is set; {} otherwise.
+    const writeHeaders = { 'Content-Type': 'application/json', ...(await getFirestoreAuthHeaders()) };
     await fetch(`${BASE_URL}/${uKey}?key=${API_KEY}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: writeHeaders,
       body: JSON.stringify(firestoreDoc),
       signal: AbortSignal.timeout(8000)
     });
     if (eKey) {
       await fetch(`${BASE_URL}/${eKey}?key=${API_KEY}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: writeHeaders,
         body: JSON.stringify(firestoreDoc),
         signal: AbortSignal.timeout(8000)
       });
@@ -200,7 +203,7 @@ export async function fetchUserFromCloud(identifier) {
 
   try {
     const res = await fetch(`${BASE_URL}/${docKey}?key=${API_KEY}`, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(await getFirestoreAuthHeaders()) },
       signal: AbortSignal.timeout(8000)
     });
     if (!res.ok) return null;

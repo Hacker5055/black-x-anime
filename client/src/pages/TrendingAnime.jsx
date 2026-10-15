@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { imgFallback, pushToast } from '../hooks/hooks.js';
+import { useAnimeCatalogTotal, formatCount } from '../hooks/useCatalogStats.js';
 import { SkeletonGrid, EmptyState } from '../components/Loading.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import {
@@ -31,6 +32,7 @@ export default function TrendingAnime() {
   const { lang, formatNumber } = useI18n();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const animeTotal = useAnimeCatalogTotal();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const vipTier = resolveUserVipTier(user);
@@ -69,7 +71,8 @@ export default function TrendingAnime() {
   const [latestStreamList, setLatestStreamList] = useState([]);
   const [catalogList, setCatalogList] = useState([]);
   const [catalogPage, setCatalogPage] = useState(1);
-  const [totalCatalogCount, setTotalCatalogCount] = useState(0);
+  // Real catalog size reported by the API; null until known (never a guess).
+  const [totalCatalogCount, setTotalCatalogCount] = useState(null);
   const [hasNextCatalogPage, setHasNextCatalogPage] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [randomScraperList, setRandomScraperList] = useState([]);
@@ -149,7 +152,9 @@ export default function TrendingAnime() {
       if (!alive) return;
       setLatestStreamList(latestData?.items || []);
       setCatalogList(catalogData?.items || []);
-      setTotalCatalogCount(Number.isFinite(Number(catalogData?.totalCount)) ? Number(catalogData?.totalCount) : (catalogData?.items?.length || 0));
+      // The API sends null when the source reports no total; Number(null) would be 0.
+      const reportedTotal = Number(catalogData?.totalCount);
+      setTotalCatalogCount(Number.isFinite(reportedTotal) && reportedTotal > 0 ? reportedTotal : null);
       setHasNextCatalogPage(catalogData?.hasNext !== false);
       setRandomScraperList(randomData?.items || []);
       setTrendingList(trendData?.anime || []);
@@ -551,7 +556,12 @@ export default function TrendingAnime() {
                 alt="BLACK X"
                 style={{ width: '22px', height: '22px', borderRadius: '6px', objectFit: 'cover' }}
               />
-              <span>BLACK X <span style={{ fontWeight: 500, opacity: 0.78 }}>original • 6,973 ANIME</span></span>
+              <span>
+                BLACK X{' '}
+                <span style={{ fontWeight: 500, opacity: 0.78 }}>
+                  {animeTotal ? `original • ${formatCount(animeTotal)} ANIME` : 'original'}
+                </span>
+              </span>
             </div>
             <h1 style={{ margin: 0, fontSize: 'clamp(1.75rem, 3.2vw, 2.45rem)', fontWeight: 900 }}>
               🔥 {lang === 'ar' ? 'الأعمال الرائجة ومكتبة الأنمي الشاملة' : 'Trending & Complete Anime Hub'}
@@ -1034,9 +1044,13 @@ export default function TrendingAnime() {
           }}
         >
           <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'rgba(255, 255, 255, 0.78)' }}>
-            {lang === 'ar'
-              ? `📚 تم تحميل ${formatNumber(unifiedAnime.length)} عمل • إجمالي الفهرس الذي يعلنه المصدر: ${formatNumber(totalCatalogCount)}`
-              : `📚 ${formatNumber(unifiedAnime.length)} loaded • source-reported catalog total: ${formatNumber(totalCatalogCount)}`}
+            {totalCatalogCount
+              ? lang === 'ar'
+                ? `📚 تم تحميل ${formatNumber(unifiedAnime.length)} عمل • إجمالي الفهرس الذي يعلنه المصدر: ${formatNumber(totalCatalogCount)}`
+                : `📚 ${formatNumber(unifiedAnime.length)} loaded • source-reported catalog total: ${formatNumber(totalCatalogCount)}`
+              : lang === 'ar'
+                ? `📚 تم تحميل ${formatNumber(unifiedAnime.length)} عمل`
+                : `📚 ${formatNumber(unifiedAnime.length)} loaded`}
           </div>
           <button
             type="button"

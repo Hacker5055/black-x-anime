@@ -2,6 +2,8 @@
  * BLACK X API Client — Hybrid Web + Capacitor Android APK Edition
  * Supports dynamic cloud backend URL resolution for the native Android APK.
  */
+import { findPublicCacheRoute } from '../../shared/publicCacheRoutes.js';
+
 const TOKEN_KEY = 'blackx_token';
 const SERVER_URL_KEY = 'blackx_server_url';
 
@@ -107,9 +109,13 @@ if (typeof window !== 'undefined' && !window.__blackxFetchWrapped) {
 async function request(path, { method = 'GET', body, headers = {}, signal } = {}) {
   let res;
   const token = getStoredToken();
+  // Public, user-independent GET routes are cached on Vercel's CDN, and Vercel
+  // never serves a cached copy to a request that carries an Authorization
+  // header. Those routes ignore the user anyway, so leave the token off them.
+  const isPublicCacheableGet = method === 'GET' && typeof path === 'string' && Boolean(findPublicCacheRoute(path));
   const reqHeaders = {
     ...(body ? { 'Content-Type': 'application/json' } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token && !isPublicCacheableGet ? { Authorization: `Bearer ${token}` } : {}),
     ...headers
   };
 

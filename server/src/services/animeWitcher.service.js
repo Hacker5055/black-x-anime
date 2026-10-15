@@ -290,7 +290,8 @@ export async function resolveWitcherObjectId(slugOrQuery) {
 }
 
 /**
- * Browse the full 6,973-anime catalog from Anime Witcher's Algolia indices
+ * Browse the full catalog from Anime Witcher's Algolia indices.
+ * `totalCount` is Algolia's own nbHits, or null when the index did not report it.
  */
 export async function fetchWitcherCatalog({
   page = 1,
@@ -328,7 +329,7 @@ export async function fetchWitcherCatalog({
   return {
     page: algoliaPage + 1,
     totalPages: Number(data?.nbPages) || 1,
-    totalCount: Number(data?.nbHits) || items.length,
+    totalCount: Number(data?.nbHits) || null,
     hasNext: algoliaPage + 1 < (Number(data?.nbPages) || 1),
     items
   };
