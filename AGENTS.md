@@ -14,7 +14,7 @@ Read this file before changing the repository. It records the user's durable req
 
 ## 2. User requirements and guardrails
 
-- **Website-only by default.** Do not edit `client/src/mobile/`, APK assets/releases, or native Android files unless the user explicitly asks. On 2026-10-15 the user did ask: "update the APK servers, fix anime and manga, and make the app's servers the same as the website's" — that produced APK v15 (section 5, *Mobile APK*). Further APK work still needs an explicit request.
+- **Website-only by default.** Do not edit `client/src/mobile/`, APK assets/releases, or native Android files unless the user explicitly asks. On 2026-10-15 the user did ask: "update the APK servers, fix anime and manga, and make the app's servers the same as the website's" — that produced APK v15 (section 5, *Mobile APK*). On 2026-10-15 the user also asked for the APK UI overhaul (icons instead of emoji, avatar + menu header, nothing over the fullscreen video, smooth animations, no fake numbers) — APK v15.1. Further APK work still needs an explicit request.
 - Keep the website bilingual EN/AR and pure monochrome black/white/silver. Animations should be light, respect reduced motion, and avoid GPU-heavy filters/effects.
 - Preserve player controls: fullscreen, ±10 seconds, and ±10 minutes. Test them when changing the player.
 - Anime/catalog data must be fetched dynamically. Do not hardcode catalog entries or claim fake totals as real counts.
@@ -116,6 +116,15 @@ The official domain returned HTTP 200 for the following during the latest check:
 - Build/sign: `tools/apk/README.md`. The release key lives only in the owner's private Google Drive folder «BLACK X — مفتاح توقيع التطبيق (سري — لا تشاركه)» (cert SHA-256 `2b2f63d1…c281`). Never commit it. v14 was signed with a lost key, so v14 → v15 needs one uninstall + reinstall; later builds with the same key update normally.
 - Accounts, VIP, watch party and reviews in the APK still use Firestore `settings/*` directly (see the Firestore section).
 - Verified for v15: headless mobile-viewport run of the APK bundle against a mock of the website API (library, server tabs, details, server switch, reader with direct/proxy/failed pages, anime search → episodes → servers), `apksigner verify` (v1+v2+v3), 4-byte alignment and unchanged native entries. Not yet verified on a physical phone.
+
+### Mobile APK UI (v15.1, 2026-10-15)
+
+- **No emoji anywhere in the APK.** Every pictogram is a lucide icon through `client/src/mobile/BxIcon.jsx` (`<BxIcon name="..." />`, add new names to its registry). `stripEmoji()` cleans runtime text (toasts, values saved by older builds). `showToast(message, iconName)` takes the icon as its second argument.
+- Top bar = the user's photo (`user.photoUrl`, else initial, else a user icon) + the access menu only; the brand, version line and shortcuts (search, radar, schedule, settings…) live in the menu. The bar turns solid on scroll and slides away while scrolling down.
+- The dock (`.bx-dock`) is hidden while the player page, fullscreen video or manga reader is open, and the mini player floats above it. The fullscreen HUD (`.bx-fs-chrome`) auto-hides ~3 s into playback (stays while paused) and comes back on any tap; double tap left/right is still ±10 s.
+- Motion lives in `client/src/mobile/mobileUi.css`: transform/opacity only, `backwards` fill (a `forwards` fill would freeze `transform` and kill the press effect), everything off under `prefers-reduced-motion`. Avoid `transform`/`filter`/`will-change` on containers that hold `position: fixed` children (the manga reader, player and sheets).
+- Fake numbers removed in v15.1 (do not reintroduce): DNA "% match", likes/views derived from the rating, `|| '9.2'` / `'8.9'` / `'9.8'` rating fallbacks, `|| '2026'` years, fixed `24:00` times, `E{index}` episode badges, "S1 E1" labels, TV-MA / 4K / 1080p / 120Hz claims (the Hz label is the measured refresh rate), invented leaderboard users, seeded poll votes, seeded timed comments, starting XP 350, member number `88492011`. Server side: witanime score/rating, mangalik/anime3rb/english fallback ratings and the bx1 SQLite seed ratings are `null` when unknown — UIs hide unknown values.
+- Verified for v15.1: headless run against the API mock (34 checks: zero emoji on every tab/modal, header, dock icons, menu, toast, dock hidden in the player, fullscreen HUD auto-hide + tap, ±10 s, exit fullscreen, mini player above the dock).
 
 ### Cross-server episode matching
 

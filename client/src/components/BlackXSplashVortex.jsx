@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import BxIcon from '../mobile/BxIcon.jsx';
 
 export const BLACK_X_MOTION_THEMES = [
   {
     id: 'random',
-    icon: '🎲',
+    iconName: 'dice',
     nameAr: 'تبديل عشوائي (الكل)',
     nameEn: 'Auto-Rotate (All 5)',
     subAr: 'يشغّل موشن مختلف من الـ 5 في كل مرة',
@@ -11,7 +12,7 @@ export const BLACK_X_MOTION_THEMES = [
   },
   {
     id: 'vortex',
-    icon: '🌌',
+    iconName: 'orbit',
     nameAr: '1. بوابة الظلال',
     nameEn: '1. Shadow Vortex',
     subAr: 'دوامة جزيئات ثلاثية الأبعاد وموجات صدمة ضوئية',
@@ -19,7 +20,7 @@ export const BLACK_X_MOTION_THEMES = [
   },
   {
     id: 'katana',
-    icon: '⚔️',
+    iconName: 'swords',
     nameAr: '2. ضربة سيف الكاتانا',
     nameEn: '2. Katana X-Slash',
     subAr: 'ضربتا سيف أنمي خاطفتان مع شرارات الفولاذ الأبيض',
@@ -27,7 +28,7 @@ export const BLACK_X_MOTION_THEMES = [
   },
   {
     id: 'cyber',
-    icon: '⚡',
+    iconName: 'zap',
     nameAr: '3. مصفوفة الغليتش 120Hz',
     nameEn: '3. Cyber Matrix Glitch',
     subAr: 'مطر رقمي وشبكة ثلاثية الأبعاد وغليتش سايبربانك',
@@ -35,7 +36,7 @@ export const BLACK_X_MOTION_THEMES = [
   },
   {
     id: 'eclipse',
-    icon: '🕳️',
+    iconName: 'circle-dashed',
     nameAr: '4. كسوف الثقب الأسود',
     nameEn: '4. Eclipse Singularity',
     subAr: 'أفق الحدث وحلقة الفوتونات وانحناء الضوء الكوني',
@@ -43,7 +44,7 @@ export const BLACK_X_MOTION_THEMES = [
   },
   {
     id: 'monarch',
-    icon: '👑',
+    iconName: 'crown',
     nameAr: '5. عرش إمبراطور الظلال',
     nameEn: '5. Monarch Sovereign',
     subAr: 'تاج الملك الماسي وأعمدة لهب الظلال البيضاء',
@@ -849,7 +850,7 @@ export default function BlackXSplashVortex({
           <span>
             {isWebProfile
               ? (measuredFps ? `${measuredFps} FPS` : '≤60 FPS')
-              : `${measuredFps >= 105 ? 120 : measuredFps >= 80 ? 90 : 120}Hz`} · {activeMeta.icon} {isRtl ? activeMeta.nameAr : activeMeta.nameEn}
+              : `${measuredFps >= 105 ? 120 : measuredFps >= 80 ? 90 : 60}Hz`} · <BxIcon name={activeMeta.iconName} /> {isRtl ? activeMeta.nameAr : activeMeta.nameEn}
           </span>
         </div>
 
@@ -875,7 +876,7 @@ export default function BlackXSplashVortex({
               cursor: 'pointer'
             }}
           >
-            {soundMuted ? '🔇' : '🔊'}
+            <BxIcon name={soundMuted ? 'mute' : 'volume'} label={soundMuted ? 'Unmute' : 'Mute'} />
           </button>
 
           <button
@@ -893,7 +894,7 @@ export default function BlackXSplashVortex({
               letterSpacing: '0.04em'
             }}
           >
-            {isRtl ? 'تخطي ⏭' : 'SKIP ⏭'}
+            {isRtl ? 'تخطي' : 'SKIP'} <BxIcon name="skip-forward" />
           </button>
         </div>
       </div>
@@ -1055,7 +1056,7 @@ export default function BlackXSplashVortex({
             }}
           >
             <span>
-              { activeMeta.icon } { isRtl ? activeMeta.nameAr : activeMeta.nameEn }
+              <BxIcon name={activeMeta.iconName} /> {isRtl ? activeMeta.nameAr : activeMeta.nameEn}
             </span>
             <span>{progress}%</span>
           </div>

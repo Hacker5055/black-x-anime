@@ -1,0 +1,495 @@
+/*
+ * BLACK X Mobile v15.1 — motion system + app chrome (header, dock, menu, toast, player HUD).
+ * Only transform / opacity are animated (compositor friendly) and every animation is disabled
+ * for users that ask for reduced motion.
+ * Entrance animations use `backwards` fill so the element's own :active press transform keeps
+ * working once the entrance is over (a `forwards` fill would freeze `transform`).
+ */
+
+.bx-app {
+  --bx-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --bx-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --bx-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --bx-safe-top: env(safe-area-inset-top, 0px);
+  --bx-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ---------- Icons ---------- */
+.bx-ico {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+}
+.bx-ico-spin {
+  animation: bxSpin 0.85s linear infinite;
+}
+.bx-ico-lead {
+  margin-inline-end: 0.32em;
+}
+.bx-ico-trail {
+  margin-inline-start: 0.32em;
+}
+[dir='rtl'] .bx-ico-dir {
+  transform: scaleX(-1);
+}
+
+/* ---------- Press feedback (all buttons + cards) ---------- */
+.bx-app button {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.32s var(--bx-ease-spring),
+    background-color 0.28s ease,
+    color 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    opacity 0.28s ease;
+}
+.bx-app button:active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: 0.09s;
+}
+.bx-app .bx-mob-card {
+  transition: transform 0.38s var(--bx-ease-spring);
+}
+.bx-app .bx-mob-card:active {
+  transform: scale(0.965);
+  transition-duration: 0.1s;
+}
+
+/* ---------- Page / section entrances ---------- */
+.bx-page {
+  animation: bxPageIn 0.46s var(--bx-ease-out) backwards;
+}
+/* staggered entrance for explicit lists and every horizontal rail (first 12 items only —
+   long lists such as a 1000-episode switcher must not animate hundreds of nodes) */
+.bx-stagger > *:nth-child(-n + 12),
+.bx-mob-scroll > *:nth-child(-n + 12) {
+  animation: bxRise 0.5s var(--bx-ease-out) backwards;
+}
+.bx-stagger > *:nth-child(1), .bx-mob-scroll > *:nth-child(1) { animation-delay: 0.03s; }
+.bx-stagger > *:nth-child(2), .bx-mob-scroll > *:nth-child(2) { animation-delay: 0.07s; }
+.bx-stagger > *:nth-child(3), .bx-mob-scroll > *:nth-child(3) { animation-delay: 0.11s; }
+.bx-stagger > *:nth-child(4), .bx-mob-scroll > *:nth-child(4) { animation-delay: 0.15s; }
+.bx-stagger > *:nth-child(5), .bx-mob-scroll > *:nth-child(5) { animation-delay: 0.19s; }
+.bx-stagger > *:nth-child(6), .bx-mob-scroll > *:nth-child(6) { animation-delay: 0.23s; }
+.bx-stagger > *:nth-child(7), .bx-mob-scroll > *:nth-child(7) { animation-delay: 0.27s; }
+.bx-stagger > *:nth-child(8), .bx-mob-scroll > *:nth-child(8) { animation-delay: 0.31s; }
+.bx-stagger > *:nth-child(n + 9):nth-child(-n + 12),
+.bx-mob-scroll > *:nth-child(n + 9):nth-child(-n + 12) { animation-delay: 0.34s; }
+
+.bx-sheet {
+  animation: bxSheetIn 0.52s var(--bx-ease-out) backwards;
+}
+.bx-fade {
+  animation: bxFade 0.32s ease backwards;
+}
+.bx-pop {
+  animation: bxPop 0.42s var(--bx-ease-spring) backwards;
+}
+
+/* ---------- Home hero (cross-fade + slow Ken Burns per slide) ---------- */
+.bx-hero-img {
+  animation:
+    bxFade 0.9s ease backwards,
+    bxKenBurns 9s var(--bx-ease-out) backwards;
+}
+.bx-hero-copy > * {
+  animation: bxRise 0.6s var(--bx-ease-out) backwards;
+}
+.bx-hero-copy > *:nth-child(1) { animation-delay: 0.08s; }
+.bx-hero-copy > *:nth-child(2) { animation-delay: 0.14s; }
+.bx-hero-copy > *:nth-child(3) { animation-delay: 0.2s; }
+.bx-hero-copy > *:nth-child(4) { animation-delay: 0.26s; }
+.bx-hero-copy > *:nth-child(n + 5) { animation-delay: 0.32s; }
+
+/* ---------- Top bar: avatar + menu only ---------- */
+.bx-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--bx-safe-top) + 10px) 14px 10px;
+  pointer-events: none;
+  transition:
+    background-color 0.35s ease,
+    box-shadow 0.35s ease,
+    transform 0.5s var(--bx-ease-out),
+    opacity 0.35s ease;
+}
+.bx-topbar > * {
+  pointer-events: auto;
+}
+.bx-topbar.is-solid {
+  background: rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: saturate(140%) blur(18px);
+  backdrop-filter: saturate(140%) blur(18px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.bx-topbar.is-hidden {
+  transform: translate3d(0, -110%, 0);
+  opacity: 0;
+}
+.bx-topbar.is-hidden > * {
+  pointer-events: none;
+}
+.bx-topbar-spacer {
+  height: calc(var(--bx-safe-top) + 62px);
+}
+.bx-avatar-btn,
+.bx-round-btn {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  background: rgba(18, 18, 22, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.bx-avatar-btn {
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  font-weight: 900;
+  font-size: 1rem;
+}
+.bx-avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bx-round-btn {
+  font-size: 1.12rem;
+}
+
+/* ---------- Floating dock (icons + morphing active pill) ---------- */
+.bx-dock {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + var(--bx-safe-bottom));
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(14, 14, 18, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: saturate(150%) blur(22px);
+  backdrop-filter: saturate(150%) blur(22px);
+  transition:
+    transform 0.5s var(--bx-ease-out),
+    opacity 0.35s ease;
+  animation: bxDockIn 0.6s var(--bx-ease-out) 0.1s backwards;
+}
+.bx-dock.is-hidden {
+  transform: translate3d(0, calc(100% + 28px), 0);
+  opacity: 0;
+  pointer-events: none;
+}
+.bx-dock-item {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 46px;
+  min-width: 46px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.bx-app .bx-dock-item {
+  transition:
+    color 0.3s ease,
+    background-color 0.45s var(--bx-ease-out),
+    padding 0.45s var(--bx-ease-out),
+    gap 0.45s var(--bx-ease-out),
+    box-shadow 0.45s ease,
+    transform 0.32s var(--bx-ease-spring);
+}
+.bx-dock-item .bx-ico {
+  font-size: 1.28rem;
+  transition: transform 0.5s var(--bx-ease-spring);
+}
+.bx-dock-item.is-active {
+  background: #ffffff;
+  color: #000000;
+  padding: 0 16px;
+  gap: 7px;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.16);
+}
+.bx-dock-item.is-active .bx-ico {
+  animation: bxIconBounce 0.55s var(--bx-ease-spring);
+}
+.bx-dock-label {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width 0.45s var(--bx-ease-out),
+    opacity 0.25s ease;
+}
+.bx-dock-item.is-active .bx-dock-label {
+  max-width: 104px;
+  opacity: 1;
+  transition:
+    max-width 0.45s var(--bx-ease-out),
+    opacity 0.35s ease 0.08s;
+}
+
+/* ---------- Toast ---------- */
+.bx-toast {
+  position: fixed;
+  top: calc(var(--bx-safe-top) + 12px);
+  left: 50%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(92vw, 440px);
+  padding: 10px 16px 10px 10px;
+  border-radius: 20px;
+  background: rgba(20, 20, 24, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.45;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  transform: translate3d(-50%, 0, 0);
+  animation: bxToastIn 0.55s var(--bx-ease-spring) backwards;
+  pointer-events: none;
+}
+.bx-toast.is-leaving {
+  animation: bxToastOut 0.28s ease forwards;
+}
+.bx-toast-ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+.bx-toast-ico.is-success {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+/* ---------- Command menu ---------- */
+.bx-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9600;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: calc(var(--bx-safe-top) + 64px) 12px 16px;
+  background: rgba(0, 0, 0, 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  animation: bxFade 0.3s ease backwards;
+}
+.bx-menu-card {
+  width: 100%;
+  max-width: 340px;
+  max-height: calc(100dvh - var(--bx-safe-top) - 92px);
+  overflow-y: auto;
+  border-radius: 28px;
+  background: rgba(16, 16, 20, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.9);
+  padding: 1rem 0.85rem 0.9rem;
+  color: #ffffff;
+  animation: bxMenuIn 0.5s var(--bx-ease-spring) backwards;
+}
+.bx-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.72rem 0.8rem;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  cursor: pointer;
+  animation: bxRise 0.42s var(--bx-ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms + 90ms);
+}
+.bx-app .bx-menu-item:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.bx-menu-ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 1.05rem;
+}
+.bx-menu-badge {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+/* ---------- Video player HUD ---------- */
+.bx-fs-chrome {
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s var(--bx-ease-out);
+}
+.bx-fs-chrome.is-hidden {
+  opacity: 0;
+  transform: translate3d(0, -16px, 0);
+  pointer-events: none;
+}
+.bx-fs-chrome.is-hidden * {
+  pointer-events: none;
+}
+.bx-hud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.bx-hud-btn .bx-ico {
+  font-size: 1.05rem;
+}
+.bx-hud-btn.is-on {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes bxSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes bxFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes bxPageIn {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bxRise {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bxSheetIn {
+  from { opacity: 0; transform: translate3d(0, 48px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bxPop {
+  from { opacity: 0; scale: 0.82; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes bxKenBurns {
+  from { transform: scale(1.08); }
+  to { transform: scale(1); }
+}
+@keyframes bxDockIn {
+  from { opacity: 0; transform: translate3d(0, 40px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bxIconBounce {
+  0% { transform: scale(0.7); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+@keyframes bxToastIn {
+  from { opacity: 0; transform: translate3d(-50%, -26px, 0) scale(0.94); }
+  to { opacity: 1; transform: translate3d(-50%, 0, 0); }
+}
+@keyframes bxToastOut {
+  from { opacity: 1; transform: translate3d(-50%, 0, 0); }
+  to { opacity: 0; transform: translate3d(-50%, -18px, 0) scale(0.96); }
+}
+@keyframes bxMenuIn {
+  from { opacity: 0; transform: translate3d(0, -12px, 0) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .bx-app *,
+  .bx-app *::before,
+  .bx-app *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .bx-app .bx-ico-spin {
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

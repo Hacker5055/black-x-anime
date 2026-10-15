@@ -14,7 +14,7 @@ import { getServerUrl, isNativeApk } from '../api.js';
 export const BX_PUBLIC_ORIGIN = 'https://black-x-anime.me';
 export const BX_APK_FILE_NAME = 'BLACK-X-Mobile-120Hz.apk';
 export const BX_APK_DOWNLOAD_URL = `${BX_PUBLIC_ORIGIN}/${BX_APK_FILE_NAME}`;
-export const BX_APK_VERSION = '15.0';
+export const BX_APK_VERSION = '15.1';
 
 /* -------------------------------------------------------------------------- */
 /* Base URL + JSON helper                                                      */
@@ -416,17 +416,17 @@ export async function resolveMobileEpisodeServer(server) {
 
 /** Mirrors the website library tabs (client/src/pages/Browse.jsx). */
 export const BX_MANGA_SERVER_TABS = Object.freeze([
-  Object.freeze({ id: 'all', ar: '🌐 جميع سيرفرات BLACK X', en: '🌐 All BLACK X Servers' }),
-  Object.freeze({ id: 'bx1', ar: '⚡ سيرفر BLACK X 1 (مانهوا عربية)', en: '⚡ BLACK X 1 (AR Manhwa)' }),
-  Object.freeze({ id: 'bx2', ar: '📖 سيرفر BLACK X 2 (مانجا عربية)', en: '📖 BLACK X 2 (AR Manga)' }),
-  Object.freeze({ id: 'bx3', ar: '👑 سيرفر BLACK X 3 (الفهرس العالمي)', en: '👑 BLACK X 3 (Global Index)' })
+  Object.freeze({ id: 'all', ar: 'جميع سيرفرات BLACK X', en: 'All BLACK X Servers' }),
+  Object.freeze({ id: 'bx1', ar: 'سيرفر BLACK X 1 (مانهوا عربية)', en: 'BLACK X 1 (AR Manhwa)' }),
+  Object.freeze({ id: 'bx2', ar: 'سيرفر BLACK X 2 (مانجا عربية)', en: 'BLACK X 2 (AR Manga)' }),
+  Object.freeze({ id: 'bx3', ar: 'سيرفر BLACK X 3 (الفهرس العالمي)', en: 'BLACK X 3 (Global Index)' })
 ]);
 
 /** Shown only while the website exposes it (search-only, like on the website). */
 export const BX_MANGA_SEARCH_ONLY_TAB = Object.freeze({
   id: 'bx4',
-  ar: '🔎 سيرفر BLACK X 4 (بحث فقط)',
-  en: '🔎 BLACK X 4 (Search only)',
+  ar: 'سيرفر BLACK X 4 (بحث فقط)',
+  en: 'BLACK X 4 (Search only)',
   searchOnly: true
 });
 
