@@ -8,13 +8,13 @@ Read this file before changing the repository. It records the user's durable req
 - Official website: <https://black-x-anime.me/>.
 - Hosting decision: **Vercel only** for the website/API; the user prefers hosting without a credit card. Do not restore Cloudflare Workers deployment code or move hosting providers unless explicitly asked. A stale `Workers Builds` GitHub check may fail without affecting Vercel.
 - GitHub repository: <https://github.com/Hacker5055/black-x-anime>.
-- Latest public `main` verified on 2026-10-15: `97064a9` (merge of PR #8, website player fullscreen fix). PR #6 (`939c132`), PR #4 (`6c44129`) and PR #5 (API/JWT and Firebase token fixes, head `b84f83d`) are merged. Re-check GitHub before relying on this snapshot.
+- Latest public `main` verified on 2026-10-15: `d902e46` (merge of PR #10: Firestore phase 1, Vercel CDN caching, real catalog counts). PR #9 (opt-in BLACK X 4), PR #8 (player fullscreen), PR #6, PR #5 and PR #4 are merged. Re-check GitHub before relying on this snapshot.
 - The user works from a separate Linux clone, typically `~/black-x-anime`; `/home/user/black-x-anime` is the Arena workspace path and does not exist on the user's laptop.
 - Communicate with the user in Arabic (Egyptian dialect). When the user says «ارفعه», commit the intended files, push the session branch, open a PR and merge it into `main` (this deploys production).
 
 ## 2. User requirements and guardrails
 
-- **Website-only by default.** The user deferred further mobile-app work; do not edit `client/src/mobile/`, APK assets/releases, or native Android files unless they explicitly ask. PR #6 did include a mobile-source change; do not continue that work by assumption.
+- **Website-only by default.** Do not edit `client/src/mobile/`, APK assets/releases, or native Android files unless the user explicitly asks. On 2026-10-15 the user did ask: "update the APK servers, fix anime and manga, and make the app's servers the same as the website's" — that produced APK v15 (section 5, *Mobile APK*). Further APK work still needs an explicit request.
 - Keep the website bilingual EN/AR and pure monochrome black/white/silver. Animations should be light, respect reduced motion, and avoid GPU-heavy filters/effects.
 - Preserve player controls: fullscreen, ±10 seconds, and ±10 minutes. Test them when changing the player.
 - Anime/catalog data must be fetched dynamically. Do not hardcode catalog entries or claim fake totals as real counts.
@@ -31,7 +31,8 @@ Read this file before changing the repository. It records the user's durable req
 - `client/src/components/VideoPlayer.jsx` — website player and source controls.
 - `client/src/components/DownloadModal.jsx`, `client/src/pages/Watch.jsx` — episode source/download UI.
 - `client/src/context/AuthContext.jsx`, `client/src/firebase.js` — session and Firebase/Google sign-in.
-- `client/src/mobile/` — mobile-app web bundle; do not alter unless requested.
+- `client/src/mobile/` — mobile-app web bundle (`MobileApkApp.jsx`); do not alter unless requested. `bxServers.js` is the only place the app gets anime/manga servers from (the website API); `MangaPageImage.jsx` renders reader pages.
+- `tools/apk/` — rebuild/repack/sign the APK without an Android SDK (`build-apk.sh`, `repack-apk.py`, `README.md`).
 - `server/src/index.js` — Express API app; exports the app for Vercel and only calls `listen()` for standalone Node hosting.
 - `api/index.js` — Vercel function entry that imports `server/src/index.js`.
 - `server/src/routes/` — API routes, including anime, streaming, auth, and content.
@@ -50,6 +51,7 @@ Read this file before changing the repository. It records the user's durable req
 - Install reproducibly with `npm ci` (the repository has `package-lock.json`).
 - Frontend build: `npm run build`.
 - Optional AniProject v3 adapter tests (mocked upstream; no external services needed): `npm run test:aniproject`. Live playback and chapter images still require verification on a configured production backend.
+- Server/APK bridge tests (no network): `npm run test:servers` — strict cross-server title matching, CDN `Vary: Origin`, and the APK's website-API mapping (`client/src/mobile/bxServers.js`).
 - Safer non-mutating build check: `npm run build -- --outDir /tmp/blackx-build-verify`.
 - Useful syntax/whitespace checks:
   ```bash
@@ -86,7 +88,7 @@ The official domain returned HTTP 200 for the following during the latest check:
 
 ### Catalog counts (never hardcode a count)
 
-- Every "N anime" label on the website comes from `GET /api/stream/stats` (Algolia `nbHits` for BLACK X 1) through `useAnimeCatalogTotal()` in `client/src/hooks/useCatalogStats.js`. The endpoint answers 503 instead of guessing, and labels hide the number while it is unknown. The old hardcoded `6,973` / `+120K` labels were removed from the website on 2026-10-15; `client/src/mobile/MobileApkApp.jsx` still contains `6,973` (APK code, not touched without the user's go-ahead).
+- Every "N anime" label on the website comes from `GET /api/stream/stats` (Algolia `nbHits` for BLACK X 1) through `useAnimeCatalogTotal()` in `client/src/hooks/useCatalogStats.js`. The endpoint answers 503 instead of guessing, and labels hide the number while it is unknown. The old hardcoded `6,973` / `+120K` labels were removed from the website on 2026-10-15, and from the APK in v15 (its header reads the same endpoint; the stale per-genre/studio counts in its filter chips are gone too).
 - `/api/content/library` returns `count` (real unique items in the response) and `totalCount: null`: its upstream catalogs expose pages only, never a grand total. `/api/stream/catalog` returns `totalCount: null` (not the page size) when BLACK X 1's index did not answer.
 - BLACK X 4 (`aniproject`, opt-in) has no browsable catalog: `/api/stream/catalog?source=aniproject` returns an empty list with `totalCount: 0`, and its search responses report `totalCount` = results actually returned. Clients treat any missing or non-positive total as unknown and hide it (`Number(null)` is `0`, so never print a raw total).
 
@@ -102,7 +104,22 @@ The official domain returned HTTP 200 for the following during the latest check:
 - Only 200/304 responses with real data are cached. Errors, JSON with only empty lists (upstream outage), `success:false`/`error` bodies and responses with `Set-Cookie` are sent `no-store`, so an outage is never frozen into the CDN.
 - Never add a route whose handler reads `req.user`, cookies or `Authorization` (for example `/api/anime/:id` watchlist state, `/api/stream/episode` VIP servers, library, auth, proxies, download links). A cached response is served to everyone.
 - `/api/stream/sources` is cached (`config`, 60 s) because it depends only on server configuration (`ANIPROJECT_API_URL` decides whether BLACK X 4 is listed), never on the user. BLACK X 4's empty latest/catalog responses fall under the empty-list rule and are not cached.
+- Cacheable responses always carry `Vary: Origin`. Same-origin website requests get no CORS headers while the APK (`https://localhost`) gets `Access-Control-Allow-Origin`; without the Vary, a website-populated CDN copy was served to the APK and failed CORS.
 - Verify after deploy: request a cached route twice and check `x-vercel-cache` goes `MISS` → `HIT`.
+
+### Mobile APK (v15, 2026-10-15)
+
+- The APK no longer scrapes anything from the phone. Up to v14 it called third-party manga/anime APIs directly (Mello, Azora, Swat, Dilar, MangaDex, AnimeWitcher Firestore, Animeify) with its own server list; when a title was missing it loaded the chapters of an unrelated series (Mello id 3278), and the global cover healer replaced broken reader pages with AniList covers found by searching the alt text "Page 1".
+- v15 gets every server from the website API through `client/src/mobile/bxServers.js`: manga library/search/details/pages (`/api/content/library`, `/api/search?type=manga`, `/api/content/library/:id` → `/api/manga/:id/chapters`, `/api/manga/chapter/:id/pages`), anime search/episodes/servers (`/api/stream/search`, `/api/stream/show/:slug`, `/api/stream/episode/:slug/:ep`, `POST /api/stream/resolve`) and `/api/stream/stats` / `/api/stream/sources`. Server tabs mirror `Browse.jsx` (all, BLACK X 1–3; BLACK X 4 only while `/api/stream/sources` lists `aniproject`). Server fixes on the website therefore reach the app without a new APK; only UI changes need a rebuild.
+- Nothing falls back to another title or invents data: an empty server says so and offers the title's other servers; a page that fails directly is retried through `/api/proxy/image`, then shows a "tap to retry" tile. The APK player is a plain `<video>`, so only direct MP4 (and HLS where the WebView plays it) entries are listed; iframe-only hosts stay on the website. PixelDrain links start on the `pixeldrain.dev` mirror (v14 behaviour) and the error handler walks `.dev → .net → .com`, then the next server.
+- API calls use `credentials: 'omit'`; inside the APK a CORS/network failure is retried once through the native `BlackXNativeAuth.httpRequestAsync` bridge. `https://localhost` and `capacitor://localhost` are allowed CORS origins in `server/src/index.js`.
+- Build/sign: `tools/apk/README.md`. The release key lives only in the owner's private Google Drive folder «BLACK X — مفتاح توقيع التطبيق (سري — لا تشاركه)» (cert SHA-256 `2b2f63d1…c281`). Never commit it. v14 was signed with a lost key, so v14 → v15 needs one uninstall + reinstall; later builds with the same key update normally.
+- Accounts, VIP, watch party and reviews in the APK still use Firestore `settings/*` directly (see the Firestore section).
+- Verified for v15: headless mobile-viewport run of the APK bundle against a mock of the website API (library, server tabs, details, server switch, reader with direct/proxy/failed pages, anime search → episodes → servers), `apksigner verify` (v1+v2+v3), 4-byte alignment and unchanged native entries. Not yet verified on a physical phone.
+
+### Cross-server episode matching
+
+- `/api/stream/episode` for a BLACK X 1 (`aw-…`) slug also asks BLACK X 2 for the same show. The general `isTitleMatch()` accepted 2/3 of the words and attached *Tensei shitara Slime Datta Ken* episodes to *Tensei shitara Ken deshita 2*. `anime3rb.service.js` now uses `isStrictCrossSourceMatch()` (`server/src/lib/crossSourceMatch.js`) for word-based links: every significant query word, ≥75% of the candidate's words, and the same season number. Native BLACK X 2 ids (`xCamelCase`) keep the old path. `isWitcherTitleMatch()` (BLACK X 1 resolution) is still loose (substring match) — a known follow-up.
 
 ### Signed-in UI check
 
@@ -131,7 +148,7 @@ The official domain returned HTTP 200 for the following during the latest check:
 
 - Work on a topic branch and open a PR to `main`; do not force-push or overwrite the user's branch.
 - Stage specific intended files instead of `git add -A` when the working tree has unrelated generated/untracked files.
-- Do not include `client/dist`, secrets, database files, or APK binaries in a web/API hotfix.
+- Do not include `client/dist`, secrets, database files, or APK binaries in a web/API hotfix. An APK release commits only the rebuilt `client/public/BLACK-X-Mobile-120Hz.apk` (built and verified as in `tools/apk/README.md`); the website serves it at `/BLACK-X-Mobile-120Hz.apk`, which is also the app's in-app update link.
 - Verify PR Vercel checks and preview behavior, then merge. The official production deploy follows GitHub `main`.
 - Cloudflare `Workers Builds` may remain a stale failing status. The user's hosting decision is Vercel; do not change DNS or restore a Worker simply to make that check green.
 - After merge, re-check live API endpoints and the official site. Do not report production success until the live endpoints return valid data.

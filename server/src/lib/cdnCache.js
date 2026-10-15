@@ -12,7 +12,8 @@ import { CDN_CACHE_PROFILES, findPublicCacheRoute } from '../../../shared/public
  *    temporary outage is never frozen into the CDN for everyone;
  *  - responses that set a cookie are never cached.
  * `stale-if-error` lets the CDN keep serving the last good copy while an
- * upstream source is down.
+ * upstream source is down. Cacheable responses always carry `Vary: Origin`
+ * because their CORS headers differ between the website and the APK.
  */
 
 const LIST_KEYS = ['items', 'results', 'anime', 'episodes', 'data', 'media', 'list'];
@@ -33,6 +34,13 @@ export function isCacheablePayload(body) {
   const lists = LIST_KEYS.filter((key) => Array.isArray(body[key]));
   if (lists.length === 0) return true;
   return lists.some((key) => body[key].length > 0);
+}
+
+export function addVaryOrigin(res) {
+  const current = res.getHeader('Vary');
+  const list = Array.isArray(current) ? current.join(', ') : String(current || '');
+  if (list.trim() === '*' || /(^|,)\s*origin\s*(,|$)/i.test(list)) return;
+  res.setHeader('Vary', list.trim() ? `${list}, Origin` : 'Origin');
 }
 
 export function cdnCacheMiddleware(req, res, next) {
@@ -59,6 +67,10 @@ export function cdnCacheMiddleware(req, res, next) {
       payloadIsCacheable !== false &&
       !res.getHeader('set-cookie');
     res.setHeader('Cache-Control', cacheable ? cacheControl : 'no-store');
+    // CORS headers depend on the request Origin: same-origin website requests get none,
+    // the APK (https://localhost) gets its own Access-Control-Allow-Origin. Keying the CDN
+    // entry by Origin stops a website-populated copy from being served to the APK.
+    if (cacheable) addVaryOrigin(res);
     return originalWriteHead.call(this, statusCode, ...rest);
   };
 
