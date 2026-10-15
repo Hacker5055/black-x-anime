@@ -18,6 +18,7 @@ export default function ShowDetail({ onOpenAuth }) {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
   const sourceParam = (searchParams.get('source') || '').toLowerCase();
+  const isAniProject = sourceParam === 'aniproject' || String(slug).startsWith('ap-');
   const srcSuffix = sourceParam ? `?source=${sourceParam}` : '';
   const navigate = useNavigate();
   const { t, lang, formatNumber } = useI18n();
@@ -184,7 +185,7 @@ export default function ShowDetail({ onOpenAuth }) {
                   fontWeight: 900
                 }}
               >
-                4K Ultra • 120Hz
+                {isAniProject ? 'BLACK X 4' : '4K Ultra • 120Hz'}
               </span>
             </div>
 
@@ -195,43 +196,55 @@ export default function ShowDetail({ onOpenAuth }) {
               <span className="badge badge--cat" style={{ borderRadius: '999px', background: '#ffffff', color: '#000000', fontWeight: 900 }}>
                 {show.episodeCount ? t('show.episodeCount', { n: formatNumber(show.episodeCount) }) : `${eps.length} EP`}
               </span>
-              <span className="badge badge--open" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)' }}>
-                {t('watch.sub')}
-              </span>
-              <span className="badge" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)', fontWeight: 900 }}>
-                👑 FHD 1080p • VIP
-              </span>
+              {!isAniProject && (
+                <>
+                  <span className="badge badge--open" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)' }}>
+                    {t('watch.sub')}
+                  </span>
+                  <span className="badge" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)', fontWeight: 900 }}>
+                    👑 FHD 1080p • VIP
+                  </span>
+                </>
+              )}
             </div>
 
-            {/* Official slothUI Pro 6-Icon Micro-Stats Strip */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-                gap: '0.4rem',
-                padding: '0.75rem 0.5rem',
-                margin: '0.95rem 0',
-                borderRadius: '20px',
-                background: 'rgba(12, 12, 18, 0.9)',
-                border: '1px solid rgba(255,255,255,0.16)',
-                textAlign: 'center'
-              }}
-            >
-              {[
-                { icon: '🎞️', val: show.episodeCount || eps.length || '12', lbl: lang === 'ar' ? 'حلقات' : 'Eps' },
-                { icon: '♥', val: '1.4K', lbl: lang === 'ar' ? 'إعجاب' : 'Likes' },
-                { icon: '👁', val: '24.8K', lbl: lang === 'ar' ? 'مشاهدة' : 'Views' },
-                { icon: '💬', val: '186', lbl: lang === 'ar' ? 'تقييم' : 'Reviews' },
-                { icon: '🧬', val: '98%', lbl: lang === 'ar' ? 'تطابق' : 'Match' },
-                { icon: '★', val: '9.5', lbl: lang === 'ar' ? 'التقييم' : 'Score' }
-              ].map((st, idx) => (
-                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                  <span style={{ fontSize: '0.92rem', lineHeight: 1 }}>{st.icon}</span>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 900, color: '#ffffff' }}>{st.val}</span>
-                  <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'rgba(255,255,255,0.58)' }}>{st.lbl}</span>
-                </div>
-              ))}
-            </div>
+            {/* Do not invent popularity, quality or release figures for the search-only source. */}
+            {isAniProject ? (
+              <p style={{ margin: '0.95rem 0', color: 'rgba(255,255,255,0.72)', fontSize: '0.85rem' }}>
+                {lang === 'ar'
+                  ? 'الحلقات المتاحة من BLACK X 4 مدرجة أدناه. جودة البث والترجمة تعتمد على الخادم المصدر.'
+                  : 'Available BLACK X 4 episodes are listed below. Playback quality and subtitles depend on the upstream source.'}
+              </p>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+                  gap: '0.4rem',
+                  padding: '0.75rem 0.5rem',
+                  margin: '0.95rem 0',
+                  borderRadius: '20px',
+                  background: 'rgba(12, 12, 18, 0.9)',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  textAlign: 'center'
+                }}
+              >
+                {[
+                  { icon: '🎞️', val: show.episodeCount || eps.length || '12', lbl: lang === 'ar' ? 'حلقات' : 'Eps' },
+                  { icon: '♥', val: '1.4K', lbl: lang === 'ar' ? 'إعجاب' : 'Likes' },
+                  { icon: '👁', val: '24.8K', lbl: lang === 'ar' ? 'مشاهدة' : 'Views' },
+                  { icon: '💬', val: '186', lbl: lang === 'ar' ? 'تقييم' : 'Reviews' },
+                  { icon: '🧬', val: '98%', lbl: lang === 'ar' ? 'تطابق' : 'Match' },
+                  { icon: '★', val: '9.5', lbl: lang === 'ar' ? 'التقييم' : 'Score' }
+                ].map((st, idx) => (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ fontSize: '0.92rem', lineHeight: 1 }}>{st.icon}</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 900, color: '#ffffff' }}>{st.val}</span>
+                    <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'rgba(255,255,255,0.58)' }}>{st.lbl}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {show.description && (
               <p className="detail-synopsis" style={{ color: 'rgba(255,255,255,0.82)' }}>{show.description}</p>
@@ -241,11 +254,11 @@ export default function ShowDetail({ onOpenAuth }) {
             <div className="wit-meta-grid">
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'النوع:' : 'Type:'}</span>
-                <span className="wit-meta-val">TV • 120Hz</span>
+                <span className="wit-meta-val">{isAniProject ? (lang === 'ar' ? 'أنمي' : 'Anime') : 'TV • 120Hz'}</span>
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'حالة الأنمي:' : 'Status:'}</span>
-                <span className="wit-meta-val" style={{ color: '#ffffff' }}>{lang === 'ar' ? 'يعرض الآن' : 'Airing'}</span>
+                <span className="wit-meta-val" style={{ color: '#ffffff' }}>{isAniProject ? (show.status || '—') : (lang === 'ar' ? 'يعرض الآن' : 'Airing')}</span>
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'عدد الحلقات:' : 'Episodes:'}</span>
@@ -253,15 +266,15 @@ export default function ShowDetail({ onOpenAuth }) {
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'مدة الحلقة:' : 'Duration:'}</span>
-                <span className="wit-meta-val">{lang === 'ar' ? '24 دقيقة' : '24 min'}</span>
+                <span className="wit-meta-val">{isAniProject ? '—' : (lang === 'ar' ? '24 دقيقة' : '24 min')}</span>
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'المصدر:' : 'Source:'}</span>
-                <span className="wit-meta-val">{lang === 'ar' ? 'مانجا يابانية' : 'Manga'}</span>
+                <span className="wit-meta-val">{isAniProject ? 'BLACK X 4' : (lang === 'ar' ? 'مانجا يابانية' : 'Manga')}</span>
               </div>
               <div className="wit-meta-item">
                 <span className="wit-meta-label">{lang === 'ar' ? 'الجودة المتوفرة:' : 'Quality:'}</span>
-                <span className="wit-meta-val" style={{ color: '#ffffff' }}>👑 FHD 1080p VIP / HD</span>
+                <span className="wit-meta-val" style={{ color: '#ffffff' }}>{isAniProject ? (lang === 'ar' ? 'حسب المصدر' : 'Varies by source') : '👑 FHD 1080p VIP / HD'}</span>
               </div>
             </div>
 
@@ -390,9 +403,11 @@ export default function ShowDetail({ onOpenAuth }) {
                 color: '#ffffff'
               }}
             >
-              {vipTier === 'free'
-                ? (lang === 'ar' ? '⏳ الحلقات الرسمية الجديدة تفتح لمشتركي VIP في نفس اليوم، وتتأخر 24 ساعة للنسخة المجانية' : '⏳ Official new episodes drop same-day for VIP, 24h delay for Free')
-                : (lang === 'ar' ? '👑 عضويتك VIP: جميع الحلقات الرسمية تنزل لك في نفس اليوم وبجودة FHD 1080p!' : '👑 VIP Active: Same-day official episodes & FHD 1080p unlocked!')}
+              {isAniProject
+                ? (lang === 'ar' ? '🔎 الحلقات المتاحة من سيرفر BLACK X 4' : '🔎 Episodes available on BLACK X 4')
+                : vipTier === 'free'
+                  ? (lang === 'ar' ? '⏳ الحلقات الرسمية الجديدة تفتح لمشتركي VIP في نفس اليوم، وتتأخر 24 ساعة للنسخة المجانية' : '⏳ Official new episodes drop same-day for VIP, 24h delay for Free')
+                  : (lang === 'ar' ? '👑 عضويتك VIP: جميع الحلقات الرسمية تنزل لك في نفس اليوم وبجودة FHD 1080p!' : '👑 VIP Active: Same-day official episodes & FHD 1080p unlocked!')}
             </span>
             <span className="chip" style={{ cursor: 'default' }}>{formatNumber(eps.length)} {t('common.episodes')}</span>
           </div>
@@ -410,7 +425,7 @@ export default function ShowDetail({ onOpenAuth }) {
                 const p = progress[e.episode];
                 const pct = p && p.duration ? Math.min(1, p.position / p.duration) : p?.completed ? 1 : 0;
                 const maxEp = eps.length ? Math.max(...eps.map((item) => Number(item.episode || 0))) : 0;
-                const isLatest = eps.length > 1 && Number(e.episode) === maxEp;
+                const isLatest = !isAniProject && eps.length > 1 && Number(e.episode) === maxEp;
                 return (
                   <button
                     key={e.episode}

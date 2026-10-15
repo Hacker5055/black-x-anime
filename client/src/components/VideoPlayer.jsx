@@ -27,7 +27,7 @@ const isDirectCdnPlayable = (url) => {
 // Keep upstream host/provider names out of the player UI. Preserve only the
 // BLACK X server tier when it is already part of the branded label.
 const brandedServerName = (entry) => {
-  const match = String(entry?.server || '').match(/\bBLACK\s*X\s*(?:SERVER\s*)?([1-3])\b/i);
+  const match = String(entry?.server || '').match(/\bBLACK\s*X\s*(?:SERVER\s*)?([1-4])\b/i);
   return match?.[1] ? `BLACK X ${match[1]}` : 'BLACK X';
 };
 
@@ -152,6 +152,43 @@ export default function VideoPlayer({
     !String(activeSource.embedUrl).startsWith('/api/stream/mp4-player')
   );
   const embedMode = Boolean(activeSource && (!effectiveDirectUrl || (forceEmbed && hasExternalEmbed)));
+  const browserHls = Boolean(activeSource?.isHls && activeSource?.browserDirect && effectiveDirectUrl);
+
+  // AniProject returns HLS manifests. Play public/CORS-enabled manifests in
+  // this player; when ANIPROJECT_MEDIA_HOSTS is set, the source URL is instead
+  // our same-origin allowlisted HLS proxy. Both retain the BLACK X seek/UI.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!browserHls || !video || embedMode) return undefined;
+    const url = resolveApiUrl(effectiveDirectUrl);
+    let disposed = false;
+    let hls;
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.play().catch(() => {});
+    } else {
+      import('hls.js').then(({ default: Hls }) => {
+        if (disposed) return;
+        if (!Hls.isSupported()) {
+          pushToast(lang === 'ar' ? 'تعذر تشغيل بث HLS في هذا المتصفح' : 'HLS playback is unsupported in this browser', 'error');
+          return;
+        }
+        hls = new Hls({ maxBufferLength: 30 });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal && !disposed) video.dispatchEvent(new Event('error'));
+        });
+      }).catch(() => {
+        if (!disposed) pushToast(lang === 'ar' ? 'تعذر تحميل مشغل HLS' : 'Could not load HLS player', 'error');
+      });
+    }
+    return () => {
+      disposed = true;
+      hls?.destroy();
+    };
+  }, [browserHls, embedMode, effectiveDirectUrl, active?.id, lang]);
 
   // Prefer a direct file/custom player so the BLACK X controls work and the
   // upstream host's branded iframe is only used when no direct source exists.
@@ -470,12 +507,14 @@ export default function VideoPlayer({
               key={`${active?.id || 'none'}-${effectiveDirectUrl || ''}-${forceProxy ? 'proxy' : 'direct'}`}
               ref={videoRef}
               className="player-video"
-              src={effectiveDirectUrl ? proxied(effectiveDirectUrl, forceProxy) : undefined}
+              src={browserHls ? undefined : effectiveDirectUrl
+                ? (activeSource?.browserDirect ? resolveApiUrl(effectiveDirectUrl) : proxied(effectiveDirectUrl, forceProxy))
+                : undefined}
               referrerPolicy="no-referrer"
               playsInline
               autoPlay
               preload="auto"
-              crossOrigin="anonymous"
+              crossOrigin={activeSource?.browserDirect ? undefined : 'anonymous'}
               onPlay={() => { setPlaying(true); setEnded(false); setBuffering(false); wake(); }}
               onPause={() => { setPlaying(false); setShowControls(true); save(true); }}
               onTimeUpdate={(e) => {

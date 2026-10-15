@@ -20,6 +20,55 @@ favorites (watchlist) and continue-watching — all persisted per user.
 - 🔐 **Auth** — JWT httpOnly cookies, demo accounts below
 - 📡 **AniList GraphQL** — trending/season discovery with live metadata (never hardcoded)
 
+## Optional BLACK X 4 — AniProject v3 anime + manga source
+
+[**AniProject v3.0.0**](https://github.com/ErickLimaS/anime-website/releases/tag/v3.0.0)
+provides **application source code**, not a content API at the release URL. Its
+backend calls a separately hosted Consumet API (Zoro anime / MangaDex manga)
+and requires Redis. BLACK X integrates with that **backend** when you provide
+its URL; it does not embed the upstream Next.js frontend, copy its code/assets,
+or depend on a public demo website.
+
+1. Deploy your own AniProject **v3 backend** according to its [backend setup](https://github.com/ErickLimaS/anime-website/tree/v3.0.0/backend)
+   (including its Redis and Consumet settings). Check its non-commercial
+   [CC BY-NC-SA 4.0 license](https://github.com/ErickLimaS/anime-website/blob/v3.0.0/LICENSE.md)
+   and the rights/terms of the underlying media before deployment.
+2. Set `ANIPROJECT_API_URL=https://your-aniproject-backend.example` in **BLACK X's
+   server** environment (Vercel → Project → Settings → Environment Variables),
+   then redeploy. Never set it to the GitHub release, the frontend URL, or a
+   Consumet URL. For local development only, `http://localhost:<port>` is accepted.
+3. Optionally set `ANIPROJECT_MEDIA_HOSTS=cdn.example.com,media.example.net` to
+   allowlist *only* the actual media CDN hosts for BLACK X's video/HLS proxy.
+   Without it, browser-direct playback is tried; HLS then depends on upstream
+   CORS. Add every playlist/segment host that needs proxying. An entry also
+   permits its subdomains: only list domains whose subdomains you trust. Do not
+   use `*`, scheme prefixes, private addresses, or untrusted domains.
+
+With the backend configured, BLACK X 4 appears in the bilingual server selector
+and **all-source searches**. Anime search → show → episodes → playback (HLS via
+hls.js, MP4 via the existing player) and manga search → chapters → reader work
+through the existing pages. The backend offers **search only** for these
+providers: no latest feed, browsable catalog, verified counts, guaranteed
+Arabic translation, or guaranteed working video/download link is claimed.
+BLACK X 4 does not inherit the other servers' VIP release delay or fabricated
+quality badges; download links appear only when supplied by the upstream.
+MangaDex UUID chapters fall back to BLACK X's existing MangaDex at-home adapter
+if AniProject v3 returns an empty page list. Source 4 is hidden/disabled until
+configured; the other sources remain available if its backend goes down.
+
+```bash
+npm run test:aniproject      # offline mocked integration tests
+# After setting ANIPROJECT_API_URL and redeploying, test on your own host:
+curl 'https://your-black-x-domain/api/stream/sources'
+curl 'https://your-black-x-domain/api/stream/search?source=aniproject&q=One%20Piece'
+curl 'https://your-black-x-domain/api/search?type=manga&server=bx4&query=One%20Piece'
+```
+
+**بالعربية:** المصدر الرابع اختياري؛ رابط GitHub هو كود وليس خادم محتوى.
+لتفعيله ضع رابط خادم AniProject الخلفي الخاص بك في `ANIPROJECT_API_URL` على
+Vercel. يدعم البحث ثم المشاهدة/القراءة، ولا يقدّم فهرساً كاملاً أو أحدث الحلقات.
+اختبر بث الفيديو وصفحات المانجا على الموقع الفعلي قبل اعتباره جاهزاً.
+
 ## ✨ 3D profile ornaments — زخارف ثلاثية الأبعاد (new)
 
 Avatar frames and profile banners as **live 3D objects**: real transmission glass,

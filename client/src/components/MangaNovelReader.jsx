@@ -500,7 +500,7 @@ export default function MangaNovelReader({
                     cursor: 'pointer'
                   }}
                 >
-                  {srv.id === 'bx1' ? 'BLACK X 1' : srv.id === 'bx2' ? 'BLACK X 2' : 'BLACK X 3'}
+                  {srv.id === 'bx1' ? 'BLACK X 1' : srv.id === 'bx2' ? 'BLACK X 2' : srv.id === 'bx4' ? 'BLACK X 4' : 'BLACK X 3'}
                 </button>
               ))}
             </div>
