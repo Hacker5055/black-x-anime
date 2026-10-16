@@ -7,6 +7,7 @@ import { Modal } from '../components/Modals.jsx';
 import { SkeletonGrid, EmptyState, LiquidLoader } from '../components/Loading.jsx';
 import { pushToast, imgFallback } from '../hooks/hooks.js';
 import MangaNovelReader from '../components/MangaNovelReader.jsx';
+import { ANILIST_EXCLUSION_ARGS, hasBlockedGenre } from '../../../shared/contentFilter.js';
 
 export default function Browse() {
   const { lang } = useI18n();
@@ -89,7 +90,7 @@ export default function Browse() {
       const gql = `
         query ($page: Int, $perPage: Int, $countryOfOrigin: CountryCode, $search: String, $sort: [MediaSort]) {
           Page(page: $page, perPage: $perPage) {
-            media(type: MANGA, countryOfOrigin: $countryOfOrigin, search: $search, sort: $sort, isAdult: false) {
+            media(type: MANGA, countryOfOrigin: $countryOfOrigin, search: $search, sort: $sort, isAdult: false, ${ANILIST_EXCLUSION_ARGS}) {
               id
               title { romaji english native }
               synonyms
@@ -98,6 +99,7 @@ export default function Browse() {
               chapters
               averageScore
               genres
+              tags { name }
               description(asHtml: false)
               coverImage { extraLarge large }
               bannerImage
@@ -119,7 +121,8 @@ export default function Browse() {
       });
       if (!resp.ok) return [];
       const json = await resp.json();
-      const media = json?.data?.Page?.media || [];
+      // Ecchi / Harem / Isekai are hidden from BLACK X (shared/contentFilter.js).
+      const media = (json?.data?.Page?.media || []).filter((m) => !hasBlockedGenre(m.genres, m.tags));
       return media.map((m) => {
         const titleEn = m.title?.english || m.title?.romaji || m.title?.native || `Manga #${m.id}`;
         const c = String(m.countryOfOrigin || 'JP').toUpperCase();
@@ -135,13 +138,14 @@ export default function Browse() {
           type: typeLabel,
           poster,
           banner: m.bannerImage || poster,
-          author: c === 'KR' ? 'مانهوا كورية • BLACK X' : c === 'CN' ? 'مانهاوا صينية • BLACK X' : 'مانجا يابانية • BLACK X',
-          rating: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4',
-          description_ar: desc || `اقرأ ${titleEn} عبر الفهرس العالمي الشامل ومصادر BLACK X.`,
-          description_en: desc || `Read ${titleEn} on BLACK X Master Global Index.`,
-          chapters_count: m.chapters || (c === 'KR' ? 120 : 180),
+          // Unknown stays unknown: no invented author, rating, chapter count or genre.
+          author: '',
+          rating: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
+          description_ar: desc,
+          description_en: desc,
+          chapters_count: m.chapters || null,
           status: m.status === 'FINISHED' ? 'COMPLETED' : 'ONGOING',
-          genres: Array.isArray(m.genres) && m.genres.length ? m.genres : [typeLabel],
+          genres: Array.isArray(m.genres) ? m.genres : [],
           source: 'BLACK X 3',
           server: 'bx3'
         };
@@ -244,7 +248,7 @@ export default function Browse() {
           r.coverUrl ||
           '/blackx-logo.png',
         banner: r.banner || r.poster || r.coverImage || r.coverUrl,
-        author: r.author || r.source || 'سيرفرات BLACK X',
+        author: r.author || '',
         rating: r.rating ?? (r.averageScore ? (r.averageScore / 10).toFixed(1) : null),
         description_ar: r.description_ar || r.description || '',
         description_en: r.description_en || r.description || '',
@@ -462,24 +466,26 @@ export default function Browse() {
                     borderRadius: '999px'
                   }}
                 >
-                  🔥 {lang === 'ar' ? 'الأكثر رواجاً #1' : '#1 Trending'}
+                  ✦ {lang === 'ar' ? 'مميز' : 'Featured'}
                 </span>
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: '12px',
-                    insetInlineEnd: '12px',
-                    background: 'rgba(0, 0, 0, 0.85)',
-                    border: '1px solid rgba(255,255,255,0.28)',
-                    color: '#ffffff',
-                    fontWeight: 900,
-                    fontSize: '0.82rem',
-                    padding: '0.26rem 0.72rem',
-                    borderRadius: '999px'
-                  }}
-                >
-                  ★ {spotlightItem.rating}
-                </span>
+                {spotlightItem.rating != null && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      insetInlineEnd: '12px',
+                      background: 'rgba(0, 0, 0, 0.85)',
+                      border: '1px solid rgba(255,255,255,0.28)',
+                      color: '#ffffff',
+                      fontWeight: 900,
+                      fontSize: '0.82rem',
+                      padding: '0.26rem 0.72rem',
+                      borderRadius: '999px'
+                    }}
+                  >
+                    ★ {spotlightItem.rating}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -540,7 +546,11 @@ export default function Browse() {
                     fontWeight: 800
                   }}
                 >
-                  {spotlightItem.chapters_count} {lang === 'ar' ? 'فصلاً مترجماً' : 'Chapters'}
+                  {spotlightItem.chapters_count != null
+                    ? `${spotlightItem.chapters_count} ${lang === 'ar' ? 'فصلاً مترجماً' : 'Chapters'}`
+                    : lang === 'ar'
+                    ? 'عرض الفصول'
+                    : 'View chapters'}
                 </span>
               </div>
 
@@ -548,7 +558,8 @@ export default function Browse() {
                 {lang === 'ar' ? spotlightItem.title_ar : spotlightItem.title_en}
               </h2>
               <div style={{ color: 'rgba(255,255,255,0.68)', fontSize: '0.9rem', fontWeight: 600 }}>
-                {spotlightItem.title_en} · ✍️ {spotlightItem.author}
+                {spotlightItem.title_en}
+                {spotlightItem.author ? ` · ✍️ ${spotlightItem.author}` : ''}
               </div>
 
               <p
@@ -843,9 +854,12 @@ export default function Browse() {
                   {lang === 'ar' ? item.title_ar : item.title_en}
                 </h3>
 
-                <div style={{ fontSize: '0.78rem', color: 'var(--ink-dim)', marginBottom: '0.65rem' }}>
-                  ✍️ {item.author || 'BLACK X Manga'}{(item.release_year || item.server !== 'bx4') && ` · ${item.release_year || '2024'}`}
-                </div>
+                {/* Real author / year only (no invented "BLACK X Manga · 2024"). */}
+                {item.author || item.release_year ? (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--ink-dim)', marginBottom: '0.65rem' }}>
+                    {[item.author ? `✍️ ${item.author}` : '', item.release_year || ''].filter(Boolean).join(' · ')}
+                  </div>
+                ) : null}
 
                 {/* Genre chips */}
                 {Array.isArray(item.genres) && item.genres.length > 0 && (
@@ -948,7 +962,7 @@ export default function Browse() {
       {selectedItem && (
         <Modal
           title={lang === 'ar' ? selectedItem.title_ar : selectedItem.title_en}
-          sub={`${selectedItem.type === 'MANHWA' ? '⚡ مانهوا كورية' : '📖 مانجا يابانية'} · ${selectedItem.author}`}
+          sub={`${selectedItem.type === 'MANHWA' ? '⚡ مانهوا كورية' : '📖 مانجا يابانية'}${selectedItem.author ? ` · ${selectedItem.author}` : ''}`}
           onClose={() => setSelectedItem(null)}
           wide={true}
         >

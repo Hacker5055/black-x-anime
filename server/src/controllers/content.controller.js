@@ -7,6 +7,7 @@ import { getUserId, fail, prismaError, ensurePrismaUser, isDbUnavailable, dbIsBr
 import { db, social, ensureSocialTables, levelFromMinutes, awardBadgesSqlite } from '../lib/socialDb.js';
 import { mangalikService, FLAGSHIP_MANGA_MAP } from '../services/mangalik.service.js';
 import { aniprojectService, isAniProjectConfigured, isAniProjectMangaId } from '../services/aniproject.service.js';
+import { filterMangaList, markHiddenManga } from '../lib/hiddenTitles.js';
 
 /** POST /api/content/rate — body { contentId, episodeId?, score: 1..10 } */
 export async function rateContent(req, res) {
@@ -198,7 +199,7 @@ export async function getLibrary(req, res) {
       if (!isAniProjectConfigured()) return res.status(503).json({ success: false, error: 'source_unavailable', items: [] });
       const page = Math.max(1, Number(req.query.page) || 1);
       try {
-        const found = q && page === 1 ? await aniprojectService.searchManga(q) : [];
+        const found = q && page === 1 ? await filterMangaList(await aniprojectService.searchManga(q)) : [];
         const items = type === 'ALL' ? found : found.filter((item) => item.type === type);
         return res.json({ success: true, totalCount: items.length, page, hasNext: false, items });
       } catch {
@@ -286,6 +287,9 @@ export async function getLibrary(req, res) {
       }
     }
 
+    // Ecchi / Harem / Isekai (shared/contentFilter.js, lib/hiddenTitles.js).
+    items = await filterMangaList(items);
+
     // The upstream catalogs only return pages, never a grand total, so the
     // total is reported as unknown (null) instead of an invented number.
     // `count` is the real number of unique items in this response.
@@ -317,7 +321,7 @@ export async function getLibraryItemDetail(req, res) {
       try {
         const chapters = await aniprojectService.getMangaChapters(id);
         return res.json({ success: true, item: {
-          ...item, chapters_count: chapters.length,
+          ...(await markHiddenManga(item)), chapters_count: chapters.length,
           availableServers: [{ id: 'bx4', name: 'سيرفر BLACK X 4', labelEn: 'BLACK X Server 4' }],
           activeServer: 'bx4',
           chapters: chapters.map((chapter) => ({ ...chapter, number: chapter.chapterNumber }))
@@ -359,8 +363,9 @@ export async function getLibraryItemDetail(req, res) {
           url: c.url,
           slug: c.slug,
           server: c.server || activeServer,
-          releaseDate: c.releaseDate || '2026',
-          scanlationGroup: c.scanlationGroup || 'سيرفرات BLACK X الرسمية'
+          // Unknown stays unknown: no invented year or translation team.
+          releaseDate: c.releaseDate || null,
+          scanlationGroup: c.scanlationGroup || ''
         }));
       }
     } catch (_) {}
@@ -368,8 +373,8 @@ export async function getLibraryItemDetail(req, res) {
     return res.json({
       success: true,
       item: {
-        ...item,
-        chapters_count: chapters.length || item.chapters_count || 1,
+        ...(await markHiddenManga(item)),
+        chapters_count: chapters.length || item.chapters_count || null,
         availableServers,
         activeServer,
         chapters

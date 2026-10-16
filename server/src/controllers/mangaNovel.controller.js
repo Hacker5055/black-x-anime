@@ -10,6 +10,22 @@ import {
 import { anilistService } from '../services/anilist.service.js';
 import { scraperService } from '../services/scraper.service.js';
 import { getPrisma } from '../lib/prisma.js';
+import { filterAnimeList, filterMangaList, getHiddenIndex, isHiddenMangaItem, markHiddenManga } from '../lib/hiddenTitles.js';
+
+/** Saved rows keep their data; hidden genres are only left out of what is shown. */
+function savedContentOf(row) {
+  const c = row?.content || row?.chapter?.content || null;
+  if (!c || typeof c !== 'object') return {};
+  let genres = c.genres;
+  if (typeof genres === 'string') {
+    try {
+      genres = JSON.parse(genres);
+    } catch {
+      genres = genres.split(',');
+    }
+  }
+  return { ...c, genres: Array.isArray(genres) ? genres : [] };
+}
 
 function getUpstreamHeadersForImage(decodedUrl) {
   let referer = 'https://olympustaff.com/';
@@ -73,7 +89,7 @@ export const mangaNovelController = {
         if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable', manga: [] });
         try {
           results.manga = (type === 'all' || type === 'manga')
-            ? await aniprojectService.searchManga(query) : [];
+            ? await filterMangaList(await aniprojectService.searchManga(query)) : [];
           return res.json({ ...results, results: results.manga });
         } catch {
           return res.status(502).json({ error: 'upstream', manga: [] });
@@ -112,7 +128,9 @@ export const mangaNovelController = {
       }
 
       await Promise.allSettled(promises);
-      results.manga = [...new Map(mangaResults.map((item) => [item.id, item])).values()];
+      // Ecchi / Harem / Isekai (shared/contentFilter.js, lib/hiddenTitles.js).
+      results.manga = await filterMangaList([...new Map(mangaResults.map((item) => [item.id, item])).values()]);
+      results.metadata = Array.isArray(results.metadata) ? await filterAnimeList(results.metadata) : results.metadata;
       return res.json({
         ...results,
         results: results.manga
@@ -132,11 +150,11 @@ export const mangaNovelController = {
       if (isAniProjectMangaId(id)) {
         if (!isAniProjectConfigured()) return res.status(503).json({ error: 'source_unavailable' });
         const item = await aniprojectService.getManga(id);
-        return item ? res.json(item) : res.status(404).json({ error: 'not_found' });
+        return item ? res.json(await markHiddenManga(item)) : res.status(404).json({ error: 'not_found' });
       }
       const meta = await mangalikService.getSeriesMetadata(id);
       if (meta) {
-        return res.json(meta);
+        return res.json(await markHiddenManga(meta));
       }
       if (!Number.isNaN(Number(id))) {
         const details = await anilistService.getDetails(id);
@@ -423,7 +441,8 @@ export const mangaNovelController = {
         orderBy: { created_at: 'desc' }
       });
 
-      return res.json({ bookmarks });
+      const index = await getHiddenIndex();
+      return res.json({ bookmarks: bookmarks.filter((b) => !isHiddenMangaItem(savedContentOf(b), index)) });
     } catch (error) {
       return res.status(500).json({ error: 'Failed to fetch bookmarks', bookmarks: [] });
     }
@@ -492,7 +511,8 @@ export const mangaNovelController = {
         take: 30
       });
 
-      return res.json({ history });
+      const index = await getHiddenIndex();
+      return res.json({ history: history.filter((h) => !isHiddenMangaItem(savedContentOf(h), index)) });
     } catch (error) {
       return res.status(500).json({ error: 'Failed to fetch reading history', history: [] });
     }

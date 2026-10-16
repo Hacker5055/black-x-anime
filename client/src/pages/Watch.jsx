@@ -15,6 +15,7 @@ import {
 } from '../utils/deviceNotifications.js';
 import { DownloadModal } from '../components/DownloadModal.jsx';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
+import { isHiddenAnime } from '../../../shared/contentFilter.js';
 import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
 
 export default function Watch({ onOpenAuth }) {
@@ -273,6 +274,16 @@ export default function Watch({ onOpenAuth }) {
       <div className="glass" style={{ padding: '2.5rem' }}>
         <EmptyState icon="🔍" title={t('show.notFound')}>
           <button type="button" className="btn btn--ghost" onClick={() => navigate('/browse')}>{t('common.back')}</button>
+        </EmptyState>
+      </div>
+    );
+  }
+  // Ecchi / Harem / Isekai are hidden from BLACK X (shared/contentFilter.js; the API marks them).
+  if (show && isHiddenAnime(show)) {
+    return (
+      <div className="glass" style={{ padding: '2.5rem' }}>
+        <EmptyState icon="✕" title={lang === 'ar' ? 'العمل ده مش متاح على BLACK X' : 'This title is not available on BLACK X'}>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate('/')}>{t('common.back')}</button>
         </EmptyState>
       </div>
     );

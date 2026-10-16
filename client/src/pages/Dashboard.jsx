@@ -11,6 +11,7 @@ import AnimeDiscover from '../components/AnimeDiscover.jsx';
 import BxIcon from '../components/BxIcon.jsx';
 import { sendNativeDeviceNotification } from '../utils/deviceNotifications.js';
 import { useAnimeCatalogTotal, formatCount } from '../hooks/useCatalogStats.js';
+import { visibleGenres } from '../../../shared/contentFilter.js';
 
 const WEEK_DAYS = [
   { id: 6, ar: 'السبت', en: 'Saturday' },
@@ -92,31 +93,22 @@ function WitSectionHeader({ icon, title, sub, linkTo, linkLabel }) {
   );
 }
 
-const DEFAULT_HERO_SLIDES = [
-  {
-    slug: 'bleach-sennen-kessen-hen',
-    titleEn: 'BLEACH: Sennen Kessen-hen - Soukoku-tan',
-    titleAr: 'القسم الثالث من حرب الألفية الدموية متاح الآن بجودة عالية.',
-    episodes: 14,
-    score: 89,
-    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/169755-82wS1kG2a1kZ.jpg'
-  },
-  {
-    slug: 'solo-leveling',
-    titleEn: 'Solo Leveling: Arise from the Shadow',
-    titleAr: 'الموسم الجديد متاح الآن بجودة FHD 1080p.',
-    episodes: 12,
-    score: 88,
-    poster: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/151807-37yfQA3ym8PA.jpg'
-  }
-];
+/** Genre pills of one hero title in the page language, without the hidden genres. */
+function heroGenreLabels(item, isRtl) {
+  const all = Array.isArray(item?.genres) ? item.genres : [];
+  const ar = Array.isArray(item?.tagsAr) && item.tagsAr.length ? item.tagsAr : all.filter((g) => /[\u0600-\u06FF]/.test(String(g)));
+  const en = all.filter((g) => !/[\u0600-\u06FF]/.test(String(g)));
+  const pick = isRtl ? (ar.length ? ar : en) : en.length ? en : ar;
+  return visibleGenres(pick).slice(0, 3);
+}
 
 /* --------------------------- 0. Exact 1:1 Reference Cinema Hero + All Episodes + Anime/Manga Portals + Stories --------------------------- */
-function Hero3DStage({ items = [], trending = [] }) {
+function Hero3DStage({ items = [], trending = [], onOpenAuth }) {
   const { lang, setLang } = useI18n();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activeIdx, setActiveIdx] = useState(0);
-  const [inPlaylist, setInPlaylist] = useState(false);
+  const [favSlugs, setFavSlugs] = useState({}); // slug -> saved in the list (real /api/library/favorites)
   const [storyModalIdx, setStoryModalIdx] = useState(null);
   const isRtl = lang === 'ar';
 
@@ -130,7 +122,7 @@ function Hero3DStage({ items = [], trending = [] }) {
       merged.push(item);
       if (merged.length >= 12) break;
     }
-    return merged.length > 0 ? merged : DEFAULT_HERO_SLIDES;
+    return merged; // nothing invented while the catalogue loads or when it fails
   }, [items, trending]);
 
   useEffect(() => {
@@ -151,26 +143,83 @@ function Hero3DStage({ items = [], trending = [] }) {
     return () => clearTimeout(id);
   }, [storyModalIdx, heroPool.length]);
 
-  const current = heroPool[activeIdx] || heroPool[0];
-  const displayTitle =
-    current.titleEn ||
-    current.titleEnglish ||
-    current.titleRomaji ||
-    current.titleAr ||
-    current.titleArabic ||
-    current.slug ||
-    'DEMON SLAYER: KIMETSU NO YAIBA';
-  const score = current.score ? (Number(current.score) / 10).toFixed(1) : '8.8';
+  const current = heroPool[activeIdx] || heroPool[0] || null;
+  const displayTitle = current
+    ? current.titleEn ||
+      current.titleEnglish ||
+      current.title_english ||
+      current.titleRomaji ||
+      current.title_romaji ||
+      current.titleAr ||
+      current.titleArabic ||
+      current.slug ||
+      ''
+    : '';
+  // Real values only: unknown score / year / type / episode are simply not shown.
+  const rawScore = Number(current?.rating) || Number(current?.score) || 0;
+  const score = rawScore > 0 ? (rawScore > 10 ? rawScore / 10 : rawScore).toFixed(1) : '';
   const artwork =
-    current.poster ||
-    current.coverUrl ||
-    current.banner ||
-    current.bannerUrl ||
+    current?.poster ||
+    current?.coverUrl ||
+    current?.cover_url ||
+    current?.banner ||
+    current?.bannerUrl ||
+    current?.banner_url ||
     '/blackx-logo.png';
+  const heroGenres = current ? heroGenreLabels(current, isRtl) : [];
+  const heroBadge = current ? [current.type || current.format || '', current.year || current.season_year || current.seasonYear || ''].filter(Boolean).join(' • ') : '';
+  const heroEpisode = Number(current?.episode) || 0;
+  const heroLine = [heroEpisode ? (isRtl ? `الحلقة ${heroEpisode}` : `Episode ${heroEpisode}`) : '', score ? `★ ${score}` : ''].filter(Boolean).join(' • ');
+  const playLabel = current?.slug
+    ? isRtl
+      ? `شغّل الحلقة ${heroEpisode || 1}`
+      : `Play episode ${heroEpisode || 1}`
+    : isRtl
+    ? 'ابحث عنه'
+    : 'Find it';
 
-  const heroGenres = isRtl ? ['اكشن', 'تاريخي', 'شونين'] : ['Action', 'Historical', 'Shonen'];
+  // «أضف إلى قائمتي» saves to the real list (website favorites); guests are asked to sign in.
+  const currentSlug = current?.slug || '';
+  const inPlaylist = Boolean(currentSlug && favSlugs[currentSlug]);
+  useEffect(() => {
+    if (!user || !currentSlug || favSlugs[currentSlug] !== undefined) return undefined;
+    let alive = true;
+    api
+      .get(`/api/library/favorites/${currentSlug}`)
+      .then((d) => alive && setFavSlugs((m) => ({ ...m, [currentSlug]: Boolean(d?.favorite) })))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [user, currentSlug, favSlugs]);
+  const toggleList = async () => {
+    if (!currentSlug) return;
+    if (!user) {
+      onOpenAuth?.('login');
+      return;
+    }
+    const next = !inPlaylist;
+    setFavSlugs((m) => ({ ...m, [currentSlug]: next }));
+    try {
+      if (next) {
+        await api.put(`/api/library/favorites/${currentSlug}`, {
+          titleEn: current.titleEn || displayTitle,
+          titleAr: current.titleAr || null,
+          poster: current.poster || null,
+          banner: current.banner || null
+        });
+      } else {
+        await api.del(`/api/library/favorites/${currentSlug}`);
+      }
+      pushToast(next ? (isRtl ? 'اتضاف لقائمتك' : 'Added to your list') : isRtl ? 'اتشال من قائمتك' : 'Removed from your list', 'success');
+    } catch {
+      setFavSlugs((m) => ({ ...m, [currentSlug]: !next }));
+      pushToast(isRtl ? 'ماقدرناش نحفظ — جرّب تاني' : 'Could not save — try again', 'error');
+    }
+  };
 
   const handleWatchCurrent = (item = current, ep = 1) => {
+    if (!item) return;
     if (item?.slug) {
       navigate(`/watch/${item.slug}/${item.episode || ep}`);
     } else {
@@ -179,6 +228,7 @@ function Hero3DStage({ items = [], trending = [] }) {
   };
 
   const handleOpenDetails = (item = current) => {
+    if (!item) return;
     if (item?.slug) {
       navigate(`/show/${item.slug}`);
     } else {
@@ -341,7 +391,8 @@ function Hero3DStage({ items = [], trending = [] }) {
           </div>
         </div>
 
-        {/* Centered Hero Content at Bottom */}
+        {/* Centered Hero Content at Bottom (only with a real title: no invented placeholder show) */}
+        {current ? (
         <div
           style={{
             position: 'absolute',
@@ -355,7 +406,7 @@ function Hero3DStage({ items = [], trending = [] }) {
             alignItems: 'center'
           }}
         >
-          {/* Genre Pills + TV-MA Badge ABOVE Title */}
+          {/* Genre pills + type / year of the title (real values only) */}
           <div
             style={{
               display: 'flex',
@@ -382,18 +433,20 @@ function Hero3DStage({ items = [], trending = [] }) {
                 {g}
               </span>
             ))}
-            <span
-              style={{
-                padding: '0.22rem 0.62rem',
-                borderRadius: '999px',
-                background: '#ffffff',
-                color: '#000000',
-                fontSize: '0.68rem',
-                fontWeight: 900
-              }}
-            >
-              TV-MA • 2024
-            </span>
+            {heroBadge ? (
+              <span
+                style={{
+                  padding: '0.22rem 0.62rem',
+                  borderRadius: '999px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  fontSize: '0.68rem',
+                  fontWeight: 900
+                }}
+              >
+                {heroBadge}
+              </span>
+            ) : null}
           </div>
 
           {/* Giant Bold Uppercase Title */}
@@ -417,21 +470,23 @@ function Hero3DStage({ items = [], trending = [] }) {
             {displayTitle}
           </h1>
 
-          {/* Episode Subtitle Line */}
-          <div
-            style={{
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.82)',
-              marginBottom: '0.9rem'
-            }}
-          >
-            {isRtl
-              ? `م1 ح1 • بداية أسطورة ${displayTitle.slice(0, 26)} • ★ ${score}`
-              : `S1 E1 • The Origins Of ${displayTitle.slice(0, 26)} • ★ ${score}`}
-          </div>
+          {/* Episode + score line (only what is known) */}
+          {heroLine ? (
+            <div
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                color: 'rgba(255,255,255,0.82)',
+                marginBottom: '0.9rem'
+              }}
+            >
+              {heroLine}
+            </div>
+          ) : (
+            <div style={{ height: '0.6rem' }} />
+          )}
 
-          {/* Dual Capsule Pill Row: [▶ تشغيل م1 ح1 (Play S1 E1)] + [ⓘ التفاصيل (Details)] */}
+          {/* Play + details */}
           <div
             style={{
               display: 'grid',
@@ -463,7 +518,7 @@ function Hero3DStage({ items = [], trending = [] }) {
               }}
             >
               <BxIcon name="play" size={15} active />
-              <span>{isRtl ? 'تشغيل م1 ح1 (Play S1 E1)' : 'Play S1 E1'}</span>
+              <span>{playLabel}</span>
             </button>
 
             <button
@@ -486,14 +541,16 @@ function Hero3DStage({ items = [], trending = [] }) {
               }}
             >
               <BxIcon name="info" size={16} />
-              <span>{isRtl ? 'التفاصيل (Details)' : 'Details'}</span>
+              <span>{isRtl ? 'التفاصيل' : 'Details'}</span>
             </button>
           </div>
 
-          {/* Full-Width Outlined Pill: [+ أضف إلى قائمتي (Add To Playlist)] */}
+          {/* «أضف إلى قائمتي»: the real list (needs a title page, so only for playable titles) */}
+          {currentSlug ? (
           <button
             type="button"
-            onClick={() => setInPlaylist((v) => !v)}
+            onClick={toggleList}
+            aria-pressed={inPlaylist}
             style={{
               width: '100%',
               maxWidth: '410px',
@@ -516,17 +573,26 @@ function Hero3DStage({ items = [], trending = [] }) {
             <span>
               {inPlaylist
                 ? isRtl
-                  ? 'مضاف في قائمتي (In Playlist)'
-                  : 'Saved in Playlist'
+                  ? 'في قائمتي'
+                  : 'In my list'
                 : isRtl
-                ? 'أضف إلى قائمتي (Add To Playlist)'
-                : 'Add To Playlist'}
+                ? 'أضف إلى قائمتي'
+                : 'Add to my list'}
             </span>
           </button>
+          ) : null}
         </div>
+        ) : (
+          <div
+            aria-hidden="true"
+            style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'grid', placeItems: 'center' }}
+          >
+            <img src="/blackx-logo.png" alt="" style={{ width: '72px', height: '72px', borderRadius: '20px', opacity: 0.55 }} />
+          </div>
+        )}
       </section>
 
-      {/* 2. "حلقات مختارة (All Episodes)" ↔ "⇅ الأكثر شهرة (Most Popular)" 16:9 Strip */}
+      {/* 2. Featured episodes strip (the hero's titles) */}
       <section style={{ padding: '1rem 0.15rem 0.25rem' }}>
         <div
           style={{
@@ -537,7 +603,7 @@ function Hero3DStage({ items = [], trending = [] }) {
           }}
         >
           <span style={{ fontWeight: 900, fontSize: '0.98rem', letterSpacing: '0.01em', color: '#ffffff' }}>
-            {isRtl ? 'حلقات مختارة (All Episodes)' : 'All Episodes'}
+            {isRtl ? 'حلقات مختارة' : 'Featured episodes'}
           </span>
           <button
             type="button"
@@ -554,8 +620,8 @@ function Hero3DStage({ items = [], trending = [] }) {
               cursor: 'pointer'
             }}
           >
-            <span>⇅</span>
-            <span>{isRtl ? 'الأكثر شهرة (Most Popular)' : 'Most Popular'}</span>
+            <span>{isRtl ? 'اللي بعده' : 'Next'}</span>
+            <span aria-hidden="true">{isRtl ? '←' : '→'}</span>
           </button>
         </div>
 
@@ -574,7 +640,7 @@ function Hero3DStage({ items = [], trending = [] }) {
             return (
               <div
                 key={`web-ep-${epItem.slug || epIdx}`}
-                onClick={() => handleWatchCurrent(epItem, epIdx + 1)}
+                onClick={() => handleWatchCurrent(epItem, 1)}
                 style={{
                   position: 'relative',
                   width: '215px',
@@ -605,7 +671,8 @@ function Hero3DStage({ items = [], trending = [] }) {
                     background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 45%, rgba(0,0,0,0.88) 100%)'
                   }}
                 />
-                {/* Top-Left Badge: "E1  24:00" */}
+                {/* Episode badge: only when the episode number is known (no invented E1 / 24:00) */}
+                {epItem.episode ? (
                 <div
                   style={{
                     position: 'absolute',
@@ -623,9 +690,9 @@ function Hero3DStage({ items = [], trending = [] }) {
                     color: '#ffffff'
                   }}
                 >
-                  <span>E{epItem.episode || epIdx + 1}</span>
-                  <span style={{ opacity: 0.75 }}>24:00</span>
+                  <span>{isRtl ? `الحلقة ${epItem.episode}` : `E${epItem.episode}`}</span>
                 </div>
+                ) : null}
 
                 {/* Bottom Title + Circular [X] Seal */}
                 <div
@@ -676,7 +743,7 @@ function Hero3DStage({ items = [], trending = [] }) {
         </div>
       </section>
 
-      {/* 3. Dual Artwork Portal Banner Cards: [قائمة الأنمي (ANIME LIST)] & [قائمة المانجا (MANGA LIST)] */}
+      {/* 3. Anime list / manga list portals */}
       <section style={{ padding: '0.7rem 0.15rem 0.2rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
           <div
@@ -720,7 +787,7 @@ function Hero3DStage({ items = [], trending = [] }) {
               }}
             >
               <BxIcon name="anime" size={16} />
-              <span>{isRtl ? 'قائمة الأنمي (ANIME LIST)' : 'ANIME LIST'}</span>
+              <span>{isRtl ? 'قائمة الأنمي' : 'Anime list'}</span>
             </span>
             <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '42px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
           </div>
@@ -766,14 +833,14 @@ function Hero3DStage({ items = [], trending = [] }) {
               }}
             >
               <BxIcon name="manga" size={16} />
-              <span>{isRtl ? 'قائمة المانجا (MANGA LIST)' : 'MANGA LIST'}</span>
+              <span>{isRtl ? 'قائمة المانجا' : 'Manga list'}</span>
             </span>
             <span style={{ position: 'relative', zIndex: 2, marginTop: '4px', width: '42px', height: '2.5px', borderRadius: '99px', background: '#ffffff' }} />
           </div>
         </div>
       </section>
 
-      {/* 4. "معاينات سريعة (Stories)" ↔ "اضغط للمعاينة والتشغيل الفوري" */}
+      {/* 4. Quick previews */}
       <section style={{ padding: '0.75rem 0.15rem 0.15rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
           <h2
@@ -789,7 +856,7 @@ function Hero3DStage({ items = [], trending = [] }) {
             }}
           >
             <BxIcon name="bolt" size={16} />
-            <span>{isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}</span>
+            <span>{isRtl ? 'معاينات سريعة' : 'Quick previews'}</span>
           </h2>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.52)', fontWeight: 800 }}>
             {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
@@ -956,10 +1023,14 @@ function Hero3DStage({ items = [], trending = [] }) {
                   />
                   <div>
                     <div style={{ fontSize: '0.76rem', fontWeight: 900, color: '#ffffff' }}>
-                      BLACK X STORY • 120Hz
+                      BLACK X
                     </div>
                     <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>
-                      ★ {activeStoryItem.score ? (Number(activeStoryItem.score) / 10).toFixed(1) : '9.2'} • FHD 1080p
+                      {(() => {
+                        const raw = Number(activeStoryItem.rating) || Number(activeStoryItem.score) || 0;
+                        const ep = Number(activeStoryItem.episode) || 0;
+                        return [raw > 0 ? `★ ${(raw > 10 ? raw / 10 : raw).toFixed(1)}` : '', ep ? (isRtl ? `الحلقة ${ep}` : `Episode ${ep}`) : ''].filter(Boolean).join(' • ');
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -991,10 +1062,7 @@ function Hero3DStage({ items = [], trending = [] }) {
                 {activeStoryItem.titleEn || activeStoryItem.titleEnglish || activeStoryItem.titleAr || activeStoryItem.slug}
               </h3>
               <p style={{ margin: '0 0 1rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
-                {activeStoryItem.titleAr ||
-                  (isRtl
-                    ? 'متاح الآن للمشاهدة الفورية بجودة FHD 1080p وسرعة 120Hz عبر سيرفرات BLACK X.'
-                    : 'Streaming now in Full HD 1080p at 120Hz on BLACK X servers.')}
+                {activeStoryItem.titleAr && activeStoryItem.titleAr !== (activeStoryItem.titleEn || activeStoryItem.titleEnglish) ? activeStoryItem.titleAr : ''}
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '0.6rem' }}>
@@ -1021,7 +1089,9 @@ function Hero3DStage({ items = [], trending = [] }) {
                   }}
                 >
                   <BxIcon name="play" size={14} active />
-                  <span>{isRtl ? 'تشغيل الحلقة 1' : 'Play S1 E1'}</span>
+                  <span>
+                    {isRtl ? `شغّل الحلقة ${Number(activeStoryItem?.episode) || 1}` : `Play episode ${Number(activeStoryItem?.episode) || 1}`}
+                  </span>
                 </button>
 
                 <button
@@ -1112,12 +1182,12 @@ function MostWatchedAndSeasonSplit({ latestItems = [], seasonItems = [], loading
                       {/* Top-Right White Rank Square (1, 2, 3, 4, 5, 6) */}
                       <span className="wit-rank-num">{idx + 1}</span>
 
-                      {/* Top-Left Dark Episode Pill (الحلقة X) */}
-                      <span className="wit-rank-ep">
-                        {lang === 'ar'
-                          ? `الحلقة ${formatNumber(item.episode || 1)}`
-                          : `EP ${formatNumber(item.episode || 1)}`}
-                      </span>
+                      {/* Top-Left Dark Episode Pill (only a known episode number) */}
+                      {Number(item.episode) > 0 ? (
+                        <span className="wit-rank-ep">
+                          {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `EP ${formatNumber(item.episode)}`}
+                        </span>
+                      ) : null}
                     </div>
                   </article>
                 </div>
@@ -1347,72 +1417,65 @@ function TrendingSection() {
 /* --------------------------- 6. Manga & Manhwa Section --------------------------- */
 function LibraryShowcaseSection() {
   const { lang } = useI18n();
+  // Real titles from the library API (Ecchi / Harem / Isekai already removed by the server).
+  const [items, setItems] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .get('/api/content/library?type=ALL&server=all&page=1')
+      .then((d) => {
+        if (!alive) return;
+        const list = (Array.isArray(d?.items) ? d.items : []).filter((m) => m && m.id && (m.poster || m.coverImage || m.coverUrl));
+        setItems(list.slice(0, 8));
+      })
+      .catch(() => alive && setItems([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  const trendingPicks = [
-    {
-      id: 'solo-leveling',
-      titleAr: 'سولو ليفلينج (Solo Leveling)',
-      titleEn: 'Solo Leveling',
-      type: 'مانهوا',
-      rating: '9.9',
-      chapters: '205 فصل',
-      cover: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx105398-b673Vt5ZS2qp.jpg'
-    },
-    {
-      id: 'omniscient-readers-viewpoint',
-      titleAr: 'وجهة نظر القارئ العليم',
-      titleEn: "Omniscient Reader's Viewpoint",
-      type: 'مانهوا',
-      rating: '9.9',
-      chapters: '220 فصل',
-      cover: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx119257-R3N93C4X9M5G.jpg'
-    },
-    {
-      id: 'one-piece',
-      titleAr: 'ون بيس (One Piece)',
-      titleEn: 'One Piece',
-      type: 'مانجا',
-      rating: '9.9',
-      chapters: '1160 فصل',
-      cover: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/nx21-6A18Y87b1h30.jpg'
-    },
-    {
-      id: 'jujutsu-kaisen',
-      titleAr: 'جوجوتسو كايسن',
-      titleEn: 'Jujutsu Kaisen',
-      type: 'مانجا',
-      rating: '9.8',
-      chapters: '270 فصل',
-      cover: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pEFseh.jpg'
-    }
-  ];
+  if (Array.isArray(items) && items.length === 0) return null; // nothing real to show
+
+  const typeLabel = (type) => {
+    const t = String(type || '').toUpperCase();
+    if (t.includes('MANHWA')) return lang === 'ar' ? 'مانهوا' : 'Manhwa';
+    if (t.includes('MANHUA')) return lang === 'ar' ? 'مانها' : 'Manhua';
+    if (t.includes('MANGA')) return lang === 'ar' ? 'مانجا' : 'Manga';
+    return '';
+  };
 
   return (
     <section className="wit-section">
       <WitSectionHeader
         icon={<BxIcon name="manga" size={18} />}
-        title={lang === 'ar' ? 'أحدث فصول المانجا والمانهوا' : 'Trending Manga & Manhwa'}
-        sub={lang === 'ar' ? 'قراءة مباشرة لجميع الفصول المترجمة بالعربية' : 'Read high-res chapters directly'}
+        title={lang === 'ar' ? 'من مكتبة المانجا' : 'From the manga library'}
+        sub={lang === 'ar' ? 'مانجا ومانهوا للقراءة على سيرفرات BLACK X' : 'Manga & manhwa to read on BLACK X servers'}
         linkTo="/browse"
         linkLabel={lang === 'ar' ? 'دخول المكتبة ←' : 'Full Library →'}
       />
 
-      <div className="wit-grid-anime grid-anime">
-        {trendingPicks.map((pick, i) => (
-          <ShowCard
-            key={pick.id}
-            show={{
-              slug: pick.id,
-              titleAr: pick.titleAr,
-              titleEn: pick.titleEn,
-              poster: pick.cover
-            }}
-            meta={pick.chapters}
-            delay={i}
-            onClick={() => { window.location.href = '/browse'; }}
-          />
-        ))}
-      </div>
+      {!items ? (
+        <SkeletonGrid count={4} />
+      ) : (
+        <div className="wit-grid-anime grid-anime">
+          {items.map((m, i) => (
+            <ShowCard
+              key={m.id}
+              show={{
+                slug: m.id,
+                titleAr: m.title_ar || m.title || m.title_en,
+                titleEn: m.title_en || m.title || m.title_ar,
+                poster: m.poster || m.coverImage || m.coverUrl
+              }}
+              meta={Number(m.chapters_count) > 0 ? (lang === 'ar' ? `${m.chapters_count} فصل` : `${m.chapters_count} ch.`) : typeLabel(m.type)}
+              delay={i}
+              onClick={() => {
+                window.location.href = '/browse';
+              }}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1865,7 +1928,7 @@ export default function Dashboard({ onOpenAuth }) {
   return (
     <div className="wit-home-wrap">
       {/* 0. Exact 1:1 Cinema Hero + All Episodes + Anime/Manga Portals + Stories */}
-      <Hero3DStage items={pinnedItems} trending={trending || []} />
+      <Hero3DStage items={pinnedItems} trending={trending || []} onOpenAuth={onOpenAuth} />
 
       {/* 1. Continue Watching (if logged in) */}
       <ContinueSection onOpenAuth={onOpenAuth} />

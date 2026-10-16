@@ -435,6 +435,64 @@ scenario('genres', async (browser) => {
   await page.close();
 });
 
+/* =================================================================== desktop */
+scenario('desktop', async (browser) => {
+  const G = 'desktop';
+  let { page, ctx } = await openWeb(browser, { route: '/', phone: false });
+  await waitFor(page, () => /Test Anime 1/.test(document.querySelector('.app-shell h1')?.textContent || ''), null, 10000);
+  const home = await page.evaluate(() => document.querySelector('.app-shell')?.innerText || '');
+  const fakes = ['TV-MA', '24:00', 'S1 E1', 'م1 ح1', 'بداية أسطورة', '(Play', '(Details)', '(Add To', '(All Episodes)', '(Most Popular)', '(ANIME LIST)', '(MANGA LIST)', '(Stories)', 'DEMON SLAYER', 'BLEACH'];
+  const found = fakes.filter((f) => home.includes(f));
+  check(G, 'computer home: no invented badges, scores or mixed-language labels', found.length === 0, found.join(', ') || 'clean');
+  const hero = await page.evaluate(() => {
+    const h1 = document.querySelector('.app-shell h1');
+    const box = h1?.parentElement;
+    return { title: h1?.textContent.trim() || '', text: box?.innerText || '' };
+  });
+  check(G, 'hero shows a real title from the API', hero.title === 'Test Anime 1', hero.title);
+  check(G, 'hero shows its real genres and episode', /أكشن/.test(hero.text) && /الحلقة 3/.test(hero.text) && /شغّل الحلقة 3/.test(hero.text), hero.text.replace(/\n/g, ' / ').slice(0, 160));
+  check(G, 'hero shows type and year from the record', /مسلسل • 2021/.test(hero.text), hero.text.replace(/\n/g, ' / ').slice(0, 160));
+  await page.evaluate(() => [...document.querySelectorAll('.app-shell button')].find((b) => b.textContent.includes('أضف إلى قائمتي'))?.click());
+  await sleep(700);
+  const authOpen = await page.evaluate(() => /تسجيل الدخول|Sign in|دخول/.test(document.querySelector('.modal, [role="dialog"]')?.innerText || ''));
+  check(G, '«أضف إلى قائمتي» asks a guest to sign in (it saves for real)', authOpen);
+  check(G, 'no page errors on the computer home', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
+  // Hidden genres on the computer website: title and player pages say "not available".
+  const hiddenSlug = slugOf(HIDDEN_ANIME[0].name);
+  for (const route of [`/show/${hiddenSlug}`, `/watch/${hiddenSlug}/1`]) {
+    ({ page, ctx } = await openWeb(browser, { route, phone: false }));
+    const ok = await waitFor(page, () => /مش متاح على BLACK X/.test(document.querySelector('.app-shell')?.innerText || ''), null, 10000);
+    check(G, `${route.split('/')[1]} page of a hidden title: «مش متاح»`, ok);
+    await page.close();
+  }
+  ({ page, ctx } = await openWeb(browser, { route: `/show/${slugOf('Test Anime 2')}`, phone: false }));
+  const normal = await waitFor(page, () => /Test Anime 2/.test(document.querySelector('.app-shell h1')?.textContent || ''), null, 10000);
+  check(G, 'a normal title page still opens', normal && !(await page.evaluate(() => /مش متاح على BLACK X/.test(document.body.innerText))));
+  const detail = await page.evaluate(() => document.querySelector('.detail-hero')?.innerText || '');
+  const invented = ['120Hz', '4K Ultra', 'FHD 1080p', '1.4K', '24.8K', '98%', 'تطابق', '24 دقيقة', 'مانجا يابانية', 'يعرض الآن'].filter((f) => detail.includes(f));
+  check(G, 'title page: no invented likes, views, match %, quality, duration or source', invented.length === 0, invented.join(', ') || 'clean');
+  check(G, 'title page: real facts (type, year, rating, server)', /مسلسل/.test(detail) && /2022/.test(detail) && /★ 6\.7/.test(detail) && /BLACK X 1/.test(detail), detail.replace(/\n/g, ' / ').slice(0, 220));
+  await page.close();
+
+  // The browser's own AniList queries ask AniList to drop the hidden genres.
+  ({ page, ctx } = await openWeb(browser, { route: '/browse', phone: false }));
+  await sleep(2500);
+  const bodies = ctx.anilist.map((b) => b?.query || '').filter(Boolean);
+  check(G, 'manga page: AniList queries exclude Ecchi / Harem / Isekai', bodies.length > 0 && bodies.every((q) => /genre_not_in/.test(q) && /tag_not_in/.test(q)), `${bodies.length} queries`);
+  await page.keyboard.down('Control');
+  await page.keyboard.press('k');
+  await page.keyboard.up('Control');
+  await sleep(400);
+  const before = ctx.anilist.length;
+  await page.keyboard.type('naruto');
+  await sleep(1500);
+  const search = ctx.anilist.slice(before).map((b) => b?.query || '');
+  check(G, 'search window (Ctrl+K): AniList query excludes them too', search.length > 0 && search.every((q) => /genre_not_in/.test(q)), `${search.length} queries`);
+  await page.close();
+});
+
 /* ==================================================================== runner */
 const server = await startServer();
 for (const sc of scenarios) {

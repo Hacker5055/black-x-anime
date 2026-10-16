@@ -10,30 +10,18 @@ const router = Router();
 router.get('/rankings', async (req, res) => {
   try {
     const list = await fetchTopRanked(15);
-    // Enrich with community rating stats and rankings
+    // The ranking is AniList's (its average score, 0–100). BLACK X members' own votes are added
+    // as they are: their real count and average, nothing when nobody voted yet. No invented
+    // vote totals or star breakdowns (only the count and the average are stored).
     const rankings = list.map((item, index) => {
       const stats = getAnimeCommunityStats(item.id);
-      // Base community score from AniList averageScore (e.g. 91) plus local community inputs
-      const baseScore = item.score || 88;
-      const communityScore = stats.avgScore ? Number((stats.avgScore * 10).toFixed(1)) : baseScore;
-      const totalVotes = (stats.votes || 0) + Math.max(1200, Math.floor((item.popularity || 150000) * 0.12));
-
-      // Calculate rating distribution for visual data charts
-      const pct5 = Math.min(95, Math.max(60, Math.round(communityScore * 0.9)));
-      const pct4 = Math.min(30, Math.max(5, Math.round((100 - pct5) * 0.7)));
-      const pct3 = Math.max(1, 100 - pct5 - pct4);
-
+      const votes = Number(stats.votes) || 0;
       return {
         ...item,
         rank: index + 1,
-        communityScore,
-        scoreTen: Number((communityScore / 10).toFixed(1)),
-        votesCount: totalVotes,
-        distribution: [
-          { stars: '5★', percent: pct5, count: Math.round(totalVotes * (pct5 / 100)) },
-          { stars: '4★', percent: pct4, count: Math.round(totalVotes * (pct4 / 100)) },
-          { stars: '3★', percent: pct3, count: Math.round(totalVotes * (pct3 / 100)) }
-        ]
+        scoreTen: Number(item.score) > 0 ? Number((item.score / 10).toFixed(1)) : null,
+        communityScore: votes > 0 && stats.avgScore ? Number((stats.avgScore * 10).toFixed(1)) : null,
+        votesCount: votes
       };
     });
 

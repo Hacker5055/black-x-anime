@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { syncUserToCloud, mergeCloudLibraryToLocal } from '../services/cloudSync.service.js';
+import { filterAnimeList } from '../lib/hiddenTitles.js';
 
 const router = Router();
 
@@ -10,8 +11,9 @@ const router = Router();
 router.get('/favorites', requireAuth, async (req, res) => {
   await mergeCloudLibraryToLocal(req.user).catch(() => {});
   const rows = db.prepare('SELECT * FROM favorites WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
+  // Hidden genres are hidden on screen only: the saved list itself is never edited.
   res.json({
-    favorites: rows.map((r) => ({
+    favorites: await filterAnimeList(rows.map((r) => ({
       id: r.id,
       slug: r.slug,
       titleEn: r.title_en,
@@ -20,7 +22,7 @@ router.get('/favorites', requireAuth, async (req, res) => {
       banner: r.banner,
       episodes: r.episodes,
       createdAt: r.created_at
-    }))
+    })))
   });
 });
 
@@ -66,7 +68,7 @@ router.get('/favorites/:slug', requireAuth, (req, res) => {
  * GET /api/library/continue — one entry per show: the most recently
  * watched episode that is not finished (or the last touched one).
  */
-router.get('/continue', requireAuth, (req, res) => {
+router.get('/continue', requireAuth, async (req, res) => {
   const rows = db.prepare(`
     SELECT p.* FROM progress p
     JOIN (
@@ -78,7 +80,7 @@ router.get('/continue', requireAuth, (req, res) => {
     LIMIT 24
   `).all(req.user.id, req.user.id);
 
-  const entries = rows.map((r) => ({
+  const entries = await filterAnimeList(rows.map((r) => ({
     slug: r.slug,
     episode: r.episode,
     position: r.position,
@@ -89,7 +91,7 @@ router.get('/continue', requireAuth, (req, res) => {
     poster: r.poster,
     updatedAt: r.updated_at,
     percent: r.duration > 0 ? Math.min(100, Math.round((r.position / r.duration) * 100)) : 0
-  }));
+  })));
 
   // keep only active shows (not fully completed the episode), completed ones move to history
   res.json({

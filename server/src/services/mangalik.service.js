@@ -414,8 +414,8 @@ class MangalikService {
           author: 'سيرفر BLACK X 1 (مترجم للعربية)',
           description_ar: `اقرأ ${title} مترجماً باللغة العربية بجودة فائقة مباشرة عبر سيرفر BLACK X 1.`,
           description_en: `Read ${title} in high resolution directly on BLACK X 1.`,
-          genres: [rawType || 'مانهوا كورية', 'أكشن', 'فانتازيا'],
-          release_year: 2025,
+          genres: [],
+          release_year: null,
           source: 'BLACK X 1',
           server: 'bx1'
         });
@@ -670,8 +670,8 @@ class MangalikService {
           author: 'سيرفر BLACK X 2 (مانجا عربية)',
           description_ar: `اقرأ مانجا ${title} بالترجمة العربية الكاملة عبر سيرفر BLACK X 2.`,
           description_en: `Read ${title} Manga in Arabic on BLACK X 2.`,
-          genres: ['مانجا يابانية', 'شونين', 'أكشن'],
-          release_year: 2025,
+          genres: [],
+          release_year: null,
           source: 'BLACK X 2',
           server: 'bx2'
         });
@@ -1035,9 +1035,9 @@ class MangalikService {
         const id = `mm:${m.id}`;
         const title = String(m.title || m.name || '').trim();
         const poster = rewriteLegacyMangaImageUrl(m.img || m.image || m.cover || m.poster || '');
-        const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : ['مانهوا', 'أكشن'];
+        const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : [];
         const isManga = genres.some((g) => /مانجا|شونين|سينين/i.test(g));
-        const rawRate = parseFloat(m.ten_rate || m.average_rate || m.rate || '9.5') || 9.5;
+        const rawRate = parseFloat(m.ten_rate || m.average_rate || m.rate) || 0; // unknown stays unknown (no invented rating)
         return {
           id,
           mangalikSlug: id,
@@ -1049,13 +1049,13 @@ class MangalikService {
           banner: poster,
           type: isManga ? 'MANGA' : 'MANHWA',
           status: m.is_completed === 1 ? 'COMPLETED' : 'ONGOING',
-          rating: rawRate > 10 ? +(rawRate / 10).toFixed(1) : +rawRate.toFixed(1),
+          rating: rawRate > 0 ? (rawRate > 10 ? +(rawRate / 10).toFixed(1) : +rawRate.toFixed(1)) : null,
           chapters_count: Number(m.chapters_count || m.last_chapter || 100),
           author: 'سيرفر BLACK X 1',
           description_ar: m.summary || m.description || `اقرأ ${title} بالترجمة العربية الكاملة عبر سيرفر BLACK X 1.`,
           description_en: m.summary || m.description || `Read ${title} in Arabic on BLACK X 1.`,
           genres,
-          release_year: 2026,
+          release_year: null,
           source: 'BLACK X 1',
           server: 'bx1'
         };
@@ -1088,7 +1088,7 @@ class MangalikService {
           const id = `mm:${m.id}`;
           const title = String(m.title || m.name || '').trim();
           const poster = rewriteLegacyMangaImageUrl(m.img || m.image || m.cover || m.poster || '');
-          const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : ['مانهوا', 'أكشن'];
+          const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : [];
           results.push({
             id,
             mangalikSlug: id,
@@ -1131,7 +1131,7 @@ class MangalikService {
       if (!m?.id) return null;
       const title = String(m.title || m.name || '').trim();
       const poster = rewriteLegacyMangaImageUrl(m.img || m.image || m.cover || m.poster || '');
-      const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : ['مانهوا', 'أكشن'];
+      const genres = Array.isArray(m.genres) ? m.genres.map((g) => g.name || g.title).filter(Boolean) : [];
       const rawChapters = Array.isArray(m.chapters) ? m.chapters : m.chapters?.data || [];
       const info = {
         id: `mm:${m.id}`,
@@ -1149,7 +1149,7 @@ class MangalikService {
         description_ar: m.summary || m.description || `اقرأ ${title} بالترجمة العربية عبر سيرفر BLACK X 1.`,
         description_en: m.summary || m.description || `Read ${title} on BLACK X 1.`,
         genres,
-        release_year: 2026
+        release_year: null
       };
       setCache(cacheKey, info);
       return info;
@@ -1268,7 +1268,7 @@ class MangalikService {
           const id = `az:${p.id}:${p.slug}`;
           const title = String(p.postTitle || p.slug).trim();
           const poster = String(p.featuredImage || '').trim();
-          const genres = Array.isArray(p.genres) ? p.genres.map((g) => g.name).filter(Boolean) : ['مانهوا كورية', 'أكشن'];
+          const genres = Array.isArray(p.genres) ? p.genres.map((g) => g.name).filter(Boolean) : [];
           return {
             id,
             mangalikSlug: id,
@@ -1286,7 +1286,7 @@ class MangalikService {
             description_ar: `اقرأ مانهوا ${title} بالترجمة العربية المباشرة عبر سيرفر BLACK X 1.`,
             description_en: `Read ${title} Manhwa on BLACK X 1.`,
             genres,
-            release_year: 2026,
+            release_year: null,
             source: 'BLACK X 1',
             server: 'bx1'
           };
@@ -1439,7 +1439,7 @@ class MangalikService {
         const id = `sw:${seriesId}`;
         const title = String(s.title || s.slug || '').trim();
         const poster = String(s.poster?.medium || s.poster?.thumbnail || '').trim();
-        const genres = Array.isArray(s.genres) ? s.genres.map((g) => g.name).filter(Boolean) : ['مانهوا كورية', 'أكشن'];
+        const genres = Array.isArray(s.genres) ? s.genres.map((g) => g.name).filter(Boolean) : [];
         return {
           id,
           mangalikSlug: id,
@@ -1457,7 +1457,7 @@ class MangalikService {
           description_ar: s.description || `اقرأ ${title} بالترجمة العربية المباشرة عبر سيرفر BLACK X 2.`,
           description_en: s.description || `Read ${title} on BLACK X 2.`,
           genres,
-          release_year: 2026,
+          release_year: null,
           source: 'BLACK X 2',
           server: 'bx2'
         };
@@ -1621,8 +1621,8 @@ class MangalikService {
           author: 'سيرفر BLACK X 2',
           description_ar: s.summary || `اقرأ ${title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
           description_en: s.summary || `Read ${titleEn} on BLACK X 2.`,
-          genres: ['مانهوا', 'مانجا عربية'],
-          release_year: 2026,
+          genres: [],
+          release_year: null,
           source: 'BLACK X 2',
           server: 'bx2'
         };
@@ -1726,7 +1726,7 @@ class MangalikService {
           author: country === 'KR' ? 'مانهوا كورية • BLACK X' : country === 'CN' ? 'مانهاوا صينية • BLACK X' : 'مانجا يابانية • BLACK X',
           description_ar: cleanDesc || `اقرأ ${titleEn} مباشرة عبر الفهرس العالمي الشامل ومصادر BLACK X.`,
           description_en: cleanDesc || `Read ${titleEn} on BLACK X Global Master Index.`,
-          genres: Array.isArray(m.genres) && m.genres.length > 0 ? m.genres : [typeLabel],
+          genres: Array.isArray(m.genres) ? m.genres : [],
           release_year: m.startDate?.year || 2025,
           source: 'BLACK X 3',
           server: 'bx3'
@@ -1806,7 +1806,7 @@ class MangalikService {
         author: country === 'KR' ? 'مانهوا كورية • BLACK X' : country === 'CN' ? 'مانهاوا صينية • BLACK X' : 'مانجا يابانية • BLACK X',
         description_ar: cleanDesc || `اقرأ ${titleEn} عبر محرك BLACK X الشامل.`,
         description_en: cleanDesc || `Read ${titleEn} on BLACK X.`,
-        genres: Array.isArray(m.genres) && m.genres.length > 0 ? m.genres : [typeLabel],
+        genres: Array.isArray(m.genres) ? m.genres : [],
         release_year: m.startDate?.year || 2025,
         source: 'BLACK X 3',
         server: 'bx3'
@@ -1858,8 +1858,8 @@ class MangalikService {
           author: 'سيرفر BLACK X 2',
           description_ar: row.summary || `اقرأ ${title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
           description_en: row.summary || `Read ${title} on BLACK X 2.`,
-          genres: ['مانهوا', 'مانجا عربية'],
-          release_year: 2026,
+          genres: [],
+          release_year: null,
           source: 'BLACK X 2',
           server: 'bx2'
         };
@@ -1914,7 +1914,7 @@ class MangalikService {
           author: 'سيرفر BLACK X 3 (Global HD)',
           description_ar: attrs.description?.ar || attrs.description?.en || `اقرأ ${titleAr} عبر سيرفر BLACK X 3.`,
           description_en: attrs.description?.en || `Read ${titleEn} on BLACK X 3.`,
-          genres: [typeLabel],
+          genres: [],
           release_year: attrs.year || 2025,
           source: 'BLACK X 3',
           server: 'bx3'
@@ -2471,8 +2471,8 @@ class MangalikService {
         author: 'سيرفرات BLACK X الرسمية',
         description_ar: `اقرأ ${f.title_ar} مباشرة بجودة عالية عبر سيرفرات BLACK X 1 و BLACK X 2 و BLACK X 3.`,
         description_en: `Read ${f.title_en} directly on BLACK X 1, BLACK X 2, and BLACK X 3.`,
-        genres: f.type === 'MANHWA' ? ['مانهوا كورية', 'أكشن', 'فانتازيا'] : ['مانجا يابانية', 'شونين', 'أكشن'],
-        release_year: 2025
+        genres: Array.isArray(f.genres) ? f.genres : [],
+        release_year: null
       };
     }
 
@@ -2500,8 +2500,8 @@ class MangalikService {
         author: 'سيرفر BLACK X 3',
         description_ar: 'متاح للقراءة المباشرة بالترجمة العربية عبر سيرفر BLACK X 1.',
         description_en: 'Available on BLACK X 1 Server.',
-        genres: ['مانهوا كورية', 'أكشن'],
-        release_year: 2026
+        genres: [],
+        release_year: null
       };
     }
 
@@ -2527,8 +2527,8 @@ class MangalikService {
             author: 'سيرفر BLACK X 4',
             description_ar: s.description || `اقرأ ${s.title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
             description_en: s.description || `Read ${s.title} on BLACK X 2.`,
-            genres: Array.isArray(s.genres) ? s.genres.map((g) => g.name).filter(Boolean) : ['مانهوا كورية', 'أكشن'],
-            release_year: 2026
+            genres: Array.isArray(s.genres) ? s.genres.map((g) => g.name).filter(Boolean) : [],
+            release_year: null
           };
         }
       } catch (_) {}
@@ -2558,8 +2558,8 @@ class MangalikService {
             author: 'سيرفر BLACK X 2',
             description_ar: s.summary || `اقرأ ${s.title} بالترجمة العربية عبر سيرفر BLACK X 2.`,
             description_en: s.summary || `Read ${s.title} on BLACK X 2.`,
-            genres: ['مانهوا', 'مانجا عربية'],
-            release_year: 2026
+            genres: [],
+            release_year: null
           };
         }
       } catch (_) {}
@@ -2583,8 +2583,8 @@ class MangalikService {
         author: 'سيرفر BLACK X 1',
         description_ar: 'متاح للقراءة المباشرة بالترجمة العربية عبر سيرفر BLACK X 1.',
         description_en: 'Available on BLACK X 1 Server.',
-        genres: ['مانهوا كورية', 'أكشن'],
-        release_year: 2025
+        genres: [],
+        release_year: null
       };
     }
 
@@ -2606,8 +2606,8 @@ class MangalikService {
         author: 'سيرفر BLACK X 2',
         description_ar: 'متاح للقراءة المباشرة بالترجمة العربية عبر سيرفر BLACK X 2.',
         description_en: 'Available on BLACK X 2 Server.',
-        genres: ['مانجا يابانية', 'أكشن'],
-        release_year: 2025
+        genres: [],
+        release_year: null
       };
     }
 
@@ -2643,7 +2643,7 @@ class MangalikService {
             author: 'سيرفر BLACK X 3 (Global HD)',
             description_ar: attrs.description?.ar || attrs.description?.en || `${titleEn} — متاح عبر سيرفر BLACK X 3.`,
             description_en: attrs.description?.en || `${titleEn} — Available on BLACK X 3.`,
-            genres: ['مانجا عالمية', 'أكشن'],
+            genres: [],
             release_year: attrs.year || 2025
           };
         }
@@ -2667,8 +2667,8 @@ class MangalikService {
         author: 'سيرفر BLACK X 3',
         description_ar: `${title} — متاح بدقة أصلية كاملة عبر سيرفر BLACK X 3.`,
         description_en: `${title} — Available in Full HD on BLACK X 3.`,
-        genres: ['مانجا عالمية', 'أكشن'],
-        release_year: 2025
+        genres: [],
+        release_year: null
       };
     }
 

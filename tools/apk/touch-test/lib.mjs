@@ -287,8 +287,34 @@ function algolia(index, body, limit = 1000) {
   };
 }
 
+/** A catalogue record as the website API returns it (server/src/services/animeWitcher.service.js). */
+function webShow(a) {
+  return {
+    slug: `aw-${a.objectID.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`,
+    objectID: a.objectID,
+    title: a.name,
+    titleEn: a.name,
+    titleRomaji: a.name,
+    poster: a.poster_uri,
+    banner: a.cover_uri,
+    tagsAr: a.tags,
+    genres: a.tags,
+    rating: a.details.mal_mean,
+    year: Number(a.details.year),
+    type: a.type,
+    source: 'witanime'
+  };
+}
+
 function api(req, url, ctx) {
   const p = url.pathname;
+  // Website-only lists (the server already removed the hidden genres from them).
+  if (p === '/api/stream/latest') return json(req, { items: ANIME.slice(0, 8).map((a, i) => ({ ...webShow(a), episode: i + 3 })) });
+  if (p === '/api/anime/trending') {
+    return json(req, {
+      anime: ANIME.slice(20, 26).map((a) => ({ id: a.mal_id, title_english: a.name, title_romaji: a.name, cover_url: a.poster_uri, banner_url: a.cover_uri, genres: ['Action'], score: 81, season_year: 2024 }))
+    });
+  }
   const method = req.method();
   const auth = req.headers().authorization || '';
   let m;
@@ -325,7 +351,7 @@ function api(req, url, ctx) {
       show: {
         slug,
         title: record ? record.name : slug,
-        ...(record ? { titleRomaji: record.name, tagsAr: record.tags } : {}),
+        ...(record ? { titleEn: record.name, titleRomaji: record.name, tagsAr: record.tags, type: record.type, year: Number(record.details.year), rating: record.details.mal_mean, sourceName: 'سيرفر BLACK X 1' } : {}),
         ...(slug === 'a3rb-sneaky-isekai' ? { genres: ['عالم مختلف', 'اكشن'] } : {}),
         poster: `${LOCAL}/poster/1.svg`,
         banner: `${LOCAL}/wide/1.svg`,

@@ -19,6 +19,7 @@ import {
   aniprojectService, isAniProjectConfigured, isAniProjectAnimeSlug,
   isAniProjectMediaHost
 } from '../services/aniproject.service.js';
+import { filterAnimeList, markHiddenAnime } from '../lib/hiddenTitles.js';
 import {
   getTranslatedEpisodeSubtitles,
   parseSubtitles,
@@ -153,6 +154,9 @@ router.get('/catalog', async (req, res) => {
     for (const group of results) {
       items = items.concat(group);
     }
+    // Ecchi / Harem / Isekai (shared/contentFilter.js). BLACK X 1 already excludes them in the
+    // Algolia query, so its total and pages stay real.
+    items = await filterAnimeList(items);
 
     res.json({
       items,
@@ -304,6 +308,7 @@ router.get('/latest', async (req, res) => {
       }
     }
 
+    combined = await filterAnimeList(combined); // hidden genres (lib/hiddenTitles.js)
     res.json({ items: combined, totalCount: combined.length });
   } catch (err) {
     console.error('[stream/latest]', err.message);
@@ -321,7 +326,7 @@ router.get('/search', async (req, res) => {
   }
   try {
     if (source === 'aniproject') {
-      const items = await aniprojectService.searchAnime(q);
+      const items = await filterAnimeList(await aniprojectService.searchAnime(q));
       return res.json({ items, results: items, totalCount: items.length });
     }
     let witaResults = [];
@@ -405,7 +410,7 @@ router.get('/search', async (req, res) => {
     await Promise.all(tasks);
 
     const seen = new Set();
-    const merged = [];
+    let merged = [];
     for (const item of [...witaResults, ...a3rbResults, ...enResults, ...apResults]) {
       const key = `${item.source || 'src'}:${item.slug}`;
       if (!seen.has(key)) {
@@ -413,6 +418,7 @@ router.get('/search', async (req, res) => {
         merged.push(item);
       }
     }
+    merged = await filterAnimeList(merged); // hidden genres (lib/hiddenTitles.js)
 
     res.json({ items: merged, results: merged, totalCount: merged.length });
   } catch (err) {
@@ -498,7 +504,8 @@ router.get('/show/:slug', async (req, res) => {
     }
 
     if (!show) return res.status(404).json({ error: 'not_found', message: 'Show not found' });
-    res.json({ show });
+    // A hidden genre comes back as `bxHidden: true`: the website and the app say "not available".
+    res.json({ show: await markHiddenAnime(show) });
   } catch (err) {
     console.error('[stream/show]', err.message);
     res.status(502).json({ error: 'upstream', message: 'Streaming source unreachable' });

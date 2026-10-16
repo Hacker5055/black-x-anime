@@ -1,4 +1,11 @@
 import { apiGet as cacheGet, apiGetStale, apiSet as cacheSet, upsertAnime, getAnimeRow, parseAnimeRow } from './db.js';
+import { ANILIST_EXCLUSION_ARGS, hasBlockedGenre } from '../../shared/contentFilter.js';
+
+// Ecchi / Harem / Isekai are hidden from BLACK X (shared/contentFilter.js): list queries ask
+// AniList to drop them; lists that cannot be filtered in the query (the airing schedule) are
+// checked against genres + tags.
+const HIDE = ANILIST_EXCLUSION_ARGS;
+const visibleMedia = (m) => Boolean(m) && !hasBlockedGenre(m.genres, (m.tags || []).map((t) => t?.name));
 
 const ANILIST_URL = 'https://graphql.anilist.co';
 
@@ -14,6 +21,7 @@ const MEDIA_FRAGMENT = `
   coverImage { extraLarge large color }
   bannerImage
   genres
+  tags { name }
   averageScore
   meanScore
   popularity
@@ -97,11 +105,11 @@ async function cachedQuery(cacheKey, ttl, query, variables, mapper) {
 
 export async function fetchTrending() {
   return cachedQuery(
-    'anilist:trending:v3',
+    'anilist:trending:v4',
     20 * 60 * 1000,
     `query ($page: Int) {
       Page(page: $page, perPage: 16) {
-        media(sort: TRENDING_DESC, type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], isAdult: false) { ${MEDIA_FRAGMENT} }
+        media(sort: TRENDING_DESC, type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
       }
     }`,
     { page: 1 },
@@ -111,11 +119,11 @@ export async function fetchTrending() {
 
 export async function fetchTopRanked(perPage = 15) {
   return cachedQuery(
-    `anilist:rankings:top:v3:${perPage}`,
+    `anilist:rankings:top:v4:${perPage}`,
     30 * 60 * 1000,
     `query ($page: Int) {
       Page(page: $page, perPage: ${perPage}) {
-        media(sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], isAdult: false) { ${MEDIA_FRAGMENT} }
+        media(sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, countryOfOrigin: "JP", status_in: [FINISHED, RELEASING], isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
       }
     }`,
     { page: 1 },
@@ -125,11 +133,11 @@ export async function fetchTopRanked(perPage = 15) {
 
 export async function fetchSeason(season, seasonYear) {
   return cachedQuery(
-    `anilist:season:${season}:${seasonYear}`,
+    `anilist:season:v2:${season}:${seasonYear}`,
     30 * 60 * 1000,
     `query ($season: MediaSeason, $year: Int) {
       Page(perPage: 16) {
-        media(season: $season, seasonYear: $year, type: ANIME, sort: POPULARITY_DESC, isAdult: false) { ${MEDIA_FRAGMENT} }
+        media(season: $season, seasonYear: $year, type: ANIME, sort: POPULARITY_DESC, isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
       }
     }`,
     { season, year: seasonYear },
@@ -139,7 +147,7 @@ export async function fetchSeason(season, seasonYear) {
 
 export async function fetchSchedule(weekStart, weekEnd) {
   return cachedQuery(
-    `anilist:schedule:${weekStart}`,
+    `anilist:schedule:v2:${weekStart}`,
     15 * 60 * 1000,
     `query ($start: Int, $end: Int) {
       Page(perPage: 50) {
@@ -152,11 +160,13 @@ export async function fetchSchedule(weekStart, weekEnd) {
     }`,
     { start: weekStart, end: weekEnd },
     (data) =>
-      data.Page.airingSchedules.map((s) => ({
-        episode: s.episode,
-        airingAt: s.airingAt,
-        media: mediaToJson(normalizeMedia(s.media))
-      }))
+      data.Page.airingSchedules
+        .filter((s) => visibleMedia(s.media))
+        .map((s) => ({
+          episode: s.episode,
+          airingAt: s.airingAt,
+          media: mediaToJson(normalizeMedia(s.media))
+        }))
   );
 }
 
@@ -181,11 +191,11 @@ export async function fetchAnimeRaw(id) {
 
 export async function fetchSearch(q) {
   return cachedQuery(
-    `anilist:search:${q.toLowerCase().trim()}`,
+    `anilist:search:v2:${q.toLowerCase().trim()}`,
     30 * 60 * 1000,
     `query ($search: String) {
       Page(perPage: 12) {
-        media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FRAGMENT} }
+        media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
       }
     }`,
     { search: q },

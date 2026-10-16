@@ -109,7 +109,7 @@ class EnglishAnimeService {
         const titleEn = m.title?.english || m.title?.romaji || `Anime ${m.idMal}`;
         const latestEp = m.nextAiringEpisode?.episode
           ? Math.max(1, m.nextAiringEpisode.episode - 1)
-          : m.episodes || 12;
+          : m.episodes || null; // unknown: not an invented 12
         const slug = slugifyTitle(titleEn, m.idMal);
         return {
           slug,
@@ -122,8 +122,8 @@ class EnglishAnimeService {
           titleAr: titleEn,
           poster: m.coverImage?.extraLarge || m.coverImage?.large || '',
           banner: m.bannerImage || m.coverImage?.extraLarge || '',
-          score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : 8.9,
-          genres: m.genres || ['Action', 'Fantasy'],
+          score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : null,
+          genres: Array.isArray(m.genres) ? m.genres : [],
           url: `/show/${slug}?source=english`,
           source: 'english',
           hasAutoArabicSub: true,
@@ -178,7 +178,7 @@ class EnglishAnimeService {
         const titleEn = m.title?.english || m.synonyms?.[0] || m.title?.romaji || clean;
         const epCount = m.nextAiringEpisode?.episode
           ? Math.max(1, m.nextAiringEpisode.episode - 1)
-          : m.episodes || 12;
+          : m.episodes || null;
         const slug = slugifyTitle(m.title?.romaji || titleEn, m.idMal);
         return {
           slug,
@@ -191,8 +191,8 @@ class EnglishAnimeService {
           banner: m.bannerImage || m.coverImage?.extraLarge || '',
           episodes: epCount,
           episodeCount: epCount,
-          score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : 8.8,
-          genres: m.genres || ['Action'],
+          score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : null,
+          genres: Array.isArray(m.genres) ? m.genres : [],
           url: `/show/${slug}?source=english`,
           source: 'english',
           hasAutoArabicSub: true,
@@ -262,7 +262,7 @@ class EnglishAnimeService {
     const synonyms = Array.isArray(m.synonyms) ? m.synonyms : [];
     const epCount = m.nextAiringEpisode?.episode
       ? Math.max(1, m.nextAiringEpisode.episode - 1)
-      : m.episodes || 12;
+      : m.episodes || 0; // only episodes AniList knows about
 
     const cleanDesc = (m.description || '').replace(/<[^>]+>/g, '').trim();
     const descAr = cleanDesc ? await translateTextToArabic(cleanDesc).catch(() => cleanDesc) : '';
@@ -290,7 +290,7 @@ class EnglishAnimeService {
       banner: m.bannerImage || m.coverImage?.extraLarge || '',
       score: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
       status: m.status === 'FINISHED' ? 'مكتمل' : 'يعرض الان',
-      genres: m.genres || ['Action', 'Fantasy'],
+      genres: Array.isArray(m.genres) ? m.genres : [],
       description: descAr || cleanDesc,
       episodeCount: epCount,
       episodes,
