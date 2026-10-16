@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
 import MangaPageImage from './MangaPageImage.jsx';
@@ -54,11 +54,12 @@ import PlayerControls from './PlayerControls.jsx';
 import BottomSheet from './BottomSheet.jsx';
 import usePresence from './usePresence.js';
 import ScheduleTab from './ScheduleTab.jsx';
+import ProfileTab, { profilePageTitle } from './profile/ProfileTab.jsx';
 import MobileDock from './MobileDock.jsx';
 import PosterCard from './PosterCard.jsx';
 import SectionHead from './SectionHead.jsx';
 import FilterSheet, { SORT_OPTIONS, activeFilterCount } from './FilterSheet.jsx';
-import { navigateWithMotion, pageEnterClass } from './tabMotion.js';
+import { navigateStack, navigateWithMotion, pageEnterClass } from './tabMotion.js';
 import { todayScheduleId } from './scheduleDays.js';
 import { NextEpisodeCountdown, SkipSegmentOverlay } from './PlayerExtras.jsx';
 import { SPLASH_SOUND_KEY } from './splashPrefs.js';
@@ -528,8 +529,6 @@ export default function MobileApkApp() {
   const [replyText, setReplyText] = useState('');
 
   // Profile & Personal Library States
-  const [librarySubTab, setLibrarySubTab] = useState('favorites'); // 'favorites' | 'watching' | 'completed' | 'planned' | 'history' | 'manga_history'
-  const [editingProfile, setEditingProfile] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editPhotoUrl, setEditPhotoUrl] = useState('');
@@ -572,7 +571,6 @@ export default function MobileApkApp() {
   const [cloudVipCodes, setCloudVipCodes] = useState([]);
   const [vipRedeemCode, setVipRedeemCode] = useState('');
   const [vipRedeemBusy, setVipRedeemBusy] = useState(false);
-  const [vipGateShowLogin, setVipGateShowLogin] = useState(false);
   const [devToggleBusy, setDevToggleBusy] = useState(false);
   const [devGenTier, setDevGenTier] = useState('vip_monarch');
   const [devGenDays, setDevGenDays] = useState(30);
@@ -674,7 +672,55 @@ export default function MobileApkApp() {
   // ==================== v7.0 APEX & CLEAN OBSIDIAN UI STATES ====================
   const [playerStudioOpen, setPlayerStudioOpen] = useState(false);
   const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
-  const [profileSubTab, setProfileSubTab] = useState('account'); // 'account' | 'appearance' | 'vault' | 'developer'
+  // Profile hub navigation (profile/ProfileTab.jsx): a stack of sub-pages over the profile
+  // root. The top bar shows the page title + a back button; Android back pops one page.
+  const [profileStack, setProfileStack] = useState([]);
+  const profilePage = profileStack[profileStack.length - 1] || 'root';
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+  const profileScrollMemoRef = useRef([]); // scroll position of every page under the top one
+  const profileScrollTargetRef = useRef(null); // where the page that mounts next should scroll to
+  const openProfilePage = useCallback(
+    (id) => {
+      haptic('tap');
+      const y = typeof window !== 'undefined' ? window.scrollY : 0;
+      navigateStack('push', lang === 'ar', () => {
+        profileScrollMemoRef.current.push(y);
+        profileScrollTargetRef.current = 0;
+        setProfileStack((st) => [...st, id]);
+      });
+    },
+    [lang]
+  );
+  const closeProfilePage = useCallback(() => {
+    haptic('tap');
+    navigateStack('pop', lang === 'ar', () => {
+      profileScrollTargetRef.current = profileScrollMemoRef.current.pop() ?? 0;
+      setProfileStack((st) => st.slice(0, -1));
+    });
+  }, [lang]);
+  const resetProfileStack = useCallback((pages = []) => {
+    profileScrollMemoRef.current = pages.map(() => 0);
+    profileScrollTargetRef.current = 0;
+    setProfileStack(pages);
+  }, []);
+  // Restore the scroll position of the page we came back to (before the transition snapshot).
+  useLayoutEffect(() => {
+    const y = profileScrollTargetRef.current;
+    if (y == null) return;
+    profileScrollTargetRef.current = null;
+    try {
+      window.scrollTo(0, y);
+    } catch (_) {
+      /* storage or scroll unavailable */
+    }
+  }, [profilePage, activeTab]);
+  // Signing in from the sign-in page closes it. Keyed on the server session, not on `user`:
+  // accounts saved by pre-v16 builds have a user but no session and must be able to sign in.
+  useEffect(() => {
+    if (!sessionToken || !profileStack.includes('signin')) return;
+    profileScrollTargetRef.current = profileScrollMemoRef.current.pop() ?? 0;
+    setProfileStack((st) => st.filter((pg) => pg !== 'signin'));
+  }, [sessionToken, profileStack]);
   const [devSubTab, setDevSubTab] = useState('vip'); // 'vip' | 'users' | 'broadcast' | 'requests'
   const [readingBgmMode, setReadingBgmMode] = useState('off'); // 'off' | 'rain' | 'drone' | 'battle'
   const bgmCtxRef = useRef(null);
@@ -880,8 +926,8 @@ export default function MobileApkApp() {
       selectedAnime,
       activeMangaChapter,
       selectedManga,
-      editingProfile,
-      vipGateShowLogin,
+      profileDepth: profileStack.length,
+      signOutConfirmOpen,
       activeTab
     };
   }, [
@@ -897,8 +943,8 @@ export default function MobileApkApp() {
     selectedAnime,
     activeMangaChapter,
     selectedManga,
-    editingProfile,
-    vipGateShowLogin,
+    profileStack,
+    signOutConfirmOpen,
     activeTab
   ]);
 
@@ -916,7 +962,8 @@ export default function MobileApkApp() {
       selectedAnime ||
       activeMangaChapter ||
       selectedManga ||
-      editingProfile ||
+      profileStack.length > 0 ||
+      signOutConfirmOpen ||
       activeTab !== 'home'
     ) {
       try {
@@ -936,7 +983,8 @@ export default function MobileApkApp() {
     selectedAnime,
     activeMangaChapter,
     selectedManga,
-    editingProfile,
+    profileStack,
+    signOutConfirmOpen,
     activeTab
   ]);
 
@@ -971,8 +1019,8 @@ export default function MobileApkApp() {
         setHeroTrailerOpen(false);
         return true;
       }
-      if (s.vipGateShowLogin) {
-        setVipGateShowLogin(false);
+      if (s.signOutConfirmOpen) {
+        setSignOutConfirmOpen(false);
         return true;
       }
       if (s.activeEpisode && !s.playerMinimized) {
@@ -993,8 +1041,8 @@ export default function MobileApkApp() {
         setSelectedManga(null);
         return true;
       }
-      if (s.editingProfile) {
-        setEditingProfile(false);
+      if (s.activeTab === 'profile' && s.profileDepth > 0) {
+        closeProfilePage();
         return true;
       }
       if (s.activeTab && s.activeTab !== 'home') {
@@ -1025,7 +1073,7 @@ export default function MobileApkApp() {
     return () => {
       window.removeEventListener('popstate', onPopState);
     };
-  }, [showToast, lang]);
+  }, [showToast, lang, closeProfilePage]);
 
   // Real-Time Polling of Global Cloud VIP System (`settings/global_vip_system`) across all connected APK & Website instances
   // Shared app config (VIP enforcement, broadcast, pinned pick, latest APK) comes from the
@@ -1118,7 +1166,6 @@ export default function MobileApkApp() {
         return;
       }
       if (!sessionToken) {
-        setVipGateShowLogin(true);
         showToast(lang === 'ar' ? 'سجّل الدخول الأول عشان الكود يتسجل على حسابك' : 'Sign in first so the code is saved to your account', 'user');
         return;
       }
@@ -2132,8 +2179,8 @@ export default function MobileApkApp() {
   }, [isDeveloper]);
 
   useEffect(() => {
-    if (isDeveloper && (profileSubTab === 'developer' || activeTab === 'profile')) loadDevPanel();
-  }, [isDeveloper, profileSubTab, activeTab, loadDevPanel]);
+    if (isDeveloper && activeTab === 'profile') loadDevPanel();
+  }, [isDeveloper, activeTab, loadDevPanel]);
 
   // ==================== v8.0 GLOBAL LUXURY CONTROLLERS ====================
 
@@ -2530,7 +2577,6 @@ export default function MobileApkApp() {
       const loggedUser = { ...res.user };
       setUser(loggedUser);
       localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
-      setVipGateShowLogin(false);
       if (res.state) applyServerState(res.state);
       haptic('success');
       // Push back what this phone had before signing in (merged above).
@@ -2566,7 +2612,7 @@ export default function MobileApkApp() {
   const handleManualSync = useCallback(async () => {
     if (!sessionToken) {
       setActiveTab('profile');
-      setProfileSubTab('account');
+      resetProfileStack(['signin']);
       showToast(lang === 'ar' ? 'سجّل الدخول عشان حسابك يتزامن مع الموقع' : 'Sign in to sync your account', 'user');
       return;
     }
@@ -2578,7 +2624,7 @@ export default function MobileApkApp() {
         : lang === 'ar' ? 'المزامنة ما نجحتش — اتأكد من النت' : 'Sync failed — check your connection',
       pulled || pushed ? 'check' : 'alert'
     );
-  }, [sessionToken, user, pullCloudUserState, syncUserStateToCloud, showToast, lang]);
+  }, [sessionToken, user, pullCloudUserState, syncUserStateToCloud, showToast, lang, resetProfileStack]);
 
   useEffect(() => {
     if (!sessionToken) return undefined;
@@ -3483,7 +3529,7 @@ export default function MobileApkApp() {
         const localUser = { ...user, ...patch };
         setUser(localUser);
         localStorage.setItem('bx_mob_user', JSON.stringify(localUser));
-        setEditingProfile(false);
+        closeProfilePage();
         showToast(lang === 'ar' ? 'اتحفظ على الموبايل — سجّل الدخول عشان يتزامن' : 'Saved on this phone — sign in to sync', 'check');
         return;
       }
@@ -3492,13 +3538,13 @@ export default function MobileApkApp() {
         const updatedUser = { ...user, ...(res.user || {}) };
         setUser(updatedUser);
         localStorage.setItem('bx_mob_user', JSON.stringify(updatedUser));
-        setEditingProfile(false);
+        closeProfilePage();
         showToast(lang === 'ar' ? 'اتحدث ملفك الشخصي واتزامن مع الموقع' : 'Profile updated & synced!', 'check');
       } catch (err) {
         showToast(apiErrorMessage(err, lang), 'alert');
       }
     },
-    [user, sessionToken, editDisplayName, editBio, editPhotoUrl, showToast, lang]
+    [user, sessionToken, editDisplayName, editBio, editPhotoUrl, showToast, lang, closeProfilePage]
   );
 
   // Handle Login & Register against Shared BLACK X Cloud Firestore
@@ -3834,7 +3880,7 @@ export default function MobileApkApp() {
   const avatarPhoto = user?.photoUrl && !avatarFailed ? user.photoUrl : '';
   const isRtl = lang === 'ar';
   // Entrance class of the visible tab page, decided once when that page mounts.
-  const pageKey = `${activeTab}${selectedAnime ? ':details' : ''}`;
+  const pageKey = `${activeTab}${activeTab === 'profile' ? `:${profilePage}` : ''}${selectedAnime ? ':details' : ''}`;
   const pageClassRef = useRef({ key: '', cls: 'bx-page' });
   if (pageClassRef.current.key !== pageKey) pageClassRef.current = { key: pageKey, cls: pageEnterClass() };
   const pageCls = pageClassRef.current.cls;
@@ -3916,6 +3962,795 @@ export default function MobileApkApp() {
   );
   const visibleMangaHistory = useMemo(() => mangaHistory.filter((m) => !isHiddenManga(m)), [mangaHistory]);
   const watchedIds = useMemo(() => watchHistory.map((h) => h.objectID).filter(Boolean), [watchHistory]);
+
+  // ---- Profile hub wiring (ProfileTab.jsx renders, the state and actions live here) ----
+  const startProfileEdit = () => {
+    if (!user) return;
+    setEditDisplayName(user.displayName || '');
+    setEditBio(user.bio || '');
+    setEditPhotoUrl(user.photoUrl || '');
+    openProfilePage('edit');
+  };
+  const openMangaFromProfile = (entry) => {
+    setActiveTab('manga');
+    handleOpenManga(entry);
+  };
+  const readOfflineFromProfile = (och) => {
+    setActiveTab('manga');
+    setSelectedManga({ name: och.mangaName, poster_uri: och.poster, source: och.source });
+    handleReadMangaChapter(och);
+  };
+  const deleteSnapshot = (id) => {
+    setSavedPanels((prev) => {
+      const next = prev.filter((x) => x.id !== id);
+      try {
+        localStorage.setItem('bx_mob_saved_panels', JSON.stringify(next));
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+      return next;
+    });
+  };
+  const handleSignOut = () => {
+    setSignOutConfirmOpen(false);
+    apkSignOut();
+    setSessionToken(null);
+    setUser(null);
+    localStorage.removeItem('bx_mob_user');
+    resetProfileStack();
+    haptic('success');
+    showToast(isRtl ? 'اتسجّل الخروج' : 'Signed out', 'logout');
+  };
+  const profileSettings = {
+    lang,
+    onLanguage: changeLanguage,
+    dataSaverPref,
+    dataSaverActive: dataSaver,
+    onDataSaver: (id) => {
+      haptic('select');
+      setDataSaverPref(id);
+    },
+    haptics: hapticsOn,
+    onHaptics: (on) => {
+      setHapticsEnabled(on);
+      setHapticsOn(on);
+      haptic('select');
+    },
+    splashSound: splashSoundOn,
+    onSplashSound: (on) => {
+      try {
+        localStorage.setItem(SPLASH_SOUND_KEY, on ? 'on' : 'off');
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+      setSplashSoundOn(on);
+      haptic('select');
+    },
+    splashTheme: motionPref,
+    splashThemes: BLACK_X_MOTION_THEMES,
+    onSplashTheme: (m) => {
+      haptic('select');
+      setMotionPref(m.id);
+      try {
+        localStorage.setItem('bx_motion_pref', m.id);
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+    },
+    onPreviewSplash: () => window.triggerBlackXMotion?.(motionPref === 'random' ? undefined : motionPref, 4000),
+    incognito: incognitoMode,
+    onIncognito: (next) => {
+      haptic('select');
+      setIncognitoMode(next);
+      try {
+        localStorage.setItem('bx_mob_incognito', String(next));
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+      showToast(next ? (isRtl ? 'التصفح الخفي شغال' : 'Incognito on') : isRtl ? 'التصفح الخفي اتقفل' : 'Incognito off', 'eye-off');
+    },
+    pinCode: appPinCode,
+    pinInput: pinSetupInput,
+    setPinInput: setPinSetupInput,
+    onSavePin: () => {
+      if (pinSetupInput.length !== 4) {
+        showToast(isRtl ? 'اكتب 4 أرقام بالظبط' : 'Enter exactly 4 digits');
+        return;
+      }
+      setAppPinCode(pinSetupInput);
+      try {
+        localStorage.setItem('bx_mob_pin_code', pinSetupInput);
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+      setPinSetupInput('');
+      haptic('success');
+      showToast(isRtl ? 'اتفعّل قفل التطبيق' : 'App lock is on', 'lock');
+    },
+    onClearPin: () => {
+      setAppPinCode('');
+      setPinLocked(false);
+      setPinSetupInput('');
+      try {
+        localStorage.removeItem('bx_mob_pin_code');
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+      showToast(isRtl ? 'اتلغى قفل التطبيق' : 'App lock removed', 'unlock');
+    },
+    title: selectedSovereignTitle,
+    onTitle: (t, locked) => {
+      if (locked) {
+        haptic('error');
+        showToast(
+          t.need === 'vip'
+            ? isRtl
+              ? 'اللقب ده لأعضاء VIP'
+              : 'This title is for VIP members'
+            : isRtl
+            ? 'كمّل الهدف المكتوب تحت اللقب عشان يتفتح'
+            : 'Reach the goal under the title to unlock it',
+          'lock'
+        );
+        return;
+      }
+      haptic('select');
+      setSelectedSovereignTitle(t.id);
+      try {
+        localStorage.setItem('bx_mob_sovereign_title', t.id);
+      } catch (_) {
+        /* storage or scroll unavailable */
+      }
+    }
+  };
+  // Developer panel (developer accounts only) — shown as the profile's "Developer" page.
+  const devPanelNode = isDeveloper ? (
+    <div className="bxp-dev">
+      {/* Developer Live Platform Telemetry Strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem', marginBottom: '0.75rem' }}>
+        <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{cloudVipCodes.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>أكواد نشطة</div>
+        </div>
+        <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{cloudUserRequests.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>طلبات الأعضاء</div>
+        </div>
+        <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{globalVipEnforced ? <><BxIcon name="lock" className="bx-ico-lead" />{"مفعل"}</> : <><BxIcon name="unlock" className="bx-ico-lead" />{"مفتوح"}</>}</div>
+          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>بوابة VIP</div>
+        </div>
+        <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{globalBroadcastMsg ? <><BxIcon name="dot" className="bx-ico-lead" />{"مباشر"}</> : <><BxIcon name="circle-dashed" className="bx-ico-lead" />{"صامت"}</>}</div>
+          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>البث العام</div>
+        </div>
+      </div>
+
+      {/* Developer 4-Sub-Tab Switcher */}
+      <div
+        className="bx-mob-scroll"
+        style={{
+          display: 'flex',
+          gap: '0.35rem',
+          overflowX: 'auto',
+          marginBottom: '0.85rem',
+          padding: '0.3rem',
+          borderRadius: '12px',
+          background: '#050507',
+          border: '1px solid rgba(255,255,255,0.16)'
+        }}
+      >
+        {[
+          { id: 'vip', label: 'الأكواد والـ VIP' },
+          { id: 'users', label: 'كشاف وترقية الأعضاء' },
+          { id: 'broadcast', label: 'البث والترشيح' },
+          { id: 'requests', label: `الطلبات (${cloudUserRequests.length})` }
+        ].map((dt) => (
+          <button
+            key={dt.id}
+            type="button"
+            onClick={() => setDevSubTab(dt.id)}
+            style={{
+              flex: 1,
+              padding: '0.45rem 0.65rem',
+              borderRadius: '8px',
+              background: devSubTab === dt.id ? '#ffffff' : 'transparent',
+              color: devSubTab === dt.id ? '#000000' : 'rgba(255,255,255,0.75)',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              whiteSpace: 'nowrap',
+              cursor: 'pointer'
+            }}
+          >
+            {dt.label}
+          </button>
+        ))}
+      </div>
+
+      {/*Master Global VIP Switch Button*/}
+      <div
+        style={{
+          display: devSubTab === 'vip' ? 'block' : 'none',
+          padding: '0.85rem',
+          borderRadius: '12px',
+          background: globalVipEnforced ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
+          border: globalVipEnforced ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.2)',
+          marginBottom: '0.9rem'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>
+            {isRtl ? 'حالة فرض اشتراك VIP على كل النسخ:' : 'Global VIP Gate Status:'}
+          </span>
+          <span
+            style={{
+              padding: '0.2rem 0.6rem',
+              borderRadius: '8px',
+              background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.12)',
+              color: globalVipEnforced ? '#000000' : '#ffffff',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}
+          >
+            {globalVipEnforced
+              ? isRtl
+                ? <><BxIcon name="lock" className="bx-ico-lead" />{"مفعل ومفروض على الجميع"}</>
+                : <><BxIcon name="lock" className="bx-ico-lead" />{"ENFORCED ON ALL USERS"}</>
+              : isRtl
+              ? <><BxIcon name="unlock" className="bx-ico-lead" />{"ملغي (مجاني للجميع)"}</>
+              : <><BxIcon name="unlock" className="bx-ico-lead" />{"UNLOCKED FOR ALL"}</>}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          disabled={devToggleBusy}
+          onClick={() => handleDevToggleGlobalVip(!globalVipEnforced)}
+          style={{
+            width: '100%',
+            padding: '0.8rem',
+            borderRadius: '12px',
+            border: 'none',
+            background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.18)',
+            color: globalVipEnforced ? '#000000' : '#ffffff',
+            fontWeight: 700,
+            fontSize: '0.8125rem',
+            cursor: 'pointer'
+          }}
+        >
+          {devToggleBusy
+            ? isRtl
+              ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري تعميم الأمر على جميع النسخ..."}</>
+              : <><BxIcon name="loader" className="bx-ico-lead" />{"Syncing across all instances..."}</>
+            : globalVipEnforced
+            ? isRtl
+              ? <><BxIcon name="unlock" className="bx-ico-lead" />{"اضغط لإلغاء فرض الـ VIP وفتح التطبيق مجاناً لكل المستخدمين"}</>
+              : <><BxIcon name="unlock" className="bx-ico-lead" />{"Disable Global VIP Enforcement (Unlock for All)"}</>
+            : isRtl
+            ? <><BxIcon name="lock" className="bx-ico-lead" />{"اضغط لتفعيل وفرض خطط الـ VIP على جميع المستخدمين فوراً"}</>
+            : <><BxIcon name="lock" className="bx-ico-lead" />{"Enable Global VIP Enforcement on All Users"}</>}
+        </button>
+      </div>
+
+      {/* Cloud VIP Code Generator inside APK */}
+      <div style={{ display: devSubTab === 'vip' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+          <BxIcon name="key" className="bx-ico-lead" />{isRtl ? 'توليد أكواد تفعيل VIP سحابية فورية (تعمل في الموقع والتطبيق):' : 'Generate Cloud VIP Activation Codes:'}
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+          <select
+            value={devGenTier}
+            onChange={(e) => setDevGenTier(e.target.value)}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              borderRadius: '12px',
+              background: '#000',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.22)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}
+          >
+            <option value="vip_monarch">باقة الملك (199 ج.م)</option>
+            <option value="vip_basic">الباقة الأساسية (99 ج.م)</option>
+          </select>
+          <select
+            value={devGenDays}
+            onChange={(e) => setDevGenDays(Number(e.target.value))}
+            style={{
+              width: '110px',
+              padding: '0.5rem',
+              borderRadius: '12px',
+              background: '#000',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.22)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}
+          >
+            <option value={30}>30 يوم</option>
+            <option value={90}>90 يوم</option>
+            <option value={365}>سنة كاملة</option>
+            <option value={3650}>مدى الحياة</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          disabled={devGenBusy}
+          onClick={handleDevGenerateVipCode}
+          style={{
+            width: '100%',
+            padding: '0.68rem',
+            borderRadius: '12px',
+            border: 'none',
+            background: '#ffffff',
+            color: '#000000',
+            fontWeight: 700,
+            fontSize: '0.8125rem',
+            cursor: 'pointer'
+          }}
+        >
+          {devGenBusy ? <><BxIcon name="loader" className="bx-ico-lead" />{"بيولّد..."}</> : <><BxIcon name="zap" className="bx-ico-lead" />{"توليد كود VIP جديد وحفظه بالسحابة"}</>}
+        </button>
+
+        {cloudVipCodes.length > 0 && (
+          <div style={{ marginTop: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '165px', overflowY: 'auto' }}>
+            {cloudVipCodes.slice(0, 10).map((c) => (
+              <div
+                key={c.code}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.42rem 0.65rem',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  fontSize: '0.75rem'
+                }}
+              >
+                <span
+                  onClick={() => {
+                    navigator.clipboard?.writeText(c.code);
+                    showToast(`اتنسخ الكود: ${c.code}`, 'check');
+                  }}
+                  style={{ fontFamily: 'monospace', fontWeight: 700, cursor: 'pointer', flex: 1 }}
+                >
+                  {c.code}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.65)', marginLeft: '0.4rem', marginRight: '0.4rem' }}>
+                  {(c.tier || c.planId) === 'vip_monarch' ? <><BxIcon name="crown" className="bx-ico-lead" />{"الملك"}</> : <><BxIcon name="zap" className="bx-ico-lead" />{"أساسية"}</>} ({c.usedCount || 0}/{c.maxUses || 1})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDevDeleteVipCode(c.code)}
+                  style={{
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    borderRadius: '8px',
+                    padding: '0.18rem 0.45rem',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <BxIcon name="trash" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Developer Global Push Broadcast Transmitter */}
+      <div style={{ display: devSubTab === 'broadcast' ? 'block' : 'none', paddingTop: '0.2rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
+          <BxIcon name="megaphone" className="bx-ico-lead" />{isRtl ? 'بث إشعار عام فوري لجميع الهواتف والموقع:' : 'Global Real-Time Push Broadcast Banner:'}
+        </div>
+        <input
+          type="text"
+          value={devBroadcastInput}
+          onChange={(e) => setDevBroadcastInput(e.target.value)}
+          placeholder={
+            globalBroadcastMsg ||
+            (isRtl ? 'اكتب نص الإشعار ليظهر فوراً أعلى جميع نسخ التطبيق...' : 'Enter broadcast message...')
+          }
+          style={{
+            width: '100%',
+            padding: '0.58rem 0.75rem',
+            borderRadius: '12px',
+            background: '#000',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.22)',
+            fontSize: '0.75rem',
+            marginBottom: '0.45rem'
+          }}
+        />
+        <div style={{ display: 'flex', gap: '0.45rem' }}>
+          <button
+            type="button"
+            disabled={devBroadcastBusy}
+            onClick={() => handleDevSendBroadcast(false)}
+            style={{
+              flex: 1,
+              padding: '0.62rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: '#ffffff',
+              color: '#000000',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer'
+            }}
+          >
+            {devBroadcastBusy ? <><BxIcon name="loader" />{"..."}</> : isRtl ? <><BxIcon name="megaphone" className="bx-ico-lead" />{"بث الإشعار للجميع"}</> : <><BxIcon name="megaphone" className="bx-ico-lead" />{"Broadcast Now"}</>}
+          </button>
+          {globalBroadcastMsg && (
+            <button
+              type="button"
+              disabled={devBroadcastBusy}
+              onClick={() => handleDevSendBroadcast(true)}
+              style={{
+                padding: '0.62rem 0.85rem',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: 'pointer'
+              }}
+            >
+              <BxIcon name="trash" className="bx-ico-lead" />{isRtl ? 'إخفاء' : 'Clear'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Developer Direct User VIP Upgrade (Upgrade any username or email without code) */}
+      <div style={{ display: devSubTab === 'users' ? 'block' : 'none', paddingTop: '0.2rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
+          <BxIcon name="crown" className="bx-ico-lead" />{isRtl ? 'ترقية أي مستخدم مباشرة إلى VIP (بدون كود):' : 'Direct User VIP Grant (No Code Needed):'}
+        </div>
+        <input
+          type="text"
+          value={devGrantTarget}
+          onChange={(e) => setDevGrantTarget(e.target.value)}
+          placeholder={isRtl ? 'اكتب اسم المستخدم أو البريد الإلكتروني للعضو...' : 'Username or Email...'}
+          style={{
+            width: '100%',
+            padding: '0.58rem 0.75rem',
+            borderRadius: '12px',
+            background: '#000',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.22)',
+            fontSize: '0.75rem',
+            marginBottom: '0.45rem'
+          }}
+        />
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.45rem' }}>
+          <select
+            value={devGrantTier}
+            onChange={(e) => setDevGrantTier(e.target.value)}
+            style={{
+              flex: 1,
+              padding: '0.48rem',
+              borderRadius: '12px',
+              background: '#000',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.22)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}
+          >
+            <option value="vip_monarch">باقة الملك</option>
+            <option value="vip_basic">الباقة الأساسية</option>
+          </select>
+          <select
+            value={devGrantDays}
+            onChange={(e) => setDevGrantDays(Number(e.target.value))}
+            style={{
+              width: '110px',
+              padding: '0.48rem',
+              borderRadius: '12px',
+              background: '#000',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.22)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}
+          >
+            <option value={30}>30 يوم</option>
+            <option value={90}>90 يوم</option>
+            <option value={365}>سنة كاملة</option>
+            <option value={3650}>مدى الحياة</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: '0.45rem' }}>
+          <button
+            type="button"
+            disabled={devGrantBusy}
+            onClick={handleDevDirectGrantUserVip}
+            style={{
+              flex: 1,
+              padding: '0.65rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: '#ffffff',
+              color: '#000000',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer'
+            }}
+          >
+            {devGrantBusy
+              ? <><BxIcon name="loader" />{"..."}</>
+              : isRtl
+              ? <><BxIcon name="crown" className="bx-ico-lead" />{"ترقية حساب العضو فوراً"}</>
+              : <><BxIcon name="crown" className="bx-ico-lead" />{"Grant VIP Now"}</>}
+          </button>
+          <button
+            type="button"
+            disabled={devGrantBusy}
+            onClick={handleDevRevokeUserVip}
+            style={{
+              padding: '0.65rem 0.75rem',
+              borderRadius: '12px',
+              border: '1px solid rgba(255,255,255,0.28)',
+              background: 'rgba(255,255,255,0.08)',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <BxIcon name="ban" className="bx-ico-lead" />{isRtl ? 'سحب VIP' : 'Revoke'}
+          </button>
+        </div>
+      </div>
+
+      {/* Developer Live Cloud User Inspector (كشاف المستخدمين السحابي المباشر) */}
+      <div style={{ display: devSubTab === 'users' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
+          <BxIcon name="users" className="bx-ico-lead" />{isRtl ? 'بحث في حسابات المستخدمين:' : 'Live Cloud User Inspector:'}
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.45rem' }}>
+          <input
+            type="text"
+            value={devInspectQuery}
+            onChange={(e) => setDevInspectQuery(e.target.value)}
+            placeholder={isRtl ? 'ابحث باسم المستخدم أو البريد الإلكتروني...' : 'Search username or email...'}
+            style={{
+              flex: 1,
+              padding: '0.55rem 0.75rem',
+              borderRadius: '12px',
+              background: '#000',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.22)',
+              fontSize: '0.75rem'
+            }}
+          />
+          <button
+            type="button"
+            disabled={devInspectBusy}
+            onClick={handleDevInspectUser}
+            style={{
+              padding: '0 0.85rem',
+              borderRadius: '12px',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer'
+            }}
+          >
+            {devInspectBusy ? <BxIcon name="loader" /> : isRtl ? <><BxIcon name="search" className="bx-ico-lead" />{"فحص"}</> : <><BxIcon name="search" className="bx-ico-lead" />{"Inspect"}</>}
+          </button>
+        </div>
+
+        {devInspectedUser && (
+          <div
+            style={{
+              padding: '0.7rem',
+              borderRadius: '12px',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              fontSize: '0.9375rem',
+              lineHeight: 1.6
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>
+              <BxIcon name="user" className="bx-ico-lead" />{devInspectedUser.displayName || devInspectedUser.username} (@{devInspectedUser.username})
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.72)' }}><BxIcon name="mail" className="bx-ico-lead" />{devInspectedUser.email || '—'}</div>
+            <div>
+              <BxIcon name="gem" className="bx-ico-lead" />الحالة: <strong>{devInspectedUser.vipStatus || 'Free Tier'}</strong> • <BxIcon name="heart" className="bx-ico-lead" />المفضلة:{' '}
+              {devInspectedUser.stats?.favorites ?? 0} • <BxIcon name="film" className="bx-ico-lead" />السجل: {devInspectedUser.stats?.history ?? 0}
+            </div>
+            <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDevGrantTarget(devInspectedUser.email || devInspectedUser.username);
+                  setDevGrantTier('vip_monarch');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.38rem',
+                  borderRadius: '8px',
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <BxIcon name="crown" className="bx-ico-lead" />تحديد للترقية
+              </button>
+              <button
+                type="button"
+                onClick={() => setDevInspectedUser(null)}
+                style={{
+                  padding: '0.38rem 0.65rem',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.12)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <BxIcon name="close" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Developer Global Featured Spotlight Pin (تثبيت ترشيح المطور الرسمي) */}
+      <div style={{ display: devSubTab === 'broadcast' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
+          <BxIcon name="pin" className="bx-ico-lead" />{isRtl ? 'تثبيت أنمي اليوم كترشيح رسمي أعلى الصفحة الرئيسية:' : 'Pin Official Developer Spotlight on Home:'}
+        </div>
+        <input
+          type="text"
+          value={devPinTitleInput}
+          onChange={(e) => setDevPinTitleInput(e.target.value)}
+          placeholder={
+            globalPinnedRec?.titleEn ||
+            (isRtl ? 'اكتب اسم الأنمي لتثبيته (مثال: Solo Leveling أو One Piece)...' : 'Anime title to pin...')
+          }
+          style={{
+            width: '100%',
+            padding: '0.55rem 0.75rem',
+            borderRadius: '12px',
+            background: '#000',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.22)',
+            fontSize: '0.75rem',
+            marginBottom: '0.4rem'
+          }}
+        />
+        <input
+          type="text"
+          value={devPinNoteInput}
+          onChange={(e) => setDevPinNoteInput(e.target.value)}
+          placeholder={isRtl ? 'رسالة الترشيح (مثال: عمل أسطوري ننصح بمشاهدته الليلة!)...' : 'Recommendation note...'}
+          style={{
+            width: '100%',
+            padding: '0.55rem 0.75rem',
+            borderRadius: '12px',
+            background: '#000',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.22)',
+            fontSize: '0.75rem',
+            marginBottom: '0.45rem'
+          }}
+        />
+        <div style={{ display: 'flex', gap: '0.45rem' }}>
+          <button
+            type="button"
+            disabled={devPinBusy}
+            onClick={() => handleDevPinRecommendation(false)}
+            style={{
+              flex: 1,
+              padding: '0.62rem',
+              borderRadius: '12px',
+              background: '#ffffff',
+              color: '#000000',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer'
+            }}
+          >
+            {devPinBusy ? <><BxIcon name="loader" />{"..."}</> : isRtl ? <><BxIcon name="pin" className="bx-ico-lead" />{"تثبيت في الرئيسية للجميع"}</> : <><BxIcon name="pin" className="bx-ico-lead" />{"Pin on Home"}</>}
+          </button>
+          {globalPinnedRec && (
+            <button
+              type="button"
+              disabled={devPinBusy}
+              onClick={() => handleDevPinRecommendation(true)}
+              style={{
+                padding: '0.62rem 0.8rem',
+                borderRadius: '12px',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#ffffff',
+                border: '1px solid rgba(255,255,255,0.25)',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                cursor: 'pointer'
+              }}
+            >
+              <BxIcon name="trash" className="bx-ico-lead" />{isRtl ? 'إزالة' : 'Unpin'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Developer User Requests & Ticket Center (صندوق طلبات الأعضاء المباشر للمطور) */}
+      {devSubTab === 'requests' && (
+        <div style={{ paddingTop: '0.2rem' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+            <BxIcon name="mail" className="bx-ico-lead" />{isRtl ? `طلبات الأعضاء المباشرة (${cloudUserRequests.length}):` : `User Requests (${cloudUserRequests.length}):`}
+          </div>
+          {cloudUserRequests.length === 0 ? (
+            <div style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }}>
+              {isRtl ? 'مفيش طلبات جديدة.' : 'No pending user requests.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '240px', overflowY: 'auto' }}>
+              {cloudUserRequests.map((req) => (
+                <div
+                  key={req.id}
+                  style={{
+                    padding: '0.65rem',
+                    borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.16)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>
+                      {req.type === 'anime' ? <><BxIcon name="film" className="bx-ico-lead" />{"طلب أنمي"}</> : req.type === 'manga' ? <><BxIcon name="book" className="bx-ico-lead" />{"طلب مانهوا"}</> : <><BxIcon name="wrench" className="bx-ico-lead" />{"بلاغ/دعم"}</>} •<BxIcon name="user" className="bx-ico-trail" /> {req.author}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, marginTop: '0.15rem' }}>{req.text}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDevDeleteUserRequest(req.id)}
+                    style={{
+                      padding: '0.35rem 0.65rem',
+                      borderRadius: '8px',
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    <BxIcon name="check" className="bx-ico-lead" />إنجاز
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div
@@ -4259,25 +5094,37 @@ export default function MobileApkApp() {
 
       {/* Top bar: only the user's picture + the access menu (logo / version / shortcuts live in the menu now) */}
       {!selectedAnime && !activeMangaChapter && (
-        <header className={`bx-topbar${pageScrolled ? ' is-solid' : ''}${topbarHidden && !commandMenuOpen ? ' is-hidden' : ''}`}>
-          <button
-            type="button"
-            className={`bx-avatar-btn${activeTab === 'profile' ? ' is-on' : ''}`}
-            onClick={() => goToTab('profile')}
-            aria-label={isRtl ? 'حسابي' : 'My account'}
-          >
-            {avatarPhoto ? (
-              <img src={avatarPhoto} alt="" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} />
-            ) : user ? (
-              <span>{(user.displayName?.[0] || user.username?.[0] || 'X').toUpperCase()}</span>
-            ) : (
-              <BxIcon name="user" />
-            )}
-          </button>
-          {TOPBAR_TITLES[activeTab] && (
-            <h1 className="bx-topbar-title" key={activeTab}>
-              {isRtl ? TOPBAR_TITLES[activeTab].ar : TOPBAR_TITLES[activeTab].en}
+        <header className={`bx-topbar${pageScrolled ? ' is-solid' : ''}${topbarHidden && !commandMenuOpen && !(activeTab === 'profile' && profilePage !== 'root') ? ' is-hidden' : ''}`}>
+          {activeTab === 'profile' && profilePage !== 'root' ? (
+            <button type="button" className="bx-round-btn bxp-back" onClick={closeProfilePage} aria-label={isRtl ? 'رجوع' : 'Back'}>
+              <BxIcon name="chevron-left" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`bx-avatar-btn${activeTab === 'profile' ? ' is-on' : ''}`}
+              onClick={() => goToTab('profile', () => resetProfileStack())}
+              aria-label={isRtl ? 'حسابي' : 'My account'}
+            >
+              {avatarPhoto ? (
+                <img src={avatarPhoto} alt="" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} />
+              ) : user ? (
+                <span>{(user.displayName?.[0] || user.username?.[0] || 'X').toUpperCase()}</span>
+              ) : (
+                <BxIcon name="user" />
+              )}
+            </button>
+          )}
+          {activeTab === 'profile' && profilePage !== 'root' ? (
+            <h1 className="bx-topbar-title" key={`profile:${profilePage}`}>
+              {profilePageTitle(profilePage, isRtl)}
             </h1>
+          ) : (
+            TOPBAR_TITLES[activeTab] && (
+              <h1 className="bx-topbar-title" key={activeTab}>
+                {isRtl ? TOPBAR_TITLES[activeTab].ar : TOPBAR_TITLES[activeTab].en}
+              </h1>
+            )
           )}
           <button
             type="button"
@@ -6296,2088 +7143,93 @@ export default function MobileApkApp() {
         </main>
       )}
 
-      {/* ==================== TAB 5: v12.0 SLOTH-UI & APPLE-AIRLINE LUXURY MONOCHROME PROFILE STUDIO ==================== */}
+      {/* ==================== TAB 5: PROFILE HUB (profile/ProfileTab.jsx) ==================== */}
       {activeTab === 'profile' && !selectedAnime && (
-        <main className={pageCls} style={{ padding: '0.85rem 1rem 1.5rem' }}>
-          {user && !sessionToken && (
-            <div className="bx-update-card bx-pop" style={{ margin: '0 0 0.85rem' }} role="note">
-              <div className="bx-update-head">
-                <span className="bx-update-ico">
-                  <BxIcon name="shield-check" size="1.05em" strokeWidth={2.4} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="bx-update-title">{isRtl ? 'سجّل الدخول تاني مرة واحدة' : 'Sign in once more'}</div>
-                  <div className="bx-update-sub">
-                    {isRtl
-                      ? 'تسجيل الدخول بقى عن طريق سيرفر الموقع عشان أمان حسابك. بياناتك على الموبايل محفوظة وهتتزامن بعد الدخول.'
-                      : 'Sign-in now goes through the website server for your account security. Your data on this phone is kept and syncs after signing in.'}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="bx-update-cta"
-                style={{ marginTop: '0.7rem' }}
-                onClick={() => {
-                  setUser(null);
-                  localStorage.removeItem('bx_mob_user');
-                  setProfileSubTab('account');
-                }}
-              >
-                <BxIcon name="user" className="bx-ico-lead" />
-                {isRtl ? 'سجّل الدخول' : 'Sign in'}
-              </button>
-            </div>
-          )}
-          {/* Profile header: the guest sees the sign-in card first; members get a compact header */}
-          {user ? (
-            <section className="bx-profile-head">
-              <span className="bx-profile-avatar">
-                {avatarPhoto ? (
-                  <img src={avatarPhoto} alt="" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} />
-                ) : (
-                  (user.displayName?.[0] || user.username?.[0] || 'X').toUpperCase()
-                )}
-              </span>
-              <div className="bx-profile-id">
-                <h2 dir="auto">{user.displayName || user.username}</h2>
-                <div className="bx-profile-sub">
-                  {user.username ? <span dir="ltr">@{user.username}</span> : null}
-                  {(userVipTier !== 'free' || isDeveloper) && (
-                    <span className="bx-vip-tag">
-                      <BxIcon name="crown" size="0.95em" />
-                      {isDeveloper ? (isRtl ? 'المطور' : 'Developer') : 'VIP'}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="bx-profile-stats">
-                <button type="button" onClick={() => { setProfileSubTab('vault'); setLibrarySubTab('favorites'); }}>
-                  <strong>{visibleFavorites.length}</strong>
-                  <span>{isRtl ? 'في قائمتي' : 'My list'}</span>
-                </button>
-                <button type="button" onClick={() => { setProfileSubTab('vault'); setLibrarySubTab('history'); }}>
-                  <strong>{visibleHistory.length}</strong>
-                  <span>{isRtl ? 'اتفرجت عليه' : 'Watched'}</span>
-                </button>
-                <div>
-                  <strong>{userXp}</strong>
-                  <span>XP</span>
-                </div>
-              </div>
-              <div className="bx-profile-actions">
-                <button
-                  type="button"
-                  className="bx-btn bx-btn-ghost bx-btn-sm"
-                  onClick={() => {
-                    setEditDisplayName(user.displayName || '');
-                    setEditBio(user.bio || '');
-                    setEditPhotoUrl(user.photoUrl || '');
-                    setProfileSubTab('account');
-                    setEditingProfile((v) => !v);
-                  }}
-                >
-                  <BxIcon name="pencil" />
-                  {isRtl ? 'تعديل' : 'Edit'}
-                </button>
-                <button type="button" className="bx-btn bx-btn-ghost bx-btn-sm" onClick={handleManualSync}>
-                  <BxIcon name="refresh" />
-                  {isRtl ? 'مزامنة' : 'Sync'}
-                </button>
-                <button
-                  type="button"
-                  className="bx-icon-btn bx-icon-btn-sm"
-                  aria-label={isRtl ? 'تسجيل الخروج' : 'Sign out'}
-                  onClick={() => {
-                    apkSignOut();
-                    setSessionToken(null);
-                    setUser(null);
-                    localStorage.removeItem('bx_mob_user');
-                    showToast(isRtl ? 'اتسجّل الخروج' : 'Signed out');
-                  }}
-                >
-                  <BxIcon name="logout" />
-                </button>
-              </div>
-            </section>
-          ) : (
-            <form
-              onSubmit={handleAuthSubmit}
-              style={{
-                padding: '1.25rem',
-                borderRadius: '18px',
-                background: '#0a0a0e',
-                border: '1px solid rgba(255,255,255,0.16)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.75rem'
-              }}
-            >
-              <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: 800 }}>
-                <BxIcon name="lock" className="bx-ico-lead" />{isRtl ? 'سجّل دخولك' : 'Sign in'}
-              </h2>
-              <p style={{ margin: 0, fontSize: '0.9375rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                {isRtl
-                  ? 'ادخل بحساب Google أو حسابك على موقع BLACK X، وقائمتك وسجل مشاهدتك هيتزامنوا بين الموبايل والموقع.'
-                  : 'Use Google or your BLACK X website account to sync your list and history.'}
-              </p>
-
-              {/* Official Google OAuth 2.0 Sign-In (Opens Real accounts.google.com Login — No Cloud Account Listing) */}
-              <button
-                type="button"
-                disabled={authBusy}
-                onClick={handleRealGoogleOAuthLogin}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.65rem',
-                  padding: '0.82rem 1rem',
-                  borderRadius: '12px',
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: '1.5px solid #ffffff',
-                  fontWeight: 700,
-                  fontSize: '0.9375rem',
-                  cursor: 'pointer',
-                  boxShadow: '0 6px 20px rgba(255,255,255,0.16)'
-                }}
-              >
-                <svg width="19" height="19" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                <span>
-                  {authBusy
-                    ? isRtl
-                      ? <><BxIcon name="loader" className="bx-ico-lead" />{"بيفتح حسابات Google..."}</>
-                      : <><BxIcon name="loader" className="bx-ico-lead" />{"Opening Phone Google Accounts..."}</>
-                    : isRtl
-                    ? 'الدخول بحساب Google'
-                    : 'Sign in with Phone Google Accounts'}
-                </span>
-              </button>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.15rem 0' }}>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />
-                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>
-                  {isRtl ? 'أو باسم المستخدم' : 'or with a username'}
-                </span>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.45rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem',
-                    borderRadius: '12px',
-                    fontWeight: 700,
-                    fontSize: '0.8125rem',
-                    border: 'none',
-                    background: authMode === 'login' ? '#ffffff' : 'rgba(255,255,255,0.07)',
-                    color: authMode === 'login' ? '#000000' : '#ffffff',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {isRtl ? 'تسجيل الدخول' : 'Sign In'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('register')}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem',
-                    borderRadius: '12px',
-                    fontWeight: 700,
-                    fontSize: '0.8125rem',
-                    border: 'none',
-                    background: authMode === 'register' ? '#ffffff' : 'rgba(255,255,255,0.07)',
-                    color: authMode === 'register' ? '#000000' : '#ffffff',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {isRtl ? 'حساب جديد' : 'Register'}
-                </button>
-              </div>
-
-              {authMode === 'register' && (
-                <input
-                  type="text"
-                  value={authDisplayName}
-                  onChange={(e) => setAuthDisplayName(e.target.value)}
-                  placeholder={isRtl ? 'الاسم اللي هيظهر' : 'Display Name'}
-                  style={{
-                    padding: '0.7rem 0.9rem',
-                    borderRadius: '12px',
-                    background: '#050507',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: '#fff',
-                    fontSize: '0.8125rem'
-                  }}
-                />
-              )}
-
-              <input
-                type="text"
-                value={authUsername}
-                onChange={(e) => setAuthUsername(e.target.value)}
-                placeholder={isRtl ? 'اسم المستخدم أو البريد الإلكتروني' : 'Username or Email'}
-                style={{
-                  padding: '0.7rem 0.9rem',
-                  borderRadius: '12px',
-                  background: '#050507',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#fff',
-                  fontSize: '0.8125rem'
-                }}
-              />
-
-              {authMode === 'register' && (
-                <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  placeholder={isRtl ? 'البريد الإلكتروني' : 'Email Address'}
-                  style={{
-                    padding: '0.7rem 0.9rem',
-                    borderRadius: '12px',
-                    background: '#050507',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: '#fff',
-                    fontSize: '0.8125rem'
-                  }}
-                />
-              )}
-
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder={isRtl ? 'كلمة المرور' : 'Password'}
-                style={{
-                  padding: '0.7rem 0.9rem',
-                  borderRadius: '12px',
-                  background: '#050507',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  color: '#fff',
-                  fontSize: '0.8125rem'
-                }}
-              />
-
-              <button
-                type="submit"
-                disabled={authBusy}
-                style={{
-                  padding: '0.8rem',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: '#ffffff',
-                  color: '#000000',
-                  fontWeight: 700,
-                  fontSize: '0.9375rem',
-                  cursor: 'pointer'
-                }}
-              >
-                {authBusy
-                  ? isRtl
-                    ? <><BxIcon name="loader" className="bx-ico-lead" />{"بيدخّلك..."}</>
-                    : <><BxIcon name="loader" className="bx-ico-lead" />{"Connecting..."}</>
-                  : authMode === 'login'
-                  ? isRtl
-                    ? 'دخول'
-                    : 'Sign In & Sync'
-                  : isRtl
-                  ? 'إنشاء الحساب ومزامنته'
-                  : 'Create Synced Account'}
-              </button>
-            </form>
-          )}
-
-          {/* SlothUI Segmented Pill Profile Sub-Tab Bar (Matches Profile UI 2 Segmented Switcher) */}
-          <div
-            className="bx-mob-scroll"
-            style={{
-              display: 'flex',
-              gap: '0.4rem',
-              overflowX: 'auto',
-              marginBottom: '0.95rem',
-              padding: '0.35rem',
-              borderRadius: '999px',
-              background: '#09090e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            {[
-              { id: 'account', ar: 'الحساب', en: 'Account' },
-              { id: 'vault', ar: 'مكتبتي', en: 'Library' },
-              { id: 'appearance', ar: 'الإعدادات', en: 'Settings' },
-              ...(isDeveloper
-                ? [{ id: 'developer', ar: `المطور (${cloudUserRequests.length})`, en: 'Dev' }]
-                : [])
-            ].map((tb) => {
-              const active = profileSubTab === tb.id;
-              return (
-                <button
-                  key={tb.id}
-                  type="button"
-                  onClick={() => setProfileSubTab(tb.id)}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem 0.8rem',
-                    borderRadius: '999px',
-                    background: active ? '#ffffff' : 'transparent',
-                    color: active ? '#000000' : 'rgba(255,255,255,0.78)',
-                    border: 'none',
-                    fontWeight: 700,
-                    fontSize: '0.75rem',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {isRtl ? tb.ar : tb.en}
-                </button>
-              );
-            })}
-          </div>
-
-          {user ? (
-            <>
-              <div
-                style={{
-                  display: profileSubTab === 'account' && editingProfile ? 'block' : 'none',
-                  padding: '1rem',
-                  borderRadius: '18px',
-                  background: '#0a0a0e',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  marginBottom: '1rem'
-                }}
-              >
-                {/* Inline Profile Editor */}
-                {editingProfile && (
-                  <form
-                    onSubmit={handleSaveProfileEdit}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.55rem',
-                      textAlign: 'start'
-                    }}
-                  >
-                    <input
-                      type="text"
-                      value={editDisplayName}
-                      onChange={(e) => setEditDisplayName(e.target.value)}
-                      placeholder={isRtl ? 'الاسم المعروض' : 'Display Name'}
-                      style={{
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.8125rem'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      value={editBio}
-                      onChange={(e) => setEditBio(e.target.value)}
-                      placeholder={isRtl ? 'نبذة عنك...' : 'Your Otaku Bio...'}
-                      style={{
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.8125rem'
-                      }}
-                    />
-                    <input
-                      type="url"
-                      value={editPhotoUrl}
-                      onChange={(e) => setEditPhotoUrl(e.target.value)}
-                      placeholder={isRtl ? 'لينك الصورة...' : 'Avatar Image URL...'}
-                      style={{
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.8125rem'
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      style={{
-                        padding: '0.65rem',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 700,
-                        fontSize: '0.8125rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <BxIcon name="check" className="bx-ico-lead" />{isRtl ? 'حفظ التعديلات ومزامنتها' : 'Save & Sync Profile'}
-                    </button>
-                  </form>
-                )}
-              </div>
-
-              {/* ==================== DEVELOPER EXCLUSIVE MASTER VIP CONTROL PANEL (حساب المطور فقط — مقسم لـ 4 تبويبات منظمة) ==================== */}
-              {isDeveloper && profileSubTab === 'developer' && (
-                <div
-                  style={{
-                    marginTop: '0.2rem',
-                    padding: '1.1rem',
-                    borderRadius: '18px',
-                    background: 'linear-gradient(145deg, #111116 0%, #050507 100%)',
-                    border: '2px solid #ffffff',
-                    boxShadow: '0 12px 34px rgba(255,255,255,0.14)'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                      <BxIcon name="crown" className="bx-ico-lead" />{isRtl ? 'لوحة المطور' : 'Developer Command Center'}
-                    </div>
-                    <span
-                      style={{
-                        padding: '0.2rem 0.55rem',
-                        borderRadius: '999px',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontSize: '0.75rem',
-                        fontWeight: 700
-                      }}
-                    >
-                      DEV v8.0
-                    </span>
-                  </div>
-
-                  {/* Developer Live Platform Telemetry Strip */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem', marginBottom: '0.75rem' }}>
-                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{cloudVipCodes.length}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>أكواد نشطة</div>
-                    </div>
-                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{cloudUserRequests.length}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>طلبات الأعضاء</div>
-                    </div>
-                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{globalVipEnforced ? <><BxIcon name="lock" className="bx-ico-lead" />{"مفعل"}</> : <><BxIcon name="unlock" className="bx-ico-lead" />{"مفتوح"}</>}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>بوابة VIP</div>
-                    </div>
-                    <div style={{ padding: '0.45rem 0.25rem', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>{globalBroadcastMsg ? <><BxIcon name="dot" className="bx-ico-lead" />{"مباشر"}</> : <><BxIcon name="circle-dashed" className="bx-ico-lead" />{"صامت"}</>}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>البث العام</div>
-                    </div>
-                  </div>
-
-                  {/* Developer 4-Sub-Tab Switcher */}
-                  <div
-                    className="bx-mob-scroll"
-                    style={{
-                      display: 'flex',
-                      gap: '0.35rem',
-                      overflowX: 'auto',
-                      marginBottom: '0.85rem',
-                      padding: '0.3rem',
-                      borderRadius: '12px',
-                      background: '#050507',
-                      border: '1px solid rgba(255,255,255,0.16)'
-                    }}
-                  >
-                    {[
-                      { id: 'vip', label: 'الأكواد والـ VIP' },
-                      { id: 'users', label: 'كشاف وترقية الأعضاء' },
-                      { id: 'broadcast', label: 'البث والترشيح' },
-                      { id: 'requests', label: `الطلبات (${cloudUserRequests.length})` }
-                    ].map((dt) => (
-                      <button
-                        key={dt.id}
-                        type="button"
-                        onClick={() => setDevSubTab(dt.id)}
-                        style={{
-                          flex: 1,
-                          padding: '0.45rem 0.65rem',
-                          borderRadius: '8px',
-                          background: devSubTab === dt.id ? '#ffffff' : 'transparent',
-                          color: devSubTab === dt.id ? '#000000' : 'rgba(255,255,255,0.75)',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {dt.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/*Master Global VIP Switch Button*/}
-                  <div
-                    style={{
-                      display: devSubTab === 'vip' ? 'block' : 'none',
-                      padding: '0.85rem',
-                      borderRadius: '12px',
-                      background: globalVipEnforced ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
-                      border: globalVipEnforced ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.2)',
-                      marginBottom: '0.9rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>
-                        {isRtl ? 'حالة فرض اشتراك VIP على كل النسخ:' : 'Global VIP Gate Status:'}
-                      </span>
-                      <span
-                        style={{
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '8px',
-                          background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.12)',
-                          color: globalVipEnforced ? '#000000' : '#ffffff',
-                          fontSize: '0.75rem',
-                          fontWeight: 700
-                        }}
-                      >
-                        {globalVipEnforced
-                          ? isRtl
-                            ? <><BxIcon name="lock" className="bx-ico-lead" />{"مفعل ومفروض على الجميع"}</>
-                            : <><BxIcon name="lock" className="bx-ico-lead" />{"ENFORCED ON ALL USERS"}</>
-                          : isRtl
-                          ? <><BxIcon name="unlock" className="bx-ico-lead" />{"ملغي (مجاني للجميع)"}</>
-                          : <><BxIcon name="unlock" className="bx-ico-lead" />{"UNLOCKED FOR ALL"}</>}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={devToggleBusy}
-                      onClick={() => handleDevToggleGlobalVip(!globalVipEnforced)}
-                      style={{
-                        width: '100%',
-                        padding: '0.8rem',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.18)',
-                        color: globalVipEnforced ? '#000000' : '#ffffff',
-                        fontWeight: 700,
-                        fontSize: '0.8125rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {devToggleBusy
-                        ? isRtl
-                          ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري تعميم الأمر على جميع النسخ..."}</>
-                          : <><BxIcon name="loader" className="bx-ico-lead" />{"Syncing across all instances..."}</>
-                        : globalVipEnforced
-                        ? isRtl
-                          ? <><BxIcon name="unlock" className="bx-ico-lead" />{"اضغط لإلغاء فرض الـ VIP وفتح التطبيق مجاناً لكل المستخدمين"}</>
-                          : <><BxIcon name="unlock" className="bx-ico-lead" />{"Disable Global VIP Enforcement (Unlock for All)"}</>
-                        : isRtl
-                        ? <><BxIcon name="lock" className="bx-ico-lead" />{"اضغط لتفعيل وفرض خطط الـ VIP على جميع المستخدمين فوراً"}</>
-                        : <><BxIcon name="lock" className="bx-ico-lead" />{"Enable Global VIP Enforcement on All Users"}</>}
-                    </button>
-                  </div>
-
-                  {/* Cloud VIP Code Generator inside APK */}
-                  <div style={{ display: devSubTab === 'vip' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-                      <BxIcon name="key" className="bx-ico-lead" />{isRtl ? 'توليد أكواد تفعيل VIP سحابية فورية (تعمل في الموقع والتطبيق):' : 'Generate Cloud VIP Activation Codes:'}
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                      <select
-                        value={devGenTier}
-                        onChange={(e) => setDevGenTier(e.target.value)}
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          borderRadius: '12px',
-                          background: '#000',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700
-                        }}
-                      >
-                        <option value="vip_monarch">باقة الملك (199 ج.م)</option>
-                        <option value="vip_basic">الباقة الأساسية (99 ج.م)</option>
-                      </select>
-                      <select
-                        value={devGenDays}
-                        onChange={(e) => setDevGenDays(Number(e.target.value))}
-                        style={{
-                          width: '110px',
-                          padding: '0.5rem',
-                          borderRadius: '12px',
-                          background: '#000',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700
-                        }}
-                      >
-                        <option value={30}>30 يوم</option>
-                        <option value={90}>90 يوم</option>
-                        <option value={365}>سنة كاملة</option>
-                        <option value={3650}>مدى الحياة</option>
-                      </select>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={devGenBusy}
-                      onClick={handleDevGenerateVipCode}
-                      style={{
-                        width: '100%',
-                        padding: '0.68rem',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 700,
-                        fontSize: '0.8125rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {devGenBusy ? <><BxIcon name="loader" className="bx-ico-lead" />{"بيولّد..."}</> : <><BxIcon name="zap" className="bx-ico-lead" />{"توليد كود VIP جديد وحفظه بالسحابة"}</>}
-                    </button>
-
-                    {cloudVipCodes.length > 0 && (
-                      <div style={{ marginTop: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '165px', overflowY: 'auto' }}>
-                        {cloudVipCodes.slice(0, 10).map((c) => (
-                          <div
-                            key={c.code}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              padding: '0.42rem 0.65rem',
-                              borderRadius: '8px',
-                              background: 'rgba(255,255,255,0.06)',
-                              border: '1px solid rgba(255,255,255,0.14)',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            <span
-                              onClick={() => {
-                                navigator.clipboard?.writeText(c.code);
-                                showToast(`اتنسخ الكود: ${c.code}`, 'check');
-                              }}
-                              style={{ fontFamily: 'monospace', fontWeight: 700, cursor: 'pointer', flex: 1 }}
-                            >
-                              {c.code}
-                            </span>
-                            <span style={{ color: 'rgba(255,255,255,0.65)', marginLeft: '0.4rem', marginRight: '0.4rem' }}>
-                              {(c.tier || c.planId) === 'vip_monarch' ? <><BxIcon name="crown" className="bx-ico-lead" />{"الملك"}</> : <><BxIcon name="zap" className="bx-ico-lead" />{"أساسية"}</>} ({c.usedCount || 0}/{c.maxUses || 1})
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleDevDeleteVipCode(c.code)}
-                              style={{
-                                background: 'rgba(255,255,255,0.12)',
-                                border: '1px solid rgba(255,255,255,0.2)',
-                                color: '#fff',
-                                borderRadius: '8px',
-                                padding: '0.18rem 0.45rem',
-                                fontSize: '0.75rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <BxIcon name="trash" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Developer Global Push Broadcast Transmitter */}
-                  <div style={{ display: devSubTab === 'broadcast' ? 'block' : 'none', paddingTop: '0.2rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
-                      <BxIcon name="megaphone" className="bx-ico-lead" />{isRtl ? 'بث إشعار عام فوري لجميع الهواتف والموقع:' : 'Global Real-Time Push Broadcast Banner:'}
-                    </div>
-                    <input
-                      type="text"
-                      value={devBroadcastInput}
-                      onChange={(e) => setDevBroadcastInput(e.target.value)}
-                      placeholder={
-                        globalBroadcastMsg ||
-                        (isRtl ? 'اكتب نص الإشعار ليظهر فوراً أعلى جميع نسخ التطبيق...' : 'Enter broadcast message...')
-                      }
-                      style={{
-                        width: '100%',
-                        padding: '0.58rem 0.75rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.75rem',
-                        marginBottom: '0.45rem'
-                      }}
-                    />
-                    <div style={{ display: 'flex', gap: '0.45rem' }}>
-                      <button
-                        type="button"
-                        disabled={devBroadcastBusy}
-                        onClick={() => handleDevSendBroadcast(false)}
-                        style={{
-                          flex: 1,
-                          padding: '0.62rem',
-                          borderRadius: '12px',
-                          border: 'none',
-                          background: '#ffffff',
-                          color: '#000000',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {devBroadcastBusy ? <><BxIcon name="loader" />{"..."}</> : isRtl ? <><BxIcon name="megaphone" className="bx-ico-lead" />{"بث الإشعار للجميع"}</> : <><BxIcon name="megaphone" className="bx-ico-lead" />{"Broadcast Now"}</>}
-                      </button>
-                      {globalBroadcastMsg && (
-                        <button
-                          type="button"
-                          disabled={devBroadcastBusy}
-                          onClick={() => handleDevSendBroadcast(true)}
-                          style={{
-                            padding: '0.62rem 0.85rem',
-                            borderRadius: '12px',
-                            border: '1px solid rgba(255,255,255,0.25)',
-                            background: 'rgba(255,255,255,0.08)',
-                            color: '#ffffff',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <BxIcon name="trash" className="bx-ico-lead" />{isRtl ? 'إخفاء' : 'Clear'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Developer Direct User VIP Upgrade (Upgrade any username or email without code) */}
-                  <div style={{ display: devSubTab === 'users' ? 'block' : 'none', paddingTop: '0.2rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
-                      <BxIcon name="crown" className="bx-ico-lead" />{isRtl ? 'ترقية أي مستخدم مباشرة إلى VIP (بدون كود):' : 'Direct User VIP Grant (No Code Needed):'}
-                    </div>
-                    <input
-                      type="text"
-                      value={devGrantTarget}
-                      onChange={(e) => setDevGrantTarget(e.target.value)}
-                      placeholder={isRtl ? 'اكتب اسم المستخدم أو البريد الإلكتروني للعضو...' : 'Username or Email...'}
-                      style={{
-                        width: '100%',
-                        padding: '0.58rem 0.75rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.75rem',
-                        marginBottom: '0.45rem'
-                      }}
-                    />
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.45rem' }}>
-                      <select
-                        value={devGrantTier}
-                        onChange={(e) => setDevGrantTier(e.target.value)}
-                        style={{
-                          flex: 1,
-                          padding: '0.48rem',
-                          borderRadius: '12px',
-                          background: '#000',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700
-                        }}
-                      >
-                        <option value="vip_monarch">باقة الملك</option>
-                        <option value="vip_basic">الباقة الأساسية</option>
-                      </select>
-                      <select
-                        value={devGrantDays}
-                        onChange={(e) => setDevGrantDays(Number(e.target.value))}
-                        style={{
-                          width: '110px',
-                          padding: '0.48rem',
-                          borderRadius: '12px',
-                          background: '#000',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700
-                        }}
-                      >
-                        <option value={30}>30 يوم</option>
-                        <option value={90}>90 يوم</option>
-                        <option value={365}>سنة كاملة</option>
-                        <option value={3650}>مدى الحياة</option>
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.45rem' }}>
-                      <button
-                        type="button"
-                        disabled={devGrantBusy}
-                        onClick={handleDevDirectGrantUserVip}
-                        style={{
-                          flex: 1,
-                          padding: '0.65rem',
-                          borderRadius: '12px',
-                          border: 'none',
-                          background: '#ffffff',
-                          color: '#000000',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {devGrantBusy
-                          ? <><BxIcon name="loader" />{"..."}</>
-                          : isRtl
-                          ? <><BxIcon name="crown" className="bx-ico-lead" />{"ترقية حساب العضو فوراً"}</>
-                          : <><BxIcon name="crown" className="bx-ico-lead" />{"Grant VIP Now"}</>}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={devGrantBusy}
-                        onClick={handleDevRevokeUserVip}
-                        style={{
-                          padding: '0.65rem 0.75rem',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(255,255,255,0.28)',
-                          background: 'rgba(255,255,255,0.08)',
-                          color: '#ffffff',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        <BxIcon name="ban" className="bx-ico-lead" />{isRtl ? 'سحب VIP' : 'Revoke'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Developer Live Cloud User Inspector (كشاف المستخدمين السحابي المباشر) */}
-                  <div style={{ display: devSubTab === 'users' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
-                      <BxIcon name="users" className="bx-ico-lead" />{isRtl ? 'بحث في حسابات المستخدمين:' : 'Live Cloud User Inspector:'}
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.45rem' }}>
-                      <input
-                        type="text"
-                        value={devInspectQuery}
-                        onChange={(e) => setDevInspectQuery(e.target.value)}
-                        placeholder={isRtl ? 'ابحث باسم المستخدم أو البريد الإلكتروني...' : 'Search username or email...'}
-                        style={{
-                          flex: 1,
-                          padding: '0.55rem 0.75rem',
-                          borderRadius: '12px',
-                          background: '#000',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem'
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={devInspectBusy}
-                        onClick={handleDevInspectUser}
-                        style={{
-                          padding: '0 0.85rem',
-                          borderRadius: '12px',
-                          background: '#ffffff',
-                          color: '#000000',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {devInspectBusy ? <BxIcon name="loader" /> : isRtl ? <><BxIcon name="search" className="bx-ico-lead" />{"فحص"}</> : <><BxIcon name="search" className="bx-ico-lead" />{"Inspect"}</>}
-                      </button>
-                    </div>
-
-                    {devInspectedUser && (
-                      <div
-                        style={{
-                          padding: '0.7rem',
-                          borderRadius: '12px',
-                          background: 'rgba(255,255,255,0.06)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.9375rem',
-                          lineHeight: 1.6
-                        }}
-                      >
-                        <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>
-                          <BxIcon name="user" className="bx-ico-lead" />{devInspectedUser.displayName || devInspectedUser.username} (@{devInspectedUser.username})
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.72)' }}><BxIcon name="mail" className="bx-ico-lead" />{devInspectedUser.email || '—'}</div>
-                        <div>
-                          <BxIcon name="gem" className="bx-ico-lead" />الحالة: <strong>{devInspectedUser.vipStatus || 'Free Tier'}</strong> • <BxIcon name="heart" className="bx-ico-lead" />المفضلة:{' '}
-                          {devInspectedUser.stats?.favorites ?? 0} • <BxIcon name="film" className="bx-ico-lead" />السجل: {devInspectedUser.stats?.history ?? 0}
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDevGrantTarget(devInspectedUser.email || devInspectedUser.username);
-                              setDevGrantTier('vip_monarch');
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '0.38rem',
-                              borderRadius: '8px',
-                              background: '#ffffff',
-                              color: '#000000',
-                              border: 'none',
-                              fontWeight: 700,
-                              fontSize: '0.75rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <BxIcon name="crown" className="bx-ico-lead" />تحديد للترقية
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDevInspectedUser(null)}
-                            style={{
-                              padding: '0.38rem 0.65rem',
-                              borderRadius: '8px',
-                              background: 'rgba(255,255,255,0.12)',
-                              color: '#ffffff',
-                              border: 'none',
-                              fontWeight: 700,
-                              fontSize: '0.75rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <BxIcon name="close" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Developer Global Featured Spotlight Pin (تثبيت ترشيح المطور الرسمي) */}
-                  <div style={{ display: devSubTab === 'broadcast' ? 'block' : 'none', borderTop: '1px solid rgba(255,255,255,0.14)', paddingTop: '0.8rem', marginTop: '0.8rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
-                      <BxIcon name="pin" className="bx-ico-lead" />{isRtl ? 'تثبيت أنمي اليوم كترشيح رسمي أعلى الصفحة الرئيسية:' : 'Pin Official Developer Spotlight on Home:'}
-                    </div>
-                    <input
-                      type="text"
-                      value={devPinTitleInput}
-                      onChange={(e) => setDevPinTitleInput(e.target.value)}
-                      placeholder={
-                        globalPinnedRec?.titleEn ||
-                        (isRtl ? 'اكتب اسم الأنمي لتثبيته (مثال: Solo Leveling أو One Piece)...' : 'Anime title to pin...')
-                      }
-                      style={{
-                        width: '100%',
-                        padding: '0.55rem 0.75rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.75rem',
-                        marginBottom: '0.4rem'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      value={devPinNoteInput}
-                      onChange={(e) => setDevPinNoteInput(e.target.value)}
-                      placeholder={isRtl ? 'رسالة الترشيح (مثال: عمل أسطوري ننصح بمشاهدته الليلة!)...' : 'Recommendation note...'}
-                      style={{
-                        width: '100%',
-                        padding: '0.55rem 0.75rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.75rem',
-                        marginBottom: '0.45rem'
-                      }}
-                    />
-                    <div style={{ display: 'flex', gap: '0.45rem' }}>
-                      <button
-                        type="button"
-                        disabled={devPinBusy}
-                        onClick={() => handleDevPinRecommendation(false)}
-                        style={{
-                          flex: 1,
-                          padding: '0.62rem',
-                          borderRadius: '12px',
-                          background: '#ffffff',
-                          color: '#000000',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {devPinBusy ? <><BxIcon name="loader" />{"..."}</> : isRtl ? <><BxIcon name="pin" className="bx-ico-lead" />{"تثبيت في الرئيسية للجميع"}</> : <><BxIcon name="pin" className="bx-ico-lead" />{"Pin on Home"}</>}
-                      </button>
-                      {globalPinnedRec && (
-                        <button
-                          type="button"
-                          disabled={devPinBusy}
-                          onClick={() => handleDevPinRecommendation(true)}
-                          style={{
-                            padding: '0.62rem 0.8rem',
-                            borderRadius: '12px',
-                            background: 'rgba(255,255,255,0.08)',
-                            color: '#ffffff',
-                            border: '1px solid rgba(255,255,255,0.25)',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <BxIcon name="trash" className="bx-ico-lead" />{isRtl ? 'إزالة' : 'Unpin'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Developer User Requests & Ticket Center (صندوق طلبات الأعضاء المباشر للمطور) */}
-                  {devSubTab === 'requests' && (
-                    <div style={{ paddingTop: '0.2rem' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-                        <BxIcon name="mail" className="bx-ico-lead" />{isRtl ? `طلبات الأعضاء المباشرة (${cloudUserRequests.length}):` : `User Requests (${cloudUserRequests.length}):`}
-                      </div>
-                      {cloudUserRequests.length === 0 ? (
-                        <div style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }}>
-                          {isRtl ? 'مفيش طلبات جديدة.' : 'No pending user requests.'}
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '240px', overflowY: 'auto' }}>
-                          {cloudUserRequests.map((req) => (
-                            <div
-                              key={req.id}
-                              style={{
-                                padding: '0.65rem',
-                                borderRadius: '12px',
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.16)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                gap: '0.5rem'
-                              }}
-                            >
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>
-                                  {req.type === 'anime' ? <><BxIcon name="film" className="bx-ico-lead" />{"طلب أنمي"}</> : req.type === 'manga' ? <><BxIcon name="book" className="bx-ico-lead" />{"طلب مانهوا"}</> : <><BxIcon name="wrench" className="bx-ico-lead" />{"بلاغ/دعم"}</>} •<BxIcon name="user" className="bx-ico-trail" /> {req.author}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', fontWeight: 700, marginTop: '0.15rem' }}>{req.text}</div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleDevDeleteUserRequest(req.id)}
-                                style={{
-                                  padding: '0.35rem 0.65rem',
-                                  borderRadius: '8px',
-                                  background: '#ffffff',
-                                  color: '#000000',
-                                  border: 'none',
-                                  fontWeight: 700,
-                                  fontSize: '0.75rem',
-                                  cursor: 'pointer',
-                                  flexShrink: 0
-                                }}
-                              >
-                                <BxIcon name="check" className="bx-ico-lead" />إنجاز
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          ) : null}
-
-          {/* VIP Subscription Status & Code Redemption Box inside Profile */}
-          <div
-            style={{
-              display: profileSubTab === 'account' ? 'block' : 'none',
-              marginTop: '1rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                <BxIcon name="gem" className="bx-ico-lead" />{isRtl ? 'اشتراكك في VIP:' : 'Your BLACK X VIP Status:'}
-              </span>
-              <span
-                style={{
-                  padding: '0.2rem 0.65rem',
-                  borderRadius: '999px',
-                  background: userVipTier !== 'free' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                  color: userVipTier !== 'free' ? '#000000' : '#ffffff',
-                  fontSize: '0.75rem',
-                  fontWeight: 700
-                }}
-              >
-                {isDeveloper
-                  ? <><BxIcon name="crown" className="bx-ico-lead" />{"المطور"}</>
-                  : userVipTier === 'vip_monarch'
-                  ? <><BxIcon name="crown" className="bx-ico-lead" />{"باقة الملك"}</>
-                  : userVipTier === 'vip_basic'
-                  ? <><BxIcon name="zap" className="bx-ico-lead" />{"الباقة الأساسية"}</>
-                  : isRtl
-                  ? 'مجاني (غير مشترك)'
-                  : 'Free Tier'}
-              </span>
-            </div>
-
-            <form onSubmit={handleRedeemVipCode} style={{ display: 'flex', gap: '0.45rem', marginTop: '0.5rem' }}>
-              <input
-                type="text"
-                value={vipRedeemCode}
-                onChange={(e) => setVipRedeemCode(e.target.value)}
-                placeholder={isRtl ? 'أدخل كود تفعيل VIP (مثال: BX-XXXX-XXXX)...' : 'Enter VIP Activation Code...'}
-                style={{
-                  flex: 1,
-                  padding: '0.6rem 0.8rem',
-                  borderRadius: '12px',
-                  background: '#050507',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  color: '#fff',
-                  fontSize: '0.75rem',
-                  fontFamily: 'monospace'
-                }}
-              />
-              <button
-                type="submit"
-                disabled={vipRedeemBusy}
-                style={{
-                  padding: '0 0.95rem',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: '#ffffff',
-                  color: '#000000',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                {vipRedeemBusy ? <BxIcon name="loader" /> : isRtl ? 'تفعيل' : 'Activate'}
-              </button>
-            </form>
-          </div>
-
-          {/* Direct User Request Box to Developer (صندوق طلبات الأنمي والمانهوا المباشر للمطور) */}
-          <div
-            style={{
-              display: profileSubTab === 'account' ? 'block' : 'none',
-              marginTop: '1rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.35rem' }}>
-              <BxIcon name="mail" className="bx-ico-lead" />{isRtl ? 'اطلب أنمي أو مانهوا' : 'Request an anime or manga'}
-            </div>
-            <form onSubmit={handleSubmitUserRequest} style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-              <div style={{ display: 'flex', gap: '0.35rem' }}>
-                {[
-                  { id: 'anime', label: 'طلب أنمي' },
-                  { id: 'manga', label: 'طلب مانهوا' },
-                  { id: 'issue', label: 'بلاغ أو استفسار' }
-                ].map((rt) => (
-                  <button
-                    key={rt.id}
-                    type="button"
-                    onClick={() => setUserRequestType(rt.id)}
-                    style={{
-                      flex: 1,
-                      padding: '0.4rem',
-                      borderRadius: '8px',
-                      background: userRequestType === rt.id ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: userRequestType === rt.id ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      fontWeight: 700,
-                      fontSize: '0.75rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {rt.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <input
-                  type="text"
-                  value={userRequestText}
-                  onChange={(e) => setUserRequestText(e.target.value)}
-                  placeholder={isRtl ? 'اكتب اسم الأنمي أو المانهوا أو رسالتك للمطور...' : 'Type your request...'}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem 0.75rem',
-                    borderRadius: '12px',
-                    background: '#050507',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
-                    fontSize: '0.75rem'
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={userRequestBusy}
-                  style={{
-                    padding: '0 0.9rem',
-                    borderRadius: '12px',
-                    background: '#ffffff',
-                    color: '#000000',
-                    border: 'none',
-                    fontWeight: 700,
-                    fontSize: '0.75rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {userRequestBusy ? <BxIcon name="loader" /> : isRtl ? 'إرسال' : 'Send'}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* v16: experience settings (data saver, haptics, splash sound) */}
-          <div
-            style={{
-              display: profileSubTab === 'appearance' ? 'block' : 'none',
-              marginBottom: '0.75rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: '1.0625rem', marginBottom: '0.6rem' }}>
-              {isRtl ? 'التطبيق' : 'App'}
-            </div>
-            <div className="bx-setting-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="bx-setting-title">
-                  <BxIcon name="globe" className="bx-ico-lead" />
-                  {isRtl ? 'اللغة' : 'Language'}
-                </div>
-                <div className="bx-setting-sub">{isRtl ? 'لغة القوائم والأزرار' : 'Menus and buttons'}</div>
-              </div>
-              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'اللغة' : 'Language'}>
-                {[
-                  ['ar', 'عربي'],
-                  ['en', 'English']
-                ].map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={lang === id}
-                    className={lang === id ? 'is-on' : ''}
-                    onClick={() => changeLanguage(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="bx-setting-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="bx-setting-title">
-                  <BxIcon name="gauge" className="bx-ico-lead" />
-                  {isRtl ? 'توفير البيانات' : 'Data saver'}
-                </div>
-                <div className="bx-setting-sub">
-                  {isRtl
-                    ? `صور أصغر وجودة أقل للبث${dataSaver ? ' • شغال دلوقتي' : ''}`
-                    : `Smaller images and lower stream quality${dataSaver ? ' • active now' : ''}`}
-                </div>
-              </div>
-              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'توفير البيانات' : 'Data saver'}>
-                {[
-                  ['auto', isRtl ? 'تلقائي' : 'Auto'],
-                  ['on', isRtl ? 'شغال' : 'On'],
-                  ['off', isRtl ? 'مقفول' : 'Off']
-                ].map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={dataSaverPref === id}
-                    className={dataSaverPref === id ? 'is-on' : ''}
-                    onClick={() => {
-                      haptic('select');
-                      setDataSaverPref(id);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="bx-setting-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="bx-setting-title">
-                  <BxIcon name="smartphone" className="bx-ico-lead" />
-                  {isRtl ? 'اهتزاز خفيف مع اللمس' : 'Haptic feedback'}
-                </div>
-                <div className="bx-setting-sub">{isRtl ? 'مع التنقل والتشغيل والمفضلة' : 'On navigation, play and favorites'}</div>
-              </div>
-              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'الاهتزاز' : 'Haptics'}>
-                {[
-                  [true, isRtl ? 'شغال' : 'On'],
-                  [false, isRtl ? 'مقفول' : 'Off']
-                ].map(([on, label]) => (
-                  <button
-                    key={String(on)}
-                    type="button"
-                    role="radio"
-                    aria-checked={hapticsOn === on}
-                    className={hapticsOn === on ? 'is-on' : ''}
-                    onClick={() => {
-                      setHapticsEnabled(on);
-                      setHapticsOn(on);
-                      haptic('select');
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="bx-setting-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="bx-setting-title">
-                  <BxIcon name="volume" className="bx-ico-lead" />
-                  {isRtl ? 'صوت شاشة البداية' : 'Splash sound'}
-                </div>
-                <div className="bx-setting-sub">{isRtl ? 'مقفول من الأول' : 'Off by default'}</div>
-              </div>
-              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'صوت البداية' : 'Splash sound'}>
-                {[
-                  [true, isRtl ? 'شغال' : 'On'],
-                  [false, isRtl ? 'مقفول' : 'Off']
-                ].map(([on, label]) => (
-                  <button
-                    key={String(on)}
-                    type="button"
-                    role="radio"
-                    aria-checked={splashSoundOn === on}
-                    className={splashSoundOn === on ? 'is-on' : ''}
-                    onClick={() => {
-                      localStorage.setItem(SPLASH_SOUND_KEY, on ? 'on' : 'off');
-                      setSplashSoundOn(on);
-                      haptic('select');
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Internal Splash Screen Motion Graphics Selector (من الداخل فقط) */}
-          <div
-            style={{
-              display: profileSubTab === 'appearance' ? 'block' : 'none',
-              marginTop: '0.2rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                <BxIcon name="film" className="bx-ico-lead" />{isRtl ? 'شاشة البداية' : 'Splash screen'}
-              </span>
-              <button
-                type="button"
-                onClick={() => window.triggerBlackXMotion?.(motionPref === 'random' ? undefined : motionPref, 4000)}
-                style={{
-                  padding: '0.28rem 0.7rem',
-                  borderRadius: '999px',
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="play" className="bx-ico-lead" />{isRtl ? 'معاينة الآن' : 'Preview'}
-              </button>
-            </div>
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
-              {isRtl
-                ? 'اختار الحركة اللي تظهر لما التطبيق يفتح:'
-                : 'Choose the animation shown when the app opens:'}
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.45rem' }}>
-              {BLACK_X_MOTION_THEMES.map((m) => {
-                const active = motionPref === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => {
-                      setMotionPref(m.id);
-                      localStorage.setItem('bx_motion_pref', m.id);
-                      showToast(
-                        isRtl
-                          ? `شاشة البداية: ${m.nameAr}`
-                          : `Splash motion set to: ${m.nameEn}`, 'check'
-                      );
-                    }}
-                    style={{
-                      padding: '0.58rem 0.65rem',
-                      borderRadius: '12px',
-                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: active ? '#000000' : '#ffffff',
-                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
-                      fontWeight: 700,
-                      fontSize: '0.75rem',
-                      textAlign: isRtl ? 'right' : 'left',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.38rem'
-                    }}
-                  >
-                    <BxIcon name={m.iconName} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {isRtl ? m.nameAr : m.nameEn}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* In-App Cloud OTA Update Checker & Direct APK Installer */}
-          <div
-            style={{
-              marginTop: '1rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)',
-              display: profileSubTab === 'appearance' ? 'flex' : 'none',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>
-                <BxIcon name="refresh" className="bx-ico-lead" />{isRtl ? 'تحديث التطبيق' : 'App update'}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
-                {isRtl
-                  ? `الإصدار الحالي: v${BX_APK_VERSION}${apkRelease?.version ? ` • آخر إصدار: v${apkRelease.version}` : ''}`
-                  : `Current version: v${BX_APK_VERSION}${apkRelease?.version ? ` • latest: v${apkRelease.version}` : ''}`}
-              </div>
-            </div>
-            <a
-              href={BX_APK_DOWNLOAD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() =>
-                showToast(
-                  isRtl
-                    ? 'بينزّل آخر نسخة من التطبيق...'
-                    : 'Downloading the latest BLACK X APK from the website...', 'check'
-                )
-              }
-              style={{
-                padding: '0.52rem 0.9rem',
-                borderRadius: '12px',
-                background: '#ffffff',
-                color: '#000000',
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                textDecoration: 'none',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <BxIcon name="download" className="bx-ico-lead" />{isRtl ? 'تحديث مباشر الآن' : 'Update APK Now'}
-            </a>
-          </div>
-
-          {/* Sovereign Achievements & Unlockable Titles Selector (خزنة الأوسمة والألقاب الملكية) */}
-          <div
-            style={{
-              display: profileSubTab === 'account' ? 'block' : 'none',
-              marginTop: '1rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.3rem' }}>
-              <BxIcon name="medal" className="bx-ico-lead" />{isRtl ? 'الألقاب:' : 'Titles:'}
-            </div>
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
-              {isRtl
-                ? 'اختار لقب يظهر جنب اسمك في تقييماتك:'
-                : 'Pick a title shown next to your name in your reviews:'}
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.42rem' }}>
-              {[
-                { title: 'صياد الرتبة S', desc: 'مفتوح للجميع' },
-                { title: 'سيد الظلال', desc: `${watchHistory.length}/3 حلقات` },
-                { title: 'حكيم المانهوا', desc: `${mangaHistory.length}/2 فصول` },
-                { title: 'جامع المفضلات', desc: `${favorites.length}/3 مفضلة` },
-                { title: 'عراف الأرينا', desc: `${userXp} XP` },
-                { title: 'نجم BLACK X', desc: 'للأعضاء VIP' }
-              ].map((b) => {
-                const active = selectedSovereignTitle === b.title;
-                return (
-                  <button
-                    key={b.title}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSovereignTitle(b.title);
-                      localStorage.setItem('bx_mob_sovereign_title', b.title);
-                      showToast(`لقبك دلوقتي: ${b.title}`, 'medal');
-                    }}
-                    style={{
-                      padding: '0.52rem 0.65rem',
-                      borderRadius: '12px',
-                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: active ? '#000000' : '#ffffff',
-                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
-                      fontWeight: 700,
-                      fontSize: '0.75rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <span>{b.title}</span>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>{b.desc}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 1-Tap Full Vault Backup & Restore (تصدير واستيراد الخزنة الكاملة بضغطة واحدة) */}
-          <div
-            style={{
-              display: profileSubTab === 'vault' ? 'block' : 'none',
-              marginTop: '0.2rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.3rem' }}>
-              <BxIcon name="save" className="bx-ico-lead" />{isRtl ? 'نسخة احتياطية' : 'Backup & restore'}
-            </div>
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
-              {isRtl
-                ? 'احفظ نسخة احتياطية شاملة لكل مفضلاتك، سجل مشاهداتك، لقطاتك، وفصولك بدون نت في ملف واحد واستعدها على أي هاتف فوراً:'
-                : 'Export or restore all your favorites, history, offline chapters, and snapshots in one tap:'}
-            </p>
-            <input
-              ref={backupFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleImportVaultBackup}
-              style={{ display: 'none' }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={handleExportVaultBackup}
-                style={{
-                  flex: 1,
-                  padding: '0.58rem',
-                  borderRadius: '12px',
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="save" className="bx-ico-lead" />{isRtl ? 'تصدير' : 'Export Backup'}
-              </button>
-              <button
-                type="button"
-                onClick={() => backupFileInputRef.current?.click()}
-                style={{
-                  flex: 1,
-                  padding: '0.58rem',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.1)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="folder" className="bx-ico-lead" />{isRtl ? 'استعادة' : 'Restore Backup'}
-              </button>
-            </div>
-          </div>
-
-          {/* Privacy & Security Suite: Incognito Mode + 4-Digit App PIN Lock */}
-          <div
-            style={{
-              display: profileSubTab === 'appearance' ? 'block' : 'none',
-              marginTop: '1rem',
-              padding: '1rem',
-              borderRadius: '18px',
-              background: '#0a0a0e',
-              border: '1px solid rgba(255,255,255,0.16)'
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: '0.6rem' }}>
-              <BxIcon name="shield" className="bx-ico-lead" />{isRtl ? 'الخصوصية والحماية الذكية (PIN + التصفح الخفي):' : 'Privacy & Security Suite:'}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.75rem' }}>
-                  <BxIcon name="eye-off" className="bx-ico-lead" />{isRtl ? 'التصفح الخفي' : 'Incognito Mode'}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)' }}>
-                  {isRtl ? 'مشاهدة الحلقات وقراءة الفصول بدون حفظها في السجل' : 'Watch & read without saving history'}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !incognitoMode;
-                  setIncognitoMode(next);
-                  localStorage.setItem('bx_mob_incognito', String(next));
-                  showToast(
-                    next
-                      ? isRtl
-                        ? 'التصفح الخفي شغال'
-                        : 'Incognito Mode ON'
-                      : isRtl
-                      ? 'التصفح الخفي اتقفل'
-                      : 'Incognito Mode OFF', 'eye-off'
-                  );
-                }}
-                style={{
-                  padding: '0.42rem 0.85rem',
-                  borderRadius: '12px',
-                  background: incognitoMode ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                  color: incognitoMode ? '#000000' : '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                {incognitoMode ? (isRtl ? 'مفعل ON' : 'ON') : isRtl ? 'متوقف OFF' : 'OFF'}
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
-              <input
-                type="password"
-                maxLength={4}
-                value={pinSetupInput}
-                onChange={(e) => setPinSetupInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
-                placeholder={
-                  appPinCode
-                    ? isRtl
-                      ? 'القفل مفعل (أدخل 4 أرقام لتغييره)'
-                      : 'PIN Active (4 digits)'
-                    : isRtl
-                    ? 'أدخل رمز PIN من 4 أرقام لقفل التطبيق...'
-                    : 'Set 4-digit PIN lock...'
-                }
-                style={{
-                  flex: 1,
-                  padding: '0.55rem 0.75rem',
-                  borderRadius: '12px',
-                  background: '#050507',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  color: '#fff',
-                  fontSize: '0.75rem'
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (pinSetupInput.length !== 4) {
-                    showToast(isRtl ? 'اكتب 4 أرقام بالظبط' : 'Enter 4 digits');
-                    return;
-                  }
-                  setAppPinCode(pinSetupInput);
-                  localStorage.setItem('bx_mob_pin_code', pinSetupInput);
-                  setPinSetupInput('');
-                  showToast(isRtl ? 'اتفعّل قفل التطبيق بالـ PIN' : 'App PIN Lock enabled!', 'lock');
-                }}
-                style={{
-                  padding: '0.55rem 0.85rem',
-                  borderRadius: '12px',
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                {isRtl ? 'حفظ PIN' : 'Set PIN'}
-              </button>
-              {appPinCode && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAppPinCode('');
-                    setPinLocked(false);
-                    localStorage.removeItem('bx_mob_pin_code');
-                    showToast(isRtl ? 'اتلغى قفل الـ PIN' : 'PIN Lock removed', 'unlock');
-                  }}
-                  style={{
-                    padding: '0.55rem 0.7rem',
-                    borderRadius: '12px',
-                    background: 'rgba(255,255,255,0.1)',
-                    color: '#ffffff',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    fontWeight: 700,
-                    fontSize: '0.75rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {isRtl ? 'إلغاء' : 'Clear'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 8-Tab Personal Library Manager (Favorites, Offline Vault, Saved Panels, Watching, Completed, Plan to Watch, Episode History, Manga History) */}
-          <div style={{ display: profileSubTab === 'vault' ? 'block' : 'none', marginTop: '1.15rem' }}>
-            <h3 style={{ margin: '0 0 0.55rem', fontSize: '0.9375rem', fontWeight: 700 }}>
-              <BxIcon name="library" className="bx-ico-lead" />{isRtl ? 'مكتبتي الشخصية، خزنة بدون نت، ولقطاتي' : 'My Library, Offline Vault & Snapshots'}
-            </h3>
-            <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginBottom: '0.85rem', paddingBottom: '0.2rem' }}>
-              {[
-                { id: 'favorites', ar: `المفضلة (${visibleFavorites.length})`, en: `Favorites (${visibleFavorites.length})` },
-                { id: 'offline', ar: `بدون نت (${offlineChapters.length})`, en: `Offline (${offlineChapters.length})` },
-                { id: 'panels', ar: `لقطاتي (${savedPanels.length})`, en: `Snapshots (${savedPanels.length})` },
-                { id: 'watching', ar: 'أشاهد حالياً', en: 'Watching' },
-                { id: 'completed', ar: 'مكتمل', en: 'Completed' },
-                { id: 'planned', ar: 'أخطط لمشاهدته', en: 'Plan to Watch' },
-                { id: 'history', ar: `سجل الحلقات (${visibleHistory.length})`, en: `History (${visibleHistory.length})` },
-                { id: 'manga_history', ar: `سجل المانجا (${visibleMangaHistory.length})`, en: `Manga (${visibleMangaHistory.length})` }
-              ].map((lt) => {
-                const active = librarySubTab === lt.id;
-                return (
-                  <button
-                    key={lt.id}
-                    type="button"
-                    onClick={() => setLibrarySubTab(lt.id)}
-                    style={{
-                      padding: '0.42rem 0.8rem',
-                      borderRadius: '999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      cursor: 'pointer',
-                      background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                      color: active ? '#000000' : '#ffffff',
-                      border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
-                    }}
-                  >
-                    {isRtl ? lt.ar : lt.en}
-                  </button>
-                );
-              })}
-            </div>
-
-            {librarySubTab === 'favorites' && (
-              visibleFavorites.length === 0 ? (
-                <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? <>{"قائمتك المفضلة فارغة حالياً. اضغط على ("}<BxIcon name="plus" className="bx-ico-trail" />{") في أي أنمي لإضافته!"}</> : 'No favorites added yet.'}
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
-                  {visibleFavorites.map((fav) => (
-                    <div key={fav.objectID || fav.slug} onClick={() => handleOpenAnime(fav)} style={{ cursor: 'pointer' }}>
-                      <img src={coverForMode(fav.poster, dataSaver)} alt={fav.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '12px', objectFit: 'cover' }} />
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {fav.titleEn}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
-
-            {['watching', 'completed', 'planned'].includes(librarySubTab) && (() => {
-              const items = visibleWatchlist.filter((w) => w.status === librarySubTab);
-              return items.length === 0 ? (
-                <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? 'القايمة دي فاضية لسه.' : 'No anime in this list yet.'}
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
-                  {items.map((it) => (
-                    <div key={it.objectID} onClick={() => handleOpenAnime(it)} style={{ cursor: 'pointer' }}>
-                      <img src={coverForMode(it.poster, dataSaver)} alt={it.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '12px', objectFit: 'cover' }} />
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {it.titleEn}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {librarySubTab === 'offline' && (
-              offlineChapters.length === 0 ? (
-                <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl
-                    ? <>{"خزنة القراءة بدون إنترنت فارغة حالياً. اضغط على ("}<BxIcon name="download" className="bx-ico-lead" />{"حفظ بدون نت) من داخل أي فصل مانهوا أو مانجا لحفظه هنا!"}</>
-                    : <>{"Offline Vault is empty. Tap ("}<BxIcon name="download" className="bx-ico-lead" />{"Save Offline) inside any chapter to cache it here!"}</>}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                  {offlineChapters.map((och) => (
-                    <div
-                      key={och.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.7rem',
-                        padding: '0.6rem',
-                        borderRadius: '12px',
-                        background: '#0a0a0e',
-                        border: '1px solid rgba(255,255,255,0.15)'
-                      }}
-                    >
-                      {och.poster && (
-                        <img
-                          src={och.poster}
-                          alt={och.mangaName}
-                          style={{ width: '50px', height: '68px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
-                        />
-                      )}
-                      <div
-                        onClick={() => {
-                          setActiveTab('manga');
-                          setSelectedManga({
-                            objectID: och.mangaId,
-                            name: och.mangaName,
-                            poster_uri: och.poster,
-                            source: och.source
-                          });
-                          handleReadMangaChapter(och);
-                        }}
-                        style={{ flex: 1, cursor: 'pointer' }}
-                      >
-                        <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{och.mangaName}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>
-                          <BxIcon name="download" className="bx-ico-lead" />{isRtl ? `الفصل ${och.chapter} • ${och.pagesCount} صفحة محفوظة` : `Ch. ${och.chapter} • ${och.pagesCount} pages`}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab('manga');
-                          setSelectedManga({
-                            objectID: och.mangaId,
-                            name: och.mangaName,
-                            poster_uri: och.poster,
-                            source: och.source
-                          });
-                          handleReadMangaChapter(och);
-                        }}
-                        style={{
-                          padding: '0.4rem 0.7rem',
-                          borderRadius: '8px',
-                          background: '#ffffff',
-                          color: '#000000',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="book" className="bx-ico-lead" />{isRtl ? 'قراءة' : 'Read'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteOfflineChapter(och.id)}
-                        style={{
-                          padding: '0.4rem 0.55rem',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.08)',
-                          color: '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="trash" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
-
-            {librarySubTab === 'panels' && (
-              savedPanels.length === 0 ? (
-                <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl
-                    ? <>{"لم تقم بحفظ أي لقطة شاشة أو صفحة مانهوا بعد. اضغط على ("}<BxIcon name="camera" className="bx-ico-lead" />{"لقطة) داخل مشغل الأنمي أو ("}<BxIcon name="bookmark" className="bx-ico-lead" />{"حفظ لقطة) داخل قارئ المانهوا!"}</>
-                    : 'No saved snapshots or panels yet.'}
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
-                  {savedPanels.map((sp) => (
-                    <div
-                      key={sp.id}
-                      style={{
-                        borderRadius: '12px',
-                        overflow: 'hidden',
-                        background: '#0a0a0e',
-                        border: '1px solid rgba(255,255,255,0.16)'
-                      }}
-                    >
-                      <img
-                        src={sp.imageUrl}
-                        alt={sp.title}
-                        style={{ width: '100%', height: '135px', objectFit: 'cover', display: 'block' }}
-                      />
-                      <div style={{ padding: '0.5rem' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {sp.title}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.22rem' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>{sp.subtitle}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSavedPanels((prev) => {
-                                const next = prev.filter((x) => x.id !== sp.id);
-                                localStorage.setItem('bx_mob_saved_panels', JSON.stringify(next));
-                                return next;
-                              });
-                            }}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'rgba(255,255,255,0.7)',
-                              fontSize: '0.75rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <BxIcon name="trash" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
-
-            {librarySubTab === 'history' && (
-              visibleHistory.length === 0 ? (
-                <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? 'لم تشاهد أي حلقة بعد.' : 'No watch history yet.'}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {visibleHistory.map((h) => (
-                    <div
-                      key={h.id}
-                      onClick={() => handleOpenAnime({ objectID: h.objectID, slug: h.slug, titleEn: h.titleEn, poster: h.poster })}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.7rem',
-                        padding: '0.55rem',
-                        borderRadius: '12px',
-                        background: '#0a0a0e',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <img src={h.poster} alt={h.titleEn} style={{ width: '54px', height: '72px', borderRadius: '8px', objectFit: 'cover' }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{h.titleEn}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>{h.epName}</div>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700 }}><BxIcon name="play" /></span>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
-
-            {librarySubTab === 'manga_history' && (
-              visibleMangaHistory.length === 0 ? (
-                <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? 'لم تقرأ أي فصل مانجا أو مانهوا بعد.' : 'No manga reading history yet.'}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {visibleMangaHistory.map((mh, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        setActiveTab('manga');
-                        handleOpenManga({ objectID: mh.mangaId, name: mh.name, poster_uri: mh.poster, sourceLabel: mh.sourceLabel });
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.7rem',
-                        padding: '0.55rem',
-                        borderRadius: '12px',
-                        background: '#0a0a0e',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <img src={coverForMode(mh.poster, dataSaver)} alt={mh.name} style={{ width: '54px', height: '72px', borderRadius: '8px', objectFit: 'cover' }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{mh.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}><BxIcon name="book" className="bx-ico-lead" />الفصل {mh.chapterNum}</div>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700 }}><BxIcon name="book" /></span>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
-          </div>
-        </main>
+        <ProfileTab
+          page={profilePage}
+          pageClassName={pageCls}
+          isRtl={isRtl}
+          lang={lang}
+          dataSaver={dataSaver}
+          onOpenPage={openProfilePage}
+          onBack={closeProfilePage}
+          onSync={handleManualSync}
+          account={{
+            user,
+            sessionToken,
+            avatarPhoto,
+            onAvatarError: () => setAvatarFailed(true),
+            isDeveloper,
+            vipTier: userVipTier,
+            xp: userXp,
+            needsReauth: Boolean(user && !sessionToken),
+            onReauth: () => {
+              setUser(null);
+              localStorage.removeItem('bx_mob_user');
+              openProfilePage('signin');
+            }
+          }}
+          auth={{
+            mode: authMode,
+            setMode: setAuthMode,
+            busy: authBusy,
+            displayName: authDisplayName,
+            setDisplayName: setAuthDisplayName,
+            username: authUsername,
+            setUsername: setAuthUsername,
+            email: authEmail,
+            setEmail: setAuthEmail,
+            password: authPassword,
+            setPassword: setAuthPassword,
+            onSubmit: handleAuthSubmit,
+            onGoogle: handleRealGoogleOAuthLogin
+          }}
+          profileEdit={{
+            name: editDisplayName,
+            setName: setEditDisplayName,
+            bio: editBio,
+            setBio: setEditBio,
+            photo: editPhotoUrl,
+            setPhoto: setEditPhotoUrl,
+            onSave: handleSaveProfileEdit,
+            onOpen: startProfileEdit
+          }}
+          library={{
+            favorites: visibleFavorites,
+            watchlist: visibleWatchlist,
+            history: visibleHistory,
+            mangaHistory: visibleMangaHistory,
+            offlineChapters,
+            snapshots: savedPanels,
+            onOpenAnime: handleOpenAnime,
+            onPeek: setQuickPeekAnime,
+            onOpenManga: openMangaFromProfile,
+            onReadOffline: readOfflineFromProfile,
+            onDeleteOffline: handleDeleteOfflineChapter,
+            onDeleteSnapshot: deleteSnapshot
+          }}
+          vip={{ code: vipRedeemCode, setCode: setVipRedeemCode, busy: vipRedeemBusy, onRedeem: handleRedeemVipCode }}
+          requests={{
+            type: userRequestType,
+            setType: setUserRequestType,
+            text: userRequestText,
+            setText: setUserRequestText,
+            busy: userRequestBusy,
+            onSubmit: handleSubmitUserRequest
+          }}
+          settings={profileSettings}
+          app={{
+            version: BX_APK_VERSION,
+            release: apkRelease,
+            downloadUrl: BX_APK_DOWNLOAD_URL,
+            catalogTotal: bxAnimeTotal || 0,
+            onUpdate: () => showToast(isRtl ? 'بينزّل آخر نسخة من التطبيق…' : 'Downloading the latest app…', 'download')
+          }}
+          backup={{ onExport: handleExportVaultBackup, onImport: handleImportVaultBackup, fileRef: backupFileInputRef }}
+          signOut={{ open: signOutConfirmOpen, setOpen: setSignOutConfirmOpen }}
+          devPanel={devPanelNode}
+          devBadge={cloudUserRequests.length || null}
+        />
       )}
 
       {/* ==================== FULL 4-TAB ANIME STUDIO & 120Hz CINEMA PLAYER SHEET ==================== */}
@@ -10914,6 +9766,27 @@ export default function MobileApkApp() {
       </BottomSheet>
 
       {/* Search filters (bottom sheet) */}
+      <BottomSheet
+        open={signOutConfirmOpen}
+        onClose={() => setSignOutConfirmOpen(false)}
+        title={isRtl ? 'تسجيل الخروج؟' : 'Sign out?'}
+        closeLabel={isRtl ? 'إغلاق' : 'Close'}
+      >
+        <p className="bxp-confirm-text">
+          {isRtl
+            ? 'قائمتك وسجل مشاهدتك محفوظين على حسابك، وهيفضلوا كمان على الموبايل ده.'
+            : 'Your list and history are saved to your account and also stay on this phone.'}
+        </p>
+        <div className="bxp-confirm-actions">
+          <button type="button" className="bx-btn bx-btn-primary bx-btn-block" onClick={handleSignOut}>
+            <BxIcon name="logout" />
+            {isRtl ? 'تسجيل الخروج' : 'Sign out'}
+          </button>
+          <button type="button" className="bx-btn bx-btn-ghost bx-btn-block" onClick={() => setSignOutConfirmOpen(false)}>
+            {isRtl ? 'إلغاء' : 'Cancel'}
+          </button>
+        </div>
+      </BottomSheet>
       <FilterSheet
         open={filterSheetOpen && activeTab === 'catalog' && !selectedAnime}
         onClose={() => setFilterSheetOpen(false)}
@@ -10955,7 +9828,7 @@ export default function MobileApkApp() {
             <button
               type="button"
               className="bx-menu-item"
-              onClick={() => goToTab('profile')}
+              onClick={() => goToTab('profile', () => resetProfileStack())}
               style={{
                 '--i': 0,
                 padding: '0.55rem 0.6rem',
@@ -10998,22 +9871,14 @@ export default function MobileApkApp() {
                 icon: 'bookmark',
                 label: isRtl ? 'قائمتي' : 'My list',
                 badge: visibleFavorites.length || null,
-                onClick: () =>
-                  goToTab('profile', () => {
-                    setProfileSubTab('vault');
-                    setLibrarySubTab('favorites');
-                  })
+                onClick: () => goToTab('profile', () => resetProfileStack(['library']))
               },
               {
                 id: 'history',
                 icon: 'clock',
                 label: isRtl ? 'سجل المشاهدة' : 'Watch history',
                 badge: null,
-                onClick: () =>
-                  goToTab('profile', () => {
-                    setProfileSubTab('vault');
-                    setLibrarySubTab('history');
-                  })
+                onClick: () => goToTab('profile', () => resetProfileStack(['history']))
               },
               {
                 id: 'radar',
@@ -11030,25 +9895,21 @@ export default function MobileApkApp() {
                 icon: 'download',
                 label: isRtl ? 'التنزيلات' : 'Downloads',
                 badge: offlineChapters.length || null,
-                onClick: () =>
-                  goToTab('profile', () => {
-                    setProfileSubTab('vault');
-                    setLibrarySubTab('offline');
-                  })
+                onClick: () => goToTab('profile', () => resetProfileStack(['offline']))
               },
               {
                 id: 'vip',
                 icon: 'crown',
                 label: isRtl ? 'العضوية و VIP' : 'Membership & VIP',
                 badge: userVipTier !== 'free' || isDeveloper ? 'VIP' : null,
-                onClick: () => goToTab('profile', () => setProfileSubTab('account'))
+                onClick: () => goToTab('profile', () => resetProfileStack(['vip']))
               },
               {
                 id: 'settings',
                 icon: 'settings',
                 label: isRtl ? 'الإعدادات' : 'Settings',
                 badge: null,
-                onClick: () => goToTab('profile', () => setProfileSubTab('appearance'))
+                onClick: () => goToTab('profile', () => resetProfileStack(['settings']))
               }
             ].map((item, idx) => (
               <button key={item.id} type="button" className="bx-menu-item" style={{ '--i': idx + 1 }} onClick={item.onClick}>

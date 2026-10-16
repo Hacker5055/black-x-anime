@@ -280,7 +280,25 @@ function api(req, url, ctx) {
   let m;
   if (p === '/api/app/config') return json(req, { enforced: false, broadcastMsg: '', pinnedRec: null, apk: APK_RELEASE, serverTime: new Date().toISOString() });
   if (p === '/api/app/skip-times') return json(req, { found: true, malId: Number(url.searchParams.get('mal')) || null, segments: [{ type: 'op', start: 90, end: 180 }] });
-  if (p === '/api/app/me') return auth ? json(req, { user: TEST_USER, state: { favorites: [], progress: [], positions: {}, xp: 120 } }) : json(req, { error: 'auth_required' }, 401);
+  if (p === '/api/app/me') return auth ? json(req, { user: { ...TEST_USER, ...ctx.userPatch }, state: { favorites: [], progress: [], positions: {}, xp: 120 } }) : json(req, { error: 'auth_required' }, 401);
+  // Username sign-in (password "secret-pass"), profile edits and requests to the developer.
+  if (p === '/api/app/auth/login' && method === 'POST') {
+    const body = safeJson(req.postData()) || {};
+    ctx.logins.push(String(body.identifier || ''));
+    if (body.password !== 'secret-pass') return json(req, { error: 'invalid_credentials' }, 401);
+    return json(req, { token: 'test-session-token-login-0123456789', user: { ...TEST_USER, ...ctx.userPatch }, state: { favorites: [], progress: [], positions: {}, xp: 120 } });
+  }
+  if (p === '/api/app/profile' && method === 'PUT') {
+    if (!auth) return json(req, { error: 'auth_required' }, 401);
+    const patch = safeJson(req.postData()) || {};
+    ctx.profilePuts.push(patch);
+    Object.assign(ctx.userPatch, patch);
+    return json(req, { user: { ...TEST_USER, ...ctx.userPatch } });
+  }
+  if (p === '/api/app/requests' && method === 'POST') {
+    ctx.requests.push(safeJson(req.postData()) || {});
+    return json(req, { ok: true });
+  }
   if (p === '/api/app/state') return auth ? json(req, { ok: true, state: safeJson(req.postData()) }) : json(req, { error: 'auth_required' }, 401);
   if (p === '/api/stream/sources') return json(req, { sources: [{ id: 'witanime' }, { id: 'anime3rb' }, { id: 'english' }] });
   if (p === '/api/stream/stats') return json(req, { animeTotal: ANIME.length + HIDDEN_ANIME.length });
@@ -409,7 +427,7 @@ export async function openApp(browser, { seed = {} } = {}) {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
   await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000 };
+  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000, logins: [], profilePuts: [], requests: [], userPatch: {} };
   ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
   await page.setRequestInterception(true);
   page.on('request', (req) => {

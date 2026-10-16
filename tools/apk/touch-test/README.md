@@ -3,7 +3,7 @@
 Run it after every APK build (and after any change to the mobile UI or the player):
 
 ```bash
-bash tools/apk/touch-test/run.sh                 # all scenarios, ~3 min
+bash tools/apk/touch-test/run.sh                 # all scenarios, ~4 min
 ONLY=nav,player bash tools/apk/touch-test/run.sh  # some scenarios
 APK=/path/to/other.apk bash tools/apk/touch-test/run.sh
 ```
@@ -23,7 +23,7 @@ server answers video `Range` requests with 206 (without that every seek restarts
 Taps and swipes are CDP touch events (`page.touchscreen`), never `element.click()`, because the
 v16.0 bug (no tab could be scrolled by finger) passed every mouse/JS-click check.
 
-Scenarios (154 checks): `nav` (dock, finger scroll on pages and rails, directional view
+Scenarios (196 checks): `nav` (dock, finger scroll on pages and rails, directional view
 transitions, avatar → profile, menu, long press → quick peek, language switch), `search` (grid,
 typing, recent searches, filter sheet), `catalog` ("load more" stops at Algolia's pagination
 limit with a note instead of a dead button; the mock caps paging like `paginationLimitedTo`), `genres` (Ecchi,
@@ -33,7 +33,14 @@ every mock list), `schedule` (opens on today), `player` (resume, auto-hide,
 pause, ±10 s buttons and double tap, intro marks, full screen + native immersive call, settings
 sheet over the player, ±10 min, speed, lock, next episode, saved position, back order sheet →
 full screen → player → details → home), `manga` (chapters, reader pages, immersive, finger
-scroll), `community` (guest), `logged` (one like per account, posting) and `motion` (reduced
-motion, rapid taps, taps during a running transition).
+scroll), `community` (guest), `logged` (one like per account, posting), `profile` (guest sign-in
+hero, grouped rows, sub-pages pushed with a back button and popped by the phone back button, my
+list grid + empty state, watch history with episode / time left / day groups and Latin titles
+aligned in RTL, reading history chapter + cover, settings switches and segments saved, splash
+choice, incognito + PIN lock, guest VIP → sign-in page, username sign-in that closes itself,
+member header stats, locked / unlocked titles, profile edit saved to the account, request to the
+developer, sign-out confirmation closed by back, menu shortcuts, a pre-v16 account without a
+session can still open the sign-in page) and `motion` (reduced motion,
+rapid taps, taps during a running transition).
 
 A pass here is necessary, not sufficient: it does not replace a test on a real phone.

@@ -90,13 +90,35 @@ export function pageEnterClass() {
  * Returns true when an animated transition was started.
  */
 export function navigateWithMotion(from, to, rtl, update) {
-  const root = typeof document !== 'undefined' ? document.documentElement : null;
-  if (!root || from === to || reducedMotion()) {
+  if (from === to) {
     pending = null;
     update();
     return false;
   }
-  const motion = tabMotion(from, to, rtl);
+  return runMotion(tabMotion(from, to, rtl), update);
+}
+
+/**
+ * Push / pop between the pages of one tab (the profile hub and its sub-pages), like a
+ * native navigation stack: a pushed page slides in from the trailing side (right in LTR,
+ * left in RTL) and popping slides the previous page back in from the leading side.
+ */
+export function stackMotion(direction, rtl) {
+  const forward = direction !== 'pop';
+  return forward !== Boolean(rtl) ? 'from-right' : 'from-left';
+}
+
+export function navigateStack(direction, rtl, update) {
+  return runMotion(stackMotion(direction, rtl), update);
+}
+
+function runMotion(motion, update) {
+  const root = typeof document !== 'undefined' ? document.documentElement : null;
+  if (!root || reducedMotion()) {
+    pending = null;
+    update();
+    return false;
+  }
   const vtBusy = root.classList.contains('bx-vt-running');
 
   if (typeof document.startViewTransition === 'function' && !vtBusy) {

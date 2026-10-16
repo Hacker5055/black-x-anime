@@ -181,7 +181,7 @@ scenario('nav', async (browser) => {
   check(G, 'no dock tab is active on the profile', (await activeTab(page)) === '' && (await page.evaluate(() => document.querySelector('.bx-dock-indicator')?.classList.contains('is-off'))));
   const guest = await page.evaluate(() => {
     const pw = [...document.querySelectorAll('input[type="password"]')].find((i) => i.getBoundingClientRect().height > 0);
-    const btn = [...document.querySelectorAll('button')].find((b) => /تسجيل الدخول|ادخل بجوجل|جوجل/.test(b.innerText || ''));
+    const btn = [...document.querySelectorAll('main .bxp-hero.is-guest button')].find((b) => /Google|الدخول/.test(b.innerText || ''));
     const r = (pw || btn)?.getBoundingClientRect();
     return r ? Math.round(r.top) : -1;
   });
@@ -439,7 +439,7 @@ scenario('genres', async (browser) => {
   await tapEl(page, '.bx-menu-item', { text: 'قائمتي' });
   await sleep(1200);
   const lib = await page.evaluate(() => (document.querySelector('main')?.innerText || '').replace(/\s+/g, ' '));
-  check(G, 'my list shows the visible favorite, not the hidden one', lib.includes('المفضلة (1)') && lib.includes('Test Anime 5') && !lib.includes('Hidden'), lib.slice(0, 140));
+  check(G, 'my list shows the visible favorite, not the hidden one', /المفضلة\s*1/.test(lib) && lib.includes('Test Anime 5') && !lib.includes('Hidden'), lib.slice(0, 140));
   check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
 });
 
@@ -784,7 +784,7 @@ scenario('logged', async (browser) => {
   await tapEl(page, '.bx-avatar-btn', { scroll: false });
   await waitVt(page);
   await sleep(500);
-  const head = await page.evaluate(() => document.querySelector('.bx-profile-head')?.innerText.replace(/\s+/g, ' ').trim() || '');
+  const head = await page.evaluate(() => document.querySelector('.bxp-hero')?.innerText.replace(/\s+/g, ' ').trim() || '');
   check(G, 'profile header shows the member', head.includes('Tester'), head.slice(0, 120));
   check(G, 'no sign-in form for members', !(await page.evaluate(() => [...document.querySelectorAll('input[type="password"]')].some((i) => i.getBoundingClientRect().height > 0))));
   await tapTab(page, 'المجتمع');
@@ -809,6 +809,247 @@ scenario('logged', async (browser) => {
   const saved = (ctx.fsWrites.map((w) => JSON.parse(w.body.fields?.json?.stringValue || '[]')).at(-1) || [])[0] || {};
   check(G, 'member can post; it appears on top', firstPost.text === 'بوست تجريبي من الاختبار', JSON.stringify(firstPost));
   check(G, 'new post stores createdAt', Boolean(saved.createdAt && !Number.isNaN(Date.parse(saved.createdAt))), saved.createdAt || '');
+  check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+});
+
+/* ================================================================== profile */
+scenario('profile', async (browser) => {
+  const G = 'profile';
+  const now = Date.now();
+  const saved = (name, extra = {}) => ({ slug: `aw-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, objectID: name, titleEn: name, titleAr: name, poster: `${LOCAL}/poster/${(name.length % 9) + 1}.svg`, ...extra });
+  const { page, ctx } = await openApp(browser, {
+    seed: {
+      bx_mob_favorites: [saved('Test Anime 5'), saved('Test Anime 9'), saved('Test Anime 12'), saved('Test Anime 3')],
+      bx_mob_history: [
+        saved('Test Anime 7', { id: 'h2', episode: 2, docId: '002', position: 200, duration: 1440, updatedAt: new Date(now - 60e3).toISOString() }),
+        saved('Test Anime 4', { id: 'h3', episode: 5, docId: '005', position: 900, duration: 1440, updatedAt: new Date(now - 3 * 86400e3).toISOString() })
+      ],
+      bx_mob_manga_history: [{ objectID: 'bx:test-manhwa-1', name: 'Test Manhwa 1', poster_uri: `${LOCAL}/poster/31.svg`, mangaId: 'bx:test-manhwa-1', chapter: '4', chapterId: 'c4', updatedAt: new Date(now - 120e3).toISOString() }]
+    }
+  });
+  const info = () => page.evaluate(() => ({ title: document.querySelector('.bx-topbar-title')?.textContent.trim() || '', page: document.querySelector('main.bxp')?.dataset.page || '', back: Boolean(document.querySelector('.bx-topbar .bxp-back')) }));
+  const mainText = () => page.evaluate(() => (document.querySelector('main')?.innerText || '').replace(/\s+/g, ' ').trim());
+  const ls = (k) => page.evaluate((key) => localStorage.getItem(key), k);
+  const settle = async (ms = 550) => {
+    await waitVt(page);
+    await sleep(ms);
+  };
+  const openRow = async (label) => {
+    await tapEl(page, 'main .bxp-row-label', { text: label, exact: true });
+    await settle();
+  };
+  const tapBack = async () => {
+    await tapEl(page, '.bx-topbar .bxp-back', { scroll: false });
+    await settle();
+  };
+  const hwBack = async () => {
+    await back(page);
+    await settle();
+  };
+  const sw = (label) => page.evaluate((l) => [...document.querySelectorAll('main [role="switch"]')].find((x) => x.innerText.includes(l))?.getAttribute('aria-checked') ?? null, label);
+  const noOverflow = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+
+  // Guest root: a sign-in hero instead of a whole form, then grouped rows
+  await tapEl(page, '.bx-avatar-btn', { scroll: false });
+  await settle(700);
+  const guest = await page.evaluate(() => ({
+    hero: document.querySelector('.bxp-hero.is-guest')?.innerText.replace(/\s+/g, ' ').trim() || '',
+    pw: [...document.querySelectorAll('input[type="password"]')].some((i) => i.getBoundingClientRect().height > 0),
+    groups: [...document.querySelectorAll('main .bxp-group-title')].map((h) => h.textContent.trim())
+  }));
+  check(G, 'guest sees a sign-in hero (Google + username), no password form', guest.hero.includes('Google') && guest.hero.includes('باسم المستخدم') && !guest.pw, guest.hero.slice(0, 90));
+  check(G, 'root is organised in groups', ['مكتبتي', 'العضوية', 'التطبيق', 'المساعدة'].every((t) => guest.groups.includes(t)), guest.groups.join(','));
+  check(G, 'no horizontal overflow on the profile', await noOverflow());
+  await fingerScroll(page, G, 'profile root');
+  await toTop(page);
+
+  // A sub-page is pushed (back button + title); the phone back button pops it
+  await tapEl(page, 'main .bxp-hero .bx-btn-ghost');
+  await settle();
+  let at = await info();
+  check(G, 'username sign-in opens as its own page (back button + title)', at.page === 'signin' && at.back && at.title === 'تسجيل الدخول', JSON.stringify(at));
+  await hwBack();
+  at = await info();
+  check(G, 'phone back closes the sub-page first (not the tab)', at.page === 'root' && at.title === 'حسابي' && !at.back, JSON.stringify(at));
+
+  // My list
+  await openRow('قائمتي');
+  const lib = await page.evaluate(() => ({ posters: document.querySelectorAll('main .bx-poster').length, chip: document.querySelector('main .bx-chip.is-active')?.innerText.replace(/\s+/g, ' ').trim() || '' }));
+  check(G, 'my list: grid of the 4 saved titles, counted on the chip', lib.posters === 4 && /المفضلة\s*4/.test(lib.chip), JSON.stringify(lib));
+  await tapEl(page, 'main .bx-chip', { text: 'بتابعه' });
+  await sleep(400);
+  check(G, 'an empty list shows a helpful empty state', Boolean(await page.$('main .bxp-empty')) && (await mainText()).includes('فاضية'));
+  await tapBack();
+
+  // Watch history: real episode + time left (v17.0 printed a field that never existed)
+  await openRow('سجل المشاهدة');
+  const hist = await page.evaluate(() => [...document.querySelectorAll('main .bxp-media-row')].map((r) => r.innerText.replace(/\s+/g, ' ').trim()));
+  check(G, 'history rows show the episode and the time left', hist.length === 2 && /Test Anime 7/.test(hist[0]) && /الحلقة\s2/.test(hist[0]) && /فاضل\s21\sد/.test(hist[0]), hist.join(' | '));
+  check(G, 'history is grouped by day', (await page.evaluate(() => [...document.querySelectorAll('main .bxp-group-title')].map((h) => h.textContent.trim()))).includes('النهارده'));
+  const gap = await page.evaluate(() => {
+    const label = document.querySelector('main .bxp-media-row .bxp-row-label');
+    const r = document.createRange();
+    r.selectNodeContents(label);
+    return Math.round(label.getBoundingClientRect().right - r.getBoundingClientRect().right);
+  });
+  check(G, 'a Latin title lines up with the Arabic text (RTL)', Math.abs(gap) <= 2, `${gap}px from the right edge`);
+  await tapEl(page, 'main .bxp-media-row');
+  await sleep(1200);
+  check(G, 'a history row opens the title', Boolean(await page.$('.bx-details-sheet')));
+  await hwBack();
+  await sleep(300);
+  at = await info();
+  check(G, 'closing the title returns to the same history page', at.page === 'history', JSON.stringify(at));
+  await tapBack();
+
+  // Reading history: chapter + cover (v17.0 read fields that were never stored)
+  await openRow('سجل القراءة');
+  const mh = await page.evaluate(() => {
+    const r = document.querySelector('main .bxp-media-row');
+    return { text: r?.innerText.replace(/\s+/g, ' ').trim() || '', img: r?.querySelector('img')?.getAttribute('src') || '' };
+  });
+  check(G, 'reading history shows the chapter and the cover', /Test Manhwa 1/.test(mh.text) && /الفصل\s4/.test(mh.text) && mh.img.includes('/poster/31.svg'), JSON.stringify(mh));
+  await tapBack();
+
+  // Settings: real switches, saved
+  await openRow('الإعدادات');
+  check(G, 'settings: haptics is a switch, on by default', (await sw('اهتزاز')) === 'true');
+  await tapEl(page, 'main [role="switch"]', { text: 'اهتزاز' });
+  await sleep(300);
+  check(G, 'haptics switch turns off and is saved', (await sw('اهتزاز')) === 'false' && (await ls('bx_mob_haptics')) === 'off', String(await ls('bx_mob_haptics')));
+  await tapEl(page, 'main [role="switch"]', { text: 'اهتزاز' });
+  await tapEl(page, 'main [role="switch"]', { text: 'صوت شاشة البداية' });
+  await sleep(300);
+  check(G, 'splash sound switch is saved', (await sw('صوت شاشة البداية')) === 'true' && (await ls('bx_mob_splash_sound')) === 'on');
+  await tapEl(page, 'main [role="switch"]', { text: 'صوت شاشة البداية' });
+  await tapEl(page, '.bx-seg[aria-label="توفير البيانات"] button', { text: 'شغال', exact: true });
+  await sleep(300);
+  check(G, 'data saver choice is saved', (await ls('bx_mob_data_saver')) === 'on');
+  await tapEl(page, '.bx-seg[aria-label="توفير البيانات"] button', { text: 'تلقائي', exact: true });
+  await openRow('شاشة البداية');
+  await tapEl(page, 'main [role="radio"]', { text: 'ضربة سيف الكاتانا' });
+  await sleep(300);
+  const sel = await page.evaluate(() => document.querySelector('main [role="radio"][aria-checked="true"]')?.innerText.trim() || '');
+  check(G, 'splash screen: picking a motion saves and checks it', (await ls('bx_motion_pref')) === 'katana' && sel.includes('الكاتانا'), sel);
+  await tapBack();
+  check(G, 'the settings row shows the chosen splash', (await mainText()).includes('ضربة سيف الكاتانا'));
+  await tapBack();
+
+  // Privacy: incognito + PIN lock
+  await openRow('الخصوصية والأمان');
+  await tapEl(page, 'main [role="switch"]', { text: 'التصفح الخفي' });
+  await sleep(300);
+  check(G, 'incognito switch is saved', (await sw('التصفح الخفي')) === 'true' && (await ls('bx_mob_incognito')) === 'true');
+  await tapEl(page, 'main .bxp-pin');
+  await page.keyboard.type('12a34', { delay: 20 });
+  await sleep(200);
+  check(G, 'the PIN field keeps digits only', (await page.$eval('main .bxp-pin', (i) => i.value)) === '1234');
+  await tapEl(page, 'main button[type="submit"]');
+  await sleep(400);
+  check(G, 'PIN lock turns on', (await ls('bx_mob_pin_code')) === '1234' && (await mainText()).includes('شغال'));
+  await tapEl(page, 'main .bx-btn-outline', { text: 'إلغاء القفل' });
+  await sleep(300);
+  check(G, 'PIN lock can be removed', (await ls('bx_mob_pin_code')) === null);
+  await tapEl(page, 'main [role="switch"]', { text: 'التصفح الخفي' });
+  await tapBack();
+
+  // VIP as a guest: sign in first (v17.0 showed a code box that could not work)
+  await openRow('BLACK X VIP');
+  const vip = await page.evaluate(() => ({ input: Boolean(document.querySelector('main .bxp-code')), text: document.querySelector('main')?.innerText.replace(/\s+/g, ' ') || '' }));
+  check(G, 'guest VIP page asks to sign in instead of showing a code box', !vip.input && vip.text.includes('سجّل دخولك'), vip.text.slice(0, 100));
+  await tapEl(page, 'main .bxp-empty .bx-btn');
+  await settle();
+  at = await info();
+  check(G, 'its button pushes the sign-in page', at.page === 'signin', JSON.stringify(at));
+
+  // Sign in with a username: the page closes itself and the member header appears
+  await tapEl(page, 'main input[autocomplete="username"]');
+  await page.keyboard.type('tester', { delay: 10 });
+  await tapEl(page, 'main input[type="password"]');
+  await page.keyboard.type('secret-pass', { delay: 10 });
+  await tapEl(page, 'main button[type="submit"]');
+  await page.waitForFunction(() => document.querySelector('main.bxp')?.dataset.page !== 'signin', { timeout: 8000 }).catch(() => {});
+  await settle(900);
+  at = await info();
+  check(G, 'after signing in, the sign-in page closes by itself', ctx.logins.includes('tester') && at.page === 'vip', `${JSON.stringify(at)} logins=${ctx.logins.join(',')}`);
+  await hwBack();
+  const head = await page.evaluate(() => ({ text: document.querySelector('.bxp-hero')?.innerText.replace(/\s+/g, ' ').trim() || '', stats: [...document.querySelectorAll('.bxp-stats strong')].map((s) => s.textContent.trim()) }));
+  check(G, 'member header: name, @handle and real stats', head.text.includes('Tester') && head.text.includes('@tester') && head.stats.join(',') === '4,2,120', JSON.stringify(head));
+
+  // Titles: a locked one is refused, an unlocked one is saved and shown on the header
+  await openRow('اللقب');
+  await tapEl(page, 'main [role="radio"]', { text: 'سيد الظلال' });
+  await sleep(300);
+  check(G, 'a locked title is not applied', (await ls('bx_mob_sovereign_title')) !== 'سيد الظلال', String(await ls('bx_mob_sovereign_title')));
+  await tapEl(page, 'main [role="radio"]', { text: 'جامع المفضلات' });
+  await sleep(300);
+  check(G, 'an unlocked title is saved', (await ls('bx_mob_sovereign_title')) === 'جامع المفضلات');
+  await tapBack();
+  check(G, 'the header shows the title', (await page.evaluate(() => document.querySelector('.bxp-hero')?.innerText || '')).includes('جامع المفضلات'));
+
+  // Edit profile: saved to the account, the page closes, the header updates
+  await tapEl(page, 'main .bxp-hero .bx-btn', { text: 'تعديل الملف' });
+  await settle();
+  await tapEl(page, 'main input[autocomplete="nickname"]');
+  await page.keyboard.down('Control');
+  await page.keyboard.press('KeyA');
+  await page.keyboard.up('Control');
+  await page.keyboard.type('Tester Pro', { delay: 10 });
+  await tapEl(page, 'main button[type="submit"]');
+  await page.waitForFunction(() => document.querySelector('main.bxp')?.dataset.page === 'root', { timeout: 6000 }).catch(() => {});
+  await settle();
+  const put = ctx.profilePuts.at(-1) || {};
+  check(G, 'edit profile saves to the account and closes the page', put.displayName === 'Tester Pro' && (await info()).page === 'root', JSON.stringify(put));
+  check(G, 'the header shows the new name', (await page.evaluate(() => document.querySelector('.bxp-name')?.textContent.trim())) === 'Tester Pro');
+
+  // Request to the developer
+  await openRow('اطلب أنمي أو مانهوا');
+  await tapEl(page, 'main textarea');
+  await page.keyboard.type('Frieren season 2', { delay: 10 });
+  await tapEl(page, 'main button[type="submit"]');
+  await sleep(900);
+  const rq = ctx.requests.at(-1) || {};
+  check(G, 'a request reaches the developer and the box clears', rq.type === 'anime' && rq.text === 'Frieren season 2' && (await page.$eval('main textarea', (t) => t.value)) === '', JSON.stringify(rq));
+  await tapBack();
+
+  // Sign out asks first; the phone back button closes the question
+  await tapEl(page, 'main .bxp-signout');
+  await sleep(500);
+  check(G, 'sign out asks for confirmation', (await page.evaluate(() => document.querySelector('.bx-bottom-sheet')?.innerText || '')).includes('تسجيل الخروج؟'));
+  await back(page);
+  await sleep(500);
+  check(G, 'phone back closes the question and keeps you signed in', !(await page.$('.bx-bottom-sheet')) && Boolean(await page.$('.bxp-hero:not(.is-guest)')));
+  await tapEl(page, 'main .bxp-signout');
+  await sleep(500);
+  await tapEl(page, '.bx-bottom-sheet .bx-btn-primary', { scroll: false });
+  await sleep(900);
+  check(G, 'confirming signs out', Boolean(await page.$('.bxp-hero.is-guest')) && (await ls('bx_mob_user')) === null);
+
+  // Menu shortcuts land on the matching page; back returns to the profile root
+  await toTop(page);
+  await tapEl(page, '.bx-topbar [aria-label="القائمة"]', { scroll: false });
+  await sleep(600);
+  await tapEl(page, '.bx-menu-item', { text: 'الإعدادات' });
+  await settle();
+  at = await info();
+  check(G, 'menu → Settings opens the settings page', at.page === 'settings' && at.back, JSON.stringify(at));
+  await hwBack();
+  at = await info();
+  check(G, 'back from it lands on the profile root', at.page === 'root' && at.title === 'حسابي', JSON.stringify(at));
+
+  // An account saved by a pre-v16 build (a user but no server session) must be able to sign in
+  await page.evaluate(() => localStorage.setItem('bx_mob_user', JSON.stringify({ id: 'u_old', username: 'olduser', displayName: 'Old User', role: 'user', vipTier: 'free' })));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.querySelector('.bx-dock') && !document.querySelector('.bx-intro'), { timeout: 30000 }).catch(() => {});
+  await sleep(800);
+  await tapEl(page, '.bx-avatar-btn', { scroll: false });
+  await settle(700);
+  check(G, 'an old account without a session sees the "sign in once more" note', Boolean(await page.$('main .bxp-note')));
+  await openRow('BLACK X VIP');
+  await tapEl(page, 'main .bxp-empty .bx-btn');
+  await settle(900);
+  at = await info();
+  check(G, 'its sign-in page stays open (does not close itself)', at.page === 'signin', JSON.stringify(at));
   check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
 });
 
