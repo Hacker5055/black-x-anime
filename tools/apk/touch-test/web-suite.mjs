@@ -50,8 +50,11 @@ async function controlsShown(page) {
   return page.evaluate(() => document.querySelector('.bx-pc')?.classList.contains('is-visible') || false);
 }
 
+/** Browser back. history.back() is deferred so the evaluate call returns before any navigation starts:
+ *  when back leaves the document, an evaluate still in flight dies with «Execution context was destroyed»
+ *  (a race the old form lost now and then under load). */
 async function browserBack(page) {
-  await page.evaluate(() => history.back());
+  await page.evaluate(() => { setTimeout(() => history.back(), 0); });
   await sleep(700);
   await waitVt(page, 3000);
 }
@@ -296,9 +299,11 @@ scenario('back', async (browser) => {
   await solo.page.goto(`${LOCAL}/`, { waitUntil: 'domcontentloaded' });
   await waitWebReady(solo.page);
   await firstTouch(solo.page);
-  await solo.page.evaluate(() => history.back());
-  await sleep(1500);
-  check(G, 'back on the home page leaves the site', (await solo.page.evaluate(() => location.pathname)) === '/__blank', await solo.page.evaluate(() => location.pathname));
+  await solo.page.evaluate(() => { setTimeout(() => history.back(), 0); });
+  // page.url() needs no execution context, so it cannot race the navigation back to the other site.
+  const soloPath = () => new URL(solo.page.url()).pathname;
+  for (let t = 0; t < 50 && soloPath() !== '/__blank'; t++) await sleep(100);
+  check(G, 'back on the home page leaves the site', soloPath() === '/__blank', soloPath());
   await solo.page.close();
 
   // A deep link with no tap yet: back leaves at once (Chrome skips entries added before a tap).
@@ -436,6 +441,7 @@ scenario('genres', async (browser) => {
 });
 
 /* =================================================================== desktop */
+const asciiDigits = (t) => String(t).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 scenario('desktop', async (browser) => {
   const G = 'desktop';
   let { page, ctx } = await openWeb(browser, { route: '/', phone: false });
@@ -456,6 +462,8 @@ scenario('desktop', async (browser) => {
   await sleep(700);
   const authOpen = await page.evaluate(() => /تسجيل الدخول|Sign in|دخول/.test(document.querySelector('.modal, [role="dialog"]')?.innerText || ''));
   check(G, '«أضف إلى قائمتي» asks a guest to sign in (it saves for real)', authOpen);
+  const delayClaim = home.match(/24 ساعة|24h|تتأخر|نفس اليوم/g) || [];
+  check(G, 'computer home: no «24-hour delay for free users» claim (nobody is delayed)', delayClaim.length === 0, delayClaim.join(', ') || 'clean');
   check(G, 'no page errors on the computer home', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
   await page.close();
 
@@ -474,12 +482,20 @@ scenario('desktop', async (browser) => {
   const invented = ['120Hz', '4K Ultra', 'FHD 1080p', '1.4K', '24.8K', '98%', 'تطابق', '24 دقيقة', 'مانجا يابانية', 'يعرض الآن'].filter((f) => detail.includes(f));
   check(G, 'title page: no invented likes, views, match %, quality, duration or source', invented.length === 0, invented.join(', ') || 'clean');
   check(G, 'title page: real facts (type, year, rating, server)', /مسلسل/.test(detail) && /2022/.test(detail) && /★ 6\.7/.test(detail) && /BLACK X 1/.test(detail), detail.replace(/\n/g, ' / ').slice(0, 220));
+  const showPage = await page.evaluate(() => ({
+    text: document.querySelector('.app-shell')?.innerText || '',
+    latest: [...document.querySelectorAll('.ep-chip')].filter((b) => b.querySelector('.ep-chip__latest')).map((b) => b.innerText.replace(/\n/g, ' '))
+  }));
+  const showClaims = showPage.text.match(/24 ساعة|24h|نفس اليوم|VIP اليوم|same-day/gi) || [];
+  check(G, 'title page: no «same day for VIP / 24 hours for free» notes or badges', showClaims.length === 0, showClaims.join(', ') || 'clean');
+  check(G, 'title page: only the newest episode is marked «الأحدث»', showPage.latest.length === 1 && /12/.test(asciiDigits(showPage.latest[0])) && /الأحدث/.test(showPage.latest[0]), showPage.latest.join(' | ') || 'none');
   await page.close();
 
   // Player page seen by VIP Monarch, the tier of the removed «4K HDR • 60FPS» toggle (it only put a
-  // CSS colour filter on the video): no toggle, no filter, no 4K / HDR / 60fps copy; the rest stays.
+  // CSS colour filter on the video). The no-op «VIP Fast CDN» switch, the «وصول مبكر» pill and the
+  // «⏳ 24س / VIP» badge went too (nobody is delayed; the API already lists direct servers first for VIP).
   ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 2')}/1`, phone: false, seed: { 'blackx.vipTier': 'vip_monarch' } }));
-  const monarchView = await waitFor(page, () => /وصول مبكر/.test(document.querySelector('.app-shell')?.innerText || '') && document.querySelector('.player-shell'), null, 10000);
+  const monarchView = await waitFor(page, () => document.querySelector('.player-shell') && document.querySelector('.watch-meta__actions') && /الأحدث/.test(document.querySelector('.watch-side')?.innerText || ''), null, 10000);
   const watchState = await page.evaluate(() => {
     const text = document.querySelector('.app-shell')?.innerText || '';
     const filtered = [];
@@ -487,13 +503,66 @@ scenario('desktop', async (browser) => {
       const f = getComputedStyle(el).filter;
       if (f && f !== 'none') filtered.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}: ${f}`);
     }
-    return { text, filtered };
+    const latest = [...document.querySelectorAll('.watch-ep')].filter((b) => b.querySelector('.watch-ep__latest')).map((b) => b.innerText.replace(/\n/g, ' '));
+    const digits = (t) => Number(String(t).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+    const labels = [...document.querySelectorAll('.watch-ep .watch-ep__num')].map((n) => digits(n.textContent.trim()));
+    return { text, filtered, latest, labels, actions: document.querySelector('.watch-meta__actions')?.innerText || '' };
   });
-  check(G, 'player page as VIP Monarch: player and streaming bar render («VIP Fast CDN», «وصول مبكر»)', Boolean(monarchView) && /VIP Fast CDN/.test(watchState.text));
+  check(G, 'player page as VIP Monarch: player, actions and episode list render', Boolean(monarchView), watchState.actions.replace(/\n/g, ' / ').slice(0, 160));
+  const fakeVip = watchState.text.match(/Fast CDN|وصول مبكر|Early Access|محرك البث|Streaming Engine|24 ?س|24 ساعة|يوم العرض/g) || [];
+  check(G, 'player page: no «VIP Fast CDN» switch, «Early Access» pill or 24-hour badge', fakeVip.length === 0, fakeVip.join(', ') || 'clean');
+  check(G, 'player page: the newest episode is marked «الأحدث» in the list', watchState.latest.length === 1 && /12/.test(asciiDigits(watchState.latest[0])), watchState.latest.join(' | ') || 'none');
+  check(G, 'player page: the episode list shows real episode numbers (1–12)', watchState.labels.length === 12 && watchState.labels.every((n, i) => n === i + 1), watchState.labels.join(','));
+  check(G, 'player page: no upgrade button for a VIP member', !/ترقية إلى VIP/.test(watchState.text));
   const fake4k = watchState.text.match(/4K|HDR|60\s*FPS/gi) || [];
   check(G, 'player page: no «4K HDR • 60FPS» toggle and no 4K / HDR / 60fps claim', fake4k.length === 0, fake4k.join(', ') || 'clean');
   check(G, 'player page: no colour filter over the video', watchState.filtered.length === 0, watchState.filtered.join(' | ') || 'none');
   check(G, 'no page errors on the player page', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
+  // The same page for a free visitor: the upgrade button now sits with the actions under the player.
+  // (Pages in one browser share localStorage, so the tier is always seeded explicitly from here on.)
+  ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 2')}/1`, phone: false, seed: { 'blackx.vipTier': 'free' } }));
+  await waitFor(page, () => document.querySelector('.watch-meta__actions'), null, 10000);
+  const freeActions = await page.evaluate(() => document.querySelector('.watch-meta__actions')?.innerText || '');
+  check(G, 'player page as a free visitor: «ترقية إلى VIP» is one of the actions', /ترقية إلى VIP \/ تفعيل كود اشتراك/.test(freeActions), freeActions.replace(/\n/g, ' / ').slice(0, 160));
+  check(G, 'no page errors on the player page (free visitor)', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
+  // While the servers are still loading the page shows the loader (no crash on the missing episode data),
+  // then the player once they arrive.
+  ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 2')}/1`, phone: false, seed: { 'blackx.vipTier': 'free' }, ctx: { episodeDelayMs: 4000 } }));
+  const loaderShown = await waitFor(page, () => document.querySelector('.player-shell .liquid-loader') && document.querySelector('.watch-meta__actions'), null, 3500);
+  const playerAfter = await waitFor(page, () => document.querySelector('.player-shell video'), null, 12000);
+  check(G, 'player page while the servers load: loader first, then the player, no page errors', Boolean(loaderShown) && Boolean(playerAfter) && ctx.errors.length === 0, `loader=${Boolean(loaderShown)} player=${Boolean(playerAfter)} ${ctx.errors.slice(0, 2).join(' | ')}`);
+  await page.close();
+
+  // VIP plan cards (signed in): only perks the code really gives; prices untouched.
+  const session = { blackx_token: 'test-session-token-login-0123456789', 'blackx.vipTier': 'free' };
+  ({ page, ctx } = await openWeb(browser, { route: '/profile?tab=referrals', phone: false, seed: session }));
+  const plansShown = await waitFor(page, () => /VIP Monarch/.test(document.querySelector('.app-shell')?.innerText || '') && /VIP Basic/.test(document.querySelector('.app-shell')?.innerText || ''), null, 12000);
+  const plans = await page.evaluate(() => document.querySelector('.app-shell')?.innerText || '');
+  const falsePerks = ['وصول مبكر', 'Early Access', '24 ساعة', 'نفس يوم', 'بدون ضغط', 'uncompressed', '100 مشاهد', '25 مشاهد', '5 مشاهدين', 'Prompt Studio', 'الذكاء الاصطناعي', 'كافة الإطارات'].filter((f) => plans.includes(f));
+  check(G, 'VIP plans: no early access, 24-hour delay, «uncompressed», viewer caps or AI studio', Boolean(plansShown) && falsePerks.length === 0, plansShown ? falsePerks.join(', ') || 'clean' : 'plans did not render');
+  const truePerks = ['تحميل الحلقات بجودة FHD 1080p', 'السيرفرات المباشرة (Fast CDN)', 'رسائل صوتية بلا حدود', 'إطارين حصريين زيادة'].filter((f) => !plans.includes(f));
+  check(G, 'VIP plans: the real perks are listed (FHD downloads, direct servers first, voice notes, frames)', truePerks.length === 0, truePerks.length ? `missing: ${truePerks.join(', ')}` : 'all there');
+  const planDigits = asciiDigits(plans);
+  check(G, 'VIP plans: prices unchanged (99 / 199 ج.م)', /\b99\b/.test(planDigits) && /\b199\b/.test(planDigits), (planDigits.match(/\b(99|199|249|499|799|1499)\b/g) || []).join(','));
+  await page.close();
+  ({ page, ctx } = await openWeb(browser, { route: '/profile?tab=referrals', phone: false, seed: { ...session, 'blackx.vipTier': 'vip_monarch' } }));
+  await waitFor(page, () => /VIP Monarch/.test(document.querySelector('.app-shell')?.innerText || ''), null, 12000);
+  const monarchPlans = await page.evaluate(() => document.querySelector('.app-shell')?.innerText || '');
+  check(G, 'VIP Monarch account: the keyword-matching «AI 3D studio» is gone, the 5 VIP frames stay', !/استوديو الذكاء|AI 3D Prompt|توليد وتطبيق/.test(monarchPlans) && /الـ 5 إطارات الحصرية/.test(monarchPlans));
+  await page.close();
+
+  // Watch party panel: no fixed «4 / N مشاهد» count and no unenforced capacities.
+  ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 2')}/1`, phone: false, seed: { 'blackx.vipTier': 'vip_basic' } }));
+  await waitFor(page, () => /غرفة المشاهدة الجماعية/.test(document.querySelector('.app-shell')?.innerText || ''), null, 10000);
+  const party = await page.evaluate(() => {
+    const h = [...document.querySelectorAll('.app-shell h3')].find((x) => /غرفة المشاهدة الجماعية/.test(x.textContent));
+    return h ? h.innerText : '';
+  });
+  check(G, 'watch party: no invented viewer count or room capacity', Boolean(party) && !/\d+\s*\/\s*\d+|\(25|100/.test(party), party.replace(/\n/g, ' ').slice(0, 120) || 'panel missing');
   await page.close();
 
   // The browser's own AniList queries ask AniList to drop the hidden genres.

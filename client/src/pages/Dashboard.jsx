@@ -1244,11 +1244,7 @@ function LatestSection({ items, loading, error, onRetry }) {
       <WitSectionHeader
         icon={<BxIcon name="flame" size={18} />}
         title={lang === 'ar' ? 'أحدث الحلقات المضافة' : t('dashboard.latest')}
-        sub={
-          lang === 'ar'
-            ? 'تنزل الحلقات الرسمية في نفس اليوم لمشتركي VIP (وتتأخر 24 ساعة للنسخة المجانية)'
-            : t('dashboard.latestSub')
-        }
+        sub={t('dashboard.latestSub')}
         linkTo="/trending"
         linkLabel={lang === 'ar' ? 'عرض كل الحلقات ←' : 'All Episodes →'}
       />

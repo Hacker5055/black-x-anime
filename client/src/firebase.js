@@ -1,30 +1,51 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth';
-import {
-  initializeFirestore,
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  collection,
-  getDocs,
-  getDocFromServer,
-  onSnapshot
-} from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import firebaseConfig from './firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(
-  app,
-  {
-    experimentalForceLongPolling: true
-  },
-  firebaseConfig.firestoreDatabaseId
-); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+/*
+ * Firestore is loaded on first use, never at boot. The SDK (with its webchannel transport and the
+ * re2js regex engine it bundles since firebase 13) is ~440 KB of JavaScript that guests on most
+ * pages never need; it used to sit in the website's main chunk and every page load also ran a
+ * "test connection" read. Everything below goes through loadFirestore().
+ */
+let firestoreReady = null;
+export function loadFirestore() {
+  if (!firestoreReady) {
+    firestoreReady = import('firebase/firestore').then((fs) => ({
+      fs,
+      // CRITICAL: keep the named database id and long polling, the app breaks without them.
+      db: fs.initializeFirestore(app, { experimentalForceLongPolling: true }, firebaseConfig.firestoreDatabaseId)
+    }));
+    // A failed chunk download (offline, new deploy) can be retried on the next call.
+    firestoreReady.catch(() => {
+      firestoreReady = null;
+    });
+  }
+  return firestoreReady;
+}
+
+/** onSnapshot that starts once Firestore has loaded; the returned function always unsubscribes. */
+function deferredSnapshot(makeRef, onData, label) {
+  let unsubscribe = null;
+  let cancelled = false;
+  loadFirestore()
+    .then(({ fs, db }) => {
+      if (cancelled) return;
+      unsubscribe = fs.onSnapshot(makeRef(fs, db), onData, (error) => {
+        console.warn(`${label}:`, error.message);
+      });
+    })
+    .catch((err) => console.warn(`${label}:`, err?.message || err));
+  return () => {
+    cancelled = true;
+    if (unsubscribe) unsubscribe();
+  };
+}
 
 export const OperationType = {
   CREATE: 'create',
@@ -56,33 +77,29 @@ export function handleFirestoreError(error, operationType, path) {
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection on boot as mandated by the Firebase skill
-export async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-testConnection();
-
 export async function signInWithGoogle() {
   try {
     const cred = await signInWithPopup(auth, googleProvider);
     const fbUser = cred.user;
 
     // Check if a customized user profile document already exists in Firestore
-    const userDocRef = doc(db, 'users', fbUser.uid);
-    let existingProfile = null;
+    let store = null;
     try {
-      const snap = await getDoc(userDocRef);
-      if (snap.exists()) {
-        existingProfile = snap.data();
-      }
+      store = await loadFirestore();
     } catch (err) {
-      console.warn('Could not read existing Firestore user doc:', err);
+      console.warn('Firestore unavailable (continuing sign-in):', err);
+    }
+    const userDocRef = store ? store.fs.doc(store.db, 'users', fbUser.uid) : null;
+    let existingProfile = null;
+    if (userDocRef) {
+      try {
+        const snap = await store.fs.getDoc(userDocRef);
+        if (snap.exists()) {
+          existingProfile = snap.data();
+        }
+      } catch (err) {
+        console.warn('Could not read existing Firestore user doc:', err);
+      }
     }
 
     const isDeveloper = fbUser.email?.toLowerCase() === 'mz0970mmz@gmail.com';
@@ -106,16 +123,18 @@ export async function signInWithGoogle() {
     if (isDeveloper || existingProfile?.role === 'developer') userData.role = 'developer';
     if (existingProfile?.badges) userData.badges = existingProfile.badges;
 
-    try {
-      await setDoc(userDocRef, userData, { merge: true });
-    } catch (err) {
-      console.warn('Firestore profile sync failed (continuing sign-in):', err);
+    if (userDocRef) {
+      try {
+        await store.fs.setDoc(userDocRef, userData, { merge: true });
+      } catch (err) {
+        console.warn('Firestore profile sync failed (continuing sign-in):', err);
+      }
     }
 
     // Also persist developer profile under settings/developer_profile for cross-device persistence
-    if (isDeveloper) {
+    if (isDeveloper && store) {
       try {
-        await setDoc(doc(db, 'settings', 'developer_profile'), {
+        await store.fs.setDoc(store.fs.doc(store.db, 'settings', 'developer_profile'), {
           displayName: effectiveDisplayName,
           photoURL: effectivePhoto,
           photoUrl: effectivePhoto,
@@ -155,7 +174,8 @@ export async function syncProfileToFirestore(userId, profile) {
   if (!userId || !profile) return;
   const path = `users/${userId}`;
   try {
-    const userDocRef = doc(db, 'users', userId);
+    const { fs, db } = await loadFirestore();
+    const userDocRef = fs.doc(db, 'users', userId);
     const photo = profile.photoUrl || profile.photoURL || '';
     const payload = {
       id: userId,
@@ -171,12 +191,12 @@ export async function syncProfileToFirestore(userId, profile) {
     if (profile.role) payload.role = profile.role;
     if (profile.badges) payload.badges = profile.badges;
 
-    await setDoc(userDocRef, payload, { merge: true });
+    await fs.setDoc(userDocRef, payload, { merge: true });
 
     // If this is the developer account, mirror to global settings/developer_profile
     if (profile.role === 'developer' || auth.currentUser?.email?.toLowerCase() === 'mz0970mmz@gmail.com') {
       try {
-        await setDoc(doc(db, 'settings', 'developer_profile'), {
+        await fs.setDoc(fs.doc(db, 'settings', 'developer_profile'), {
           displayName: profile.displayName || '',
           photoURL: photo,
           photoUrl: photo,
@@ -192,7 +212,8 @@ export async function syncProfileToFirestore(userId, profile) {
 export async function fetchProfileFromFirestore(userId) {
   if (!userId) return null;
   try {
-    const snap = await getDoc(doc(db, 'users', userId));
+    const { fs, db } = await loadFirestore();
+    const snap = await fs.getDoc(fs.doc(db, 'users', userId));
     return snap.exists() ? snap.data() : null;
   } catch (err) {
     console.warn('Failed to fetch profile from Firestore:', err);
@@ -202,7 +223,8 @@ export async function fetchProfileFromFirestore(userId) {
 
 export async function fetchDeveloperProfileFromFirestore() {
   try {
-    const snap = await getDoc(doc(db, 'settings', 'developer_profile'));
+    const { fs, db } = await loadFirestore();
+    const snap = await fs.getDoc(fs.doc(db, 'settings', 'developer_profile'));
     return snap.exists() ? snap.data() : null;
   } catch {
     return null;
@@ -214,51 +236,38 @@ export async function fetchDeveloperProfileFromFirestore() {
  */
 export function onProfileSnapshot(userId, callback) {
   if (!userId) return () => {};
-  try {
-    return onSnapshot(
-      doc(db, 'users', userId),
-      (snap) => {
-        if (snap.exists()) {
-          callback(snap.data());
-        }
-      },
-      (error) => {
-        console.warn('Real-time profile listener note:', error.message);
+  return deferredSnapshot(
+    (fs, db) => fs.doc(db, 'users', userId),
+    (snap) => {
+      if (snap.exists()) {
+        callback(snap.data());
       }
-    );
-  } catch (err) {
-    console.warn('Failed to bind onProfileSnapshot:', err);
-    return () => {};
-  }
+    },
+    'Real-time profile listener note'
+  );
 }
 
 /**
  * Real-time listener for developer profile updates from Firestore across all devices.
  */
 export function onDeveloperProfileSnapshot(callback) {
-  try {
-    return onSnapshot(
-      doc(db, 'settings', 'developer_profile'),
-      (snap) => {
-        if (snap.exists()) {
-          callback(snap.data());
-        }
-      },
-      (error) => {
-        console.warn('Real-time dev profile listener note:', error.message);
+  return deferredSnapshot(
+    (fs, db) => fs.doc(db, 'settings', 'developer_profile'),
+    (snap) => {
+      if (snap.exists()) {
+        callback(snap.data());
       }
-    );
-  } catch (err) {
-    console.warn('Failed to bind onDeveloperProfileSnapshot:', err);
-    return () => {};
-  }
+    },
+    'Real-time dev profile listener note'
+  );
 }
 
 export async function syncFavoriteToFirestore(userId, fav) {
   if (!userId || !fav || !fav.slug) return;
   const path = `users/${userId}/favorites/${fav.slug}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'favorites', fav.slug), {
+    const { fs, db } = await loadFirestore();
+    await fs.setDoc(fs.doc(db, 'users', userId, 'favorites', fav.slug), {
       slug: fav.slug,
       userId,
       titleEn: fav.title_en || fav.titleEn || '',
@@ -277,7 +286,8 @@ export async function removeFavoriteFromFirestore(userId, slug) {
   if (!userId || !slug) return;
   const path = `users/${userId}/favorites/${slug}`;
   try {
-    await deleteDoc(doc(db, 'users', userId, 'favorites', slug));
+    const { fs, db } = await loadFirestore();
+    await fs.deleteDoc(fs.doc(db, 'users', userId, 'favorites', slug));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
   }
@@ -288,7 +298,8 @@ export async function syncProgressToFirestore(userId, progress) {
   const docId = `${progress.slug}_${progress.episode || 1}`;
   const path = `users/${userId}/progress/${docId}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'progress', docId), {
+    const { fs, db } = await loadFirestore();
+    await fs.setDoc(fs.doc(db, 'users', userId, 'progress', docId), {
       slug: progress.slug,
       userId,
       episode: Number(progress.episode || 1),
@@ -309,31 +320,25 @@ export async function syncProgressToFirestore(userId, progress) {
  * Real-time listener for community posts in Firestore
  */
 export function onCommunitySnapshot(callback) {
-  try {
-    return onSnapshot(
-      collection(db, 'community_posts'),
-      (snap) => {
-        const posts = [];
-        snap.forEach((docSnap) => {
-          posts.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        callback(posts);
-      },
-      (err) => {
-        console.warn('Real-time community snapshot note:', err.message);
-      }
-    );
-  } catch (err) {
-    console.warn('Could not bind community listener:', err);
-    return () => {};
-  }
+  return deferredSnapshot(
+    (fs, db) => fs.collection(db, 'community_posts'),
+    (snap) => {
+      const posts = [];
+      snap.forEach((docSnap) => {
+        posts.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      callback(posts);
+    },
+    'Real-time community snapshot note'
+  );
 }
 
 export async function syncCommunityPostToFirestore(post) {
   if (!post) return;
   try {
     const docId = String(post.id || `post_${Date.now()}`);
-    await setDoc(doc(db, 'community_posts', docId), {
+    const { fs, db } = await loadFirestore();
+    await fs.setDoc(fs.doc(db, 'community_posts', docId), {
       ...post,
       id: docId,
       updatedAt: new Date().toISOString()

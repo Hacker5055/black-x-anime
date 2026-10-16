@@ -72,12 +72,9 @@ export default function VideoPlayer({
   onNext,
   onPrev,
   nextLabel,
-  resumePrompt = false,
-  vipTier = 'free',
-  onRequireVip
+  resumePrompt = false
 }) {
   const { t, lang } = useI18n();
-  const isVip = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
   const videoRef = useRef(null);
   const shellRef = useRef(null);
   const hideTimer = useRef(null);

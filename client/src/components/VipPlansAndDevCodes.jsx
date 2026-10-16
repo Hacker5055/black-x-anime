@@ -102,8 +102,6 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [selectedPlanModal, setSelectedPlanModal] = useState(null);
-  const [studioPrompt, setStudioPrompt] = useState('Shadow Monarch Dragon Sovereign with Purple Lightning Aura');
-  const [studioGenerated, setStudioGenerated] = useState(null);
 
   const currentTier = resolveUserVipTier(user, referralData);
 
@@ -378,19 +376,19 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.86rem' }}>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
-                <span>✔️</span> {lang === 'ar' ? 'مشاهدة وتحميل الحلقات بجودة قياسية HD 720p / SD' : 'Standard HD 720p / SD streaming & downloads'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.5rem', color: '#fde047' }}>
-                <span>⏳</span> {lang === 'ar' ? 'الحلقات الرسمية الجديدة تفتح بعد 24 ساعة من يوم نزولها' : 'Official new episodes unlock 24h after release day'}
+                <span>✔️</span> {lang === 'ar' ? 'مشاهدة كل الحلقات بكل الجودات المتاحة، والتحميل بجودة HD 720p / SD' : 'Every episode in every available quality; downloads in HD 720p / SD'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
-                <span>✔️</span> {lang === 'ar' ? 'الانضمام لغرف المشاهدة العامة (بحد أقصى 5 مشاهدين)' : 'Public Watch Party rooms (max 5 viewers)'}
+                <span>✔️</span> {lang === 'ar' ? 'الحلقات الجديدة من غير أي فترة انتظار' : 'New episodes with no waiting period'}
+              </li>
+              <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
+                <span>✔️</span> {lang === 'ar' ? 'الانضمام لغرف المشاهدة الجماعية' : 'Join Watch Party rooms'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
-                <span>🔒</span> {lang === 'ar' ? 'سيرفرات المشاهدة والتحميل بجودة FHD 1080p حصرية لمشتركي VIP' : 'FHD 1080p streaming & download servers locked (VIP only)'}
+                <span>🔒</span> {lang === 'ar' ? 'تحميل الحلقات بجودة FHD 1080p لمشتركي VIP' : 'FHD 1080p downloads are VIP only'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
-                <span>🔒</span> {lang === 'ar' ? 'بدون غرف خاصة أو مشاهدة في نفس يوم العرض' : 'No Private Rooms or Same-Day Release Access'}
+                <span>🔒</span> {lang === 'ar' ? 'بدون غرف مشاهدة خاصة برابط مخصص' : 'No private rooms with a custom link'}
               </li>
             </ul>
           </div>
@@ -464,19 +462,19 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem', fontSize: '0.88rem' }}>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fde047', fontWeight: 800 }}>
-                <span>🎬</span> {lang === 'ar' ? 'فتح سيرفرات المشاهدة والتحميل بجودة FHD 1080p الحصرية' : 'Unlock exclusive FHD 1080p streaming & download servers'}
+                <span>🎬</span> {lang === 'ar' ? 'تحميل الحلقات بجودة FHD 1080p' : 'FHD 1080p episode downloads'}
               </li>
-              <li style={{ display: 'flex', gap: '0.55rem', color: '#34d399', fontWeight: 800 }}>
-                <span>⚡</span> {lang === 'ar' ? 'نزول الحلقات الرسمية في نفس يوم عرضها فوراً (بدون تأخير 24 ساعة)' : 'Same-day official episode release (no 24h free delay)'}
+              <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
+                <span>🎙️</span> {lang === 'ar' ? 'رسائل صوتية بلا حدود في غرف المشاهدة' : 'Unlimited voice notes in Watch Party rooms'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
                 <span>👑</span> {lang === 'ar' ? 'شارة VIP الذهبية المميزة بجانب الاسم 👑' : 'Exclusive Golden VIP Badge next to your name 👑'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
-                <span>🚀</span> {lang === 'ar' ? 'سيرفرات فائقة السرعة VIP Fast CDN بدون ضغط' : 'Ultra-fast uncompressed VIP Fast CDN servers'}
+                <span>🚀</span> {lang === 'ar' ? 'السيرفرات المباشرة (Fast CDN) في أول قائمة السيرفرات' : 'Direct (Fast CDN) servers listed first'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
-                <span>🔒</span> {lang === 'ar' ? 'إنشاء غرف مشاهدة جماعية خاصة مع رابط مخصص (25 مشاهد)' : 'Create Private Watch Party rooms with custom link'}
+                <span>🔒</span> {lang === 'ar' ? 'إنشاء غرف مشاهدة جماعية خاصة مع رابط مخصص' : 'Create Private Watch Party rooms with custom link'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
                 <span>🎨</span> {lang === 'ar' ? 'فتح 5 إطارات وزخارف كائنات حية حصرية لملف الحساب' : 'Unlock 5 exclusive living 3D avatar ornaments'}
@@ -579,16 +577,10 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem', fontSize: '0.88rem' }}>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#e9d5ff', fontWeight: 800 }}>
-                <span>⏳</span> {lang === 'ar' ? 'وصول مبكر للحلقات وفصول المانجا قبل نشرها للجميع' : 'Early Access to episodes & manga chapters before public release'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.55rem', color: '#e9d5ff', fontWeight: 800 }}>
-                <span>🪄</span> {lang === 'ar' ? 'استوديو الذكاء الاصطناعي 3D Prompt Studio مفتوح بالكامل' : 'Full access to AI 3D Prompt & Creature Studio'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.55rem', color: '#e9d5ff', fontWeight: 800 }}>
-                <span>🎙️</span> {lang === 'ar' ? 'غرف جماعية تتسع لـ 100 مشاهد + رسائل صوتية مفتوحة بلا حدود' : '100-viewer Watch Party rooms + Unlimited Voice Notes'}
+                <span>🎨</span> {lang === 'ar' ? 'إطارين حصريين زيادة: Dragon Ascension و Celestial Void' : 'Two more exclusive frames: Dragon Ascension & Celestial Void'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fde047', fontWeight: 700 }}>
-                <span>👑</span> {lang === 'ar' ? 'يشمل جميع مزايا باقة VIP Basic + كافة الإطارات والألقاب' : 'Includes all VIP Basic perks + all mythic ornaments'}
+                <span>👑</span> {lang === 'ar' ? 'يشمل جميع مزايا باقة VIP Basic' : 'Includes all VIP Basic perks'}
               </li>
             </ul>
           </div>
@@ -615,7 +607,8 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
         </div>
       </div>
 
-      {/* Unlocked Perks Interactive Controls (3D Prompt Studio for Monarch + 5 Exclusive VIP Frames for Basic/Monarch) */}
+      {/* The 5 VIP frames (Basic and Monarch). Plan cards list only what the code really does: no early access,
+          no 24-hour delay for free users, no AI studio, no viewer caps, nothing "uncompressed" (removed 2026-10-16). */}
       {(currentTier === 'vip_basic' || currentTier === 'vip_monarch') && (
         <div
           className="glass"
@@ -656,69 +649,6 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
               </button>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* VIP Monarch Exclusive: AI 3D Prompt Studio */}
-      {currentTier === 'vip_monarch' && (
-        <div
-          className="glass"
-          style={{
-            padding: '1.75rem',
-            borderRadius: '22px',
-            border: '1px solid rgba(168, 85, 247, 0.55)',
-            background: 'linear-gradient(135deg, rgba(46, 16, 101, 0.6), rgba(9, 12, 24, 0.95))'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.85rem' }}>
-            <div>
-              <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#c084fc', letterSpacing: '0.1em' }}>
-                🔮 MONARCH EXCLUSIVE • استوديو إمبراطور الظلال
-              </span>
-              <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.25rem', fontWeight: 900 }}>
-                🪄 استوديو الذكاء الاصطناعي (AI 3D Prompt & Creature Studio)
-              </h3>
-            </div>
-            <span className="badge" style={{ background: 'rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 900 }}>
-              ✓ مفتوح لحساب Monarch
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              className="input"
-              value={studioPrompt}
-              onChange={(e) => setStudioPrompt(e.target.value)}
-              placeholder="صف الهالة أو الكائن الثلاثي الأبعاد المراد توليده لحسابك..."
-              style={{ flex: 1, minWidth: '240px' }}
-            />
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => {
-                const lower = studioPrompt.toLowerCase();
-                const chosen = lower.includes('cyber') || lower.includes('ليزر')
-                  ? 'cyber-neon'
-                  : lower.includes('gold') || lower.includes('ذهب')
-                  ? 'imperial-gold'
-                  : lower.includes('dragon') || lower.includes('نار')
-                  ? 'royal-flame'
-                  : 'shadow-monarch';
-                setStudioGenerated({ prompt: studioPrompt, ornament: chosen });
-                onSelectFrame?.(chosen);
-                pushToast('🪄 تم توليد وتطبيق التكوين الثلاثي الأبعاد من استوديو Monarch!', 'success');
-              }}
-              style={{ background: 'linear-gradient(135deg, #a855f7, #06b6d4)', fontWeight: 900 }}
-            >
-              🪄 توليد وتطبيق فوري 3D
-            </button>
-          </div>
-          {studioGenerated && (
-            <div style={{ marginTop: '0.85rem', fontSize: '0.82rem', color: '#e9d5ff' }}>
-              ✨ تم ربط نموذج <strong>{studioGenerated.ornament}</strong> بالوصف: <em>"{studioGenerated.prompt}"</em> وتطبيقه على صورتك وبانر حسابك!
-            </div>
-          )}
         </div>
       )}
 

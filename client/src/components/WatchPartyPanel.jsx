@@ -47,7 +47,6 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
   const voiceRecorder = useVoiceRecorder();
 
   const vipTier = resolveUserVipTier(user);
-  const maxRoomViewers = vipTier === 'vip_monarch' ? 100 : vipTier === 'vip_basic' ? 25 : 5;
 
   const [messages, setMessages] = useState(() => {
     try {
@@ -198,8 +197,8 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
       if (vipTier === 'free' && voiceCount >= 2) {
         pushToast(
           lang === 'ar'
-            ? '🔒 الرسائل الصوتية المفتوحة بلا حدود متاحة لمشتركي باقة 🔮 VIP Monarch (199 ج.م)! (الحد المجاني: رسالتان)'
-            : '🔒 Unlimited Open Voice Notes require 🔮 VIP Monarch!',
+            ? '🔒 الرسائل الصوتية بلا حدود لمشتركي VIP (الحد المجاني: رسالتان)'
+            : '🔒 Unlimited voice notes are for VIP members (free limit: 2)',
           'info'
         );
         return;
@@ -341,17 +340,11 @@ export default function WatchPartyPanel({ slug, episode, title, currentPosRef })
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <span>🎭</span>
               {lang === 'ar' ? 'غرفة المشاهدة الجماعية والتعليقات الصوتية' : 'Live Watch Party & Real Voice Chat'}
-              <span style={{ fontSize: '0.73rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(16, 185, 129, 0.18)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#34d399' }}>
-                ● {lang === 'ar' ? `4 / ${maxRoomViewers} مشاهد (${roomCode})` : `4 / ${maxRoomViewers} Viewers (${roomCode})`}
-              </span>
-              {vipTier === 'vip_monarch' && (
-                <span style={{ fontSize: '0.7rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(168,85,247,0.22)', border: '1px solid #a855f7', color: '#e9d5ff' }}>
-                  🔮 سعة 100 مشاهد + صوتيات مفتوحة
-                </span>
-              )}
-              {vipTier === 'vip_basic' && (
-                <span style={{ fontSize: '0.7rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(245,158,11,0.2)', border: '1px solid #f59e0b', color: '#fde047' }}>
-                  ⚡ غرفة VIP خاصة (25 مشاهد)
+              {/* No viewer count or room capacity here: there is no presence data and no cap is enforced
+                  (the old «4 / N مشاهد» pill was a fixed number). */}
+              {vipTier !== 'free' && (
+                <span className="watch-party__vip-pill" style={{ fontSize: '0.7rem', padding: '0.18rem 0.6rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#ffffff' }}>
+                  🎙️ {lang === 'ar' ? 'صوتيات بلا حدود' : 'Unlimited voice notes'}
                 </span>
               )}
             </h3>

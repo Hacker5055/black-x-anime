@@ -7,7 +7,6 @@ import { api } from '../api.js';
 import { useAsync, useDominantColor, applyLiveColor, pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { RatingPanel } from '../components/Features.jsx';
-import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import {
   isAnimeEpisodeAlertEnabled,
   toggleAnimeEpisodeAlert
@@ -31,7 +30,6 @@ export default function ShowDetail({ onOpenAuth }) {
   const [progress, setProgress] = useState({});
   const [epFilter, setEpFilter] = useState('');
   const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
-  const vipTier = resolveUserVipTier(user);
 
   useEffect(() => {
     setAlertEnabled(isAnimeEpisodeAlertEnabled(slug));
@@ -125,6 +123,8 @@ export default function ShowDetail({ onOpenAuth }) {
     number: Number(e.number ?? e.episode) > 0 ? Number(e.number ?? e.episode) : idx + 1
   }));
   const continueEp = eps.find((e) => progress[e.episode] && !progress[e.episode].completed) || eps[0];
+  // Once per render (it used to be recomputed for every episode: ~1M comparisons for a 1,000-episode show).
+  const latestEpNum = eps.reduce((max, e) => Math.max(max, Number(e.episode) || 0), 0);
   // Facts the API really has (no invented likes, views, match %, quality or duration).
   const episodeTotal = Number(show.episodeCount) > 0 ? Number(show.episodeCount) : eps.length;
   const ratingRaw = Number(show.rating) || (Number(show.score) > 0 ? Number(show.score) : 0);
@@ -372,6 +372,7 @@ export default function ShowDetail({ onOpenAuth }) {
                 width: '185px'
               }}
             />
+            {isAniProject && (
             <span
               style={{
                 fontSize: '0.76rem',
@@ -383,12 +384,9 @@ export default function ShowDetail({ onOpenAuth }) {
                 color: '#ffffff'
               }}
             >
-              {isAniProject
-                ? (lang === 'ar' ? '🔎 الحلقات المتاحة من سيرفر BLACK X 4' : '🔎 Episodes available on BLACK X 4')
-                : vipTier === 'free'
-                  ? (lang === 'ar' ? '⏳ الحلقات الرسمية الجديدة تفتح لمشتركي VIP في نفس اليوم، وتتأخر 24 ساعة للنسخة المجانية' : '⏳ Official new episodes drop same-day for VIP, 24h delay for Free')
-                  : (lang === 'ar' ? '👑 عضويتك VIP: جميع الحلقات الرسمية تنزل لك في نفس اليوم وبجودة FHD 1080p!' : '👑 VIP Active: Same-day official episodes & FHD 1080p unlocked!')}
+              {lang === 'ar' ? '🔎 الحلقات المتاحة من سيرفر BLACK X 4' : '🔎 Episodes available on BLACK X 4'}
             </span>
+            )}
             <span className="chip" style={{ cursor: 'default' }}>{formatNumber(eps.length)} {t('common.episodes')}</span>
           </div>
         </div>
@@ -404,35 +402,28 @@ export default function ShowDetail({ onOpenAuth }) {
               .map((e) => {
                 const p = progress[e.episode];
                 const pct = p && p.duration ? Math.min(1, p.position / p.duration) : p?.completed ? 1 : 0;
-                const maxEp = eps.length ? Math.max(...eps.map((item) => Number(item.episode || 0))) : 0;
-                const isLatest = !isAniProject && eps.length > 1 && Number(e.episode) === maxEp;
+                const isLatest = !isAniProject && eps.length > 1 && Number(e.episode) === latestEpNum;
                 return (
                   <button
                     key={e.episode}
                     type="button"
                     className={`ep-chip ${p?.completed ? 'watched' : ''}`}
                     onClick={() => navigate(`/watch/${slug}/${e.episode}${srcSuffix}`)}
-                    style={
-                      isLatest
-                        ? {
-                            borderColor: vipTier === 'free' ? '#f59e0b' : '#10b981',
-                            position: 'relative'
-                          }
-                        : undefined
-                    }
+                    style={isLatest ? { borderColor: 'rgba(255,255,255,0.6)', position: 'relative' } : undefined}
                   >
                     <span>{lang === 'ar' ? `الحلقة ${formatNumber(e.episode)}` : `EP ${formatNumber(e.episode)}`}</span>
                     {isLatest && (
                       <span
+                        className="ep-chip__latest"
                         style={{
                           fontSize: '0.62rem',
                           fontWeight: 900,
-                          color: vipTier === 'free' ? '#fde047' : '#34d399',
+                          color: '#ffffff',
                           display: 'block',
                           marginTop: '2px'
                         }}
                       >
-                        {vipTier === 'free' ? '⏳ VIP اليوم' : '👑 VIP'}
+                        {lang === 'ar' ? 'الأحدث' : 'Latest'}
                       </span>
                     )}
                     {p && (

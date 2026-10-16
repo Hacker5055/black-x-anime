@@ -53,7 +53,7 @@ ONLY=links,back bash tools/apk/touch-test/run-web.sh    # some scenarios
 DIST=/path/to/website/build bash tools/apk/touch-test/run-web.sh
 ```
 
-`web-suite.mjs` (102 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
+`web-suite.mjs` (117 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
 the site's same-origin `/api/*` goes to the mock, Google Fonts are answered with the bundled fonts so
 Arabic renders in screenshots). A 412×915 touch phone with a phone browser user agent, or a 1440×900
 computer. Scenarios: `boot` (phone → app interface, computer → website, `?ui=` switch remembered,
@@ -64,4 +64,11 @@ site at home, no piled-up history, no entry before the first tap), `profile` (An
 computer-version rows, Google opens Firebase's popup, not the APK window), `player` (+10 s, browser
 full screen + landscape), `genres` and `desktop` (computer home without invented values, hidden
 titles «مش متاح», AniList queries with the exclusions, the player page seen as VIP Monarch: no
-«4K HDR • 60FPS» toggle, no colour filter over the video, no 4K / HDR / 60fps copy).
+«4K HDR • 60FPS» toggle, no colour filter over the video, no 4K / HDR / 60fps copy, no «VIP Fast CDN»
+switch, «Early Access» pill or 24-hour badge, real episode numbers with «الأحدث» on the newest; as a
+free visitor the upgrade button sits with the actions; the loader shows while the servers load (no
+crash); the signed-in VIP plan cards list only real perks at unchanged prices; the watch-party panel
+has no invented viewer count). `openWeb(browser, { route, phone, seed, ctx })`: `seed` is written to
+localStorage, which every page of one browser shares, so seed `blackx.vipTier` explicitly; `ctx`
+patches the mock (`episodeDelayMs` holds `/api/stream/episode` back); a seeded `blackx_token` signs
+the computer website in through the mocked `/api/auth/me`.

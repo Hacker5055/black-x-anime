@@ -321,6 +321,8 @@ function api(req, url, ctx) {
   if (p === '/api/app/config') return json(req, { enforced: false, broadcastMsg: '', pinnedRec: null, apk: ctx.apkOverride || APK_RELEASE, serverTime: new Date().toISOString() });
   if (p === '/api/app/skip-times') return json(req, { found: true, malId: Number(url.searchParams.get('mal')) || null, segments: [{ type: 'op', start: 90, end: 180 }] });
   if (p === '/api/app/me') return auth ? json(req, { user: { ...TEST_USER, ...ctx.userPatch }, state: { favorites: [], progress: [], positions: {}, xp: 120 } }) : json(req, { error: 'auth_required' }, 401);
+  // The computer website restores its session here (client/src/context/AuthContext.jsx).
+  if (p === '/api/auth/me') return auth ? json(req, { user: { ...TEST_USER, ...ctx.userPatch }, stats: null }) : json(req, { error: 'auth_required' }, 401);
   // Username sign-in (password "secret-pass"), profile edits and requests to the developer.
   if (p === '/api/app/auth/login' && method === 'POST') {
     const body = safeJson(req.postData()) || {};
@@ -355,13 +357,17 @@ function api(req, url, ctx) {
         ...(slug === 'a3rb-sneaky-isekai' ? { genres: ['عالم مختلف', 'اكشن'] } : {}),
         poster: `${LOCAL}/poster/1.svg`,
         banner: `${LOCAL}/wide/1.svg`,
-        episodes: Array.from({ length: 12 }, (_, i) => ({ number: i + 1, title: `Episode ${i + 1}`, thumb: `${LOCAL}/wide/${i + 1}.svg` }))
+        // Same shape as the real API (server/src/routes/streaming.js sends both fields).
+        episodes: Array.from({ length: 12 }, (_, i) => ({ episode: i + 1, number: i + 1, title: `Episode ${i + 1}`, thumb: `${LOCAL}/wide/${i + 1}.svg` }))
       }
     });
   }
   if ((m = p.match(/^\/api\/stream\/episode\/([^/]+)\/(\d+)$/))) {
     ctx.episodes.push(`${decodeURIComponent(m[1])}:${m[2]}`);
-    return json(req, { entries: [{ id: `e-${m[2]}`, server: 'BLACK X 1', serverCode: 'PD_DEV', quality: '1080p', directUrl: VIDEO_URL }], resolved: {} });
+    const payload = { entries: [{ id: `e-${m[2]}`, server: 'BLACK X 1', serverCode: 'PD_DEV', quality: '1080p', directUrl: VIDEO_URL }], resolved: {} };
+    // ctx.episodeDelayMs holds the servers back, to test the page while they are still loading.
+    if (ctx.episodeDelayMs) return new Promise((r) => setTimeout(r, ctx.episodeDelayMs)).then(() => json(req, payload));
+    return json(req, payload);
   }
   if (p === '/api/stream/resolve') return json(req, { source: { directUrl: VIDEO_URL } });
   if (p === '/api/stream/search') {
@@ -534,7 +540,7 @@ export const DESKTOP_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (K
  * serves the app interface), otherwise a 1440×900 computer with a mouse. `seed` fills
  * localStorage before the first load; the splash is skipped (as on a second page view).
  */
-export async function openWeb(browser, { route: routePath = '/', phone = true, seed = {}, wait = true } = {}) {
+export async function openWeb(browser, { route: routePath = '/', phone = true, seed = {}, wait = true, ctx: ctxPatch = {} } = {}) {
   const page = await browser.newPage();
   await page.setUserAgent(phone ? PHONE_UA : DESKTOP_UA);
   await page.setViewport(
@@ -542,6 +548,7 @@ export async function openWeb(browser, { route: routePath = '/', phone = true, s
   );
   const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000, logins: [], profilePuts: [], requests: [], userPatch: {} };
   ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
+  Object.assign(ctx, ctxPatch);
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     try {

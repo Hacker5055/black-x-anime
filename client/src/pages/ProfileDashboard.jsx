@@ -108,7 +108,6 @@ export default function ProfileDashboard({ onOpenAuth }) {
   const [bannerStyle, setBannerStyle] = useState(() => localStorage.getItem('profile_banner_style') || 'royal-flame');
   const [ornamentQuality, setOrnamentQuality] = useState('auto');
   const [ornament3d, setOrnament3d] = useState(true);   // WebGL ornaments vs CSS 3D
-  const [show3DPromptStudio, setShow3DPromptStudio] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -2119,7 +2118,8 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   </h4>
                   <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#fef08a', lineHeight: 1.8 }}>
                     <li>{lang === 'ar' ? 'شارة VIP الذهبية المميزة بجانب الاسم 👑' : 'Golden VIP badge next to name'}</li>
-                    <li>{lang === 'ar' ? 'سيرفرات فائقة السرعة VIP Fast CDN بدون ضغط' : 'VIP High-speed CDN servers'}</li>
+                    <li>{lang === 'ar' ? 'السيرفرات المباشرة (Fast CDN) في أول القائمة' : 'Direct (Fast CDN) servers listed first'}</li>
+                    <li>{lang === 'ar' ? 'رسائل صوتية بلا حدود في غرف المشاهدة' : 'Unlimited voice notes in watch rooms'}</li>
                     <li>{lang === 'ar' ? 'إنشاء غرف مشاهدة جماعية خاصة مع رابط مخصص' : 'Private Watch Party with custom link'}</li>
                     <li>{lang === 'ar' ? 'فتح 5 إطارات وزخارف حصرية لملف الحساب' : 'Unlock 5 exclusive 3D frames'}</li>
                   </ul>
@@ -2134,9 +2134,8 @@ export default function ProfileDashboard({ onOpenAuth }) {
                     🔮 VIP Monarch (إمبراطور الظلال)
                   </h4>
                   <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#f5d0fe', lineHeight: 1.8 }}>
-                    <li>{lang === 'ar' ? 'وصول مبكر للحلقات وفصول المانجا قبل نشرها' : 'Early access to episodes & chapters'}</li>
-                    <li>{lang === 'ar' ? 'استوديو الذكاء الاصطناعي 3D Prompt Studio' : '3D AI Prompt Studio unlock'}</li>
-                    <li>{lang === 'ar' ? 'غرف جماعية تتسع لـ 100 مشاهد + رسائل صوتية مفتوحة' : '100-user rooms + unlimited voice notes'}</li>
+                    <li>{lang === 'ar' ? 'كل مزايا VIP Basic' : 'Everything in VIP Basic'}</li>
+                    <li>{lang === 'ar' ? 'إطارين حصريين زيادة: Dragon Ascension و Celestial Void' : 'Two more exclusive frames: Dragon Ascension & Celestial Void'}</li>
                   </ul>
                 </div>
               </div>
