@@ -10,11 +10,14 @@
  * pages. Nothing here invents data: unknown values stay empty.
  */
 import { getServerUrl, isNativeApk } from '../api.js';
+import { APK_RELEASE, compareVersions } from '../../../shared/apkRelease.js';
 
 export const BX_PUBLIC_ORIGIN = 'https://black-x-anime.me';
 export const BX_APK_FILE_NAME = 'BLACK-X-Mobile-120Hz.apk';
 export const BX_APK_DOWNLOAD_URL = `${BX_PUBLIC_ORIGIN}/${BX_APK_FILE_NAME}`;
-export const BX_APK_VERSION = '15.1';
+// The version this APK was built as (the server reports the latest one in /api/app/config).
+export const BX_APK_VERSION = APK_RELEASE.version;
+export { compareVersions };
 
 /* -------------------------------------------------------------------------- */
 /* Base URL + JSON helper                                                      */
@@ -336,16 +339,19 @@ function deviceCanPlayHls() {
   try {
     if (typeof document === 'undefined') return false;
     const v = document.createElement('video');
-    return Boolean(v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl'));
+    if (v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl')) return true;
+    // Since v16 the APK player plays HLS through hls.js (Media Source Extensions).
+    const MS = window.ManagedMediaSource || window.MediaSource;
+    return Boolean(MS && typeof MS.isTypeSupported === 'function' && MS.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'));
   } catch {
     return false;
   }
 }
 
 /**
- * Website episode manifest -> APK server list. Only sources the APK's native
- * <video> player can open are kept: direct MP4 (and HLS where the WebView plays
- * it). Iframe-only hosts stay on the website player.
+ * Website episode manifest -> APK server list. Only sources the APK's <video>
+ * player can open are kept: direct MP4, and HLS (natively or through hls.js).
+ * Iframe-only hosts stay on the website player.
  */
 export function mapEpisodeEntries(data, { slug, episode, source, canPlayHls } = {}) {
   const hlsOk = typeof canPlayHls === 'boolean' ? canPlayHls : deviceCanPlayHls();

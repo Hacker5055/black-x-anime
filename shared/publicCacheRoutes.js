@@ -24,6 +24,8 @@ export const CDN_CACHE_PROFILES = Object.freeze({
   search: { sMaxAge: 300, staleWhileRevalidate: 3600, staleIfError: 86400, browserMaxAge: 60 },
   // Small settings the developer can edit (footer text, server list): 1 minute.
   config: { sMaxAge: 60, staleWhileRevalidate: 600, staleIfError: 86400, browserMaxAge: 0 },
+  // Intro/outro timestamps (AniSkip): 1 day.
+  skipTimes: { sMaxAge: 86400, staleWhileRevalidate: 604800, staleIfError: 604800, browserMaxAge: 3600 },
   // Proxied cover images and the bundled hls.js library: 7 days.
   asset: { sMaxAge: 604800, staleWhileRevalidate: 86400, staleIfError: 604800, browserMaxAge: 86400 }
 });
@@ -40,6 +42,9 @@ export const PUBLIC_CACHE_ROUTES = Object.freeze([
   { pattern: /^\/api\/stream\/hls-lib\.js$/, profile: 'asset' },
   { pattern: /^\/api\/content\/library$/, profile: 'catalog' },
   { pattern: /^\/api\/settings\/footer$/, profile: 'config' },
+  // App config for the APK and the website VIP gate (no codes, no e-mails, no per-user data).
+  { pattern: /^\/api\/app\/config$/, profile: 'config' },
+  { pattern: /^\/api\/app\/skip-times$/, profile: 'skipTimes' },
   { pattern: /^\/api\/proxy-image$/, profile: 'asset' }
 ]);
 

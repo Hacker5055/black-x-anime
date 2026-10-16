@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { hashPassword, verifyPassword, signToken, setAuthCookie, clearAuthCookie, publicUser, requireAuth, requireJwtSecret, DEVELOPER_EMAIL, verifyFirebaseGoogleIdToken } from '../auth.js';
 import { social } from '../lib/socialDb.js';
-import { syncUserToCloud, fetchUserFromCloud, sha256Hex, syncAllLocalUsersToCloud } from '../services/cloudSync.service.js';
+import { syncUserToCloud, fetchUserFromCloud, syncAllLocalUsersToCloud } from '../services/cloudSync.service.js';
+import { verifyCloudPassword } from '../services/apkAccounts.js';
 
 const router = Router();
 
@@ -105,7 +106,8 @@ router.post('/login', requireJwtSecret, async (req, res) => {
       const cloudIdentifierMatches = cloudUser && (identifier.includes('@')
         ? String(cloudUser.email || '').toLowerCase() === identifier
         : String(cloudUser.username || '').toLowerCase() === identifier);
-      if (cloudIdentifierMatches && cloudUser.passSha256 && cloudUser.passSha256 === sha256Hex(password)) {
+      // bcrypt (current) or the legacy SHA-256 of accounts created by older APKs.
+      if (cloudIdentifierMatches && (await verifyCloudPassword(cloudUser, password)).ok) {
         const uname = (cloudUser.username || identifier.split('@')[0] || 'user').toLowerCase();
         const uemail = (cloudUser.email || `${uname}@blackx.app`).toLowerCase();
         const info = db.prepare(

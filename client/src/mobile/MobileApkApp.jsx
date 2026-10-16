@@ -3,6 +3,50 @@ import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
 import MangaPageImage from './MangaPageImage.jsx';
 import BxIcon, { stripEmoji } from './BxIcon.jsx';
 import './mobileUi.css';
+import ToastHost from './ToastHost.jsx';
+import { showToastMessage } from './toastStore.js';
+import {
+  adminBroadcast,
+  adminDeleteCode,
+  adminDeleteRequest,
+  adminGenerateCodes,
+  adminGetVip,
+  adminInspectUser,
+  adminPin,
+  adminSetEnforced,
+  adminSetUserVip,
+  apiErrorMessage,
+  fetchAppConfig,
+  fetchMe,
+  fetchSkipTimes,
+  loadSession,
+  loginWithGoogle,
+  loginWithPassword,
+  pushAccountState,
+  readCachedConfig,
+  redeemVipCode,
+  registerAccount,
+  sendDeveloperRequest,
+  signOut as apkSignOut,
+  updateAccountProfile
+} from './apkApi.js';
+import { episodeKey, flushPositions, formatClock, getPosition, mergePositions, positionsForSync, savePosition } from './resumeStore.js';
+import { checkFollowedTitles, lastAlertRun } from './episodeAlerts.js';
+import { attachHls, needsHlsJs } from './hlsPlayer.js';
+import { haptic, hapticsEnabled, setHapticsEnabled } from './haptics.js';
+import { coverForMode, useDataSaver } from './dataSaver.js';
+import { installPointerTracker, transitionBackToCard, transitionFromTappedPoster } from './viewTransition.js';
+import HeroSlideScope from './HeroSlideScope.jsx';
+import SearchBox from './SearchBox.jsx';
+import LazyMount from './LazyMount.jsx';
+import { SkeletonGrid, SkeletonHero, SkeletonList, SkeletonRow } from './Skeleton.jsx';
+import PullToRefresh from './PullToRefresh.jsx';
+import useSwipeDismiss from './useSwipeDismiss.js';
+import UpdateBanner from './UpdateBanner.jsx';
+import ContinueWatchingRow from './ContinueWatchingRow.jsx';
+import BecauseYouWatchedRow from './BecauseYouWatchedRow.jsx';
+import { NextEpisodeCountdown, SkipSegmentOverlay } from './PlayerExtras.jsx';
+import { SPLASH_SOUND_KEY } from './splashPrefs.js';
 import {
   BX_APK_DOWNLOAD_URL,
   BX_APK_VERSION,
@@ -172,14 +216,6 @@ const SERVER_LABELS = {
   ST: { nameAr: 'BLACK X 8 HD', nameEn: 'BLACK X 8 HD', badge: 'احتياطي HD', fast: false }
 };
 
-async function sha256Browser(text) {
-  const data = new TextEncoder().encode(String(text || ''));
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 function cleanCloudKey(prefix, val) {
   const safe = String(val || '')
     .toLowerCase()
@@ -293,7 +329,6 @@ export default function MobileApkApp() {
   const [fpsHz, setFpsHz] = useState(120);
 
   // Home & Catalog States
-  const [heroSlide, setHeroSlide] = useState(0);
   const [popularList, setPopularList] = useState([]);
   const [latestList, setLatestList] = useState([]);
   const [topRankedList, setTopRankedList] = useState([]);
@@ -418,7 +453,7 @@ export default function MobileApkApp() {
           (saved.email || '').toLowerCase() === 'mz0970mmz@gmail.com' ||
           (saved.username || '').toLowerCase() === 'developer' ||
           (saved.username || '').toLowerCase() === 'mz0970mmz';
-        if (!isDevAcc && !localStorage.getItem('bx_mob_redeemed_vip_code')) {
+        if (!isDevAcc && !localStorage.getItem('bx_mob_redeemed_vip_code') && !localStorage.getItem('bx_mob_session_v16')) {
           saved.vipTier = 'free';
           saved.vipStatus = 'Free Tier';
         }
@@ -480,7 +515,29 @@ export default function MobileApkApp() {
   const [authDisplayName, setAuthDisplayName] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const oauthSessionIdRef = useRef('');
-  const [toast, setToast] = useState(null); // { id, msg, icon, leaving }
+  // v16 state: server session, update banner, player extras, pull-to-refresh ticks
+  const [sessionToken, setSessionToken] = useState(() => loadSession()?.token || null);
+  const [apkRelease, setApkRelease] = useState(() => readCachedConfig()?.apk || null);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [skipSegments, setSkipSegments] = useState([]);
+  const [nextEpCountdown, setNextEpCountdown] = useState(null); // { anime, ep }
+  const nextEpCountdownRef = useRef(null);
+  nextEpCountdownRef.current = nextEpCountdown;
+  const [hlsLevels, setHlsLevels] = useState([]);
+  const [hlsLevel, setHlsLevel] = useState(-1);
+  const [homeRefreshTick, setHomeRefreshTick] = useState(0);
+  const [scheduleRefreshTick, setScheduleRefreshTick] = useState(0);
+  const [hapticsOn, setHapticsOn] = useState(hapticsEnabled);
+  const [splashSoundOn, setSplashSoundOn] = useState(() => localStorage.getItem(SPLASH_SOUND_KEY) === 'on');
+  const [dataSaver, dataSaverPref, setDataSaverPref] = useDataSaver();
+  const dataSaverRef = useRef(dataSaver);
+  dataSaverRef.current = dataSaver;
+  const detailsSheetRef = useRef(null);
+  const playerPageRef = useRef(null);
+  // Latest values for callbacks that run later (timers, native callbacks, sync).
+  const refreshDoneRef = useRef(null);
+  const latestRef = useRef({});
+  latestRef.current = { user, favorites, watchHistory, watchlistMap, selectedAnime, activeEpisode };
 
   // Global Cloud-Synced VIP Enforcement & Developer Master Switch States
   const [globalVipEnforced, setGlobalVipEnforced] = useState(() => {
@@ -572,7 +629,6 @@ export default function MobileApkApp() {
   // 1. Real-Time Anime Visual Enhancer (4K-Feel Shader Presets) & Smart Auto-Skip Intro
   const [visualShaderMode, setVisualShaderMode] = useState('original'); // 'original' | 'upscale4k' | 'amoled_hdr' | 'cinema_imax'
   const [autoSkipIntro, setAutoSkipIntro] = useState(() => localStorage.getItem('bx_mob_autoskip_intro') === 'true');
-  const autoSkippedEpRef = useRef({});
 
   // 2. Webtoon Bionic Reader v6 (Touch-Paused Auto-Scroll, Dual-Page Spread, Double-Tap 200% Zoom)
   const [readerTouchPaused, setReaderTouchPaused] = useState(false);
@@ -630,12 +686,9 @@ export default function MobileApkApp() {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false); // Image 2 Luxury Rounded Command Menu Card
   const [catalogCardStyle, setCatalogCardStyle] = useState('wide'); // 'wide' (Image 1 Popular Titles Wide Cards) | 'grid' (3-Column Grid)
 
-  const isDeveloper = useMemo(() => {
-    if (!user) return false;
-    const em = String(user.email || '').toLowerCase().trim();
-    const un = String(user.username || '').toLowerCase().trim();
-    return user.role === 'developer' || em === 'mz0970mmz@gmail.com' || un === 'developer' || un === 'mz0970mmz';
-  }, [user]);
+  // Developer powers come only from a server session created by verified Google
+  // sign-in with the developer account (the server re-checks every developer call).
+  const isDeveloper = useMemo(() => Boolean(user && user.isDeveloper === true && sessionToken), [user, sessionToken]);
 
   const userVipTier = useMemo(() => {
     if (isDeveloper) return 'vip_monarch';
@@ -645,18 +698,7 @@ export default function MobileApkApp() {
     return 'free';
   }, [isDeveloper, user, redeemedVipTier]);
 
-  const toastTimersRef = useRef([]);
-  const showToast = useCallback((msg, icon = 'info') => {
-    const text = stripEmoji(String(msg ?? ''));
-    if (!text) return;
-    const id = Date.now() + Math.random();
-    toastTimersRef.current.forEach(clearTimeout);
-    setToast({ id, msg: text, icon, leaving: false });
-    toastTimersRef.current = [
-      setTimeout(() => setToast((prev) => (prev && prev.id === id ? { ...prev, leaving: true } : prev)), 3000),
-      setTimeout(() => setToast((prev) => (prev && prev.id === id ? null : prev)), 3300)
-    ];
-  }, []);
+  const showToast = useCallback((msg, icon = 'info') => showToastMessage(msg, icon), []);
 
   // Top bar: turns solid once the page scrolls, slides away while scrolling down, comes back on scroll up.
   const [pageScrolled, setPageScrolled] = useState(false);
@@ -971,148 +1013,86 @@ export default function MobileApkApp() {
   }, [showToast, lang]);
 
   // Real-Time Polling of Global Cloud VIP System (`settings/global_vip_system`) across all connected APK & Website instances
-  const fetchGlobalVipState = useCallback(async () => {
-    try {
-      const res = await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`);
-      if (!res.ok) return;
-      const doc = await res.json();
-      const raw = doc?.fields?.json?.stringValue;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.enforced === 'boolean') {
-          setGlobalVipEnforced(parsed.enforced);
-          localStorage.setItem('bx_mob_global_vip_enforced', String(parsed.enforced));
-        }
-        if (Array.isArray(parsed.codes)) {
-          setCloudVipCodes(parsed.codes);
-        }
-        if (typeof parsed.broadcastMsg === 'string') {
-          setGlobalBroadcastMsg(parsed.broadcastMsg);
-        }
-        if (parsed.pinnedRec !== undefined) {
-          setGlobalPinnedRec(parsed.pinnedRec || null);
-        }
-        if (Array.isArray(parsed.userRequests)) {
-          setCloudUserRequests(parsed.userRequests);
-        }
-      } else if (typeof doc?.fields?.enforced?.booleanValue === 'boolean') {
-        const enf = doc.fields.enforced.booleanValue;
-        setGlobalVipEnforced(enf);
-        localStorage.setItem('bx_mob_global_vip_enforced', String(enf));
-      }
-    } catch (_) {}
+  // Shared app config (VIP enforcement, broadcast, pinned pick, latest APK) comes from the
+  // website server (CDN-cached): fetched at start, when the app returns to the foreground
+  // and every 5 minutes while it is open. v15 read Firestore every 5 seconds.
+  const applyAppConfig = useCallback((cfg) => {
+    if (!cfg || typeof cfg !== 'object') return;
+    if (typeof cfg.enforced === 'boolean') {
+      setGlobalVipEnforced((prev) => (prev === cfg.enforced ? prev : cfg.enforced));
+      localStorage.setItem('bx_mob_global_vip_enforced', String(cfg.enforced));
+    }
+    if (typeof cfg.broadcastMsg === 'string') {
+      setGlobalBroadcastMsg((prev) => (prev === cfg.broadcastMsg ? prev : cfg.broadcastMsg));
+    }
+    if (cfg.pinnedRec !== undefined) {
+      setGlobalPinnedRec((prev) =>
+        JSON.stringify(prev || null) === JSON.stringify(cfg.pinnedRec || null) ? prev : cfg.pinnedRec || null
+      );
+    }
+    if (cfg.apk) setApkRelease((prev) => (JSON.stringify(prev || null) === JSON.stringify(cfg.apk) ? prev : cfg.apk));
   }, []);
 
   useEffect(() => {
-    fetchGlobalVipState();
-    const timer = setInterval(fetchGlobalVipState, 5000);
-    return () => clearInterval(timer);
-  }, [fetchGlobalVipState]);
+    applyAppConfig(readCachedConfig());
+    let lastFetch = 0;
+    const refresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (Date.now() - lastFetch < 30000) return;
+      lastFetch = Date.now();
+      fetchAppConfig().then(applyAppConfig).catch(() => {});
+    };
+    refresh();
+    const timer = setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [applyAppConfig]);
 
   // Developer Only: Toggle Global VIP Enforcement for ALL users across all APK & Website instances
   const handleDevToggleGlobalVip = useCallback(async () => {
     if (!isDeveloper) return;
     setDevToggleBusy(true);
-    const nextEnforced = !globalVipEnforced;
     try {
-      const payload = {
-        enforced: nextEnforced,
-        updatedAt: new Date().toISOString(),
-        updatedBy: user?.email || 'developer',
-        codes: cloudVipCodes,
-        broadcastMsg: globalBroadcastMsg
-      };
-      await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            json: { stringValue: JSON.stringify(payload) },
-            enforced: { booleanValue: nextEnforced },
-            updatedAt: { stringValue: payload.updatedAt }
-          }
-        })
-      });
-      setGlobalVipEnforced(nextEnforced);
-      localStorage.setItem('bx_mob_global_vip_enforced', String(nextEnforced));
+      const res = await adminSetEnforced(!globalVipEnforced);
+      setGlobalVipEnforced(res.enforced);
+      localStorage.setItem('bx_mob_global_vip_enforced', String(res.enforced));
       showToast(
-        nextEnforced
-          ? 'تم تنشيط وفرض خطط الـ VIP على جميع المستخدمين في كل نسخ التطبيق والموقع فوراً!'
-          : 'تم إلغاء فرض الـ VIP وفتح التطبيق مجاناً لجميع المستخدمين في كل النسخ فوراً!', 'dot'
+        res.enforced ? 'اتفعّل فرض اشتراك VIP على كل المستخدمين' : 'اتلغى فرض الـ VIP — التطبيق والموقع مفتوحين للكل',
+        'shield-check'
       );
-    } catch (_) {
-      showToast('تعذر الاتصال بالسحابة لتحديث حالة الـ VIP');
+    } catch (err) {
+      showToast(apiErrorMessage(err, lang), 'alert');
     } finally {
       setDevToggleBusy(false);
     }
-  }, [isDeveloper, globalVipEnforced, user, cloudVipCodes, showToast]);
+  }, [isDeveloper, globalVipEnforced, showToast, lang]);
 
   // Developer Only: Generate a Cloud VIP Code directly from the Developer Account on Mobile
   const handleDevGenerateVipCode = useCallback(async () => {
     if (!isDeveloper) return;
     setDevGenBusy(true);
     try {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let p1 = '';
-      let p2 = '';
-      for (let i = 0; i < 4; i++) {
-        p1 += chars[Math.floor(Math.random() * chars.length)];
-        p2 += chars[Math.floor(Math.random() * chars.length)];
-      }
-      const prefix = devGenTier === 'vip_monarch' ? 'BX-MONARCH' : 'BX-BASIC';
-      const newCodeStr = `${prefix}-${p1}-${p2}`;
+      const days = Number(devGenDays) || 30;
       const priceEgp =
         devGenTier === 'vip_monarch'
-          ? devGenDays >= 365
-            ? 1499
-            : devGenDays >= 90
-            ? 499
-            : 199
-          : devGenDays >= 365
-          ? 799
-          : devGenDays >= 90
-          ? 249
-          : 99;
-      const newCodeObj = {
-        id: Date.now(),
-        code: newCodeStr,
-        tier: devGenTier,
-        durationDays: Number(devGenDays),
-        maxUses: Number(devGenUses),
-        usedCount: 0,
-        priceEgp,
-        isActive: 1,
-        redeemedBy: [],
-        createdAt: new Date().toISOString()
-      };
-      const updatedCodes = [newCodeObj, ...cloudVipCodes].slice(0, 150);
-      const payload = {
-        enforced: globalVipEnforced,
-        updatedAt: new Date().toISOString(),
-        updatedBy: user?.email || 'developer',
-        codes: updatedCodes,
-        broadcastMsg: globalBroadcastMsg
-      };
-      await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            json: { stringValue: JSON.stringify(payload) },
-            enforced: { booleanValue: globalVipEnforced },
-            updatedAt: { stringValue: payload.updatedAt }
-          }
-        })
-      });
-      setCloudVipCodes(updatedCodes);
-      setLastGenCode(newCodeStr);
-      showToast(`تم توليد الكود السحابي: ${newCodeStr}`, 'key');
-    } catch (_) {
-      showToast('تعذر توليد الكود السحابي');
+          ? days >= 365 ? 1499 : days >= 90 ? 499 : 199
+          : days >= 365 ? 799 : days >= 90 ? 249 : 99;
+      const res = await adminGenerateCodes({ tier: devGenTier, days, uses: Number(devGenUses) || 1, count: 1, priceEgp });
+      const created = Array.isArray(res.codes) ? res.codes : [];
+      if (created[0]) {
+        setCloudVipCodes((prev) => [...created, ...prev]);
+        setLastGenCode(created[0].code);
+        showToast(`اتولّد الكود: ${created[0].code}`, 'key');
+      }
+    } catch (err) {
+      showToast(apiErrorMessage(err, lang), 'alert');
     } finally {
       setDevGenBusy(false);
     }
-  }, [isDeveloper, devGenTier, devGenDays, devGenUses, cloudVipCodes, globalVipEnforced, user, showToast]);
+  }, [isDeveloper, devGenTier, devGenDays, devGenUses, showToast, lang]);
 
   // Redeem a VIP Subscription Code (Unlocks VIP Basic / VIP Monarch across App & Website)
   const handleRedeemVipCode = useCallback(
@@ -1120,107 +1100,36 @@ export default function MobileApkApp() {
       if (e?.preventDefault) e.preventDefault();
       const clean = String(vipRedeemCode || '').trim().toUpperCase();
       if (!clean) {
-        showToast(lang === 'ar' ? 'يرجى إدخال كود اشتراك VIP أولاً' : 'Please enter a VIP code');
+        showToast(lang === 'ar' ? 'اكتب كود اشتراك VIP الأول' : 'Please enter a VIP code');
+        return;
+      }
+      if (!sessionToken) {
+        setVipGateShowLogin(true);
+        showToast(lang === 'ar' ? 'سجّل الدخول الأول عشان الكود يتسجل على حسابك' : 'Sign in first so the code is saved to your account', 'user');
         return;
       }
       setVipRedeemBusy(true);
       try {
-        const res = await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`);
-        let codesList = [...cloudVipCodes];
-        let currentEnforced = globalVipEnforced;
-        if (res.ok) {
-          const doc = await res.json();
-          const raw = doc?.fields?.json?.stringValue;
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed.codes)) codesList = parsed.codes;
-            if (typeof parsed.enforced === 'boolean') currentEnforced = parsed.enforced;
-          }
-        }
-        const matchIdx = codesList.findIndex((c) => String(c.code || '').toUpperCase() === clean);
-        if (matchIdx === -1) {
-          showToast(lang === 'ar' ? 'كود الاشتراك غير صحيح أو غير مسجل' : 'Invalid VIP code', 'x-circle');
-          setVipRedeemBusy(false);
-          return;
-        }
-        const codeObj = codesList[matchIdx];
-        if ((codeObj.usedCount || 0) >= (codeObj.maxUses || 1)) {
-          showToast(lang === 'ar' ? 'هذا الكود وصل للحد الأقصى من الاستخدام' : 'Code max uses reached', 'alert');
-          setVipRedeemBusy(false);
-          return;
-        }
-        const newTier = String(codeObj.tier || '').includes('monarch') ? 'vip_monarch' : 'vip_basic';
-        const newStatus = newTier === 'vip_monarch' ? 'VIP Monarch' : 'VIP Basic';
-        const days = Number(codeObj.durationDays) || 30;
-        const expiresAt = new Date(Date.now() + days * 86400 * 1000).toISOString();
-
-        // Update code usage in Cloud Firestore
-        const updatedCode = {
-          ...codeObj,
-          usedCount: (codeObj.usedCount || 0) + 1,
-          redeemedBy: [
-            ...(Array.isArray(codeObj.redeemedBy) ? codeObj.redeemedBy : []),
-            { username: user?.username || 'mobile_user', at: new Date().toISOString() }
-          ]
-        };
-        const updatedCodes = [...codesList];
-        updatedCodes[matchIdx] = updatedCode;
-        setCloudVipCodes(updatedCodes);
-
-        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: {
-                stringValue: JSON.stringify({
-                  enforced: currentEnforced,
-                  updatedAt: new Date().toISOString(),
-                  codes: updatedCodes,
-                  broadcastMsg: globalBroadcastMsg
-                })
-              },
-              enforced: { booleanValue: currentEnforced },
-              updatedAt: { stringValue: new Date().toISOString() }
-            }
-          })
-        }).catch(() => {});
-
-        localStorage.setItem('bx_mob_redeemed_vip_code', clean);
-        localStorage.setItem('bx_mob_redeemed_vip_tier', newTier);
-        localStorage.setItem('blackx.vipTier', newTier);
-        setRedeemedVipTier(newTier);
-
-        if (user) {
-          const updatedUser = {
-            ...user,
-            vipTier: newTier,
-            vipStatus: newStatus,
-            vipExpiresAt: expiresAt
-          };
-          setUser(updatedUser);
-          localStorage.setItem('bx_mob_user', JSON.stringify(updatedUser));
-        }
-
+        const res = await redeemVipCode(clean);
+        const updatedUser = { ...(user || {}), ...(res.user || {}) };
+        setUser(updatedUser);
+        localStorage.setItem('bx_mob_user', JSON.stringify(updatedUser));
         setVipRedeemCode('');
-        window.triggerBlackXMotion?.(
-          'monarch',
-          2400,
-          `مبروك! تم تفعيل ${newStatus} · عرش إمبراطور الظلال`,
-          `${newStatus} ACTIVATED · MONARCH SOVEREIGN`
-        );
+        const newStatus = res.user?.vipStatus || (res.tier === 'vip_monarch' ? 'VIP Monarch' : 'VIP Basic');
+        haptic('success');
+        window.triggerBlackXMotion?.('monarch', 2400, `مبروك! اتفعّل ${newStatus}`, `${newStatus} ACTIVATED`);
         showToast(
-          lang === 'ar'
-            ? `مبروك! تم تفعيل باقة ${newStatus} بنجاح وفتح جميع مزايا التطبيق!`
-            : `${newStatus} activated successfully!`, 'check'
+          lang === 'ar' ? `مبروك! اتفعّلت باقة ${newStatus} لمدة ${res.days} يوم` : `${newStatus} activated for ${res.days} days!`,
+          'check'
         );
-      } catch (_) {
-        showToast(lang === 'ar' ? 'حدث خطأ أثناء التحقق من الكود' : 'Error verifying code');
+      } catch (err) {
+        haptic('warning');
+        showToast(apiErrorMessage(err, lang), 'x-circle');
       } finally {
         setVipRedeemBusy(false);
       }
     },
-    [vipRedeemCode, cloudVipCodes, globalVipEnforced, globalBroadcastMsg, user, showToast, lang]
+    [vipRedeemCode, sessionToken, user, showToast, lang]
   );
 
   // Developer Only: Send or Clear a Global Cloud Broadcast Banner to ALL users immediately
@@ -1230,38 +1139,20 @@ export default function MobileApkApp() {
       setDevBroadcastBusy(true);
       const nextMsg = clearMsg ? '' : String(devBroadcastInput || '').trim();
       try {
-        const payload = {
-          enforced: globalVipEnforced,
-          updatedAt: new Date().toISOString(),
-          updatedBy: user?.email || 'developer',
-          codes: cloudVipCodes,
-          broadcastMsg: nextMsg
-        };
-        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: { stringValue: JSON.stringify(payload) },
-              enforced: { booleanValue: globalVipEnforced },
-              updatedAt: { stringValue: payload.updatedAt }
-            }
-          })
-        });
-        setGlobalBroadcastMsg(nextMsg);
+        const res = await adminBroadcast(nextMsg);
+        setGlobalBroadcastMsg(res.broadcastMsg || '');
         if (clearMsg) setDevBroadcastInput('');
         showToast(
-          nextMsg
-            ? 'تم بث الإشعار العام السحابي لجميع مستخدمي التطبيق والموقع فوراً!'
-            : 'تم إخفاء الإشعار العام من جميع الأجهزة', 'megaphone'
+          nextMsg ? 'اتنشر الإشعار العام — هيوصل لكل الأجهزة خلال دقايق' : 'اتشال الإشعار العام من كل الأجهزة',
+          'megaphone'
         );
-      } catch (_) {
-        showToast('تعذر إرسال الإشعار السحابي');
+      } catch (err) {
+        showToast(apiErrorMessage(err, lang), 'alert');
       } finally {
         setDevBroadcastBusy(false);
       }
     },
-    [isDeveloper, devBroadcastInput, globalVipEnforced, user, cloudVipCodes, showToast]
+    [isDeveloper, devBroadcastInput, showToast, lang]
   );
 
   // ==================== v4.0 ULTIMATE CONTROLLERS ====================
@@ -1271,72 +1162,21 @@ export default function MobileApkApp() {
     if (!isDeveloper) return;
     const target = String(devGrantTarget || '').trim().toLowerCase();
     if (!target) {
-      showToast(lang === 'ar' ? 'يرجى كتابة اسم المستخدم أو البريد الإلكتروني للعضو' : 'Enter username or email');
+      showToast(lang === 'ar' ? 'اكتب اسم المستخدم أو الإيميل' : 'Enter username or email');
       return;
     }
     setDevGrantBusy(true);
     try {
-      const isEmailTarget = target.includes('@');
-      const primaryKey = isEmailTarget ? cleanCloudKey('email', target) : cleanCloudKey('user', target);
-      let existingUser = null;
-      const getRes = await fetch(`${BX_SETTINGS_BASE}/${primaryKey}?key=${BX_KEY}`);
-      if (getRes.ok) {
-        const doc = await getRes.json();
-        const raw = doc?.fields?.json?.stringValue;
-        if (raw) existingUser = JSON.parse(raw);
-      }
-
-      const newStatus = devGrantTier === 'vip_monarch' ? 'VIP Monarch' : 'VIP Basic';
-      const expiresAt = new Date(Date.now() + Number(devGrantDays || 30) * 86400 * 1000).toISOString();
-      const baseUsername = existingUser?.username || (isEmailTarget ? target.split('@')[0] : target);
-      const baseEmail = existingUser?.email || (isEmailTarget ? target : '');
-
-      const upgradedUser = {
-        ...(existingUser || {
-          id: `usr_${Date.now()}`,
-          username: baseUsername,
-          email: baseEmail,
-          displayName: existingUser?.displayName || baseUsername,
-          role: 'user',
-          favorites: [],
-          progress: []
-        }),
-        vipTier: devGrantTier,
-        vipStatus: newStatus,
-        vipExpiresAt: expiresAt,
-        grantedByDeveloperAt: new Date().toISOString()
-      };
-
-      const body = {
-        fields: {
-          json: { stringValue: JSON.stringify(upgradedUser) },
-          username: { stringValue: String(baseUsername).toLowerCase() },
-          email: { stringValue: String(baseEmail).toLowerCase() },
-          updatedAt: { stringValue: new Date().toISOString() }
-        }
-      };
-
-      await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('user', baseUsername)}?key=${BX_KEY}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (baseEmail) {
-        await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('email', baseEmail)}?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-      }
-
+      const res = await adminSetUserVip(target, devGrantTier, Number(devGrantDays) || 30);
       setDevGrantTarget('');
       showToast(
         lang === 'ar'
-          ? `تم ترقية حساب (${target}) مباشرة إلى ${newStatus} لمدة ${devGrantDays} يوم في السحابة!`
-          : `Upgraded (${target}) to ${newStatus} for ${devGrantDays} days!`, 'crown'
+          ? `اترقى حساب (${res.user?.username || target}) لـ ${res.user?.vipStatus} لمدة ${devGrantDays} يوم`
+          : `Upgraded ${target} to ${res.user?.vipStatus}`,
+        'crown'
       );
-    } catch (_) {
-      showToast(lang === 'ar' ? 'تعذر ترقية المستخدم عبر السحابة' : 'Cloud upgrade failed');
+    } catch (err) {
+      showToast(apiErrorMessage(err, lang), 'alert');
     } finally {
       setDevGrantBusy(false);
     }
@@ -1922,85 +1762,33 @@ export default function MobileApkApp() {
     if (!isDeveloper) return;
     const target = String(devGrantTarget || '').trim().toLowerCase();
     if (!target) {
-      showToast('يرجى كتابة اسم المستخدم أو البريد الإلكتروني لسحب الاشتراك');
+      showToast('اكتب اسم المستخدم أو الإيميل اللي هيتسحب منه الاشتراك');
       return;
     }
     setDevGrantBusy(true);
     try {
-      const isEmailTarget = target.includes('@');
-      const primaryKey = isEmailTarget ? cleanCloudKey('email', target) : cleanCloudKey('user', target);
-      let existingUser = null;
-      const getRes = await fetch(`${BX_SETTINGS_BASE}/${primaryKey}?key=${BX_KEY}`);
-      if (getRes.ok) {
-        const doc = await getRes.json();
-        const raw = doc?.fields?.json?.stringValue;
-        if (raw) existingUser = JSON.parse(raw);
-      }
-      const baseUsername = existingUser?.username || (isEmailTarget ? target.split('@')[0] : target);
-      const baseEmail = existingUser?.email || (isEmailTarget ? target : '');
-      const revokedUser = {
-        ...(existingUser || { username: baseUsername, email: baseEmail, role: 'user' }),
-        vipTier: 'free',
-        vipStatus: 'Free Tier',
-        vipExpiresAt: null
-      };
-      const body = {
-        fields: {
-          json: { stringValue: JSON.stringify(revokedUser) },
-          username: { stringValue: String(baseUsername).toLowerCase() },
-          email: { stringValue: String(baseEmail).toLowerCase() },
-          updatedAt: { stringValue: new Date().toISOString() }
-        }
-      };
-      await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('user', baseUsername)}?key=${BX_KEY}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (baseEmail) {
-        await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('email', baseEmail)}?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-      }
+      await adminSetUserVip(target, 'free', 1);
       setDevGrantTarget('');
-      showToast(`تم سحب وإلغاء اشتراك VIP من (${target}) وإعادته للباقة المجانية فوراً!`, 'ban');
-    } catch (_) {
-      showToast('تعذر سحب الاشتراك عبر السحابة');
+      showToast(`اتسحب اشتراك VIP من (${target}) ورجع للباقة المجانية`, 'ban');
+    } catch (err) {
+      showToast(apiErrorMessage(err, lang), 'alert');
     } finally {
       setDevGrantBusy(false);
     }
-  }, [isDeveloper, devGrantTarget, showToast]);
+  }, [isDeveloper, devGrantTarget, showToast, lang]);
 
   const handleDevDeleteVipCode = useCallback(
     async (codeToDelete) => {
       if (!isDeveloper) return;
-      const updatedCodes = cloudVipCodes.filter((c) => c.code !== codeToDelete);
-      setCloudVipCodes(updatedCodes);
       try {
-        const payload = {
-          enforced: globalVipEnforced,
-          updatedAt: new Date().toISOString(),
-          updatedBy: user?.email || 'developer',
-          codes: updatedCodes,
-          broadcastMsg: globalBroadcastMsg
-        };
-        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: { stringValue: JSON.stringify(payload) },
-              enforced: { booleanValue: globalVipEnforced },
-              updatedAt: { stringValue: payload.updatedAt }
-            }
-          })
-        });
-        showToast(`تم حذف الكود (${codeToDelete}) من السحابة نهائياً`, 'trash');
-      } catch (_) {}
+        await adminDeleteCode(codeToDelete);
+        setCloudVipCodes((prev) => prev.filter((c) => c.code !== codeToDelete));
+        showToast(`اتمسح الكود (${codeToDelete})`, 'trash');
+      } catch (err) {
+        showToast(apiErrorMessage(err, lang), 'alert');
+      }
     },
-    [isDeveloper, cloudVipCodes, globalVipEnforced, user, globalBroadcastMsg, showToast]
+    [isDeveloper, showToast, lang]
   );
 
   // 6. 1-Tap Full Vault Backup & Restore (تصدير واستيراد الخزنة الكاملة)
@@ -2115,36 +1903,21 @@ export default function MobileApkApp() {
     if (!isDeveloper) return;
     const q = String(devInspectQuery || '').trim().toLowerCase();
     if (!q) {
-      showToast('أدخل اسم المستخدم أو البريد الإلكتروني للفحص');
+      showToast('اكتب اسم المستخدم أو الإيميل');
       return;
     }
     setDevInspectBusy(true);
     try {
-      const isEm = q.includes('@');
-      const key1 = isEm ? cleanCloudKey('email', q) : cleanCloudKey('user', q);
-      let res = await fetch(`${BX_SETTINGS_BASE}/${key1}?key=${BX_KEY}`);
-      if (!res.ok && !isEm) {
-        res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('email', `${q}@gmail.com`)}?key=${BX_KEY}`);
-      }
-      if (!res.ok) {
-        setDevInspectedUser(null);
-        showToast('لم يتم العثور على حساب مسجل بهذا الاسم أو البريد', 'x-circle');
-        setDevInspectBusy(false);
-        return;
-      }
-      const doc = await res.json();
-      const raw = doc?.fields?.json?.stringValue;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setDevInspectedUser(parsed);
-        showToast(`تم جلب بيانات حساب (${parsed.username || parsed.email}) بنجاح!`, 'search');
-      }
-    } catch (_) {
-      showToast('تعذر فحص الحساب عبر السحابة');
+      const res = await adminInspectUser(q);
+      setDevInspectedUser({ ...(res.user || {}), stats: res.stats || {} });
+      showToast(`اتجابت بيانات (${res.user?.username || res.user?.email || q})`, 'search');
+    } catch (err) {
+      setDevInspectedUser(null);
+      showToast(apiErrorMessage(err, lang), 'x-circle');
     } finally {
       setDevInspectBusy(false);
     }
-  }, [isDeveloper, devInspectQuery, showToast]);
+  }, [isDeveloper, devInspectQuery, showToast, lang]);
 
   // 4. Developer Global Featured Spotlight Pin (تثبيت ترشيح المطور الرسمي في الصفحة الرئيسية للجميع)
   const handleDevPinRecommendation = useCallback(
@@ -2184,26 +1957,8 @@ export default function MobileApkApp() {
             };
           }
         }
-        const payload = {
-          enforced: globalVipEnforced,
-          updatedAt: new Date().toISOString(),
-          updatedBy: user?.email || 'developer',
-          codes: cloudVipCodes,
-          broadcastMsg: globalBroadcastMsg,
-          pinnedRec: nextPin
-        };
-        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: { stringValue: JSON.stringify(payload) },
-              enforced: { booleanValue: globalVipEnforced },
-              updatedAt: { stringValue: payload.updatedAt }
-            }
-          })
-        });
-        setGlobalPinnedRec(nextPin);
+        const saved = await adminPin(nextPin);
+        setGlobalPinnedRec(saved.pinnedRec || null);
         showToast(
           nextPin
             ? `تم تثبيت (${nextPin.titleEn}) كترشيح رسمي في الصفحة الرئيسية لجميع المستخدمين!`
@@ -2221,10 +1976,6 @@ export default function MobileApkApp() {
       devPinNoteInput,
       popularList,
       airingList,
-      globalVipEnforced,
-      user,
-      cloudVipCodes,
-      globalBroadcastMsg,
       showToast
     ]
   );
@@ -2368,91 +2119,54 @@ export default function MobileApkApp() {
       if (e?.preventDefault) e.preventDefault();
       const clean = String(userRequestText || '').trim();
       if (!clean) {
-        showToast('يرجى كتابة اسم العمل أو تفاصيل طلبك أولاً');
+        showToast('اكتب اسم العمل أو تفاصيل طلبك الأول');
         return;
       }
       setUserRequestBusy(true);
       try {
-        const newReq = {
-          id: `req_${Date.now()}`,
-          type: userRequestType,
-          text: clean,
-          author: user?.displayName || user?.username || 'زائر BLACK X',
-          email: user?.email || '',
-          createdAt: new Date().toISOString()
-        };
-        const nextList = [newReq, ...cloudUserRequests].slice(0, 60);
-        const payload = {
-          enforced: globalVipEnforced,
-          updatedAt: new Date().toISOString(),
-          codes: cloudVipCodes,
-          broadcastMsg: globalBroadcastMsg,
-          pinnedRec: globalPinnedRec,
-          userRequests: nextList
-        };
-        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: { stringValue: JSON.stringify(payload) },
-              enforced: { booleanValue: globalVipEnforced },
-              updatedAt: { stringValue: payload.updatedAt }
-            }
-          })
-        });
-        setCloudUserRequests(nextList);
+        await sendDeveloperRequest(userRequestType, clean);
         setUserRequestText('');
-        showToast('تم إرسال طلبك مباشرة إلى لوحة قيادة المطور بنجاح!', 'mail');
-      } catch (_) {
-        showToast('تعذر إرسال الطلب حالياً');
+        haptic('success');
+        showToast('اتبعت طلبك للمطور', 'mail');
+      } catch (err) {
+        showToast(apiErrorMessage(err, lang), 'alert');
       } finally {
         setUserRequestBusy(false);
       }
     },
-    [
-      userRequestText,
-      userRequestType,
-      user,
-      cloudUserRequests,
-      globalVipEnforced,
-      cloudVipCodes,
-      globalBroadcastMsg,
-      globalPinnedRec,
-      showToast
-    ]
+    [userRequestText, userRequestType, showToast, lang]
   );
 
   const handleDevDeleteUserRequest = useCallback(
     async (reqId) => {
       if (!isDeveloper) return;
-      const nextList = cloudUserRequests.filter((r) => r.id !== reqId);
-      setCloudUserRequests(nextList);
       try {
-        const payload = {
-          enforced: globalVipEnforced,
-          updatedAt: new Date().toISOString(),
-          codes: cloudVipCodes,
-          broadcastMsg: globalBroadcastMsg,
-          pinnedRec: globalPinnedRec,
-          userRequests: nextList
-        };
-        await fetch(`${BX_SETTINGS_BASE}/global_vip_system?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              json: { stringValue: JSON.stringify(payload) },
-              enforced: { booleanValue: globalVipEnforced },
-              updatedAt: { stringValue: payload.updatedAt }
-            }
-          })
-        });
-        showToast('تم إنجاز/حذف الطلب من قائمة المطور', 'check');
-      } catch (_) {}
+        await adminDeleteRequest(reqId);
+        setCloudUserRequests((prev) => prev.filter((r) => r.id !== reqId));
+        showToast('اتشال الطلب من قائمة المطور', 'check');
+      } catch (err) {
+        showToast(apiErrorMessage(err, lang), 'alert');
+      }
     },
-    [isDeveloper, cloudUserRequests, globalVipEnforced, cloudVipCodes, globalBroadcastMsg, globalPinnedRec, showToast]
+    [isDeveloper, showToast, lang]
   );
+
+  // Developer panel data (codes + requests) — only the server can read them now.
+  const loadDevPanel = useCallback(async () => {
+    if (!isDeveloper) return;
+    try {
+      const res = await adminGetVip();
+      setCloudVipCodes(Array.isArray(res.codes) ? res.codes : []);
+      setCloudUserRequests(Array.isArray(res.userRequests) ? res.userRequests : []);
+      if (typeof res.enforced === 'boolean') setGlobalVipEnforced(res.enforced);
+      if (typeof res.broadcastMsg === 'string') setGlobalBroadcastMsg(res.broadcastMsg);
+      if (res.pinnedRec !== undefined) setGlobalPinnedRec(res.pinnedRec || null);
+    } catch (_) {}
+  }, [isDeveloper]);
+
+  useEffect(() => {
+    if (isDeveloper && (profileSubTab === 'developer' || activeTab === 'profile')) loadDevPanel();
+  }, [isDeveloper, profileSubTab, activeTab, loadDevPanel]);
 
   // ==================== v8.0 GLOBAL LUXURY CONTROLLERS ====================
   // 1. Shareable BLACK X Sovereign Otaku ID Card Generator (1080x600 Canvas PNG)
@@ -2581,10 +2295,11 @@ export default function MobileApkApp() {
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  // Load Home Screen rows (popular, recent, top, newest, movies, airing) from the catalogue index
+  // Load Home Screen rows (popular, recent, top, newest, movies, airing) from the catalogue index.
+  // Pull-to-refresh re-runs it (homeRefreshTick) while the current rows stay on screen.
   useEffect(() => {
     let alive = true;
-    setHomeLoading(true);
+    if (!homeRefreshTick) setHomeLoading(true);
     Promise.all([
       queryAlgolia('series_fav_count_desc', { query: '', hitsPerPage: 24 }).catch(() => ({ hits: [] })),
       queryAlgolia('recent', { query: '', hitsPerPage: 20 }).catch(() => ({ hits: [] })),
@@ -2601,20 +2316,15 @@ export default function MobileApkApp() {
       setMoviesList((mov.hits || []).map(formatAnimeHit).filter(Boolean));
       setAiringList((air.hits || []).map(formatAnimeHit).filter(Boolean));
       setHomeLoading(false);
+    }).finally(() => {
+      refreshDoneRef.current?.();
+      refreshDoneRef.current = null;
     });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [homeRefreshTick]);
 
-  // Auto-advance Hero Banner every 5 seconds
-  useEffect(() => {
-    if (!popularList.length || heroTrailerOpen) return;
-    const timer = setInterval(() => {
-      setHeroSlide((prev) => (prev + 1) % Math.min(6, popularList.length));
-    }, 5200);
-    return () => clearInterval(timer);
-  }, [popularList.length, heroTrailerOpen]);
 
   // Build facetFilters array for Catalog
   const buildCatalogFacets = useCallback(() => {
@@ -2731,20 +2441,37 @@ export default function MobileApkApp() {
       })
       .finally(() => {
         if (alive) setScheduleLoading(false);
+        refreshDoneRef.current?.();
+        refreshDoneRef.current = null;
       });
     return () => {
       alive = false;
     };
-  }, [activeTab, scheduleDay]);
+  }, [activeTab, scheduleDay, scheduleRefreshTick]);
 
   // Hands-free Auto-Scroll for Webtoon Reader
   useEffect(() => {
-    if (!activeMangaChapter || autoScrollSpeed === 0) return;
-    const pxPerTick = autoScrollSpeed * 2.2;
-    const id = setInterval(() => {
-      window.scrollBy({ top: pxPerTick, behavior: 'auto' });
-    }, 16);
-    return () => clearInterval(id);
+    // Time-based auto-scroll on requestAnimationFrame: smooth on 60/90/120 Hz screens
+    // (a fixed 16 ms timer drifts against the display and stutters).
+    if (!activeMangaChapter || autoScrollSpeed === 0) return undefined;
+    const pxPerSecond = autoScrollSpeed * 2.2 * 62.5;
+    let rafId = 0;
+    let last = 0;
+    let carry = 0;
+    const step = (now) => {
+      if (last) {
+        carry += (pxPerSecond * Math.min(64, now - last)) / 1000;
+        const whole = Math.trunc(carry);
+        if (whole) {
+          window.scrollBy(0, whole);
+          carry -= whole;
+        }
+      }
+      last = now;
+      rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
   }, [activeMangaChapter, autoScrollSpeed]);
 
   // Manga & Manhwa library/search from the website API (same servers and results as the website)
@@ -2830,300 +2557,275 @@ export default function MobileApkApp() {
   }, [loadCommunityFeed]);
 
   // Sync User Profile, Favorites & Watch History with BLACK X Shared Cloud Firestore
+  // Account sync (v16): favorites + history + resume positions + XP go to /api/app/state
+  // with the server session, debounced. Pull happens at start, after sign-in and when the
+  // app returns to the foreground (v15 wrote Firestore directly and polled it every 8 s).
+  const pendingSyncRef = useRef(null);
+  const syncTimerRef = useRef(null);
+  const syncWaitersRef = useRef([]);
+  const flushStateSync = useCallback(async () => {
+    clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = null;
+    const pending = pendingSyncRef.current;
+    pendingSyncRef.current = null;
+    const waiters = syncWaitersRef.current.splice(0);
+    if (!pending || !loadSession()) {
+      waiters.forEach((resolve) => resolve(false));
+      return false;
+    }
+    try {
+      await pushAccountState({
+        favorites: pending.favorites,
+        progress: pending.progress,
+        positions: positionsForSync(),
+        xp: Number(localStorage.getItem('bx_mob_xp') || 0)
+      });
+      waiters.forEach((resolve) => resolve(true));
+      return true;
+    } catch (err) {
+      if (err?.status === 401) setSessionToken(null);
+      waiters.forEach((resolve) => resolve(false));
+      return false;
+    }
+  }, []);
+
   const syncUserStateToCloud = useCallback(
-    async (u, favs, hist) => {
-      if (!u || !u.username) return;
-      const uKey = cleanCloudKey('user', u.username);
-      const payload = {
-        ...u,
-        favorites: favs,
-        progress: hist,
-        updatedAt: new Date().toISOString()
+    (u, favs, hist, { immediate = false } = {}) => {
+      if (!u || !loadSession()) return Promise.resolve(false);
+      pendingSyncRef.current = {
+        favorites: Array.isArray(favs) ? favs : latestRef.current.favorites || [],
+        progress: Array.isArray(hist) ? hist : latestRef.current.watchHistory || []
       };
-      const body = {
-        fields: {
-          json: { stringValue: JSON.stringify(payload) },
-          username: { stringValue: u.username.toLowerCase() },
-          email: { stringValue: (u.email || '').toLowerCase() },
-          updatedAt: { stringValue: payload.updatedAt }
-        }
-      };
-      try {
-        await fetch(`${BX_SETTINGS_BASE}/${uKey}?key=${BX_KEY}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        if (u.email) {
-          const eKey = cleanCloudKey('email', u.email);
-          await fetch(`${BX_SETTINGS_BASE}/${eKey}?key=${BX_KEY}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-        }
-      } catch (_) {}
+      return new Promise((resolve) => {
+        syncWaitersRef.current.push(resolve);
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = setTimeout(flushStateSync, immediate ? 0 : 2500);
+      });
     },
-    []
+    [flushStateSync]
+  );
+
+  // Merge what the server has into this phone (lists: union, newest first; positions:
+  // newest per episode; XP: the highest).
+  const applyServerState = useCallback((state) => {
+    if (!state || typeof state !== 'object') return;
+    if (Array.isArray(state.favorites)) {
+      setFavorites((prev) => {
+        const map = new Map();
+        for (const item of [...state.favorites, ...prev]) {
+          const k = item?.objectID || item?.slug;
+          if (k && !map.has(k)) map.set(k, item);
+        }
+        const merged = Array.from(map.values());
+        localStorage.setItem('bx_mob_favorites', JSON.stringify(merged));
+        return merged;
+      });
+    }
+    if (Array.isArray(state.progress)) {
+      setWatchHistory((prev) => {
+        const map = new Map();
+        const all = [...state.progress, ...prev].sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
+        for (const item of all) {
+          const k = item?.objectID || item?.slug;
+          if (k && !map.has(k)) map.set(k, item);
+        }
+        const merged = Array.from(map.values()).slice(0, 60);
+        localStorage.setItem('bx_mob_history', JSON.stringify(merged));
+        return merged;
+      });
+    }
+    if (state.positions) mergePositions(state.positions);
+    if (Number(state.xp) > 0) {
+      setUserXp((prev) => {
+        const next = Math.max(prev, Number(state.xp) || 0);
+        localStorage.setItem('bx_mob_xp', String(next));
+        return next;
+      });
+    }
+  }, []);
+
+  const finishServerLogin = useCallback(
+    (res) => {
+      if (!res?.token || !res.user) return;
+      setSessionToken(res.token);
+      const loggedUser = { ...res.user };
+      setUser(loggedUser);
+      localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
+      setVipGateShowLogin(false);
+      if (res.state) applyServerState(res.state);
+      haptic('success');
+      // Push back what this phone had before signing in (merged above).
+      setTimeout(() => {
+        syncUserStateToCloud(loggedUser, latestRef.current.favorites, latestRef.current.watchHistory, { immediate: true });
+      }, 900);
+    },
+    [applyServerState, syncUserStateToCloud]
   );
 
   // Pull latest cloud state when user is logged in (and keep syncing every 8 seconds with Website)
-  const pullCloudUserState = useCallback(async (activeUser) => {
-    if (!activeUser?.username && !activeUser?.email) return;
-    const keyToTry = activeUser.email
-      ? cleanCloudKey('email', activeUser.email)
-      : cleanCloudKey('user', activeUser.username);
+  const lastPullRef = useRef(0);
+  const pullCloudUserState = useCallback(async () => {
+    if (!loadSession()) return false;
+    lastPullRef.current = Date.now();
     try {
-      let res = await fetch(`${BX_SETTINGS_BASE}/${keyToTry}?key=${BX_KEY}`);
-      if (!res.ok && activeUser.username) {
-        res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('user', activeUser.username)}?key=${BX_KEY}`);
-      }
-      if (!res.ok) return;
-      const doc = await res.json();
-      const raw = doc?.fields?.json?.stringValue;
-      if (!raw) return;
-      const cloud = JSON.parse(raw);
-
-      if (cloud.displayName || cloud.photoUrl) {
+      const res = await fetchMe();
+      if (res?.user) {
         setUser((prev) => {
-          if (!prev) return prev;
-          const updated = {
-            ...prev,
-            displayName: cloud.displayName || prev.displayName,
-            photoUrl: cloud.photoUrl || prev.photoUrl,
-            role: cloud.role || prev.role
-          };
-          localStorage.setItem('bx_mob_user', JSON.stringify(updated));
-          return updated;
+          const next = { ...(prev || {}), ...res.user };
+          localStorage.setItem('bx_mob_user', JSON.stringify(next));
+          return next;
         });
       }
+      if (res?.state) applyServerState(res.state);
+      return true;
+    } catch (err) {
+      if (err?.status === 401) setSessionToken(null);
+      return false;
+    }
+  }, [applyServerState]);
 
-      if (Array.isArray(cloud.favorites) && cloud.favorites.length > 0) {
-        setFavorites((prev) => {
-          const mergedMap = new Map();
-          for (const item of [...cloud.favorites, ...prev]) {
-            const k = item.objectID || item.slug;
-            if (k && !mergedMap.has(k)) mergedMap.set(k, item);
-          }
-          const merged = Array.from(mergedMap.values());
-          localStorage.setItem('bx_mob_favorites', JSON.stringify(merged));
-          return merged;
-        });
-      }
-
-      if (Array.isArray(cloud.progress) && cloud.progress.length > 0) {
-        setWatchHistory((prev) => {
-          const mergedMap = new Map();
-          for (const item of [...cloud.progress, ...prev]) {
-            const k = item.objectID || item.slug;
-            if (k && !mergedMap.has(k)) mergedMap.set(k, item);
-          }
-          const merged = Array.from(mergedMap.values()).slice(0, 60);
-          localStorage.setItem('bx_mob_history', JSON.stringify(merged));
-          return merged;
-        });
-      }
-    } catch (_) {}
-  }, []);
+  const handleManualSync = useCallback(async () => {
+    if (!sessionToken) {
+      setActiveTab('profile');
+      setProfileSubTab('account');
+      showToast(lang === 'ar' ? 'سجّل الدخول عشان حسابك يتزامن مع الموقع' : 'Sign in to sync your account', 'user');
+      return;
+    }
+    const pulled = await pullCloudUserState();
+    const pushed = await syncUserStateToCloud(user, latestRef.current.favorites, latestRef.current.watchHistory, { immediate: true });
+    showToast(
+      pulled || pushed
+        ? lang === 'ar' ? 'اتزامن حسابك مع الموقع' : 'Account synced'
+        : lang === 'ar' ? 'المزامنة ما نجحتش — اتأكد من النت' : 'Sync failed — check your connection',
+      pulled || pushed ? 'check' : 'alert'
+    );
+  }, [sessionToken, user, pullCloudUserState, syncUserStateToCloud, showToast, lang]);
 
   useEffect(() => {
-    if (!user) return;
-    pullCloudUserState(user);
-    const interval = setInterval(() => pullCloudUserState(user), 8000);
-    return () => clearInterval(interval);
-  }, [user?.username, user?.email, pullCloudUserState]);
+    if (!sessionToken) return undefined;
+    pullCloudUserState();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        if (Date.now() - lastPullRef.current > 60000) pullCloudUserState();
+      } else {
+        flushPositions();
+        flushStateSync();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [sessionToken, pullCloudUserState, flushStateSync]);
 
   // Real Google OAuth 2.0 Sign-In via Firebase IdentityToolkit & Native Android OAuth Bridge
   // NEVER lists or exposes any cloud accounts on the login screen.
+  // Google sign-in is accepted only with a Firebase ID token that the SERVER verifies.
+  // (v15 also signed people in with just the e-mail returned by the phone's account
+  // picker, which any modified client could fake.)
   const completeVerifiedGoogleLogin = useCallback(
     async (idpData) => {
       try {
-        const verifiedEmail = String(idpData?.email || '').trim().toLowerCase();
-        if (!verifiedEmail || !idpData?.idToken) {
-          showToast(lang === 'ar' ? 'فشل التحقق من رمز مصادقة Google' : 'Google token verification failed');
-          setAuthBusy(false);
+        if (!idpData?.idToken || idpData.idToken === 'android_system_google_account') {
+          showToast(lang === 'ar' ? 'جوجل ما أكدش الدخول — جرّب تاني' : 'Google could not verify the sign-in', 'alert');
           return;
         }
-        const eKey = cleanCloudKey('email', verifiedEmail);
-        const isDev = verifiedEmail === 'mz0970mmz@gmail.com';
-        let cloudUser = null;
-
-        const res = await fetch(`${BX_SETTINGS_BASE}/${eKey}?key=${BX_KEY}`);
-        if (res.ok) {
-          const doc = await res.json();
-          const raw = doc?.fields?.json?.stringValue;
-          if (raw) cloudUser = JSON.parse(raw);
-        }
-
-        const baseUsername = (cloudUser?.username || (isDev ? 'developer' : verifiedEmail.split('@')[0]))
-          .toLowerCase()
-          .replace(/[^a-z0-9_.-]/g, '');
-
-        const mergedFavs =
-          Array.isArray(cloudUser?.favorites) && cloudUser.favorites.length
-            ? [
-                ...cloudUser.favorites,
-                ...favorites.filter(
-                  (f) => !cloudUser.favorites.some((cf) => (cf.objectID || cf.slug) === (f.objectID || f.slug))
-                )
-              ]
-            : favorites;
-
-        const mergedHist =
-          Array.isArray(cloudUser?.progress) && cloudUser.progress.length
-            ? [
-                ...cloudUser.progress,
-                ...watchHistory.filter(
-                  (h) => !cloudUser.progress.some((ch) => (ch.objectID || ch.slug) === (h.objectID || h.slug))
-                )
-              ]
-            : watchHistory;
-
-        const isDevRole = isDev || cloudUser?.role === 'developer' || baseUsername === 'developer';
-        const effectiveTier = isDevRole
-          ? 'vip_monarch'
-          : cloudUser?.vipTier === 'vip_monarch' || cloudUser?.vipTier === 'vip_basic'
-          ? cloudUser.vipTier
-          : localStorage.getItem('bx_mob_redeemed_vip_tier') || 'free';
-
-        const loggedUser = {
-          id: idpData.localId || cloudUser?.id || `google_${Date.now()}`,
-          username: baseUsername,
-          email: verifiedEmail,
-          displayName: idpData.displayName || idpData.fullName || cloudUser?.displayName || verifiedEmail.split('@')[0],
-          photoUrl: idpData.photoUrl || cloudUser?.photoUrl || '',
-          avatarColor: cloudUser?.avatarColor || '#ffffff',
-          role: isDevRole ? 'developer' : 'user',
-          vipTier: effectiveTier,
-          vipStatus:
-            effectiveTier === 'vip_monarch'
-              ? 'VIP Monarch'
-              : effectiveTier === 'vip_basic'
-              ? 'VIP Basic'
-              : 'Free Tier',
-          isGoogleAccount: true
-        };
-
-        setUser(loggedUser);
-        localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
-        setVipGateShowLogin(false);
-        setFavorites(mergedFavs);
-        localStorage.setItem('bx_mob_favorites', JSON.stringify(mergedFavs));
-        setWatchHistory(mergedHist);
-        localStorage.setItem('bx_mob_history', JSON.stringify(mergedHist));
-
-        await syncUserStateToCloud(loggedUser, mergedFavs, mergedHist);
+        const res = await loginWithGoogle(idpData.idToken, {
+          favorites: latestRef.current.favorites,
+          progress: latestRef.current.watchHistory,
+          positions: positionsForSync(),
+          xp: Number(localStorage.getItem('bx_mob_xp') || 0)
+        });
+        finishServerLogin(res);
         showToast(
-          lang === 'ar'
-            ? `تم تسجيل الدخول بحساب Google (${loggedUser.displayName}) بنجاح!`
-            : `Signed in with Google (${loggedUser.displayName})!`, 'check'
+          lang === 'ar' ? `أهلاً ${res.user.displayName} — اتسجل دخولك بجوجل` : `Signed in with Google (${res.user.displayName})`,
+          'check'
         );
-      } catch (_) {
-        showToast(lang === 'ar' ? 'حدث خطأ أثناء مزامنة حساب Google' : 'Google sync error');
+      } catch (err) {
+        showToast(apiErrorMessage(err, lang), 'alert');
       } finally {
         setAuthBusy(false);
       }
     },
-    [favorites, watchHistory, syncUserStateToCloud, showToast, lang]
+    [finishServerLogin, showToast, lang]
   );
 
   const handleRealGoogleOAuthLogin = useCallback(async () => {
     setAuthBusy(true);
-    try {
-      // Handler for Native Android System Google Account Picker (Google accounts signed in on the phone)
-      window.__onBlackXPhoneGoogleAccountPicked = async (pickedEmail) => {
-        try {
-          const cleanEmail = String(pickedEmail || '').trim().toLowerCase();
-          if (cleanEmail && cleanEmail.includes('@')) {
-            await completeVerifiedGoogleLogin({
-              email: cleanEmail,
-              idToken: 'android_system_google_account',
-              localId: `google_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
-              displayName: cleanEmail.split('@')[0]
-            });
-            return;
-          }
-          setAuthBusy(false);
-        } catch (_) {
-          setAuthBusy(false);
-        }
-      };
-
-      window.__onBlackXGoogleOAuthError = () => {
-        setAuthBusy(false);
-      };
-
-      // 1. If running inside the Android APK with Native System Account Picker, open the phone's Google Accounts sheet immediately!
-      if (window.BlackXNativeAuth?.pickPhoneGoogleAccount) {
-        window.BlackXNativeAuth.pickPhoneGoogleAccount('');
-        return;
-      }
-
-      // 2. Fallback OAuth URI flow
+    // Google's own sign-in page (in the app's OAuth window) confirms the account; the
+    // phone's account picker only pre-selects which account to use.
+    const startOAuth = async (loginHint = '') => {
       const continueUri = 'https://spry-oxide-1h7sp.firebaseapp.com/__/auth/handler';
-      const createRes = await fetch(
-        `https://www.googleapis.com/identitytoolkit/v3/relyingparty/createAuthUri?key=${BX_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            providerId: 'google.com',
-            continueUri,
-            authFlowType: 'CODE_FLOW'
-          })
-        }
-      );
+      const createRes = await fetch(`https://www.googleapis.com/identitytoolkit/v3/relyingparty/createAuthUri?key=${BX_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: 'google.com',
+          continueUri,
+          authFlowType: 'CODE_FLOW',
+          ...(loginHint ? { customParameter: { login_hint: loginHint } } : {})
+        })
+      });
       const createData = await createRes.json();
-      if (!createData?.authUri || !createData?.sessionId) {
-        throw new Error('Failed to create Google OAuth URI');
-      }
+      if (!createData?.authUri || !createData?.sessionId) throw new Error('Failed to create Google OAuth URI');
       oauthSessionIdRef.current = createData.sessionId;
-
       window.__onBlackXGoogleOAuthRedirect = async (redirectUrl) => {
         try {
-          const idpRes = await fetch(
-            `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${BX_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                requestUri: redirectUrl,
-                sessionId: oauthSessionIdRef.current,
-                returnSecureToken: true,
-                returnIdpCredential: true
-              })
-            }
-          );
+          const idpRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${BX_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              requestUri: redirectUrl,
+              sessionId: oauthSessionIdRef.current,
+              returnSecureToken: true,
+              returnIdpCredential: true
+            })
+          });
           const idpData = await idpRes.json();
-          if (idpData?.email && idpData?.idToken) {
+          if (idpData?.idToken) {
             await completeVerifiedGoogleLogin(idpData);
           } else {
-            showToast(
-              lang === 'ar'
-                ? 'تعذر إكمال مصادقة Google، يرجى المحاولة مجدداً'
-                : 'Could not verify Google sign-in'
-            );
+            showToast(lang === 'ar' ? 'ما قدرناش نكمّل الدخول بجوجل — جرّب تاني' : 'Could not verify Google sign-in', 'alert');
             setAuthBusy(false);
           }
         } catch (_) {
           setAuthBusy(false);
         }
       };
-
       if (window.BlackXNativeAuth?.startGoogleLogin) {
         window.BlackXNativeAuth.startGoogleLogin(createData.authUri);
       } else {
         window.open(createData.authUri, '_blank', 'width=500,height=680');
         setAuthBusy(false);
       }
-    } catch (_) {
-      showToast(lang === 'ar' ? 'تعذر فتح بوابة تسجيل الدخول عبر Google' : 'Could not open Google OAuth');
+    };
+    const failed = () => {
+      showToast(lang === 'ar' ? 'تعذر فتح تسجيل الدخول بجوجل' : 'Could not open Google sign-in', 'alert');
       setAuthBusy(false);
+    };
+    try {
+      window.__onBlackXPhoneGoogleAccountPicked = async (pickedEmail) => {
+        const clean = String(pickedEmail || '').trim().toLowerCase();
+        try {
+          await startOAuth(clean.includes('@') ? clean : '');
+        } catch (_) {
+          failed();
+        }
+      };
+      window.__onBlackXGoogleOAuthError = (err) => {
+        if (String(err || '') === 'picker_unavailable') startOAuth('').catch(failed);
+        else setAuthBusy(false);
+      };
+      if (window.BlackXNativeAuth?.pickPhoneGoogleAccount) {
+        window.BlackXNativeAuth.pickPhoneGoogleAccount('');
+        return;
+      }
+      await startOAuth('');
+    } catch (_) {
+      failed();
     }
   }, [completeVerifiedGoogleLogin, showToast, lang]);
 
   // Open an Anime Detail Sheet & fetch its episodes, characters/seiyuu, related seasons, and cloud reviews
-  const handleOpenAnime = useCallback(async (anime, autoPlayEpNum = null) => {
+  const handleOpenAnimeBase = useCallback(async (anime, autoPlayEpNum = null) => {
     if (!anime?.objectID) return;
     setSelectedAnime(anime);
     setDetailTab('episodes');
@@ -3218,6 +2920,26 @@ export default function MobileApkApp() {
     }
   }, []);
 
+  // Cards open the details sheet with a shared-element transition from the tapped poster.
+  const handleOpenAnime = useCallback(
+    (anime, autoPlayEpNum = null) => {
+      haptic('tap');
+      transitionFromTappedPoster(() => {
+        handleOpenAnimeBase(anime, autoPlayEpNum);
+      });
+    },
+    [handleOpenAnimeBase]
+  );
+
+  const closeDetailsSheet = useCallback(() => {
+    const oid = latestRef.current.selectedAnime?.objectID;
+    transitionBackToCard(() => {
+      setSelectedAnime(null);
+      setActiveEpisode(null);
+      setPlayingVideoUrl('');
+    }, oid);
+  }, []);
+
   // Select and play a server. Servers that still need resolving go through the website's
   // /api/stream/resolve, and a server that cannot be played hands over to the next one.
   const handleSelectServer = useCallback(async (srv, allCandidateServers = []) => {
@@ -3283,6 +3005,118 @@ export default function MobileApkApp() {
     }
   }, [playingVideoUrl, episodeServers, selectedServer, handleSelectServer]);
 
+  // ---- v16 player additions -------------------------------------------------------
+  const videoErrorRef = useRef(null);
+  videoErrorRef.current = handleVideoElementError;
+  const hlsCtlRef = useRef(null);
+  const hlsActive = useMemo(() => Boolean(playingVideoUrl) && needsHlsJs(playingVideoUrl), [playingVideoUrl]);
+  useEffect(() => {
+    setHlsLevels([]);
+    setHlsLevel(-1);
+    if (!hlsActive) return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+    let cancelled = false;
+    attachHls(video, playingVideoUrl, {
+      dataSaver: dataSaverRef.current,
+      onLevels: (levels) => {
+        if (!cancelled) setHlsLevels(levels);
+      },
+      onFatal: () => {
+        if (!cancelled) videoErrorRef.current?.();
+      }
+    })
+      .then((ctl) => {
+        if (cancelled) ctl.destroy();
+        else hlsCtlRef.current = ctl;
+      })
+      .catch(() => {
+        if (!cancelled) videoErrorRef.current?.();
+      });
+    return () => {
+      cancelled = true;
+      hlsCtlRef.current?.destroy();
+      hlsCtlRef.current = null;
+    };
+  }, [hlsActive, playingVideoUrl]);
+
+  const cycleHlsQuality = useCallback(() => {
+    const ctl = hlsCtlRef.current;
+    if (!ctl || !hlsLevels.length) return;
+    const order = [-1, ...[...hlsLevels].sort((a, b) => b.height - a.height).map((l) => l.index)];
+    const next = order[(order.indexOf(hlsLevel) + 1) % order.length];
+    ctl.setLevel(next);
+    setHlsLevel(next);
+    const lvl = hlsLevels.find((l) => l.index === next);
+    showToast(lang === 'ar' ? `الجودة: ${lvl ? `${lvl.height}p` : 'تلقائي'}` : `Quality: ${lvl ? `${lvl.height}p` : 'Auto'}`, 'sliders');
+  }, [hlsLevels, hlsLevel, showToast, lang]);
+
+  // Reset per-episode player state.
+  useEffect(() => {
+    setVideoDuration(0);
+    setSkipSegments([]);
+    setNextEpCountdown(null);
+  }, [activeEpisode?.docId, selectedAnime?.objectID]);
+
+  // Real intro/outro timestamps (AniSkip, via the website API) once the duration is known.
+  useEffect(() => {
+    if (!selectedAnime || !activeEpisode || !videoDuration) return undefined;
+    let alive = true;
+    fetchSkipTimes({
+      malId: selectedAnime.malId,
+      title: selectedAnime.titleRomaji || selectedAnime.titleEn,
+      episode: activeEpisode.number,
+      duration: videoDuration
+    }).then((res) => {
+      if (alive && Array.isArray(res?.segments)) setSkipSegments(res.segments);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAnime?.objectID, activeEpisode?.number, videoDuration]);
+
+  const skipIntroManually = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    haptic('tap');
+    const op = skipSegments.find((s) => s.type === 'op');
+    if (op && v.currentTime < op.end) {
+      v.currentTime = op.end;
+      showToast(lang === 'ar' ? 'اتخطت المقدمة' : 'Intro skipped', 'skip-forward');
+      return;
+    }
+    v.currentTime = Math.min((v.duration || v.currentTime + 86) - 1, (v.currentTime || 0) + 85);
+    showToast(lang === 'ar' ? 'اتقدّم 85 ثانية' : 'Skipped ahead 85s', 'skip-forward');
+  }, [skipSegments, showToast, lang]);
+
+  // Keeps the account copy of the history item in step with the resume position.
+  const recordWatchProgress = useCallback(
+    (sec, dur) => {
+      const anime = latestRef.current.selectedAnime;
+      const ep = latestRef.current.activeEpisode;
+      if (!anime || !ep || incognitoMode) return;
+      setWatchHistory((prev) => {
+        const idx = prev.findIndex((x) => x.objectID === anime.objectID);
+        if (idx === -1) return prev;
+        const item = {
+          ...prev[idx],
+          episode: ep.number,
+          docId: ep.docId,
+          position: Math.round(Number(sec) || 0),
+          duration: Math.round(Number(dur) || 0),
+          updatedAt: new Date().toISOString()
+        };
+        const next = [item, ...prev.filter((_, i) => i !== idx)];
+        localStorage.setItem('bx_mob_history', JSON.stringify(next));
+        const u = latestRef.current.user;
+        if (u) syncUserStateToCloud(u, latestRef.current.favorites, next);
+        return next;
+      });
+    },
+    [incognitoMode, syncUserStateToCloud]
+  );
+
   // Open an Episode: its servers are the same manifest the website's Watch page loads
   const handlePlayEpisode = useCallback(
     async (anime, epObj) => {
@@ -3328,7 +3162,11 @@ export default function MobileApkApp() {
         if (episodeServersSeqRef.current !== reqSeq) return;
         setEpisodeServers(servers);
         if (servers.length > 0) {
-          await handleSelectServer(servers[0], servers);
+          // Data saver starts with the lowest quality the servers offer.
+          const first = dataSaverRef.current
+            ? [...servers].sort((a, b) => (parseInt(a.quality, 10) || 9999) - (parseInt(b.quality, 10) || 9999))[0]
+            : servers[0];
+          await handleSelectServer(first, servers);
         } else {
           setResolvingVideo(false);
         }
@@ -3340,6 +3178,12 @@ export default function MobileApkApp() {
     },
     [user, favorites, incognitoMode, syncUserStateToCloud, handleSelectServer]
   );
+
+  const playNextFromCountdown = useCallback(() => {
+    const pending = nextEpCountdownRef.current;
+    setNextEpCountdown(null);
+    if (pending?.anime && pending?.ep) handlePlayEpisode(pending.anime, pending.ep);
+  }, [handlePlayEpisode]);
 
   // Download orb on the anime details page. If this episode's stream is
   // already resolved, download it right away; otherwise start the episode and
@@ -3397,6 +3241,7 @@ export default function MobileApkApp() {
   const toggleFavorite = useCallback(
     (anime) => {
       if (!anime) return;
+      haptic('toggle');
       setFavorites((prev) => {
         const exists = prev.some((f) => f.objectID === anime.objectID || f.slug === anime.slug);
         let next;
@@ -3539,44 +3384,57 @@ export default function MobileApkApp() {
   }, []);
 
   // 2. Real Android Phone Status-Bar Notification Radar for New Anime Episodes
+  // New-episode alerts only for titles the user follows (favorites + "watching"/"planned"),
+  // checked while the app is open: every 30 minutes and when it returns to the foreground.
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    try {
-      window.BlackXNativeAuth?.requestNotificationPermission?.();
-    } catch (_) {}
-
-    const checkAndNotifyNewEpisodes = async () => {
-      try {
-        const res = await queryAlgolia('recent', { query: '', hitsPerPage: 8 });
-        const hits = (res?.hits || []).map(formatAnimeHit).filter(Boolean);
-        if (!hits.length) return;
-
-        let seenIds = [];
-        try {
-          seenIds = JSON.parse(localStorage.getItem('bx_mob_notified_eps_v14') || '[]');
-        } catch (_) {
-          seenIds = [];
-        }
-
-        const latest = hits[0];
-        const latestKey = `${latest.objectID}_${latest.latestEp || 1}`;
-        if (!seenIds.includes(latestKey)) {
-          const nextSeen = [latestKey, ...hits.slice(1).map((h) => `${h.objectID}_${h.latestEp || 1}`), ...seenIds].slice(0, 60);
-          localStorage.setItem('bx_mob_notified_eps_v14', JSON.stringify(nextSeen));
-          dispatchPhoneNotification(
-            'حلقة أنمي جديدة على BLACK X!',
-            `توفر الآن أحدث حلقات (${latest.titleEn}) على BLACK X — اضغط للمشاهدة!`,
-            Math.floor(Date.now() % 90000) + 1000
-          );
-        }
-      } catch (_) {}
+    let cancelled = false;
+    let running = false;
+    const followedTitles = () => {
+      const list = [...(latestRef.current.favorites || [])];
+      Object.values(latestRef.current.watchlistMap || {}).forEach((entry) => {
+        if (entry && (entry.status === 'watching' || entry.status === 'planned')) list.push(entry);
+      });
+      return list;
     };
-
-    const initTimer = setTimeout(checkAndNotifyNewEpisodes, 3500);
-    const pollInterval = setInterval(checkAndNotifyNewEpisodes, 180000);
+    const run = async () => {
+      if (running || cancelled || document.visibilityState === 'hidden') return;
+      if (Date.now() - lastAlertRun() < 15 * 60 * 1000) return;
+      const titles = followedTitles();
+      if (!titles.length) return;
+      running = true;
+      try {
+        try {
+          window.BlackXNativeAuth?.requestNotificationPermission?.();
+        } catch (_) {}
+        await checkFollowedTitles({
+          titles,
+          fetchEpisodes: async (t) => (await fetchMobileEpisodes(t))?.episodes || [],
+          notify: (t, ep) => {
+            const ar = (localStorage.getItem('bx_mob_lang') || 'ar') === 'ar';
+            const name = t.titleEn || t.titleAr || 'BLACK X';
+            dispatchPhoneNotification(
+              ar ? `نزلت الحلقة ${ep} من ${name}` : `${name}: episode ${ep} is out`,
+              ar ? 'اضغط عشان تتفرج على BLACK X' : 'Tap to watch on BLACK X',
+              Math.floor(Date.now() % 90000) + 1000
+            );
+          }
+        });
+      } finally {
+        running = false;
+      }
+    };
+    const first = setTimeout(run, 9000);
+    const timer = setInterval(run, 30 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') run();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
-      clearTimeout(initTimer);
-      clearInterval(pollInterval);
+      cancelled = true;
+      clearTimeout(first);
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
@@ -3793,142 +3651,72 @@ export default function MobileApkApp() {
     async (e) => {
       e.preventDefault();
       if (!user) return;
-      const updatedUser = {
-        ...user,
+      const patch = {
         displayName: editDisplayName.trim() || user.displayName,
         bio: editBio.trim(),
-        photoUrl: editPhotoUrl.trim() || user.photoUrl
+        photoUrl: editPhotoUrl.trim() || user.photoUrl || ''
       };
-      setUser(updatedUser);
-      localStorage.setItem('bx_mob_user', JSON.stringify(updatedUser));
-      setEditingProfile(false);
-      await syncUserStateToCloud(updatedUser, favorites, watchHistory);
-      showToast(lang === 'ar' ? 'تم تحديث ملفك الشخصي ومزامنته مع الموقع!' : 'Profile updated & synced!', 'check');
+      if (!sessionToken) {
+        const localUser = { ...user, ...patch };
+        setUser(localUser);
+        localStorage.setItem('bx_mob_user', JSON.stringify(localUser));
+        setEditingProfile(false);
+        showToast(lang === 'ar' ? 'اتحفظ على الموبايل — سجّل الدخول عشان يتزامن' : 'Saved on this phone — sign in to sync', 'check');
+        return;
+      }
+      try {
+        const res = await updateAccountProfile(patch);
+        const updatedUser = { ...user, ...(res.user || {}) };
+        setUser(updatedUser);
+        localStorage.setItem('bx_mob_user', JSON.stringify(updatedUser));
+        setEditingProfile(false);
+        showToast(lang === 'ar' ? 'اتحدث ملفك الشخصي واتزامن مع الموقع' : 'Profile updated & synced!', 'check');
+      } catch (err) {
+        showToast(apiErrorMessage(err, lang), 'alert');
+      }
     },
-    [user, editDisplayName, editBio, editPhotoUrl, favorites, watchHistory, syncUserStateToCloud, showToast, lang]
+    [user, sessionToken, editDisplayName, editBio, editPhotoUrl, showToast, lang]
   );
 
   // Handle Login & Register against Shared BLACK X Cloud Firestore
+  // Username/password accounts are checked by the server (bcrypt). v15 compared an
+  // unsalted SHA-256 on the phone and let "register" overwrite existing accounts.
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
+    const identifier = (authUsername || authEmail).trim().toLowerCase();
+    if (!identifier || !authPassword) {
+      showToast(lang === 'ar' ? 'اكتب اسم المستخدم وكلمة المرور' : 'Enter username and password');
+      return;
+    }
     setAuthBusy(true);
     try {
-      const cleanId = (authUsername || authEmail).trim().toLowerCase();
-      if (!cleanId || !authPassword) {
-        showToast(lang === 'ar' ? 'يرجى إدخال اسم المستخدم وكلمة المرور' : 'Enter username and password');
-        setAuthBusy(false);
-        return;
-      }
-      const passHash = await sha256Browser(authPassword);
-      const isEmail = cleanId.includes('@');
-      const docKey = isEmail ? cleanCloudKey('email', cleanId) : cleanCloudKey('user', cleanId);
-
-      if (authMode === 'login') {
-        const res = await fetch(`${BX_SETTINGS_BASE}/${docKey}?key=${BX_KEY}`);
-        if (res.ok) {
-          const doc = await res.json();
-          const raw = doc?.fields?.json?.stringValue;
-          if (raw) {
-            const cloudUser = JSON.parse(raw);
-            if (!cloudUser.passSha256 || cloudUser.passSha256 === passHash) {
-              const isDevAcc =
-                cloudUser.role === 'developer' ||
-                cleanId === 'mz0970mmz@gmail.com' ||
-                cleanId === 'developer' ||
-                cleanId === 'mz0970mmz';
-              const redeemedTier = localStorage.getItem('bx_mob_redeemed_vip_tier');
-              const tier = isDevAcc
-                ? 'vip_monarch'
-                : cloudUser.vipTier === 'vip_monarch' || cloudUser.vipTier === 'vip_basic'
-                ? cloudUser.vipTier
-                : redeemedTier || 'free';
-              const loggedUser = {
-                id: cloudUser.id || `u_${Date.now()}`,
-                username: cloudUser.username || cleanId.split('@')[0],
-                email: cloudUser.email || (isEmail ? cleanId : `${cleanId}@blackx.app`),
-                displayName: cloudUser.displayName || cloudUser.username || cleanId,
-                photoUrl: cloudUser.photoUrl || '',
-                avatarColor: cloudUser.avatarColor || '#ffffff',
-                role: isDevAcc ? 'developer' : 'user',
-                vipTier: tier,
-                vipStatus: tier === 'vip_monarch' ? 'VIP Monarch' : tier === 'vip_basic' ? 'VIP Basic' : 'Free Tier',
-                passSha256: passHash
-              };
-              setUser(loggedUser);
-              localStorage.setItem('bx_mob_user', JSON.stringify(loggedUser));
-              setVipGateShowLogin(false);
-              if (Array.isArray(cloudUser.favorites) && cloudUser.favorites.length) {
-                setFavorites(cloudUser.favorites);
-                localStorage.setItem('bx_mob_favorites', JSON.stringify(cloudUser.favorites));
-              }
-              if (Array.isArray(cloudUser.progress) && cloudUser.progress.length) {
-                setWatchHistory(cloudUser.progress);
-                localStorage.setItem('bx_mob_history', JSON.stringify(cloudUser.progress));
-              }
-              await syncUserStateToCloud(
-                loggedUser,
-                cloudUser.favorites || favorites,
-                cloudUser.progress || watchHistory
-              );
-              showToast(lang === 'ar' ? `مرحباً بعودتك ${loggedUser.displayName}!` : `Welcome back ${loggedUser.displayName}!`, 'crown');
-              setAuthBusy(false);
-              return;
-            } else {
-              showToast(lang === 'ar' ? 'كلمة المرور غير صحيحة' : 'Invalid password');
-              setAuthBusy(false);
-              return;
-            }
-          }
-        }
-        // Fallback for Developer login if developer doc was not initialized yet
-        if (cleanId === 'mz0970mmz@gmail.com' || cleanId === 'developer' || cleanId === 'mz0970mmz') {
-          const devUser = {
-            id: 'dev_master',
-            username: 'developer',
-            email: 'mz0970mmz@gmail.com',
-            displayName: 'Developer MZ',
-            photoUrl: '',
-            avatarColor: '#ffffff',
-            role: 'developer',
-            vipTier: 'vip_monarch',
-            vipStatus: 'VIP Monarch',
-            passSha256: passHash
-          };
-          setUser(devUser);
-          localStorage.setItem('bx_mob_user', JSON.stringify(devUser));
-          setVipGateShowLogin(false);
-          await syncUserStateToCloud(devUser, favorites, watchHistory);
-          showToast('تم تسجيل الدخول بحساب مطور المنصة الرسمي!', 'crown');
-          setAuthBusy(false);
-          return;
-        }
-        showToast(lang === 'ar' ? 'الحساب غير موجود، يمكنك إنشاؤه الآن!' : 'Account not found, please register!');
-      } else {
-        const uname = (authUsername || cleanId.split('@')[0]).toLowerCase().replace(/[^a-z0-9_.-]/g, '');
-        const uemail = (authEmail || `${uname}@blackx.app`).toLowerCase();
-        const isDevAcc = uemail === 'mz0970mmz@gmail.com' || uname === 'developer' || uname === 'mz0970mmz';
-        const redeemedTier = localStorage.getItem('bx_mob_redeemed_vip_tier');
-        const tier = isDevAcc ? 'vip_monarch' : redeemedTier || 'free';
-        const newUser = {
-          id: `bx_${Date.now()}`,
-          username: uname,
-          email: uemail,
-          displayName: authDisplayName || uname,
-          photoUrl: '',
-          avatarColor: '#ffffff',
-          role: isDevAcc ? 'developer' : 'user',
-          vipTier: tier,
-          vipStatus: tier === 'vip_monarch' ? 'VIP Monarch' : tier === 'vip_basic' ? 'VIP Basic' : 'Free Tier',
-          passSha256: passHash
-        };
-        setUser(newUser);
-        localStorage.setItem('bx_mob_user', JSON.stringify(newUser));
-        setVipGateShowLogin(false);
-        await syncUserStateToCloud(newUser, favorites, watchHistory);
-        showToast(lang === 'ar' ? 'تم إنشاء حسابك ومزامنته مع الموقع بنجاح!' : 'Account created & synced with Website!', 'check');
-      }
-    } catch (_) {
-      showToast(lang === 'ar' ? 'تعذر الاتصال بالسحابة' : 'Cloud connection error');
+      const localState = {
+        favorites,
+        progress: watchHistory,
+        positions: positionsForSync(),
+        xp: userXp
+      };
+      const res =
+        authMode === 'login'
+          ? await loginWithPassword(identifier, authPassword, localState)
+          : await registerAccount({
+              username: (authUsername || identifier.split('@')[0]).trim().toLowerCase(),
+              password: authPassword,
+              displayName: authDisplayName.trim(),
+              email: authEmail.trim().toLowerCase(),
+              state: localState
+            });
+      finishServerLogin(res);
+      setAuthPassword('');
+      showToast(
+        authMode === 'login'
+          ? lang === 'ar' ? `أهلاً بعودتك ${res.user.displayName}!` : `Welcome back ${res.user.displayName}!`
+          : lang === 'ar' ? 'اتعمل حسابك واتزامن مع الموقع' : 'Account created & synced!',
+        authMode === 'login' ? 'crown' : 'check'
+      );
+    } catch (err) {
+      haptic('warning');
+      showToast(apiErrorMessage(err, lang), 'alert');
     } finally {
       setAuthBusy(false);
     }
@@ -4078,9 +3866,9 @@ export default function MobileApkApp() {
     setTimeout(() => setSkipRipple(null), 550);
   };
 
-  const heroAnime = popularList[heroSlide] || popularList[0] || null;
   const goToTab = (tabId, after) => {
     const sameTab = activeTab === tabId && !selectedAnime;
+    haptic(sameTab ? 'select' : 'tap');
     setCommandMenuOpen(false);
     setSelectedAnime(null);
     setActiveEpisode(null);
@@ -4094,10 +3882,70 @@ export default function MobileApkApp() {
   const avatarPhoto = user?.photoUrl && !avatarFailed ? user.photoUrl : '';
   const isRtl = lang === 'ar';
 
+  // ---- v16 UI hooks ---------------------------------------------------------------
+  useEffect(() => {
+    installPointerTracker();
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  }, [lang]);
+
+  const handlePullRefresh = useCallback(
+    () =>
+      new Promise((resolve) => {
+        refreshDoneRef.current = resolve;
+        setTimeout(resolve, 10000);
+        if (activeTab === 'home') {
+          setHomeRefreshTick((t) => t + 1);
+          fetchAppConfig().then(applyAppConfig).catch(() => {});
+        } else if (activeTab === 'schedule') {
+          setScheduleRefreshTick((t) => t + 1);
+        } else {
+          resolve();
+        }
+      }),
+    [activeTab, applyAppConfig]
+  );
+
+  // Drag the details sheet down to close it; drag the player page down to shrink it to the mini player.
+  const ignoreSwipeTarget = useCallback(
+    (t) => Boolean(t?.closest?.('[data-bx-video], input, textarea, select, [role="slider"], [data-no-swipe], .bx-mob-scroll')),
+    []
+  );
+  useSwipeDismiss(detailsSheetRef, closeDetailsSheet, {
+    enabled: Boolean(selectedAnime) && !(activeEpisode && !playerMinimized),
+    ignore: ignoreSwipeTarget
+  });
+  const minimizePlayer = useCallback(() => setPlayerMinimized(true), []);
+  useSwipeDismiss(playerPageRef, minimizePlayer, {
+    enabled: Boolean(activeEpisode) && !playerMinimized && !videoFullscreen,
+    ignore: ignoreSwipeTarget
+  });
+
+  // "Because you watched": titles sharing the genres of the latest watched show.
+  const loadSimilarTitles = useCallback(async (seed) => {
+    const title = seed?.titleEn || seed?.titleAr || '';
+    if (!title) return [];
+    const found = await queryAlgolia('series_fav_count_desc', { query: title, hitsPerPage: 3 }).catch(() => null);
+    const hit = (found?.hits || []).map(formatAnimeHit).find((x) => x && (x.objectID === seed.objectID || x.titleEn === seed.titleEn));
+    const tags = (hit?.tags || []).filter(Boolean).slice(0, 2);
+    if (!tags.length) return [];
+    const query = (facetFilters) =>
+      queryAlgolia('series_fav_count_desc', { query: '', facetFilters, hitsPerPage: 24 })
+        .then((r) => (r?.hits || []).map(formatAnimeHit).filter(Boolean))
+        .catch(() => []);
+    let list = await query(tags.map((t) => [`tags:${t}`]));
+    if (list.length < 8 && tags.length > 1) list = [...list, ...(await query([[`tags:${tags[0]}`]]))];
+    const seen = new Set();
+    return list.filter((x) => x.objectID !== (hit?.objectID || seed.objectID) && !seen.has(x.objectID) && seen.add(x.objectID));
+  }, []);
+  const watchedIds = useMemo(() => watchHistory.map((h) => h.objectID).filter(Boolean), [watchHistory]);
+
   return (
     <div
       dir={isRtl ? 'rtl' : 'ltr'}
-      className="bx-app"
+      className={`bx-app${dataSaver ? ' bx-datasaver' : ''}`}
       style={{
         minHeight: '100dvh',
         background: '#000000',
@@ -4131,15 +3979,16 @@ export default function MobileApkApp() {
         </defs>
       </svg>
 
-      {/* Top Toast Notification (icon + spring in/out) */}
-      {toast && (
-        <div key={toast.id} className={`bx-toast${toast.leaving ? ' is-leaving' : ''}`} role="status" aria-live="polite">
-          <span className={`bx-toast-ico${toast.icon === 'check' ? ' is-success' : ''}`}>
-            <BxIcon name={toast.icon} size="1em" strokeWidth={2.4} />
-          </span>
-          <span>{toast.msg}</span>
-        </div>
-      )}
+      {/* Top toast (own component: showing one does not re-render the app) */}
+      <ToastHost />
+
+      {/* Pull to refresh (home + schedule) */}
+      <PullToRefresh
+        onRefresh={handlePullRefresh}
+        disabled={!(activeTab === 'home' || activeTab === 'schedule') || Boolean(selectedAnime) || Boolean(activeMangaChapter) || commandMenuOpen}
+        label={isRtl ? 'اسحب للتحديث' : 'Pull to refresh'}
+        releaseLabel={isRtl ? 'سيب للتحديث' : 'Release to refresh'}
+      />
 
       {/* App 4-Digit PIN Lock Screen Overlay */}
       {pinLocked && appPinCode && (
@@ -4314,14 +4163,14 @@ export default function MobileApkApp() {
                     borderRadius: '999px',
                     background: '#ffffff',
                     color: '#000000',
-                    fontSize: '0.6rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900
                   }}
                 >
                   ACTIVE • مفعل تلقائياً
                 </span>
               </div>
-              <p style={{ margin: '0 0 0.55rem', fontSize: '0.68rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
+              <p style={{ margin: '0 0 0.55rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
                 {isRtl
                   ? 'يرسل التطبيق إشعارات حقيقية لشريط حالة هاتفك فور نزول كل حلقة أنمي جديدة. اضغط بالأسفل لاختبار إشعار الهاتف الآن:'
                   : 'Automatically sends real Android status-bar notifications when new anime episodes drop:'}
@@ -4345,7 +4194,7 @@ export default function MobileApkApp() {
                   background: '#ffffff',
                   color: '#000000',
                   fontWeight: 900,
-                  fontSize: '0.74rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer'
                 }}
               >
@@ -4353,7 +4202,7 @@ export default function MobileApkApp() {
               </button>
             </div>
 
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.5 }}>
               {isRtl
                 ? <>{"أحدث الحلقات الصادرة هذا الأسبوع (اضغط المشاهدة أو"}<BxIcon name="bell" className="bx-ico-lead" />{"لإرسال تنبيه للهاتف):"}</>
                 : 'Latest airing episode releases this week:'}
@@ -4386,7 +4235,7 @@ export default function MobileApkApp() {
                     <div style={{ fontWeight: 900, fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {item.titleEn}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.18rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.18rem' }}>
                       <BxIcon name="dot" className="bx-ico-lead" />{isRtl ? 'متاح الآن على سيرفرات BLACK X' : 'Available now on the BLACK X servers'}
                     </div>
                   </div>
@@ -4407,7 +4256,7 @@ export default function MobileApkApp() {
                       background: 'rgba(255,255,255,0.12)',
                       border: '1px solid rgba(255,255,255,0.25)',
                       color: '#ffffff',
-                      fontSize: '0.68rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
@@ -4420,7 +4269,7 @@ export default function MobileApkApp() {
                       borderRadius: '8px',
                       background: '#ffffff',
                       color: '#000000',
-                      fontSize: '0.68rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900
                     }}
                   >
@@ -4456,7 +4305,10 @@ export default function MobileApkApp() {
           <button
             type="button"
             className="bx-round-btn"
-            onClick={() => setCommandMenuOpen(true)}
+            onClick={() => {
+              haptic('tap');
+              setCommandMenuOpen(true);
+            }}
             aria-label={isRtl ? 'القائمة' : 'Menu'}
             aria-haspopup="dialog"
           >
@@ -4491,10 +4343,17 @@ export default function MobileApkApp() {
       {/* ==================== TAB 1: HOME (1:1 EXACT MATCH TO REFERENCE SCREENSHOT) ==================== */}
       {activeTab === 'home' && !selectedAnime && (
         <main className="bx-page" style={{ position: 'relative' }}>
+          {homeLoading && !popularList.length && <SkeletonHero />}
+          <HeroSlideScope count={Math.min(6, popularList.length)} paused={heroTrailerOpen || Boolean(selectedAnime)}>
+            {(heroSlide, setHeroSlide, heroSwipe) => {
+              const heroAnime = popularList[heroSlide] || popularList[0] || null;
+              return (
+                <>
           {/* v13.0 Official slothUI Pro 2.0 Full-Bleed Hero Showcase ("Handmaiden Tales" & "Sane Max Origins" Layout) */}
           {heroAnime && (
             <>
               <section
+                {...heroSwipe}
                 style={{
                   position: 'relative',
                   width: '100%',
@@ -4562,7 +4421,7 @@ export default function MobileApkApp() {
                             background: 'rgba(255,255,255,0.12)',
                             border: '1px solid rgba(255,255,255,0.28)',
                             color: '#ffffff',
-                            fontSize: '0.66rem',
+                            fontSize: '0.75rem',
                             fontWeight: 800
                           }}
                         >
@@ -4577,7 +4436,7 @@ export default function MobileApkApp() {
                           borderRadius: '999px',
                           background: '#ffffff',
                           color: '#000000',
-                          fontSize: '0.64rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900
                         }}
                       >
@@ -4766,10 +4625,12 @@ export default function MobileApkApp() {
                     type="button"
                     onClick={() => setHeroSlide((s) => (s + 1) % Math.max(1, Math.min(6, popularList.length)))}
                     style={{
+                      minHeight: '44px',
+                      padding: '0 0.25rem',
                       background: 'none',
                       border: 'none',
                       color: 'rgba(255,255,255,0.75)',
-                      fontSize: '0.74rem',
+                      fontSize: '0.75rem',
                       fontWeight: 800,
                       display: 'flex',
                       alignItems: 'center',
@@ -4811,6 +4672,7 @@ export default function MobileApkApp() {
                         src={epItem.banner || epItem.poster}
                         alt={epItem.titleEn}
                         loading="lazy"
+                          decoding="async"
                         style={{
                           width: '100%',
                           height: '100%',
@@ -4838,7 +4700,7 @@ export default function MobileApkApp() {
                             borderRadius: '8px',
                             background: 'rgba(0,0,0,0.72)',
                             border: '1px solid rgba(255,255,255,0.22)',
-                            fontSize: '0.64rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             color: '#ffffff'
                           }}
@@ -4862,7 +4724,7 @@ export default function MobileApkApp() {
                       >
                         <div
                           style={{
-                            fontSize: '0.72rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             color: '#ffffff',
                             whiteSpace: 'nowrap',
@@ -4879,7 +4741,7 @@ export default function MobileApkApp() {
                             borderRadius: '50%',
                             background: '#ffffff',
                             color: '#000000',
-                            fontSize: '0.62rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -4932,7 +4794,7 @@ export default function MobileApkApp() {
                 </h2>
                 <span
                   onClick={() => setActiveTab('catalog')}
-                  style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, cursor: 'pointer' }}
+                  style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, cursor: 'pointer' }}
                 >
                   {isRtl ? 'عرض الكل' : 'See All'}
                 </span>
@@ -4976,7 +4838,7 @@ export default function MobileApkApp() {
                       borderRadius: '99px',
                       background: 'rgba(18,18,24,0.78)',
                       border: '1px solid rgba(255,255,255,0.24)',
-                      fontSize: '0.74rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       color: '#ffffff'
                     }}
@@ -5004,7 +4866,7 @@ export default function MobileApkApp() {
                         borderRadius: '99px',
                         background: 'rgba(20,20,26,0.82)',
                         border: '1px solid rgba(255,255,255,0.18)',
-                        fontSize: '0.68rem',
+                        fontSize: '0.75rem',
                         fontWeight: 800,
                         color: 'rgba(255,255,255,0.88)'
                       }}
@@ -5063,7 +4925,7 @@ export default function MobileApkApp() {
               />
 
               <div style={{ position: 'relative', zIndex: 2 }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>
                   {isRtl ? 'شاهد اليوم • مروحة الأنمي ثلاثية الأبعاد' : 'Watch Today • 3D Fan Deck'}
                 </div>
 
@@ -5173,7 +5035,7 @@ export default function MobileApkApp() {
                             background: '#ffffff',
                             color: '#000000',
                             fontWeight: 900,
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
@@ -5206,7 +5068,7 @@ export default function MobileApkApp() {
 
                 {/* WakuWaku Bottom Caption + Dual Pill Buttons */}
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)', fontWeight: 800, marginBottom: '0.18rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)', fontWeight: 800, marginBottom: '0.18rem' }}>
                     {isRtl ? 'مقترح في قائمة مشاهدتك' : 'Up on your watchlist'}
                   </div>
                   <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.18rem', fontWeight: 900 }}>
@@ -5473,6 +5335,14 @@ export default function MobileApkApp() {
             </div>
           )}
 
+                </>
+              );
+            }}
+          </HeroSlideScope>
+
+          {/* New APK version available (from /api/app/config) */}
+          <UpdateBanner release={apkRelease} lang={lang} />
+
           {/* ==================== v9.0 NETFLIX MOBILE / STORIES CIRCULAR PREVIEWS STRIP ==================== */}
           {popularList.length > 0 && (
             <section style={{ padding: '0.65rem 1rem 0.15rem' }}>
@@ -5480,7 +5350,7 @@ export default function MobileApkApp() {
                 <h2 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 900, letterSpacing: '0.01em' }}>
                   <BxIcon name="zap" className="bx-ico-lead" />{isRtl ? 'معاينات سريعة (Stories)' : 'Quick Previews'}
                 </h2>
-                <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 800 }}>
                   {isRtl ? 'اضغط للمعاينة والتشغيل الفوري' : 'Tap to preview'}
                 </span>
               </div>
@@ -5513,9 +5383,10 @@ export default function MobileApkApp() {
                       }}
                     >
                       <img
-                        src={item.poster}
+                        src={coverForMode(item.poster, dataSaver)}
                         alt={item.titleEn}
                         loading="lazy"
+                          decoding="async"
                         style={{
                           width: '100%',
                           height: '100%',
@@ -5528,7 +5399,7 @@ export default function MobileApkApp() {
                     <span
                       style={{
                         marginTop: '0.28rem',
-                        fontSize: '0.64rem',
+                        fontSize: '0.75rem',
                         fontWeight: 800,
                         color: 'rgba(255,255,255,0.88)',
                         maxWidth: '66px',
@@ -5569,7 +5440,7 @@ export default function MobileApkApp() {
                   color: '#000000',
                   border: 'none',
                   fontWeight: 900,
-                  fontSize: '0.73rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
@@ -5588,7 +5459,7 @@ export default function MobileApkApp() {
                   color: moodDrawerOpen || activeMoodFilter !== 'all' ? '#000000' : '#ffffff',
                   border: '1px solid rgba(255,255,255,0.22)',
                   fontWeight: 900,
-                  fontSize: '0.73rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
@@ -5607,7 +5478,7 @@ export default function MobileApkApp() {
                   color: '#ffffff',
                   border: '1px solid rgba(255,255,255,0.22)',
                   fontWeight: 900,
-                  fontSize: '0.73rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
@@ -5627,7 +5498,7 @@ export default function MobileApkApp() {
                     color: '#ffffff',
                     border: '1.5px solid #ffffff',
                     fontWeight: 900,
-                    fontSize: '0.73rem',
+                    fontSize: '0.75rem',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                     flexShrink: 0
@@ -5673,7 +5544,7 @@ export default function MobileApkApp() {
                           color: active ? '#000000' : '#ffffff',
                           border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
                           fontWeight: 900,
-                          fontSize: '0.71rem',
+                          fontSize: '0.75rem',
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
                         }}
@@ -5687,7 +5558,7 @@ export default function MobileApkApp() {
                 {activeMoodFilter !== 'all' && (
                   <div style={{ marginTop: '0.55rem' }}>
                     {moodLoading ? (
-                      <div style={{ padding: '0.75rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)' }}>
+                      <div style={{ padding: '0.75rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                         {isRtl ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري تحليل ذوقك واستخراج أقوى الترشيحات..."}</> : <><BxIcon name="loader" className="bx-ico-lead" />{"Matching your DNA taste..."}</>}
                       </div>
                     ) : (
@@ -5696,18 +5567,20 @@ export default function MobileApkApp() {
                           <div
                             key={item.objectID}
                             className="bx-mob-card"
+                            data-bx-oid={item?.objectID}
                             onClick={() => handleOpenAnime(item)}
                             style={{ minWidth: '112px', maxWidth: '112px', cursor: 'pointer' }}
                           >
                             <div style={{ position: 'relative', borderRadius: '11px', overflow: 'hidden', aspectRatio: '2/2.85', border: '1px solid rgba(255,255,255,0.18)' }}>
-                              <img src={item.poster} alt={item.titleEn} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img src={coverForMode(item.poster, dataSaver)} alt={item.titleEn} loading="lazy"
+                          decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               {item.rating && (
-                                <span style={{ position: 'absolute', top: '5px', right: '5px', background: '#ffffff', color: '#000000', fontSize: '0.58rem', fontWeight: 900, padding: '0.1rem 0.35rem', borderRadius: '5px' }}>
+                                <span style={{ position: 'absolute', top: '5px', right: '5px', background: '#ffffff', color: '#000000', fontSize: '0.75rem', fontWeight: 900, padding: '0.1rem 0.35rem', borderRadius: '5px' }}>
                                   <BxIcon name="star" className="bx-ico-lead" />{item.rating}
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.71rem', fontWeight: 900, marginTop: '0.28rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 900, marginTop: '0.28rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {item.titleEn}
                             </div>
                           </div>
@@ -5720,137 +5593,37 @@ export default function MobileApkApp() {
             )}
           </section>
 
-          {/* Netflix-Style Continue Watching Strip (With Play Overlay + Bottom Progress Bar) */}
-          {watchHistory.length > 0 && (
-            <section style={{ padding: '0.9rem 1rem 0.2rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-                <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
-                  <BxIcon name="play" className="bx-ico-lead" />{isRtl ? 'متابعة المشاهدة' : 'Continue Watching'}
-                </h2>
-                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
-                  {isRtl ? 'تشغيل في المشغل المستقل' : 'Standalone Player'}
-                </span>
-              </div>
-              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
-                {watchHistory.slice(0, 12).map((h, i) => (
-                  <div
-                    key={`${h.objectID}-${i}`}
-                    className="bx-mob-card"
-                    onClick={() =>
-                      handleOpenAnime(
-                        {
-                          objectID: h.objectID,
-                          slug: h.slug,
-                          titleEn: h.titleEn,
-                          titleAr: h.titleAr,
-                          poster: h.poster,
-                          banner: h.poster,
-                          rating: '9.1',
-                          type: 'مسلسل',
-                          state: 'مستمر',
-                          storyAr: ''
-                        },
-                        h.episode || 1
-                      )
-                    }
-                    style={{
-                      minWidth: '116px',
-                      maxWidth: '116px',
-                      background: '#09090c',
-                      border: '1px solid rgba(255,255,255,0.14)',
-                      borderRadius: '10px',
-                      overflow: 'hidden',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ position: 'relative', width: '116px', height: '152px' }}>
-                      <img
-                        src={h.poster}
-                        alt={h.titleEn}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.82)' }}
-                      />
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '50%',
-                            background: 'rgba(0,0,0,0.72)',
-                            border: '2px solid #ffffff',
-                            color: '#ffffff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.85rem',
-                            fontWeight: 900
-                          }}
-                        >
-                          <BxIcon name="play" />
-                        </span>
-                      </div>
-                      {/* Netflix Bottom Episode Progress Bar */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          height: '3.5px',
-                          background: 'rgba(255,255,255,0.22)'
-                        }}
-                      >
-                        <div style={{ width: `${62 + ((i * 11) % 30)}%`, height: '100%', background: '#ffffff' }} />
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        padding: '0.38rem 0.45rem',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        background: '#0c0c10'
-                      }}
-                    >
-                      <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#ffffff' }}>
-                        {isRtl ? `ح ${h.episode}` : `E${h.episode}`}
-                      </span>
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setQuickPeekAnime({
-                            objectID: h.objectID,
-                            slug: h.slug,
-                            titleEn: h.titleEn,
-                            titleAr: h.titleAr,
-                            poster: h.poster,
-                            banner: h.poster,
-                            rating: '9.2',
-                            type: 'مسلسل',
-                            state: 'مستمر',
-                            storyAr: 'تابع مشاهدة هذا العمل من حيث توقفت.'
-                          });
-                        }}
-                        style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.75)', fontWeight: 900 }}
-                      >
-                        <BxIcon name="info" />
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+          {/* Continue watching: real resume progress per show ("Episode 5 • 12 min left") */}
+          <ContinueWatchingRow
+            history={watchHistory}
+            isRtl={isRtl}
+            dataSaver={dataSaver}
+            onResume={(h, ep) =>
+              handleOpenAnime(
+                { objectID: h.objectID, slug: h.slug, titleEn: h.titleEn, titleAr: h.titleAr, poster: h.poster, banner: h.poster },
+                ep
+              )
+            }
+            onInfo={(h) =>
+              setQuickPeekAnime({ objectID: h.objectID, slug: h.slug, titleEn: h.titleEn, titleAr: h.titleAr, poster: h.poster, banner: h.poster })
+            }
+          />
+
+          {/* Because you watched X (genres of the latest watched show, computed on the phone) */}
+          <LazyMount minHeight={240} placeholder={<SkeletonRow cards={4} animated={false} />}>
+            <BecauseYouWatchedRow
+              seed={watchHistory[0]}
+              excludeIds={watchedIds}
+              loadSimilar={loadSimilarTitles}
+              onOpen={handleOpenAnime}
+              isRtl={isRtl}
+              dataSaver={dataSaver}
+            />
+          </LazyMount>
 
           {/* ==================== v8.0 NETFLIX SIGNATURE TOP 10 RANKED ROW WITH GIANT OUTLINED NUMBERS ==================== */}
           {popularList.length > 0 && (
+            <LazyMount minHeight={260} placeholder={<SkeletonRow cards={3} cardWidth={150} cardHeight={200} animated={false} />}>
             <section style={{ padding: '0.95rem 1rem 0.25rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                 <h2 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 900 }}>
@@ -5858,7 +5631,7 @@ export default function MobileApkApp() {
                 </h2>
                 <span
                   style={{
-                    fontSize: '0.62rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     padding: '0.12rem 0.45rem',
                     borderRadius: '4px',
@@ -5874,6 +5647,7 @@ export default function MobileApkApp() {
                   <div
                     key={`top10-${item.objectID}`}
                     className="bx-mob-card"
+                    data-bx-oid={item?.objectID}
                     onClick={() => handleOpenAnime(item)}
                     style={{
                       position: 'relative',
@@ -5919,9 +5693,10 @@ export default function MobileApkApp() {
                       }}
                     >
                       <img
-                        src={item.poster}
+                        src={coverForMode(item.poster, dataSaver)}
                         alt={item.titleEn}
                         loading="lazy"
+                          decoding="async"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                       <span
@@ -5939,7 +5714,7 @@ export default function MobileApkApp() {
                           background: 'rgba(0,0,0,0.78)',
                           border: '1px solid rgba(255,255,255,0.35)',
                           color: '#ffffff',
-                          fontSize: '0.68rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           display: 'flex',
                           alignItems: 'center',
@@ -5953,10 +5728,12 @@ export default function MobileApkApp() {
                 ))}
               </div>
             </section>
+            </LazyMount>
           )}
 
           {/* Continue Reading Manga/Manhwa Strip */}
           {mangaHistory.length > 0 && (
+            <LazyMount minHeight={220} placeholder={<SkeletonRow cards={4} cardHeight={150} animated={false} />}>
             <section style={{ padding: '0.85rem 1rem 0.2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                 <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
@@ -5965,7 +5742,7 @@ export default function MobileApkApp() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('manga')}
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer' }}
                 >
                   {isRtl ? <>{"المكتبة"}<BxIcon name="arrow-left" className="bx-ico-trail" /></> : <>{"Library"}<BxIcon name="arrow-right" className="bx-ico-trail" /></>}
                 </button>
@@ -6000,7 +5777,7 @@ export default function MobileApkApp() {
                       <div style={{ fontSize: '0.76rem', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {mh.name}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.2rem' }}>
                         <BxIcon name="book" className="bx-ico-lead" />{isRtl ? `الفصل ${mh.lastChapter}` : `Ch. ${mh.lastChapter}`}
                       </div>
                     </div>
@@ -6008,6 +5785,7 @@ export default function MobileApkApp() {
                 ))}
               </div>
             </section>
+            </LazyMount>
           )}
 
           {/* Horizontal Mobile Sections (Filtered by Netflix Category Strip: All / Series / Movies / Simulcast) */}
@@ -6057,7 +5835,8 @@ export default function MobileApkApp() {
           ]
             .filter((sec) => homeCategoryFilter === 'all' || sec.cat === homeCategoryFilter)
             .map((sec, sIdx) => (
-            <section key={sIdx} style={{ padding: '0.95rem 1rem 0.2rem' }}>
+            <LazyMount key={sIdx} minHeight={250} placeholder={<SkeletonRow cards={4} cardWidth={124} cardHeight={176} animated={false} />}>
+            <section style={{ padding: '0.95rem 1rem 0.2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
                 <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
                   {isRtl ? sec.titleAr : sec.titleEn}
@@ -6105,6 +5884,7 @@ export default function MobileApkApp() {
                     <div
                       key={item.objectID}
                       className="bx-mob-card"
+                      data-bx-oid={item?.objectID}
                       onClick={() => handleOpenAnime(item)}
                       style={{
                         minWidth: '124px',
@@ -6124,9 +5904,10 @@ export default function MobileApkApp() {
                         }}
                       >
                         <img
-                          src={item.poster}
+                          src={coverForMode(item.poster, dataSaver)}
                           alt={item.titleEn}
                           loading="lazy"
+                          decoding="async"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                         {/* Top-Left Circular [X] Brand Seal (Matches Image 3 "Popular on slothUI") */}
@@ -6140,7 +5921,7 @@ export default function MobileApkApp() {
                             borderRadius: '50%',
                             background: '#ffffff',
                             color: '#000000',
-                            fontSize: '0.64rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',
@@ -6168,7 +5949,7 @@ export default function MobileApkApp() {
                               : 'rgba(12,12,16,0.78)',
                             border: '1px solid rgba(255,255,255,0.32)',
                             color: favorites.some((f) => f.objectID === item.objectID) ? '#000000' : '#ffffff',
-                            fontSize: '0.68rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',
@@ -6192,7 +5973,7 @@ export default function MobileApkApp() {
                             background: 'rgba(12,12,18,0.88)',
                             border: '1px solid rgba(255,255,255,0.28)',
                             color: '#ffffff',
-                            fontSize: '0.62rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',
@@ -6213,7 +5994,7 @@ export default function MobileApkApp() {
                               left: '6px',
                               background: 'rgba(0,0,0,0.85)',
                               color: 'rgba(255,255,255,0.95)',
-                              fontSize: '0.6rem',
+                              fontSize: '0.75rem',
                               fontWeight: 900,
                               padding: '0.1rem 0.4rem',
                               borderRadius: '6px'
@@ -6242,10 +6023,12 @@ export default function MobileApkApp() {
                 )}
               </div>
             </section>
+            </LazyMount>
           ))}
 
           {/* v11.0 UI #3: Visual Genre Art Cards Grid (2x3 Illustrated Genre Cards) */}
           {popularList.length >= 6 && (
+            <LazyMount minHeight={320}>
             <section style={{ padding: '0.95rem 1rem 0.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
                 <h2 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
@@ -6253,7 +6036,7 @@ export default function MobileApkApp() {
                 </h2>
                 <span
                   onClick={() => setActiveTab('catalog')}
-                  style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, cursor: 'pointer' }}
+                  style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, cursor: 'pointer' }}
                 >
                   {isRtl ? <>{"كل التصنيفات"}<BxIcon name="arrow-left" className="bx-ico-trail" /></> : <>{"See All"}<BxIcon name="arrow-right" className="bx-ico-trail" /></>}
                 </span>
@@ -6291,6 +6074,7 @@ export default function MobileApkApp() {
                       src={vg.img}
                       alt={vg.en}
                       loading="lazy"
+                          decoding="async"
                       style={{
                         width: '100%',
                         height: '100%',
@@ -6328,7 +6112,7 @@ export default function MobileApkApp() {
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: '0.66rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900
                         }}
                       >
@@ -6339,6 +6123,7 @@ export default function MobileApkApp() {
                 ))}
               </div>
             </section>
+            </LazyMount>
           )}
         </main>
       )}
@@ -6360,16 +6145,15 @@ export default function MobileApkApp() {
             }}
           >
             <span><BxIcon name="search" /></span>
-            <input
-              type="search"
+            <SearchBox
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onCommit={setSearchQuery}
               placeholder={
                 isRtl
                   ? 'ابحث عن الأنميات، الأفلام، والمانهوا...'
                   : 'Movies, Anime, Drama & other...'
               }
-              style={{
+              inputStyle={{
                 flex: 1,
                 background: 'transparent',
                 border: 'none',
@@ -6420,7 +6204,7 @@ export default function MobileApkApp() {
                       background: active ? '#ffffff' : 'rgba(255,255,255,0.04)',
                       color: active ? '#000000' : 'rgba(255,255,255,0.85)',
                       border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)',
-                      fontSize: '0.73rem',
+                      fontSize: '0.75rem',
                       fontWeight: 800,
                       cursor: 'pointer'
                     }}
@@ -6457,7 +6241,7 @@ export default function MobileApkApp() {
                     background: 'none',
                     border: 'none',
                     color: '#ffffff',
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     cursor: 'pointer'
                   }}
@@ -6480,7 +6264,7 @@ export default function MobileApkApp() {
                       alt={mh.name}
                       style={{ width: '96px', height: '132px', borderRadius: '10px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.18)' }}
                     />
-                    <div style={{ fontSize: '0.68rem', fontWeight: 900, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 900, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {mh.name}
                     </div>
                   </div>
@@ -6533,7 +6317,7 @@ export default function MobileApkApp() {
                   style={{
                     padding: '0.35rem 0.75rem',
                     borderRadius: '10px',
-                    fontSize: '0.72rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     whiteSpace: 'nowrap',
                     cursor: 'pointer',
@@ -6560,7 +6344,7 @@ export default function MobileApkApp() {
                   style={{
                     padding: '0.32rem 0.7rem',
                     borderRadius: '99px',
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
                     fontWeight: 800,
                     whiteSpace: 'nowrap',
                     cursor: 'pointer',
@@ -6583,7 +6367,7 @@ export default function MobileApkApp() {
                   style={{
                     padding: '0.32rem 0.7rem',
                     borderRadius: '99px',
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
                     fontWeight: 800,
                     whiteSpace: 'nowrap',
                     cursor: 'pointer',
@@ -6610,7 +6394,7 @@ export default function MobileApkApp() {
                   style={{
                     padding: '0.35rem 0.75rem',
                     borderRadius: '999px',
-                    fontSize: '0.72rem',
+                    fontSize: '0.75rem',
                     fontWeight: 800,
                     whiteSpace: 'nowrap',
                     cursor: 'pointer',
@@ -6638,7 +6422,7 @@ export default function MobileApkApp() {
               <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 900 }}>
                 {isRtl ? 'الأعمال الأكثر شعبية (Popular Titles)' : 'Popular Titles'}
               </h3>
-              <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700, marginTop: '2px' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700, marginTop: '2px' }}>
                 {Number.isFinite(catalogTotal)
                   ? searchQuery.trim()
                     ? isRtl
@@ -6669,7 +6453,7 @@ export default function MobileApkApp() {
                       background: active ? '#ffffff' : 'rgba(255,255,255,0.08)',
                       color: active ? '#000000' : '#ffffff',
                       border: active ? 'none' : '1px solid rgba(255,255,255,0.16)',
-                      fontSize: '0.68rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
@@ -6683,14 +6467,7 @@ export default function MobileApkApp() {
 
           {/* v11.0 3-Mode Catalog Grid: Bento Asymmetric Grid (UI #4) OR Wide 24px Cinema Cards OR 3-Column Poster Grid */}
           {catalogLoading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div
-                  key={i}
-                  style={{ aspectRatio: '2/3', borderRadius: '18px', background: 'rgba(255,255,255,0.06)' }}
-                />
-              ))}
-            </div>
+            <SkeletonGrid count={12} columns={3} padding="0" />
           ) : (
             <>
               {catalogCardStyle === 'bento' ? (
@@ -6701,6 +6478,7 @@ export default function MobileApkApp() {
                       <div
                         key={item.objectID}
                         className="bx-mob-card"
+                        data-bx-oid={item?.objectID}
                         onClick={() => handleOpenAnime(item)}
                         style={{
                           gridColumn: isFeaturedSpan ? 'span 2' : 'span 1',
@@ -6718,6 +6496,7 @@ export default function MobileApkApp() {
                           src={isFeaturedSpan ? item.banner || item.poster : item.poster}
                           alt={item.titleEn}
                           loading="lazy"
+                          decoding="async"
                           style={{
                             width: '100%',
                             height: '100%',
@@ -6743,7 +6522,7 @@ export default function MobileApkApp() {
                             background: '#ffffff',
                             color: '#000000',
                             fontWeight: 900,
-                            fontSize: '0.64rem',
+                            fontSize: '0.75rem',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
@@ -6761,7 +6540,7 @@ export default function MobileApkApp() {
                               borderRadius: '99px',
                               background: 'rgba(14,14,20,0.82)',
                               border: '1px solid rgba(255,255,255,0.22)',
-                              fontSize: '0.66rem',
+                              fontSize: '0.75rem',
                               fontWeight: 900
                             }}
                           >
@@ -6791,7 +6570,7 @@ export default function MobileApkApp() {
                           >
                             {item.titleEn}
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>
                             <span>{(item.tags || [item.type || 'Anime']).slice(0, 2).join(' • ')}</span>
                             <span
                               style={{
@@ -6816,6 +6595,7 @@ export default function MobileApkApp() {
                     <div
                       key={item.objectID}
                       className="bx-mob-card"
+                      data-bx-oid={item?.objectID}
                       onClick={() => handleOpenAnime(item)}
                       style={{
                         position: 'relative',
@@ -6833,6 +6613,7 @@ export default function MobileApkApp() {
                         src={item.banner || item.poster}
                         alt={item.titleEn}
                         loading="lazy"
+                          decoding="async"
                         style={{
                           width: '100%',
                           height: '100%',
@@ -6859,7 +6640,7 @@ export default function MobileApkApp() {
                             borderRadius: '99px',
                             background: 'rgba(18,18,24,0.78)',
                             border: '1px solid rgba(255,255,255,0.24)',
-                            fontSize: '0.72rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             color: '#ffffff'
                           }}
@@ -6879,7 +6660,7 @@ export default function MobileApkApp() {
                           borderRadius: '50%',
                           background: '#ffffff',
                           color: '#000000',
-                          fontSize: '0.72rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           display: 'flex',
                           alignItems: 'center',
@@ -6919,7 +6700,7 @@ export default function MobileApkApp() {
                               borderRadius: '99px',
                               background: 'rgba(20,20,28,0.82)',
                               border: '1px solid rgba(255,255,255,0.18)',
-                              fontSize: '0.66rem',
+                              fontSize: '0.75rem',
                               fontWeight: 800,
                               color: 'rgba(255,255,255,0.88)',
                               whiteSpace: 'nowrap',
@@ -6936,7 +6717,7 @@ export default function MobileApkApp() {
                               borderRadius: '99px',
                               background: 'rgba(20,20,28,0.82)',
                               border: '1px solid rgba(255,255,255,0.18)',
-                              fontSize: '0.66rem',
+                              fontSize: '0.75rem',
                               fontWeight: 800,
                               color: 'rgba(255,255,255,0.88)',
                               whiteSpace: 'nowrap'
@@ -6955,6 +6736,7 @@ export default function MobileApkApp() {
                     <div
                       key={item.objectID}
                       className="bx-mob-card"
+                      data-bx-oid={item?.objectID}
                       onClick={() => handleOpenAnime(item)}
                       style={{ cursor: 'pointer' }}
                     >
@@ -6969,9 +6751,10 @@ export default function MobileApkApp() {
                         }}
                       >
                         <img
-                          src={item.poster}
+                          src={coverForMode(item.poster, dataSaver)}
                           alt={item.titleEn}
                           loading="lazy"
+                          decoding="async"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                         <span
@@ -6984,7 +6767,7 @@ export default function MobileApkApp() {
                             borderRadius: '50%',
                             background: '#ffffff',
                             color: '#000000',
-                            fontSize: '0.58rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',
@@ -7001,7 +6784,7 @@ export default function MobileApkApp() {
                               right: '6px',
                               background: 'rgba(0,0,0,0.85)',
                               color: '#fff',
-                              fontSize: '0.6rem',
+                              fontSize: '0.75rem',
                               fontWeight: 900,
                               padding: '0.1rem 0.34rem',
                               borderRadius: '6px'
@@ -7017,7 +6800,7 @@ export default function MobileApkApp() {
                             left: '6px',
                             background: 'rgba(0,0,0,0.84)',
                             color: '#fff',
-                            fontSize: '0.58rem',
+                            fontSize: '0.75rem',
                             fontWeight: 800,
                             padding: '0.08rem 0.34rem',
                             borderRadius: '6px'
@@ -7029,7 +6812,7 @@ export default function MobileApkApp() {
                       <div
                         style={{
                           marginTop: '0.32rem',
-                          fontSize: '0.73rem',
+                          fontSize: '0.75rem',
                           fontWeight: 800,
                           lineHeight: 1.28,
                           display: '-webkit-box',
@@ -7101,7 +6884,7 @@ export default function MobileApkApp() {
                     borderRadius: '50%',
                     background: '#ffffff',
                     color: '#000000',
-                    fontSize: '0.68rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -7120,7 +6903,7 @@ export default function MobileApkApp() {
             <h2 style={{ margin: '0 0 0.28rem', fontSize: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
               {isRtl ? 'جدول البث الأسبوعي المباشر' : 'WEEKLY SIMULCAST SCHEDULE'}
             </h2>
-            <p style={{ margin: '0 0 0.85rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
+            <p style={{ margin: '0 0 0.85rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
               {isRtl
                 ? 'تابع مواعيد نزول الحلقات الجديدة للأنميات المستمرة حسب أيام الأسبوع بتوقيت القاهرة ومكة بتصميم slothUI Pro.'
                 : 'Track new episode simulcast drops by day of the week in Official slothUI Pro 16:9 format.'}
@@ -7199,7 +6982,7 @@ export default function MobileApkApp() {
               >
                 <BxIcon name="plus" />
               </button>
-              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
                 {isRtl ? `${scheduleItems.length} حلقة مجدولة` : `${scheduleItems.length} Scheduled Drops`}
               </span>
             </div>
@@ -7237,15 +7020,13 @@ export default function MobileApkApp() {
             <span style={{ fontWeight: 900, fontSize: '0.94rem' }}>
               {isRtl ? 'حلقات اليوم (All Episodes)' : 'All Episodes'}
             </span>
-            <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
               <BxIcon name="sort" className="bx-ico-lead" />{isRtl ? 'الأعلى تقييماً (Most Popular)' : 'Most Popular'}
             </span>
           </div>
 
           {scheduleLoading ? (
-            <div style={{ textAlign: 'center', padding: '2.5rem', color: 'rgba(255,255,255,0.6)' }}>
-              {isRtl ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري جلب جدول البث لهذا اليوم..."}</> : <><BxIcon name="loader" className="bx-ico-lead" />{"Loading airing schedule..."}</>}
-            </div>
+            <SkeletonList count={6} thumbWidth={130} thumbHeight={74} padding="0" />
           ) : scheduleItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2.5rem', color: 'rgba(255,255,255,0.6)' }}>
               {isRtl ? 'لا توجد حلقات مجدولة لهذا اليوم حالياً.' : 'No scheduled episodes found for this day.'}
@@ -7256,6 +7037,7 @@ export default function MobileApkApp() {
                 <div
                   key={item.objectID}
                   className="bx-mob-card"
+                  data-bx-oid={item?.objectID}
                   onClick={() => handleOpenAnime(item)}
                   style={{
                     borderRadius: '22px',
@@ -7271,6 +7053,7 @@ export default function MobileApkApp() {
                       src={item.banner || item.poster}
                       alt={item.titleEn}
                       loading="lazy"
+                          decoding="async"
                       style={{
                         width: '100%',
                         height: '100%',
@@ -7298,7 +7081,7 @@ export default function MobileApkApp() {
                         borderRadius: '10px',
                         background: 'rgba(0,0,0,0.75)',
                         border: '1px solid rgba(255,255,255,0.24)',
-                        fontSize: '0.68rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         color: '#ffffff'
                       }}
@@ -7317,7 +7100,7 @@ export default function MobileApkApp() {
                           borderRadius: '999px',
                           background: '#ffffff',
                           color: '#000000',
-                          fontSize: '0.66rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900
                         }}
                       >
@@ -7346,7 +7129,7 @@ export default function MobileApkApp() {
                           borderRadius: '50%',
                           background: '#ffffff',
                           color: '#000000',
-                          fontSize: '0.68rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -7363,7 +7146,7 @@ export default function MobileApkApp() {
                   <div style={{ padding: '0.7rem 0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem' }}>
                     <div
                       style={{
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         color: 'rgba(255,255,255,0.68)',
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
@@ -7401,7 +7184,7 @@ export default function MobileApkApp() {
                           background: '#ffffff',
                           color: '#000000',
                           fontWeight: 900,
-                          fontSize: '0.74rem'
+                          fontSize: '0.75rem'
                         }}
                       >
                         <BxIcon name="play" className="bx-ico-lead" />{isRtl ? 'تشغيل' : 'Play'}
@@ -7473,7 +7256,7 @@ export default function MobileApkApp() {
                         borderRadius: '8px',
                         padding: '0.35rem 0.75rem',
                         fontWeight: 900,
-                        fontSize: '0.74rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer'
                       }}
                     >
@@ -7496,7 +7279,7 @@ export default function MobileApkApp() {
                         color: '#fff',
                         border: '1px solid rgba(255,255,255,0.22)',
                         fontWeight: 800,
-                        fontSize: '0.74rem'
+                        fontSize: '0.75rem'
                       }}
                     >
                       {mangaChapters.map((c) => (
@@ -7515,7 +7298,7 @@ export default function MobileApkApp() {
                         background: readingBgmMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.12)',
                         border: '1px solid rgba(255,255,255,0.2)',
                         color: readingBgmMode !== 'off' ? '#000' : '#fff',
-                        fontSize: '0.7rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
@@ -7533,7 +7316,7 @@ export default function MobileApkApp() {
                         background: 'rgba(255,255,255,0.12)',
                         border: '1px solid rgba(255,255,255,0.2)',
                         color: '#fff',
-                        fontSize: '0.7rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         cursor: 'pointer'
                       }}
@@ -7550,7 +7333,7 @@ export default function MobileApkApp() {
                         background: readerSettingsOpen ? '#ffffff' : 'rgba(255,255,255,0.12)',
                         border: '1px solid rgba(255,255,255,0.2)',
                         color: readerSettingsOpen ? '#000' : '#fff',
-                        fontSize: '0.7rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
@@ -7583,7 +7366,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.1)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#fff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -7600,7 +7383,7 @@ export default function MobileApkApp() {
                           background: readerZoom > 100 ? '#ffffff' : 'rgba(255,255,255,0.1)',
                           color: readerZoom > 100 ? '#000000' : '#ffffff',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -7618,7 +7401,7 @@ export default function MobileApkApp() {
                             background: dualPageSpread ? '#ffffff' : 'rgba(255,255,255,0.1)',
                             color: dualPageSpread ? '#000000' : '#ffffff',
                             border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             cursor: 'pointer'
                           }}
@@ -7641,7 +7424,7 @@ export default function MobileApkApp() {
                             background: autoScrollSpeed > 0 ? '#ffffff' : 'rgba(255,255,255,0.1)',
                             color: autoScrollSpeed > 0 ? '#000000' : '#ffffff',
                             border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             cursor: 'pointer'
                           }}
@@ -7659,7 +7442,7 @@ export default function MobileApkApp() {
                           background: volumeKeyScroll ? '#ffffff' : 'rgba(255,255,255,0.1)',
                           color: volumeKeyScroll ? '#000000' : '#ffffff',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -7678,7 +7461,7 @@ export default function MobileApkApp() {
                           background: readerEyeFilter !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
                           color: readerEyeFilter !== 'normal' ? '#000000' : '#ffffff',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -7700,7 +7483,7 @@ export default function MobileApkApp() {
                             background: seamlessStitch ? '#ffffff' : 'rgba(255,255,255,0.1)',
                             color: seamlessStitch ? '#000000' : '#ffffff',
                             border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             cursor: 'pointer'
                           }}
@@ -7721,7 +7504,7 @@ export default function MobileApkApp() {
                             : 'rgba(255,255,255,0.12)',
                           color: offlineChapters.some((x) => x.id === activeMangaChapter.id) ? '#000000' : '#ffffff',
                           border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -7753,7 +7536,7 @@ export default function MobileApkApp() {
                     padding: '2rem 1.4rem',
                     textAlign: 'center',
                     color: 'rgba(255,255,255,0.78)',
-                    fontSize: '0.84rem',
+                    fontSize: '0.875rem',
                     fontWeight: 800,
                     lineHeight: 1.6
                   }}
@@ -7935,6 +7718,7 @@ export default function MobileApkApp() {
                       src={pg}
                       alt={isRtl ? `الصفحة ${idx + 1}` : `Page ${idx + 1}`}
                       loading="lazy"
+                          decoding="async"
                       style={{
                         width: `${readerZoom}%`,
                         maxWidth: readerZoom === 100 ? '100vw' : 'none',
@@ -7967,7 +7751,7 @@ export default function MobileApkApp() {
                       background: 'rgba(0,0,0,0.82)',
                       border: '1px solid rgba(255,255,255,0.22)',
                       color: '#ffffff',
-                      fontSize: '0.66rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       pointerEvents: 'none'
                     }}
@@ -8130,7 +7914,7 @@ export default function MobileApkApp() {
                         borderRadius: '999px',
                         padding: '0.42rem 0.9rem',
                         fontWeight: 900,
-                        fontSize: '0.74rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer'
                       }}
                     >
@@ -8145,7 +7929,7 @@ export default function MobileApkApp() {
                           borderRadius: '50%',
                           background: '#ffffff',
                           color: '#000000',
-                          fontSize: '0.6rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -8154,7 +7938,7 @@ export default function MobileApkApp() {
                       >
                         X
                       </span>
-                      <span style={{ fontSize: '0.66rem', fontWeight: 900 }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900 }}>
                         {mangaActiveServer ? mangaServerLabel(mangaActiveServer) : selectedManga.sourceLabel || 'BLACK X MANGA'}
                       </span>
                     </div>
@@ -8186,11 +7970,11 @@ export default function MobileApkApp() {
                   </h2>
 
                   <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                    <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.66rem', fontWeight: 800 }}>
+                    <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 800 }}>
                       {selectedManga.type || (isRtl ? 'مانجا / مانهوا' : 'Manga / Manhwa')}
                     </span>
                     {selectedManga.rate && (
-                      <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.66rem', fontWeight: 800 }}>
+                      <span style={{ padding: '0.18rem 0.65rem', borderRadius: '99px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 800 }}>
                         <BxIcon name="star" className="bx-ico-lead" />{selectedManga.rate}
                       </span>
                     )}
@@ -8211,11 +7995,11 @@ export default function MobileApkApp() {
                   >
                     <div>
                       <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{mangaChaptersLoading ? '…' : mangaChapters.length}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'فصل متاح' : 'Chapters'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'فصل متاح' : 'Chapters'}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{selectedManga.rate ? <><BxIcon name="star" className="bx-ico-lead" />{selectedManga.rate}</> : '—'}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'التقييم' : 'Rating'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'التقييم' : 'Rating'}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>
@@ -8229,18 +8013,18 @@ export default function MobileApkApp() {
                               : 'Ongoing'
                             : '—'}
                       </div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'الحالة' : 'Status'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'الحالة' : 'Status'}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '0.82rem', fontWeight: 900 }}>{mangaActiveServer ? mangaServerLabel(mangaActiveServer).replace('BLACK X ', 'BX ') : '—'}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'السيرفر' : 'Server'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{isRtl ? 'السيرفر' : 'Server'}</div>
                     </div>
                   </div>
 
                   {/* Servers for this title: the same list the website library modal shows */}
                   {mangaServers.length > 0 && (
                     <div style={{ marginBottom: '0.85rem', textAlign: isRtl ? 'right' : 'left' }}>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 900, color: 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 900, color: 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>
                         <BxIcon name="satellite" className="bx-ico-lead" />{isRtl ? 'سيرفرات هذا العمل (نفس سيرفرات الموقع):' : 'Servers for this title (same as the website):'}
                       </div>
                       <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.15rem' }}>
@@ -8257,7 +8041,7 @@ export default function MobileApkApp() {
                               style={{
                                 padding: '0.38rem 0.8rem',
                                 borderRadius: '999px',
-                                fontSize: '0.7rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 900,
                                 whiteSpace: 'nowrap',
                                 cursor: 'pointer',
@@ -8302,7 +8086,7 @@ export default function MobileApkApp() {
                           background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
                           color: ttsSpeaking ? '#000000' : '#ffffff',
                           border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.65rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -8310,7 +8094,7 @@ export default function MobileApkApp() {
                         {ttsSpeaking ? (isRtl ? <><BxIcon name="mute" className="bx-ico-lead" />{"إيقاف"}</> : <><BxIcon name="mute" className="bx-ico-lead" />{"Stop"}</>) : isRtl ? <><BxIcon name="volume" className="bx-ico-lead" />{"استماع"}</> : <><BxIcon name="volume" className="bx-ico-lead" />{"Listen"}</>}
                       </button>
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
+                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
                       {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || (isRtl ? 'عمل مانهوا ومانجا حصري مترجم بالكامل بجودة عالية عبر سيرفرات BLACK X.' : 'Exclusive translated Manga & Manhwa series on BLACK X.')).slice(0, 280)}
                     </p>
                   </div>
@@ -8381,7 +8165,7 @@ export default function MobileApkApp() {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 900, color: '#ffffff', marginBottom: '2px' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 900, color: '#ffffff', marginBottom: '2px' }}>
                       <BxIcon name="flame" className="bx-ico-lead" />{isRtl ? 'أحدث فصل مضاف (Latest Release)' : 'Latest Chapter Available'}
                     </div>
                     <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>
@@ -8394,7 +8178,7 @@ export default function MobileApkApp() {
                       borderRadius: '999px',
                       background: '#ffffff',
                       color: '#000000',
-                      fontSize: '0.74rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900
                     }}
                   >
@@ -8431,7 +8215,7 @@ export default function MobileApkApp() {
                     background: 'rgba(255,255,255,0.08)',
                     border: '1px solid rgba(255,255,255,0.2)',
                     color: '#ffffff',
-                    fontSize: '0.73rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     whiteSpace: 'nowrap',
                     cursor: 'pointer'
@@ -8450,7 +8234,7 @@ export default function MobileApkApp() {
                   padding: '0.35rem 0.5rem',
                   marginBottom: '0.45rem',
                   borderBottom: '1px solid rgba(255,255,255,0.12)',
-                  fontSize: '0.74rem',
+                  fontSize: '0.75rem',
                   fontWeight: 900,
                   color: 'rgba(255,255,255,0.68)'
                 }}
@@ -8460,9 +8244,7 @@ export default function MobileApkApp() {
               </div>
 
               {mangaChaptersLoading ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري جلب جميع الفصول المترجمة..."}</> : <><BxIcon name="loader" className="bx-ico-lead" />{"Loading chapters..."}</>}
-                </div>
+                <SkeletonList count={6} thumbWidth={56} thumbHeight={56} padding="0" />
               ) : mangaChapters.length === 0 ? (
                 <div
                   style={{
@@ -8472,7 +8254,7 @@ export default function MobileApkApp() {
                     background: '#0c0c11',
                     border: '1px solid rgba(255,255,255,0.12)',
                     color: 'rgba(255,255,255,0.75)',
-                    fontSize: '0.78rem',
+                    fontSize: '0.875rem',
                     fontWeight: 800,
                     lineHeight: 1.6
                   }}
@@ -8545,7 +8327,7 @@ export default function MobileApkApp() {
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: '0.68rem',
+                              fontSize: '0.75rem',
                               fontWeight: 900
                             }}
                           >
@@ -8564,7 +8346,7 @@ export default function MobileApkApp() {
                             borderRadius: '99px',
                             background: isOffline ? '#ffffff' : 'rgba(255,255,255,0.08)',
                             color: isOffline ? '#000000' : 'rgba(255,255,255,0.78)',
-                            fontSize: '0.65rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900
                           }}
                         >
@@ -8634,7 +8416,7 @@ export default function MobileApkApp() {
                         background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
                         color: active ? '#000000' : 'rgba(255,255,255,0.82)',
                         border: active ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.18)',
-                        fontSize: '0.68rem',
+                        fontSize: '0.75rem',
                         fontWeight: 800,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
@@ -8703,7 +8485,7 @@ export default function MobileApkApp() {
                         borderRadius: '50%',
                         background: '#ffffff',
                         color: '#000000',
-                        fontSize: '0.6rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -8712,7 +8494,7 @@ export default function MobileApkApp() {
                     >
                       X
                     </span>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.03em' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 900, letterSpacing: '0.03em' }}>
                       {isRtl ? 'مانهوا الأسبوع المميزة' : 'FEATURED MANHWA'}
                     </span>
                   </div>
@@ -8728,7 +8510,7 @@ export default function MobileApkApp() {
                         borderRadius: '999px',
                         background: 'rgba(10,10,15,0.82)',
                         border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.68rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900
                       }}
                     >
@@ -8802,7 +8584,7 @@ export default function MobileApkApp() {
                     <span style={{ fontWeight: 900, fontSize: '0.88rem' }}>
                       <BxIcon name="book" className="bx-ico-lead" />{isRtl ? 'متابعة القراءة (Continue Reading)' : 'Continue Reading'}
                     </span>
-                    <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
                       {mangaHistory.length} {isRtl ? 'عمل' : 'Series'}
                     </span>
                   </div>
@@ -8830,10 +8612,10 @@ export default function MobileApkApp() {
                           style={{ width: '44px', height: '62px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '0.74rem', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {mh.name}
                           </div>
-                          <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.68)', fontWeight: 800, margin: '2px 0 6px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.68)', fontWeight: 800, margin: '2px 0 6px' }}>
                             {isRtl ? `الفصل ${mh.lastChapter || mh.chapter || 1}` : `Ch. ${mh.lastChapter || mh.chapter || 1}`}
                           </div>
                           <div style={{ height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}>
@@ -8861,7 +8643,7 @@ export default function MobileApkApp() {
                       style={{
                         padding: '0.4rem 0.82rem',
                         borderRadius: '999px',
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer',
@@ -8892,7 +8674,7 @@ export default function MobileApkApp() {
                       style={{
                         padding: '0.34rem 0.8rem',
                         borderRadius: '999px',
-                        fontSize: '0.7rem',
+                        fontSize: '0.75rem',
                         fontWeight: 800,
                         cursor: 'pointer',
                         background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.04)',
@@ -8907,9 +8689,7 @@ export default function MobileApkApp() {
               </div>
 
               {mangaLoading ? (
-                <div style={{ textAlign: 'center', padding: '2.5rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري جلب مكتبة المانجا والمانهوا الشاملة..."}</> : <><BxIcon name="loader" className="bx-ico-lead" />{"Loading Manga & Manhwa catalog..."}</>}
-                </div>
+                <SkeletonGrid count={9} columns={3} padding="0" />
               ) : (
                 <>
                   {/* Horizontal "Latest Updates" Compact Row Strip (Matches Reference UI 1 Left Screen) */}
@@ -8942,20 +8722,21 @@ export default function MobileApkApp() {
                                 src={m.poster?.large || m.poster_uri}
                                 alt={m.name}
                                 loading="lazy"
+                          decoding="async"
                                 style={{ width: '52px', height: '70px', borderRadius: '12px', objectFit: 'cover', flexShrink: 0 }}
                               />
                               <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontWeight: 900, fontSize: '0.82rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {m.name}
                                 </div>
-                                <div style={{ fontSize: '0.66rem', color: '#ffffff', fontWeight: 800, marginTop: '2px' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#ffffff', fontWeight: 800, marginTop: '2px' }}>
                                   <BxIcon name="dot" className="bx-ico-lead" />{m.sourceLabel || 'BLACK X'}{m.rate ? <>{' • '}<BxIcon name="star" className="bx-ico-lead" />{m.rate}</> : null}
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.3rem', marginTop: '4px' }}>
-                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.6rem', fontWeight: 800 }}>
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.75rem', fontWeight: 800 }}>
                                     {m.type || 'مانهوا'}
                                   </span>
-                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.6rem', fontWeight: 800 }}>
+                                  <span style={{ padding: '0.1rem 0.45rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', fontSize: '0.75rem', fontWeight: 800 }}>
                                     {m.sourceLabel || 'BLACK X'}
                                   </span>
                                 </div>
@@ -8990,7 +8771,7 @@ export default function MobileApkApp() {
                         textAlign: 'center',
                         padding: '2rem 1rem',
                         color: 'rgba(255,255,255,0.68)',
-                        fontSize: '0.8rem',
+                        fontSize: '0.875rem',
                         fontWeight: 800,
                         lineHeight: 1.6
                       }}
@@ -9034,6 +8815,7 @@ export default function MobileApkApp() {
                               src={m.poster?.large || m.poster_uri}
                               alt={m.name}
                               loading="lazy"
+                          decoding="async"
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                             {/* Top-Left Circular [X] Seal */}
@@ -9047,7 +8829,7 @@ export default function MobileApkApp() {
                                 borderRadius: '50%',
                                 background: '#ffffff',
                                 color: '#000000',
-                                fontSize: '0.58rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 900,
                                 display: 'flex',
                                 alignItems: 'center',
@@ -9065,7 +8847,7 @@ export default function MobileApkApp() {
                                   right: '6px',
                                   background: 'rgba(0,0,0,0.84)',
                                   color: '#fff',
-                                  fontSize: '0.58rem',
+                                  fontSize: '0.75rem',
                                   fontWeight: 900,
                                   padding: '0.1rem 0.34rem',
                                   borderRadius: '6px'
@@ -9082,7 +8864,7 @@ export default function MobileApkApp() {
                                   left: '6px',
                                   background: 'rgba(0,0,0,0.85)',
                                   color: '#fff',
-                                  fontSize: '0.55rem',
+                                  fontSize: '0.75rem',
                                   fontWeight: 900,
                                   padding: '0.1rem 0.36rem',
                                   borderRadius: '6px'
@@ -9095,7 +8877,7 @@ export default function MobileApkApp() {
                           <div
                             style={{
                               marginTop: '0.34rem',
-                              fontSize: '0.74rem',
+                              fontSize: '0.75rem',
                               fontWeight: 800,
                               lineHeight: 1.28,
                               display: '-webkit-box',
@@ -9166,7 +8948,7 @@ export default function MobileApkApp() {
                     borderRadius: '50%',
                     background: '#ffffff',
                     color: '#000000',
-                    fontSize: '0.68rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900,
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -9185,7 +8967,7 @@ export default function MobileApkApp() {
                   borderRadius: '999px',
                   background: '#ffffff',
                   color: '#000000',
-                  fontSize: '0.68rem',
+                  fontSize: '0.75rem',
                   fontWeight: 900
                 }}
               >
@@ -9196,7 +8978,7 @@ export default function MobileApkApp() {
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.22rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
               {isRtl ? 'ساحة التوقعات والمجتمع الملكي' : 'SOVEREIGN COMMUNITY ARENA'}
             </h2>
-            <p style={{ margin: '0 0 0.85rem', fontSize: '0.74rem', color: 'rgba(255,255,255,0.68)' }}>
+            <p style={{ margin: '0 0 0.85rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.68)' }}>
               {isRtl
                 ? 'صوّت على أحداث الحلقات القادمة، شارك في نقاشات مجتمع BLACK X، واجمع نقاط XP.'
                 : 'Predict episode plot twists, join BLACK X community discussions and earn XP.'}
@@ -9235,7 +9017,7 @@ export default function MobileApkApp() {
                   </button>
                 );
               })}
-              <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>
                 {isRtl ? 'اختر القسم من الكرات الدائرية أو الأزرار أدناه' : 'Switch Arena Mode'}
               </span>
             </div>
@@ -9289,7 +9071,7 @@ export default function MobileApkApp() {
                   <div style={{ fontWeight: 900, fontSize: '0.88rem' }}>
                     <BxIcon name="sparkles" className="bx-ico-lead" />{isRtl ? 'محرك توقعات الحلقات والفصول التفاعلي' : 'Interactive Anime Prediction Engine'}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                     {isRtl ? 'صوّت على أحداث الحلقات القادمة واكسب نقاط خبرة (XP)!' : 'Vote on upcoming plot twists & earn XP!'}
                   </div>
                 </div>
@@ -9320,7 +9102,7 @@ export default function MobileApkApp() {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 900, color: 'rgba(255,255,255,0.65)' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900, color: 'rgba(255,255,255,0.65)' }}>
                         <BxIcon name="film" className="bx-ico-lead" />{pred.anime}
                       </span>
                       <span
@@ -9328,14 +9110,14 @@ export default function MobileApkApp() {
                           padding: '0.14rem 0.5rem',
                           borderRadius: '6px',
                           background: 'rgba(255,255,255,0.12)',
-                          fontSize: '0.66rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900
                         }}
                       >
                         +{pred.xpReward} XP
                       </span>
                     </div>
-                    <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.7rem', lineHeight: 1.4 }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.875rem', marginBottom: '0.7rem', lineHeight: 1.4 }}>
                       {isRtl ? pred.questionAr : pred.questionEn}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
@@ -9418,14 +9200,14 @@ export default function MobileApkApp() {
                       <div style={{ fontWeight: 900, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {user?.displayName || (isRtl ? 'زائر' : 'Guest')}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)' }}>{selectedSovereignTitle}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>{selectedSovereignTitle}</div>
                     </div>
                   </div>
                   <span style={{ fontWeight: 900, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
                     {userXp.toLocaleString()} XP
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginBottom: '0.35rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginBottom: '0.35rem' }}>
                   <span>{isRtl ? `المستوى ${Math.floor(userXp / 100) + 1}` : `Level ${Math.floor(userXp / 100) + 1}`}</span>
                   <span>{isRtl ? `${100 - (userXp % 100)} XP للمستوى التالي` : `${100 - (userXp % 100)} XP to next level`}</span>
                 </div>
@@ -9441,7 +9223,7 @@ export default function MobileApkApp() {
                   />
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: '0.7rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
                 {isRtl
                   ? 'تكسب XP من التقييمات والتوقعات والمنشورات. لا توجد لوحة متصدرين عامة بعد، فنقاطك محفوظة على جهازك فقط.'
                   : 'Earn XP from reviews, predictions and posts. There is no public leaderboard yet — your XP is stored on this device.'}
@@ -9477,7 +9259,7 @@ export default function MobileApkApp() {
                       style={{
                         padding: '0.25rem 0.6rem',
                         borderRadius: '99px',
-                        fontSize: '0.68rem',
+                        fontSize: '0.75rem',
                         fontWeight: 800,
                         whiteSpace: 'nowrap',
                         border: postCategory === cat.id ? '1px solid #fff' : '1px solid rgba(255,255,255,0.14)',
@@ -9562,7 +9344,7 @@ export default function MobileApkApp() {
                               style={{
                                 background: '#ffffff',
                                 color: '#000000',
-                                fontSize: '0.62rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 900,
                                 padding: '0.1rem 0.4rem',
                                 borderRadius: '5px'
@@ -9572,7 +9354,7 @@ export default function MobileApkApp() {
                             </span>
                           )}
                         </div>
-                        <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)' }}>{p.time}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)' }}>{p.time}</span>
                       </div>
 
                       {isBlurred ? (
@@ -9594,7 +9376,7 @@ export default function MobileApkApp() {
                           <BxIcon name="alert" className="bx-ico-lead" />{isRtl ? 'هذا المنشور يحتوي على حرق — اضغط للإظهار' : 'Spoiler — Tap to reveal'}
                         </button>
                       ) : (
-                        <p style={{ margin: '0 0 0.55rem', fontSize: '0.8rem', lineHeight: 1.5, color: 'rgba(255,255,255,0.9)' }}>
+                        <p style={{ margin: '0 0 0.55rem', fontSize: '0.875rem', lineHeight: 1.5, color: 'rgba(255,255,255,0.9)' }}>
                           {p.text}
                         </p>
                       )}
@@ -9609,7 +9391,7 @@ export default function MobileApkApp() {
                             borderRadius: '8px',
                             padding: '0.24rem 0.6rem',
                             color: '#fff',
-                            fontSize: '0.72rem',
+                            fontSize: '0.75rem',
                             fontWeight: 800,
                             cursor: 'pointer'
                           }}
@@ -9625,7 +9407,7 @@ export default function MobileApkApp() {
                             borderRadius: '8px',
                             padding: '0.24rem 0.6rem',
                             color: '#fff',
-                            fontSize: '0.72rem',
+                            fontSize: '0.75rem',
                             fontWeight: 800,
                             cursor: 'pointer'
                           }}
@@ -9637,7 +9419,7 @@ export default function MobileApkApp() {
                       {Array.isArray(p.replies) && p.replies.length > 0 && (
                         <div style={{ marginTop: '0.55rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                           {p.replies.map((r) => (
-                            <div key={r.id} style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.8)' }}>
+                            <div key={r.id} style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)' }}>
                               <strong style={{ color: '#fff' }}>{r.author}:</strong> {r.text}
                             </div>
                           ))}
@@ -9671,7 +9453,7 @@ export default function MobileApkApp() {
                               color: '#000',
                               border: 'none',
                               fontWeight: 900,
-                              fontSize: '0.74rem',
+                              fontSize: '0.75rem',
                               cursor: 'pointer'
                             }}
                           >
@@ -9691,6 +9473,36 @@ export default function MobileApkApp() {
       {/* ==================== TAB 5: v12.0 SLOTH-UI & APPLE-AIRLINE LUXURY MONOCHROME PROFILE STUDIO ==================== */}
       {activeTab === 'profile' && !selectedAnime && (
         <main className="bx-page" style={{ padding: '0.85rem 1rem 1.5rem' }}>
+          {user && !sessionToken && (
+            <div className="bx-update-card bx-pop" style={{ margin: '0 0 0.85rem' }} role="note">
+              <div className="bx-update-head">
+                <span className="bx-update-ico">
+                  <BxIcon name="shield-check" size="1.05em" strokeWidth={2.4} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="bx-update-title">{isRtl ? 'سجّل الدخول تاني مرة واحدة' : 'Sign in once more'}</div>
+                  <div className="bx-update-sub">
+                    {isRtl
+                      ? 'تسجيل الدخول بقى عن طريق سيرفر الموقع عشان أمان حسابك. بياناتك على الموبايل محفوظة وهتتزامن بعد الدخول.'
+                      : 'Sign-in now goes through the website server for your account security. Your data on this phone is kept and syncs after signing in.'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="bx-update-cta"
+                style={{ marginTop: '0.7rem' }}
+                onClick={() => {
+                  setUser(null);
+                  localStorage.removeItem('bx_mob_user');
+                  setProfileSubTab('account');
+                }}
+              >
+                <BxIcon name="user" className="bx-ico-lead" />
+                {isRtl ? 'سجّل الدخول' : 'Sign in'}
+              </button>
+            </div>
+          )}
           {/* ==================== LUXURY CURVED WAVE PROFILE HERO CARD (MATCHES PROFILE REFERENCE UI 1, 2 & 3) ==================== */}
           <div
             style={{
@@ -9753,7 +9565,7 @@ export default function MobileApkApp() {
                     border: '1px solid rgba(255,255,255,0.35)'
                   }}
                 />
-                <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 900, color: '#ffffff' }}>
                   BLACK X <span style={{ fontWeight: 500, opacity: 0.75 }}>member</span>
                 </span>
               </div>
@@ -9845,7 +9657,7 @@ export default function MobileApkApp() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.74rem',
+                  fontSize: '0.75rem',
                   fontWeight: 900
                 }}
               >
@@ -9861,7 +9673,7 @@ export default function MobileApkApp() {
                   borderRadius: '999px',
                   background: '#ffffff',
                   color: '#000000',
-                  fontSize: '0.62rem',
+                  fontSize: '0.75rem',
                   fontWeight: 900
                 }}
               >
@@ -9874,7 +9686,7 @@ export default function MobileApkApp() {
                   background: 'rgba(255,255,255,0.1)',
                   border: '1px solid rgba(255,255,255,0.24)',
                   color: '#ffffff',
-                  fontSize: '0.62rem',
+                  fontSize: '0.75rem',
                   fontWeight: 800
                 }}
               >
@@ -9887,7 +9699,7 @@ export default function MobileApkApp() {
                   background: 'rgba(255,255,255,0.1)',
                   border: '1px solid rgba(255,255,255,0.24)',
                   color: '#ffffff',
-                  fontSize: '0.62rem',
+                  fontSize: '0.75rem',
                   fontWeight: 800
                 }}
               >
@@ -9899,7 +9711,7 @@ export default function MobileApkApp() {
             <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.32rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
               {user ? user.displayName : isRtl ? 'زائر BLACK X الملكي' : 'BLACK X Guest Monarch'}
             </h2>
-            <div style={{ fontSize: '0.73rem', fontWeight: 800, color: 'rgba(255,255,255,0.62)', marginBottom: '0.85rem', letterSpacing: '0.03em' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.62)', marginBottom: '0.85rem', letterSpacing: '0.03em' }}>
               {user ? `@${user.username} • Lv.${Math.floor(userXp / 100) + 1}` : isRtl ? 'سجّل دخولك للمزامنة السحابية' : 'Sign in for Cloud Sync'}
             </div>
 
@@ -9968,13 +9780,7 @@ export default function MobileApkApp() {
               {/* 4. Outlined Glass Cloud Sync Orb */}
               <button
                 type="button"
-                onClick={() => {
-                  if (user) {
-                    syncUserStateToCloud(user, favorites, watchHistory).then(() => showToast('تمت المزامنة السحابية مع الموقع!', 'check'));
-                  } else {
-                    setProfileSubTab('account');
-                  }
-                }}
+                onClick={handleManualSync}
                 style={{
                   width: '44px',
                   height: '44px',
@@ -10005,21 +9811,21 @@ export default function MobileApkApp() {
             >
               <div>
                 <div style={{ fontSize: '1.08rem', fontWeight: 900 }}>{watchHistory.length + mangaHistory.length}</div>
-                <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
                   {isRtl ? 'سجل المشاهدة' : 'Watched'}
                 </div>
               </div>
               <div style={{ height: '24px', background: 'rgba(255,255,255,0.14)' }} />
               <div>
                 <div style={{ fontSize: '1.08rem', fontWeight: 900 }}>{favorites.length + Object.keys(watchlistMap).length}</div>
-                <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
                   {isRtl ? 'المفضلة ومكتبتي' : 'Saved'}
                 </div>
               </div>
               <div style={{ height: '24px', background: 'rgba(255,255,255,0.14)' }} />
               <div>
                 <div style={{ fontSize: '1.08rem', fontWeight: 900 }}>{userXp.toLocaleString()}</div>
-                <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)', fontWeight: 700 }}>
                   {isRtl ? 'نقاط الخبرة XP' : 'XP Score'}
                 </div>
               </div>
@@ -10027,7 +9833,7 @@ export default function MobileApkApp() {
 
             {/* Airline-Class "ACCOUNT INFORMATIONS" Structured Card (Exact Match to Profile UI 3 Left Screen) */}
             <div style={{ textAlign: isRtl ? 'right' : 'left', marginBottom: user ? '0.85rem' : '0.2rem' }}>
-              <div style={{ fontSize: '0.64rem', fontWeight: 900, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.48)', marginBottom: '0.4rem', padding: '0 0.25rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 900, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.48)', marginBottom: '0.4rem', padding: '0 0.25rem' }}>
                 {isRtl ? 'معلومات العضوية الملكية • ACCOUNT INFORMATIONS' : 'ACCOUNT INFORMATIONS'}
               </div>
               <div
@@ -10133,7 +9939,7 @@ export default function MobileApkApp() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => syncUserStateToCloud(user, favorites, watchHistory).then(() => showToast('تمت المزامنة السحابية مع الموقع!', 'check'))}
+                  onClick={handleManualSync}
                   style={{
                     flex: 1,
                     padding: '0.65rem',
@@ -10151,6 +9957,8 @@ export default function MobileApkApp() {
                 <button
                   type="button"
                   onClick={() => {
+                    apkSignOut();
+                    setSessionToken(null);
                     setUser(null);
                     localStorage.removeItem('bx_mob_user');
                     showToast(isRtl ? 'تم تسجيل الخروج' : 'Signed out');
@@ -10185,7 +9993,7 @@ export default function MobileApkApp() {
                   background: 'none',
                   border: 'none',
                   color: 'rgba(255,255,255,0.75)',
-                  fontSize: '0.73rem',
+                  fontSize: '0.75rem',
                   fontWeight: 800,
                   cursor: 'pointer'
                 }}
@@ -10202,7 +10010,7 @@ export default function MobileApkApp() {
                   borderRadius: '18px',
                   border: '1px dashed rgba(255,255,255,0.18)',
                   color: 'rgba(255,255,255,0.62)',
-                  fontSize: '0.74rem',
+                  fontSize: '0.75rem',
                   fontWeight: 700,
                   textAlign: 'center'
                 }}
@@ -10231,6 +10039,7 @@ export default function MobileApkApp() {
                     src={item.banner || item.poster}
                     alt={item.titleEn}
                     loading="lazy"
+                          decoding="async"
                     style={{
                       width: '100%',
                       height: '100%',
@@ -10258,7 +10067,7 @@ export default function MobileApkApp() {
                         borderRadius: '8px',
                         background: 'rgba(0,0,0,0.76)',
                         border: '1px solid rgba(255,255,255,0.24)',
-                        fontSize: '0.64rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         color: '#ffffff'
                       }}
@@ -10281,7 +10090,7 @@ export default function MobileApkApp() {
                   >
                     <span
                       style={{
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         color: '#ffffff',
                         whiteSpace: 'nowrap',
@@ -10298,7 +10107,7 @@ export default function MobileApkApp() {
                         borderRadius: '50%',
                         background: '#ffffff',
                         color: '#000000',
-                        fontSize: '0.6rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -10350,7 +10159,7 @@ export default function MobileApkApp() {
                     color: active ? '#000000' : 'rgba(255,255,255,0.78)',
                     border: 'none',
                     fontWeight: 900,
-                    fontSize: '0.73rem',
+                    fontSize: '0.75rem',
                     whiteSpace: 'nowrap',
                     cursor: 'pointer'
                   }}
@@ -10467,7 +10276,7 @@ export default function MobileApkApp() {
                         borderRadius: '99px',
                         background: '#ffffff',
                         color: '#000000',
-                        fontSize: '0.66rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900
                       }}
                     >
@@ -10479,19 +10288,19 @@ export default function MobileApkApp() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem', marginBottom: '0.75rem' }}>
                     <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
                       <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{cloudVipCodes.length}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>أكواد نشطة</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>أكواد نشطة</div>
                     </div>
                     <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
                       <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{cloudUserRequests.length}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>طلبات الأعضاء</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>طلبات الأعضاء</div>
                     </div>
                     <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
                       <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{globalVipEnforced ? <><BxIcon name="lock" className="bx-ico-lead" />{"مفعل"}</> : <><BxIcon name="unlock" className="bx-ico-lead" />{"مفتوح"}</>}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>بوابة VIP</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>بوابة VIP</div>
                     </div>
                     <div style={{ padding: '0.45rem 0.25rem', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', textAlign: 'center' }}>
                       <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{globalBroadcastMsg ? <><BxIcon name="dot" className="bx-ico-lead" />{"مباشر"}</> : <><BxIcon name="circle-dashed" className="bx-ico-lead" />{"صامت"}</>}</div>
-                      <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.6)' }}>البث العام</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>البث العام</div>
                     </div>
                   </div>
 
@@ -10527,7 +10336,7 @@ export default function MobileApkApp() {
                           color: devSubTab === dt.id ? '#000000' : 'rgba(255,255,255,0.75)',
                           border: 'none',
                           fontWeight: 900,
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
                         }}
@@ -10558,7 +10367,7 @@ export default function MobileApkApp() {
                           borderRadius: '8px',
                           background: globalVipEnforced ? '#ffffff' : 'rgba(255,255,255,0.12)',
                           color: globalVipEnforced ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900
                         }}
                       >
@@ -10618,7 +10427,7 @@ export default function MobileApkApp() {
                           background: '#000',
                           color: '#fff',
                           border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.74rem',
+                          fontSize: '0.75rem',
                           fontWeight: 800
                         }}
                       >
@@ -10635,7 +10444,7 @@ export default function MobileApkApp() {
                           background: '#000',
                           color: '#fff',
                           border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.74rem',
+                          fontSize: '0.75rem',
                           fontWeight: 800
                         }}
                       >
@@ -10677,7 +10486,7 @@ export default function MobileApkApp() {
                               borderRadius: '8px',
                               background: 'rgba(255,255,255,0.06)',
                               border: '1px solid rgba(255,255,255,0.14)',
-                              fontSize: '0.72rem'
+                              fontSize: '0.75rem'
                             }}
                           >
                             <span
@@ -10701,7 +10510,7 @@ export default function MobileApkApp() {
                                 color: '#fff',
                                 borderRadius: '6px',
                                 padding: '0.18rem 0.45rem',
-                                fontSize: '0.68rem',
+                                fontSize: '0.75rem',
                                 cursor: 'pointer'
                               }}
                             >
@@ -10810,7 +10619,7 @@ export default function MobileApkApp() {
                           background: '#000',
                           color: '#fff',
                           border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.74rem',
+                          fontSize: '0.75rem',
                           fontWeight: 800
                         }}
                       >
@@ -10827,7 +10636,7 @@ export default function MobileApkApp() {
                           background: '#000',
                           color: '#fff',
                           border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.74rem',
+                          fontSize: '0.75rem',
                           fontWeight: 800
                         }}
                       >
@@ -10871,7 +10680,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.08)',
                           color: '#ffffff',
                           fontWeight: 900,
-                          fontSize: '0.74rem',
+                          fontSize: '0.75rem',
                           cursor: 'pointer',
                           whiteSpace: 'nowrap'
                         }}
@@ -10913,7 +10722,7 @@ export default function MobileApkApp() {
                           color: '#000000',
                           border: 'none',
                           fontWeight: 900,
-                          fontSize: '0.74rem',
+                          fontSize: '0.75rem',
                           cursor: 'pointer'
                         }}
                       >
@@ -10928,7 +10737,7 @@ export default function MobileApkApp() {
                           borderRadius: '12px',
                           background: 'rgba(255,255,255,0.06)',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.73rem',
+                          fontSize: '0.875rem',
                           lineHeight: 1.6
                         }}
                       >
@@ -10938,7 +10747,7 @@ export default function MobileApkApp() {
                         <div style={{ color: 'rgba(255,255,255,0.72)' }}><BxIcon name="mail" className="bx-ico-lead" />{devInspectedUser.email || '—'}</div>
                         <div>
                           <BxIcon name="gem" className="bx-ico-lead" />الحالة: <strong>{devInspectedUser.vipStatus || 'Free Tier'}</strong> • <BxIcon name="heart" className="bx-ico-lead" />المفضلة:{' '}
-                          {(devInspectedUser.favorites || []).length} • <BxIcon name="film" className="bx-ico-lead" />السجل: {(devInspectedUser.progress || []).length}
+                          {devInspectedUser.stats?.favorites ?? 0} • <BxIcon name="film" className="bx-ico-lead" />السجل: {devInspectedUser.stats?.history ?? 0}
                         </div>
                         <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.45rem' }}>
                           <button
@@ -10955,7 +10764,7 @@ export default function MobileApkApp() {
                               color: '#000000',
                               border: 'none',
                               fontWeight: 900,
-                              fontSize: '0.68rem',
+                              fontSize: '0.75rem',
                               cursor: 'pointer'
                             }}
                           >
@@ -10971,7 +10780,7 @@ export default function MobileApkApp() {
                               color: '#ffffff',
                               border: 'none',
                               fontWeight: 900,
-                              fontSize: '0.68rem',
+                              fontSize: '0.75rem',
                               cursor: 'pointer'
                             }}
                           >
@@ -11053,7 +10862,7 @@ export default function MobileApkApp() {
                             color: '#ffffff',
                             border: '1px solid rgba(255,255,255,0.25)',
                             fontWeight: 900,
-                            fontSize: '0.74rem',
+                            fontSize: '0.75rem',
                             cursor: 'pointer'
                           }}
                         >
@@ -11070,7 +10879,7 @@ export default function MobileApkApp() {
                         <BxIcon name="mail" className="bx-ico-lead" />{isRtl ? `طلبات الأعضاء المباشرة (${cloudUserRequests.length}):` : `User Requests (${cloudUserRequests.length}):`}
                       </div>
                       {cloudUserRequests.length === 0 ? (
-                        <div style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.74rem', color: 'rgba(255,255,255,0.55)' }}>
+                        <div style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }}>
                           {isRtl ? 'لا توجد طلبات جديدة من الأعضاء حالياً.' : 'No pending user requests.'}
                         </div>
                       ) : (
@@ -11090,7 +10899,7 @@ export default function MobileApkApp() {
                               }}
                             >
                               <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800 }}>
+                                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', fontWeight: 800 }}>
                                   {req.type === 'anime' ? <><BxIcon name="film" className="bx-ico-lead" />{"طلب أنمي"}</> : req.type === 'manga' ? <><BxIcon name="book" className="bx-ico-lead" />{"طلب مانهوا"}</> : <><BxIcon name="wrench" className="bx-ico-lead" />{"بلاغ/دعم"}</>} •<BxIcon name="user" className="bx-ico-trail" /> {req.author}
                                 </div>
                                 <div style={{ fontSize: '0.76rem', fontWeight: 900, marginTop: '0.15rem' }}>{req.text}</div>
@@ -11105,7 +10914,7 @@ export default function MobileApkApp() {
                                   color: '#000000',
                                   border: 'none',
                                   fontWeight: 900,
-                                  fontSize: '0.68rem',
+                                  fontSize: '0.75rem',
                                   cursor: 'pointer',
                                   flexShrink: 0
                                 }}
@@ -11137,7 +10946,7 @@ export default function MobileApkApp() {
               <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900 }}>
                 <BxIcon name="lock" className="bx-ico-lead" />{isRtl ? 'حساب BLACK X الموحد (الموقع + التطبيق)' : 'Unified BLACK X Account (Web + APK)'}
               </h2>
-              <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
                 {isRtl
                   ? 'سجّل دخولك بحساب Google أو بحسابك في موقع BLACK X ليتم ربط مفضلتك وسجل مشاهداتك تلقائياً بين الهاتف والموقع.'
                   : 'Sign in with Google or your BLACK X Website account for automatic cross-device sync.'}
@@ -11184,7 +10993,7 @@ export default function MobileApkApp() {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.15rem 0' }}>
                 <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />
-                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.45)', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', fontWeight: 800 }}>
                   {isRtl ? 'أو عبر اسم المستخدم وكلمة المرور' : 'OR USERNAME & PASSWORD'}
                 </span>
                 <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.12)' }} />
@@ -11341,7 +11150,7 @@ export default function MobileApkApp() {
                   borderRadius: '99px',
                   background: userVipTier !== 'free' ? '#ffffff' : 'rgba(255,255,255,0.1)',
                   color: userVipTier !== 'free' ? '#000000' : '#ffffff',
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   fontWeight: 900
                 }}
               >
@@ -11426,7 +11235,7 @@ export default function MobileApkApp() {
                       color: userRequestType === rt.id ? '#000000' : '#ffffff',
                       border: '1px solid rgba(255,255,255,0.16)',
                       fontWeight: 900,
-                      fontSize: '0.68rem',
+                      fontSize: '0.75rem',
                       cursor: 'pointer'
                     }}
                   >
@@ -11470,6 +11279,117 @@ export default function MobileApkApp() {
             </form>
           </div>
 
+          {/* v16: experience settings (data saver, haptics, splash sound) */}
+          <div
+            style={{
+              display: profileSubTab === 'appearance' ? 'block' : 'none',
+              marginBottom: '0.75rem',
+              padding: '1rem',
+              borderRadius: '16px',
+              background: '#0a0a0e',
+              border: '1px solid rgba(255,255,255,0.16)'
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: '0.95rem', marginBottom: '0.6rem' }}>
+              <BxIcon name="sliders" className="bx-ico-lead" />
+              {isRtl ? 'الأداء والتجربة' : 'Performance & feel'}
+            </div>
+            <div className="bx-setting-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="bx-setting-title">
+                  <BxIcon name="gauge" className="bx-ico-lead" />
+                  {isRtl ? 'توفير البيانات' : 'Data saver'}
+                </div>
+                <div className="bx-setting-sub">
+                  {isRtl
+                    ? `صور أصغر وجودة أقل للبث${dataSaver ? ' • شغال دلوقتي' : ''}`
+                    : `Smaller images and lower stream quality${dataSaver ? ' • active now' : ''}`}
+                </div>
+              </div>
+              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'توفير البيانات' : 'Data saver'}>
+                {[
+                  ['auto', isRtl ? 'تلقائي' : 'Auto'],
+                  ['on', isRtl ? 'شغال' : 'On'],
+                  ['off', isRtl ? 'مقفول' : 'Off']
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={dataSaverPref === id}
+                    className={dataSaverPref === id ? 'is-on' : ''}
+                    onClick={() => {
+                      haptic('select');
+                      setDataSaverPref(id);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bx-setting-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="bx-setting-title">
+                  <BxIcon name="smartphone" className="bx-ico-lead" />
+                  {isRtl ? 'اهتزاز خفيف مع اللمس' : 'Haptic feedback'}
+                </div>
+                <div className="bx-setting-sub">{isRtl ? 'مع التنقل والتشغيل والمفضلة' : 'On navigation, play and favorites'}</div>
+              </div>
+              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'الاهتزاز' : 'Haptics'}>
+                {[
+                  [true, isRtl ? 'شغال' : 'On'],
+                  [false, isRtl ? 'مقفول' : 'Off']
+                ].map(([on, label]) => (
+                  <button
+                    key={String(on)}
+                    type="button"
+                    role="radio"
+                    aria-checked={hapticsOn === on}
+                    className={hapticsOn === on ? 'is-on' : ''}
+                    onClick={() => {
+                      setHapticsEnabled(on);
+                      setHapticsOn(on);
+                      haptic('select');
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bx-setting-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="bx-setting-title">
+                  <BxIcon name="volume" className="bx-ico-lead" />
+                  {isRtl ? 'صوت شاشة البداية' : 'Splash sound'}
+                </div>
+                <div className="bx-setting-sub">{isRtl ? 'مقفول من الأول' : 'Off by default'}</div>
+              </div>
+              <div className="bx-seg" role="radiogroup" aria-label={isRtl ? 'صوت البداية' : 'Splash sound'}>
+                {[
+                  [true, isRtl ? 'شغال' : 'On'],
+                  [false, isRtl ? 'مقفول' : 'Off']
+                ].map(([on, label]) => (
+                  <button
+                    key={String(on)}
+                    type="button"
+                    role="radio"
+                    aria-checked={splashSoundOn === on}
+                    className={splashSoundOn === on ? 'is-on' : ''}
+                    onClick={() => {
+                      localStorage.setItem(SPLASH_SOUND_KEY, on ? 'on' : 'off');
+                      setSplashSoundOn(on);
+                      haptic('select');
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Internal Splash Screen Motion Graphics Selector (من الداخل فقط) */}
           <div
             style={{
@@ -11495,14 +11415,14 @@ export default function MobileApkApp() {
                   color: '#000000',
                   border: 'none',
                   fontWeight: 900,
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer'
                 }}
               >
                 <BxIcon name="play" className="bx-ico-lead" />{isRtl ? 'معاينة الآن' : 'Preview'}
               </button>
             </div>
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
               {isRtl
                 ? 'اختر الموشن جرافيك الذي يظهر عند فتح التطبيق (تغيير شاشة البداية يتم من هنا من داخل الإعدادات فقط):'
                 : 'Select which 120Hz motion graphic plays when launching the app:'}
@@ -11530,7 +11450,7 @@ export default function MobileApkApp() {
                       color: active ? '#000000' : '#ffffff',
                       border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
                       fontWeight: 900,
-                      fontSize: '0.73rem',
+                      fontSize: '0.75rem',
                       textAlign: isRtl ? 'right' : 'left',
                       cursor: 'pointer',
                       display: 'flex',
@@ -11567,10 +11487,10 @@ export default function MobileApkApp() {
               <div style={{ fontWeight: 900, fontSize: '0.86rem' }}>
                 <BxIcon name="refresh" className="bx-ico-lead" />{isRtl ? 'نظام التحديث الهوائي الفوري (OTA Update)' : 'Cloud OTA App Update'}
               </div>
-              <div style={{ fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.2rem' }}>
                 {isRtl
-                  ? `الإصدار الحالي: BLACK X Mobile v${BX_APK_VERSION} — نفس سيرفرات الموقع`
-                  : `Current version: BLACK X Mobile v${BX_APK_VERSION} — same servers as the website`}
+                  ? `الإصدار الحالي: v${BX_APK_VERSION}${apkRelease?.version ? ` • آخر إصدار: v${apkRelease.version}` : ''}`
+                  : `Current version: v${BX_APK_VERSION}${apkRelease?.version ? ` • latest: v${apkRelease.version}` : ''}`}
               </div>
             </div>
             <a
@@ -11613,7 +11533,7 @@ export default function MobileApkApp() {
             <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.3rem' }}>
               <BxIcon name="medal" className="bx-ico-lead" />{isRtl ? 'خزنة الأوسمة والألقاب الملكية (Sovereign Titles):' : 'Sovereign Achievements & Titles:'}
             </div>
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
               {isRtl
                 ? 'اختر لقبك الملكي ليظهر بجانب اسمك في ملفك الشخصي وفي تقييمات الحلقات:'
                 : 'Select your Sovereign Title to display on your profile and episode reviews:'}
@@ -11644,7 +11564,7 @@ export default function MobileApkApp() {
                       color: active ? '#000000' : '#ffffff',
                       border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
                       fontWeight: 900,
-                      fontSize: '0.72rem',
+                      fontSize: '0.75rem',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
@@ -11652,7 +11572,7 @@ export default function MobileApkApp() {
                     }}
                   >
                     <span>{b.title}</span>
-                    <span style={{ fontSize: '0.62rem', opacity: 0.7 }}>{b.desc}</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>{b.desc}</span>
                   </button>
                 );
               })}
@@ -11673,7 +11593,7 @@ export default function MobileApkApp() {
             <div style={{ fontWeight: 900, fontSize: '0.86rem', marginBottom: '0.3rem' }}>
               <BxIcon name="save" className="bx-ico-lead" />{isRtl ? 'النسخ الاحتياطي الشامل للخزنة (Vault Backup & Restore)' : 'Full Vault Backup & Restore'}
             </div>
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.71rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+            <p style={{ margin: '0 0 0.65rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
               {isRtl
                 ? 'احفظ نسخة احتياطية شاملة لكل مفضلاتك، سجل مشاهداتك، لقطاتك، وفصولك بدون نت في ملف واحد واستعدها على أي هاتف فوراً:'
                 : 'Export or restore all your favorites, history, offline chapters, and snapshots in one tap:'}
@@ -11742,7 +11662,7 @@ export default function MobileApkApp() {
                 <div style={{ fontWeight: 900, fontSize: '0.78rem' }}>
                   <BxIcon name="eye-off" className="bx-ico-lead" />{isRtl ? 'وضع التصفح الخفي (Incognito Mode)' : 'Incognito Mode'}
                 </div>
-                <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.58)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)' }}>
                   {isRtl ? 'مشاهدة الحلقات وقراءة الفصول بدون حفظها في السجل' : 'Watch & read without saving history'}
                 </div>
               </div>
@@ -11769,7 +11689,7 @@ export default function MobileApkApp() {
                   color: incognitoMode ? '#000000' : '#ffffff',
                   border: '1px solid rgba(255,255,255,0.22)',
                   fontWeight: 900,
-                  fontSize: '0.74rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer'
                 }}
               >
@@ -11821,7 +11741,7 @@ export default function MobileApkApp() {
                   color: '#000000',
                   border: 'none',
                   fontWeight: 900,
-                  fontSize: '0.74rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer'
                 }}
               >
@@ -11843,7 +11763,7 @@ export default function MobileApkApp() {
                     color: '#ffffff',
                     border: '1px solid rgba(255,255,255,0.2)',
                     fontWeight: 900,
-                    fontSize: '0.72rem',
+                    fontSize: '0.75rem',
                     cursor: 'pointer'
                   }}
                 >
@@ -11878,7 +11798,7 @@ export default function MobileApkApp() {
                     style={{
                       padding: '0.42rem 0.8rem',
                       borderRadius: '99px',
-                      fontSize: '0.73rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       whiteSpace: 'nowrap',
                       cursor: 'pointer',
@@ -11902,8 +11822,8 @@ export default function MobileApkApp() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
                   {favorites.map((fav) => (
                     <div key={fav.objectID || fav.slug} onClick={() => handleOpenAnime(fav)} style={{ cursor: 'pointer' }}>
-                      <img src={fav.poster} alt={fav.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '11px', objectFit: 'cover' }} />
-                      <div style={{ fontSize: '0.72rem', fontWeight: 800, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <img src={coverForMode(fav.poster, dataSaver)} alt={fav.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '11px', objectFit: 'cover' }} />
+                      <div style={{ fontSize: '0.75rem', fontWeight: 800, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {fav.titleEn}
                       </div>
                     </div>
@@ -11922,8 +11842,8 @@ export default function MobileApkApp() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
                   {items.map((it) => (
                     <div key={it.objectID} onClick={() => handleOpenAnime(it)} style={{ cursor: 'pointer' }}>
-                      <img src={it.poster} alt={it.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '11px', objectFit: 'cover' }} />
-                      <div style={{ fontSize: '0.72rem', fontWeight: 800, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <img src={coverForMode(it.poster, dataSaver)} alt={it.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '11px', objectFit: 'cover' }} />
+                      <div style={{ fontSize: '0.75rem', fontWeight: 800, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {it.titleEn}
                       </div>
                     </div>
@@ -11975,7 +11895,7 @@ export default function MobileApkApp() {
                         style={{ flex: 1, cursor: 'pointer' }}
                       >
                         <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{och.mangaName}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>
                           <BxIcon name="download" className="bx-ico-lead" />{isRtl ? `الفصل ${och.chapter} • ${och.pagesCount} صفحة محفوظة` : `Ch. ${och.chapter} • ${och.pagesCount} pages`}
                         </div>
                       </div>
@@ -11998,7 +11918,7 @@ export default function MobileApkApp() {
                           color: '#000000',
                           border: 'none',
                           fontWeight: 900,
-                          fontSize: '0.72rem',
+                          fontSize: '0.75rem',
                           cursor: 'pointer'
                         }}
                       >
@@ -12013,7 +11933,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.08)',
                           color: '#ffffff',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.72rem',
+                          fontSize: '0.75rem',
                           cursor: 'pointer'
                         }}
                       >
@@ -12054,7 +11974,7 @@ export default function MobileApkApp() {
                           {sp.title}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.22rem' }}>
-                          <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.65)' }}>{sp.subtitle}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>{sp.subtitle}</span>
                           <button
                             type="button"
                             onClick={() => {
@@ -12068,7 +11988,7 @@ export default function MobileApkApp() {
                               background: 'none',
                               border: 'none',
                               color: 'rgba(255,255,255,0.7)',
-                              fontSize: '0.72rem',
+                              fontSize: '0.75rem',
                               cursor: 'pointer'
                             }}
                           >
@@ -12107,9 +12027,9 @@ export default function MobileApkApp() {
                       <img src={h.poster} alt={h.titleEn} style={{ width: '54px', height: '72px', borderRadius: '8px', objectFit: 'cover' }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{h.titleEn}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.65)' }}>{h.epName}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>{h.epName}</div>
                       </div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 900 }}><BxIcon name="play" /></span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900 }}><BxIcon name="play" /></span>
                     </div>
                   ))}
                 </div>
@@ -12141,12 +12061,12 @@ export default function MobileApkApp() {
                         cursor: 'pointer'
                       }}
                     >
-                      <img src={mh.poster} alt={mh.name} style={{ width: '54px', height: '72px', borderRadius: '8px', objectFit: 'cover' }} />
+                      <img src={coverForMode(mh.poster, dataSaver)} alt={mh.name} style={{ width: '54px', height: '72px', borderRadius: '8px', objectFit: 'cover' }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{mh.name}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.65)' }}><BxIcon name="book" className="bx-ico-lead" />الفصل {mh.chapterNum}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}><BxIcon name="book" className="bx-ico-lead" />الفصل {mh.chapterNum}</div>
                       </div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 900 }}><BxIcon name="book" /></span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900 }}><BxIcon name="book" /></span>
                     </div>
                   ))}
                 </div>
@@ -12159,6 +12079,8 @@ export default function MobileApkApp() {
       {/* ==================== FULL 4-TAB ANIME STUDIO & 120Hz CINEMA PLAYER SHEET ==================== */}
       {selectedAnime && (
         <div
+          ref={detailsSheetRef}
+          className="bx-details-sheet"
           style={{
             position: 'fixed',
             inset: 0,
@@ -12185,13 +12107,10 @@ export default function MobileApkApp() {
           >
             <button
               type="button"
-              onClick={() => {
-                setSelectedAnime(null);
-                setActiveEpisode(null);
-                setPlayingVideoUrl('');
-              }}
+              onClick={closeDetailsSheet}
               style={{
-                padding: '0.4rem 0.85rem',
+                minHeight: '44px',
+                padding: '0.4rem 0.95rem',
                 borderRadius: '10px',
                 border: '1px solid rgba(255,255,255,0.22)',
                 background: 'rgba(255,255,255,0.08)',
@@ -12238,6 +12157,7 @@ export default function MobileApkApp() {
           {/* ==================== v9.0 DEDICATED STANDALONE 120Hz CINEMA VIDEO PLAYER PAGE + FLOATING MINI-PLAYER ==================== */}
           {activeEpisode && (
             <div
+              ref={playerPageRef}
               style={
                 videoFullscreen
                   ? {
@@ -12329,7 +12249,7 @@ export default function MobileApkApp() {
                     >
                       {selectedAnime.titleEn}
                     </div>
-                    <div style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>
                       <BxIcon name="film" className="bx-ico-lead" />{activeEpisode.name}
                     </div>
                   </div>
@@ -12345,7 +12265,7 @@ export default function MobileApkApp() {
                         border: '1px solid rgba(255,255,255,0.24)',
                         color: '#ffffff',
                         fontWeight: 900,
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
                       }}
@@ -12362,7 +12282,7 @@ export default function MobileApkApp() {
                         border: 'none',
                         color: '#000000',
                         fontWeight: 900,
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
                       }}
@@ -12474,19 +12394,11 @@ export default function MobileApkApp() {
                         <button
                           type="button"
                           className="bx-hud-btn"
-                          onClick={() => {
-                            if (videoRef.current) {
-                              videoRef.current.currentTime = Math.min(
-                                videoRef.current.duration || 9999,
-                                (videoRef.current.currentTime || 0) + 85
-                              );
-                              showToast(isRtl ? 'تم تخطي المقدمة (+85 ثانية)' : 'Skipped intro (+85s)', 'skip-forward');
-                            }
-                          }}
+                          onClick={skipIntroManually}
                           aria-label={isRtl ? 'تخطي المقدمة' : 'Skip intro'}
                         >
                           <BxIcon name="skip-forward" />
-                          85s
+                          {skipSegments.some((s) => s.type === 'op') ? (isRtl ? 'المقدمة' : 'Intro') : '85s'}
                         </button>
                         <button
                           type="button"
@@ -12506,6 +12418,7 @@ export default function MobileApkApp() {
               )}
 
               <div
+                data-bx-video="1"
                 onClick={playerMinimized ? () => setPlayerMinimized(false) : videoFullscreen ? revealFsChrome : undefined}
                 onTouchStart={
                   playerMinimized
@@ -12560,7 +12473,7 @@ export default function MobileApkApp() {
                   <>
                     <video
                       ref={videoRef}
-                      src={playingVideoUrl}
+                      src={hlsActive ? undefined : playingVideoUrl}
                       controls={!videoTouchLocked && !playerMinimized}
                       autoPlay
                       playsInline
@@ -12569,40 +12482,32 @@ export default function MobileApkApp() {
                       onPlay={() => {
                         if (videoFullscreen) revealFsChrome();
                       }}
-                      onPause={() => {
+                      onPause={(e) => {
                         if (videoFullscreen) setFsChromeVisible(true);
+                        const v = e.currentTarget;
+                        if (!incognitoMode && v && v.currentTime > 5 && !v.ended) {
+                          savePosition(episodeKey(selectedAnime, activeEpisode), v.currentTime, v.duration, { immediate: true });
+                          recordWatchProgress(v.currentTime, v.duration);
+                        }
                       }}
                       onLoadedMetadata={(e) => {
                         try {
-                          const savedSec = Number(localStorage.getItem(`bx_ep_sec_${activeEpisode.docId}`) || 0);
-                          if (savedSec > 12 && e.currentTarget.duration && savedSec < e.currentTarget.duration - 20) {
-                            e.currentTarget.currentTime = savedSec;
-                            const m = Math.floor(savedSec / 60);
-                            const s = String(Math.floor(savedSec % 60)).padStart(2, '0');
-                            showToast(
-                              isRtl
-                                ? `تم استئناف الحلقة تلقائياً من ${m}:${s}`
-                                : `Auto-resumed episode at ${m}:${s}`, 'play'
-                            );
+                          const v = e.currentTarget;
+                          const dur = Number(v.duration) || 0;
+                          setVideoDuration(Number.isFinite(dur) ? Math.round(dur) : 0);
+                          const saved = getPosition(episodeKey(selectedAnime, activeEpisode));
+                          if (saved && !saved.done && saved.sec > 12 && dur && saved.sec < dur - 20) {
+                            v.currentTime = saved.sec;
+                            showToast(isRtl ? `كمّلنا من ${formatClock(saved.sec)}` : `Resumed at ${formatClock(saved.sec)}`, 'play');
                           }
                         } catch (_) {}
                       }}
                       onTimeUpdate={(e) => {
                         try {
-                          const cur = Math.floor(e.currentTarget.currentTime || 0);
-                          if (
-                            autoSkipIntro &&
-                            cur >= 2 &&
-                            cur <= 8 &&
-                            !autoSkippedEpRef.current[activeEpisode.docId]
-                          ) {
-                            autoSkippedEpRef.current[activeEpisode.docId] = true;
-                            e.currentTarget.currentTime = 87;
-                            showToast(isRtl ? 'تم تخطي مقدمة الحلقة تلقائياً (+85s)' : 'Auto-skipped Intro (+85s)', 'zap');
-                            return;
-                          }
+                          const v = e.currentTarget;
+                          const cur = Math.floor(v.currentTime || 0);
                           if (loopPointA !== null && loopPointB !== null && cur >= loopPointB) {
-                            e.currentTarget.currentTime = loopPointA;
+                            v.currentTime = loopPointA;
                             return;
                           }
                           if (timedCommentsEnabled && timedComments.length > 0) {
@@ -12611,24 +12516,27 @@ export default function MobileApkApp() {
                           } else if (activeDanmakuComment) {
                             setActiveDanmakuComment(null);
                           }
-                          if (cur > 5 && cur % 3 === 0) {
-                            localStorage.setItem(`bx_ep_sec_${activeEpisode.docId}`, String(cur));
+                          if (cur > 5 && cur % 3 === 0 && !incognitoMode) {
+                            savePosition(episodeKey(selectedAnime, activeEpisode), cur, v.duration);
                           }
                         } catch (_) {}
                       }}
-                      onEnded={() => {
-                        try {
-                          localStorage.removeItem(`bx_ep_sec_${activeEpisode.docId}`);
-                        } catch (_) {}
+                      onEnded={(e) => {
+                        const dur = Number(e.currentTarget?.duration) || 0;
+                        if (!incognitoMode && dur) {
+                          savePosition(episodeKey(selectedAnime, activeEpisode), dur, dur, { done: true, immediate: true });
+                          recordWatchProgress(dur, dur);
+                        }
                         if (sleepTimerMode === 'end_of_ep') {
                           setSleepTimerMode('off');
                           showToast('انتهت الحلقة — تم إيقاف التشغيل حسب مؤقت النوم', 'moon');
                           return;
                         }
                         if (!autoNextEp) return;
-                        const idx = animeEpisodes.findIndex((e) => e.docId === activeEpisode.docId);
+                        const idx = animeEpisodes.findIndex((x) => x.docId === activeEpisode.docId);
                         if (idx !== -1 && idx + 1 < animeEpisodes.length) {
-                          handlePlayEpisode(selectedAnime, animeEpisodes[idx + 1]);
+                          // "Next episode in 5…" instead of an instant jump.
+                          setNextEpCountdown({ anime: selectedAnime, ep: animeEpisodes[idx + 1] });
                         }
                       }}
                       style={{
@@ -12661,6 +12569,30 @@ export default function MobileApkApp() {
                         <div
                           onDoubleClick={() => handleVideoDoubleTap('right')}
                           style={{ position: 'absolute', top: '18%', bottom: '28%', right: 0, width: '28%' }}
+                        />
+                      </>
+                    )}
+                    {/* Real intro/outro skip (AniSkip) + next-episode countdown */}
+                    {!playerMinimized && (
+                      <>
+                        <SkipSegmentOverlay
+                          videoRef={videoRef}
+                          segments={skipSegments}
+                          autoSkip={autoSkipIntro}
+                          isRtl={isRtl}
+                          episodeId={`${selectedAnime?.objectID}:${activeEpisode?.number}`}
+                          onOutroSkip={() => {
+                            const v = videoRef.current;
+                            if (v && v.duration) v.currentTime = Math.max(0, v.duration - 0.25);
+                          }}
+                        />
+                        <NextEpisodeCountdown
+                          open={Boolean(nextEpCountdown)}
+                          title={nextEpCountdown ? `${isRtl ? 'الحلقة' : 'Episode'} ${nextEpCountdown.ep.number}` : ''}
+                          subtitle={nextEpCountdown?.anime?.titleEn || ''}
+                          isRtl={isRtl}
+                          onPlay={playNextFromCountdown}
+                          onCancel={() => setNextEpCountdown(null)}
                         />
                       </>
                     )}
@@ -12800,7 +12732,7 @@ export default function MobileApkApp() {
                     >
                       {selectedAnime.titleEn}
                     </div>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'rgba(255,255,255,0.68)', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.68)', marginTop: '2px' }}>
                       <BxIcon name="film" className="bx-ico-lead" />{activeEpisode.name} • {isRtl ? 'اضغط للتكبير' : 'Tap to expand'}
                     </div>
                   </div>
@@ -12815,7 +12747,7 @@ export default function MobileApkApp() {
                         color: '#000000',
                         border: 'none',
                         fontWeight: 900,
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer'
                       }}
                     >
@@ -12836,7 +12768,7 @@ export default function MobileApkApp() {
                         color: '#ffffff',
                         border: '1px solid rgba(255,255,255,0.22)',
                         fontWeight: 900,
-                        fontSize: '0.74rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer'
                       }}
                     >
@@ -12863,7 +12795,7 @@ export default function MobileApkApp() {
                           background: '#ffffff',
                           border: 'none',
                           color: '#000000',
-                          fontSize: '0.72rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
@@ -12887,7 +12819,7 @@ export default function MobileApkApp() {
                                   background: 'rgba(255,255,255,0.1)',
                                   border: '1px solid rgba(255,255,255,0.2)',
                                   color: '#fff',
-                                  fontSize: '0.7rem',
+                                  fontSize: '0.75rem',
                                   fontWeight: 900,
                                   cursor: 'pointer'
                                 }}
@@ -12905,7 +12837,7 @@ export default function MobileApkApp() {
                                   background: '#ffffff',
                                   border: 'none',
                                   color: '#000',
-                                  fontSize: '0.7rem',
+                                  fontSize: '0.75rem',
                                   fontWeight: 900,
                                   cursor: 'pointer'
                                 }}
@@ -12918,28 +12850,21 @@ export default function MobileApkApp() {
                       })()}
                       <button
                         type="button"
-                        onClick={() => {
-                          if (videoRef.current) {
-                            videoRef.current.currentTime = Math.min(
-                              videoRef.current.duration || 9999,
-                              (videoRef.current.currentTime || 0) + 85
-                            );
-                            showToast(isRtl ? 'تم تخطي المقدمة (+85 ثانية)' : 'Skipped Intro (+85s)', 'skip-forward');
-                          }
-                        }}
+                        onClick={skipIntroManually}
                         style={{
                           padding: '0.32rem 0.65rem',
                           borderRadius: '8px',
                           background: 'rgba(255,255,255,0.14)',
                           border: '1px solid rgba(255,255,255,0.28)',
                           color: '#fff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
                         }}
                       >
-                        <BxIcon name="skip-forward" className="bx-ico-lead" />+85s
+                        <BxIcon name="skip-forward" className="bx-ico-lead" />
+                        {skipSegments.some((s) => s.type === 'op') ? (isRtl ? 'تخطي المقدمة' : 'Skip intro') : '+85s'}
                       </button>
 
                       <button
@@ -12951,7 +12876,7 @@ export default function MobileApkApp() {
                           background: watchPartyRoom ? '#ffffff' : 'rgba(255,255,255,0.12)',
                           border: '1px solid rgba(255,255,255,0.24)',
                           color: watchPartyRoom ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
@@ -12969,7 +12894,7 @@ export default function MobileApkApp() {
                           background: playerStudioOpen ? '#ffffff' : 'rgba(255,255,255,0.14)',
                           border: '1.5px solid #ffffff',
                           color: playerStudioOpen ? '#000000' : '#ffffff',
-                          fontSize: '0.71rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           whiteSpace: 'nowrap',
                           cursor: 'pointer'
@@ -12994,6 +12919,30 @@ export default function MobileApkApp() {
                         gap: '0.42rem'
                       }}
                     >
+                      {hlsLevels.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={cycleHlsQuality}
+                          style={{
+                            gridColumn: '1 / -1',
+                            minHeight: '44px',
+                            padding: '0.45rem 0.6rem',
+                            borderRadius: '9px',
+                            background: hlsLevel === -1 ? 'rgba(255,255,255,0.08)' : '#ffffff',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            color: hlsLevel === -1 ? '#ffffff' : '#000000',
+                            fontSize: '0.8rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <BxIcon name="sliders" className="bx-ico-lead" />
+                          {isRtl ? 'الجودة: ' : 'Quality: '}
+                          {hlsLevel === -1
+                            ? isRtl ? `تلقائي${dataSaver ? ' (توفير البيانات)' : ''}` : `Auto${dataSaver ? ' (data saver)' : ''}`
+                            : `${hlsLevels.find((l) => l.index === hlsLevel)?.height || ''}p`}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleCycleVisualShader}
@@ -13003,7 +12952,7 @@ export default function MobileApkApp() {
                           background: visualShaderMode !== 'original' ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: visualShaderMode !== 'original' ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13027,7 +12976,7 @@ export default function MobileApkApp() {
                           background: audioBoostMode !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: audioBoostMode !== 'normal' ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13056,7 +13005,7 @@ export default function MobileApkApp() {
                           background: autoSkipIntro ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: autoSkipIntro ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13073,7 +13022,7 @@ export default function MobileApkApp() {
                           background: autoNextEp ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: autoNextEp ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13090,7 +13039,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13107,7 +13056,7 @@ export default function MobileApkApp() {
                           background: loopPointA !== null ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: loopPointA !== null ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13124,7 +13073,7 @@ export default function MobileApkApp() {
                           background: sleepTimerMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: sleepTimerMode !== 'off' ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13151,7 +13100,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13168,7 +13117,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13189,7 +13138,7 @@ export default function MobileApkApp() {
                           background: bgAudioMode ? '#ffffff' : 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: bgAudioMode ? '#000000' : '#ffffff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13216,7 +13165,7 @@ export default function MobileApkApp() {
                           background: 'rgba(255,255,255,0.08)',
                           border: '1px solid rgba(255,255,255,0.2)',
                           color: '#fff',
-                          fontSize: '0.7rem',
+                          fontSize: '0.75rem',
                           fontWeight: 900,
                           cursor: 'pointer'
                         }}
@@ -13235,7 +13184,7 @@ export default function MobileApkApp() {
                             borderRadius: '9px',
                             background: '#ffffff',
                             color: '#000000',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             textDecoration: 'none',
                             textAlign: 'center'
@@ -13248,7 +13197,7 @@ export default function MobileApkApp() {
                   )}
 
                   {/* BLACK X Exclusive Server & Quality Selector Pills */}
-                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, marginBottom: '0.35rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', fontWeight: 800, marginBottom: '0.35rem' }}>
                     {isRtl
                       ? 'اختر سيرفر BLACK X وجودة المشاهدة المباشرة (بدون إعلانات):'
                       : 'Select Direct BLACK X Stream Server & Quality (No Ads):'}
@@ -13272,7 +13221,7 @@ export default function MobileApkApp() {
                             color: active ? '#000000' : '#ffffff',
                             border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
                             fontWeight: 900,
-                            fontSize: '0.74rem',
+                            fontSize: '0.75rem',
                             whiteSpace: 'nowrap',
                             cursor: 'pointer'
                           }}
@@ -13297,7 +13246,7 @@ export default function MobileApkApp() {
                         background: timedCommentsEnabled ? '#ffffff' : 'rgba(255,255,255,0.08)',
                         color: timedCommentsEnabled ? '#000000' : '#ffffff',
                         border: '1px solid rgba(255,255,255,0.2)',
-                        fontSize: '0.68rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
@@ -13321,7 +13270,7 @@ export default function MobileApkApp() {
                         background: '#08080c',
                         border: '1px solid rgba(255,255,255,0.18)',
                         color: '#ffffff',
-                        fontSize: '0.73rem'
+                        fontSize: '0.75rem'
                       }}
                     />
                     <button
@@ -13333,7 +13282,7 @@ export default function MobileApkApp() {
                         color: '#000000',
                         border: 'none',
                         fontWeight: 900,
-                        fontSize: '0.72rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer'
                       }}
                     >
@@ -13378,7 +13327,7 @@ export default function MobileApkApp() {
                             color: '#fff',
                             borderRadius: '6px',
                             padding: '0.2rem 0.55rem',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             cursor: 'pointer'
                           }}
@@ -13419,7 +13368,7 @@ export default function MobileApkApp() {
                                 background: '#000',
                                 border: '1px solid rgba(255,255,255,0.2)',
                                 color: '#fff',
-                                fontSize: '0.74rem'
+                                fontSize: '0.75rem'
                               }}
                             />
                             <button
@@ -13432,7 +13381,7 @@ export default function MobileApkApp() {
                                 color: '#fff',
                                 border: '1px solid rgba(255,255,255,0.28)',
                                 fontWeight: 900,
-                                fontSize: '0.74rem',
+                                fontSize: '0.75rem',
                                 cursor: 'pointer'
                               }}
                             >
@@ -13456,7 +13405,7 @@ export default function MobileApkApp() {
                             }}
                           >
                             {(watchPartyRoom.chat || []).map((m) => (
-                              <div key={m.id} style={{ fontSize: '0.72rem' }}>
+                              <div key={m.id} style={{ fontSize: '0.75rem' }}>
                                 <strong style={{ color: '#ffffff' }}>{m.author}: </strong>
                                 <span style={{ color: 'rgba(255,255,255,0.82)' }}>{m.text}</span>
                               </div>
@@ -13475,7 +13424,7 @@ export default function MobileApkApp() {
                                 background: '#000',
                                 border: '1px solid rgba(255,255,255,0.2)',
                                 color: '#fff',
-                                fontSize: '0.73rem'
+                                fontSize: '0.75rem'
                               }}
                             />
                             <button
@@ -13487,7 +13436,7 @@ export default function MobileApkApp() {
                                 color: '#000000',
                                 border: 'none',
                                 fontWeight: 900,
-                                fontSize: '0.72rem',
+                                fontSize: '0.75rem',
                                 cursor: 'pointer'
                               }}
                             >
@@ -13514,7 +13463,7 @@ export default function MobileApkApp() {
                         <span style={{ fontWeight: 900, fontSize: '0.78rem' }}>
                           <BxIcon name="film-strip" className="bx-ico-lead" />{isRtl ? `تنقل فوري بين الحلقات (${animeEpisodes.length})` : `Quick Episode Switcher (${animeEpisodes.length})`}
                         </span>
-                        <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
+                        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
                           {isRtl ? 'داخل المشغل المستقل' : 'In-Player'}
                         </span>
                       </div>
@@ -13533,7 +13482,7 @@ export default function MobileApkApp() {
                                 color: active ? '#000000' : '#ffffff',
                                 border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)',
                                 fontWeight: 900,
-                                fontSize: '0.74rem',
+                                fontSize: '0.75rem',
                                 whiteSpace: 'nowrap',
                                 cursor: 'pointer',
                                 flexShrink: 0
@@ -13569,6 +13518,7 @@ export default function MobileApkApp() {
                 src={selectedAnime.poster || selectedAnime.banner}
                 alt={selectedAnime.titleEn}
                 style={{
+                  viewTransitionName: 'bx-poster',
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
@@ -13607,7 +13557,7 @@ export default function MobileApkApp() {
                       border: '1px solid rgba(255,255,255,0.35)'
                     }}
                   />
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'rgba(255,255,255,0.9)', letterSpacing: '0.03em' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.9)', letterSpacing: '0.03em' }}>
                     BLACK X <span style={{ fontWeight: 500, opacity: 0.8 }}>original</span>
                   </span>
                 </div>
@@ -13648,7 +13598,7 @@ export default function MobileApkApp() {
                       padding: '0.12rem 0.55rem',
                       borderRadius: '99px',
                       border: '1px solid rgba(255,255,255,0.35)',
-                      fontSize: '0.66rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900
                     }}
                   >
@@ -13690,8 +13640,8 @@ export default function MobileApkApp() {
                 {detailStats.map((st, idx) => (
                   <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', minWidth: 0 }}>
                     <BxIcon name={st.icon} size="1em" style={{ fontSize: '0.95rem', opacity: 0.9 }} />
-                    <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.val}</span>
-                    <span style={{ fontSize: '0.56rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>{st.lbl}</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 900, color: '#ffffff', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.val}</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>{st.lbl}</span>
                   </div>
                 ))}
               </div>
@@ -13706,7 +13656,7 @@ export default function MobileApkApp() {
                 <p
                   style={{
                     margin: 0,
-                    fontSize: '0.77rem',
+                    fontSize: '0.875rem',
                     color: 'rgba(255,255,255,0.78)',
                     lineHeight: 1.55,
                     display: storyExpanded ? 'block' : '-webkit-box',
@@ -13718,7 +13668,7 @@ export default function MobileApkApp() {
                   {selectedAnime.storyAr}
                 </p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 900, color: '#ffffff', opacity: 0.85 }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 900, color: '#ffffff', opacity: 0.85 }}>
                     {storyExpanded ? (isRtl ? <>{"عرض أقل"}<BxIcon name="chevron-up" className="bx-ico-trail" /></> : <>{"Show less"}<BxIcon name="chevron-up" className="bx-ico-trail" /></>) : isRtl ? '...قراءة المزيد' : '...Read more'}
                   </span>
                   <button
@@ -13733,7 +13683,7 @@ export default function MobileApkApp() {
                       background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.1)',
                       color: ttsSpeaking ? '#000000' : '#ffffff',
                       border: '1px solid rgba(255,255,255,0.22)',
-                      fontSize: '0.66rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
@@ -13884,7 +13834,7 @@ export default function MobileApkApp() {
                         : 'Play episode 1';
                     })()}
                   </div>
-                  <div style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.58)', fontWeight: 800 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.58)', fontWeight: 800 }}>
                     {isRtl ? `مشغل ${fpsHz}Hz` : `${fpsHz}Hz player`}
                   </div>
                 </div>
@@ -14043,7 +13993,7 @@ export default function MobileApkApp() {
                   <span style={{ fontWeight: 900, fontSize: '0.92rem' }}>
                     {isRtl ? `كل الحلقات (${animeEpisodes.length})` : `All Episodes (${animeEpisodes.length})`}
                   </span>
-                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'rgba(255,255,255,0.72)' }}>
                     <BxIcon name="sort" className="bx-ico-lead" />{isRtl ? 'الأكثر شهرة (Most Popular)' : 'Most Popular'}
                   </span>
                 </div>
@@ -14071,6 +14021,7 @@ export default function MobileApkApp() {
                           src={selectedAnime.banner || selectedAnime.poster}
                           alt={`E${ep.number}`}
                           loading="lazy"
+                          decoding="async"
                           style={{
                             width: '100%',
                             height: '100%',
@@ -14098,7 +14049,7 @@ export default function MobileApkApp() {
                             borderRadius: '8px',
                             background: 'rgba(0,0,0,0.75)',
                             border: '1px solid rgba(255,255,255,0.24)',
-                            fontSize: '0.64rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             color: '#ffffff'
                           }}
@@ -14118,7 +14069,7 @@ export default function MobileApkApp() {
                             gap: '0.4rem'
                           }}
                         >
-                          <span style={{ fontSize: '0.72rem', fontWeight: 900, color: '#ffffff' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 900, color: '#ffffff' }}>
                             {isRtl ? `الحلقة ${ep.number}` : `Episode ${ep.number}`}
                           </span>
                           <span
@@ -14128,7 +14079,7 @@ export default function MobileApkApp() {
                               borderRadius: '50%',
                               background: '#ffffff',
                               color: '#000000',
-                              fontSize: '0.6rem',
+                              fontSize: '0.75rem',
                               fontWeight: 900,
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -14204,7 +14155,7 @@ export default function MobileApkApp() {
                         background: epRangeChunk === -1 ? '#ffffff' : 'rgba(255,255,255,0.08)',
                         color: epRangeChunk === -1 ? '#000000' : '#ffffff',
                         border: '1px solid rgba(255,255,255,0.2)',
-                        fontSize: '0.7rem',
+                        fontSize: '0.75rem',
                         fontWeight: 900,
                         whiteSpace: 'nowrap',
                         cursor: 'pointer'
@@ -14227,7 +14178,7 @@ export default function MobileApkApp() {
                             background: active ? '#ffffff' : 'rgba(255,255,255,0.08)',
                             color: active ? '#000000' : '#ffffff',
                             border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 900,
                             whiteSpace: 'nowrap',
                             cursor: 'pointer'
@@ -14275,7 +14226,7 @@ export default function MobileApkApp() {
                       background: '#ffffff',
                       color: '#000000',
                       border: 'none',
-                      fontSize: '0.72rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
@@ -14291,7 +14242,7 @@ export default function MobileApkApp() {
                       background: hideFiller ? '#ffffff' : 'rgba(255,255,255,0.08)',
                       color: hideFiller ? '#000000' : '#ffffff',
                       border: '1px solid rgba(255,255,255,0.18)',
-                      fontSize: '0.72rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
@@ -14307,7 +14258,7 @@ export default function MobileApkApp() {
                       background: 'rgba(255,255,255,0.08)',
                       border: '1px solid rgba(255,255,255,0.18)',
                       color: '#fff',
-                      fontSize: '0.72rem',
+                      fontSize: '0.75rem',
                       fontWeight: 900,
                       cursor: 'pointer'
                     }}
@@ -14317,9 +14268,7 @@ export default function MobileApkApp() {
                 </div>
 
                 {episodesLoading ? (
-                  <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)' }}>
-                    {isRtl ? <><BxIcon name="loader" className="bx-ico-lead" />{"جاري جلب قائمة الحلقات والسيرفرات..."}</> : <><BxIcon name="loader" className="bx-ico-lead" />{"Loading episodes..."}</>}
-                  </div>
+                  <SkeletonList count={6} thumbWidth={120} thumbHeight={68} padding="0" />
                 ) : animeEpisodes.length === 0 ? (
                   <div
                     style={{
@@ -14329,7 +14278,7 @@ export default function MobileApkApp() {
                       background: '#0a0a0e',
                       border: '1px solid rgba(255,255,255,0.12)',
                       color: 'rgba(255,255,255,0.75)',
-                      fontSize: '0.78rem',
+                      fontSize: '0.875rem',
                       fontWeight: 800,
                       lineHeight: 1.6
                     }}
@@ -14389,7 +14338,7 @@ export default function MobileApkApp() {
                           }}
                         >
                           <div>{ep.number}</div>
-                          {isWatched && <div style={{ fontSize: '0.54rem', opacity: 0.72 }}><BxIcon name="check" /></div>}
+                          {isWatched && <div style={{ fontSize: '0.75rem', opacity: 0.72 }}><BxIcon name="check" /></div>}
                         </button>
                       );
                     })}
@@ -14434,6 +14383,7 @@ export default function MobileApkApp() {
                               src={ep.thumb || selectedAnime.poster}
                               alt={ep.name}
                               loading="lazy"
+                          decoding="async"
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                             {ep.filler && (
@@ -14444,7 +14394,7 @@ export default function MobileApkApp() {
                                   right: '3px',
                                   background: '#000',
                                   color: '#fff',
-                                  fontSize: '0.55rem',
+                                  fontSize: '0.75rem',
                                   fontWeight: 900,
                                   padding: '0.08rem 0.3rem',
                                   borderRadius: '4px'
@@ -14458,7 +14408,7 @@ export default function MobileApkApp() {
                             <div style={{ fontWeight: 900, fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                               <span>{ep.name}</span>
                               {isWatched && (
-                                <span style={{ fontSize: '0.62rem', padding: '0.05rem 0.35rem', borderRadius: '4px', background: 'rgba(255,255,255,0.16)' }}>
+                                <span style={{ fontSize: '0.75rem', padding: '0.05rem 0.35rem', borderRadius: '4px', background: 'rgba(255,255,255,0.16)' }}>
                                   <BxIcon name="check" className="bx-ico-lead" />شوهدت
                                 </span>
                               )}
@@ -14466,7 +14416,7 @@ export default function MobileApkApp() {
                             {ep.titleAr && (
                               <div
                                 style={{
-                                  fontSize: '0.72rem',
+                                  fontSize: '0.75rem',
                                   opacity: 0.72,
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
@@ -14483,7 +14433,7 @@ export default function MobileApkApp() {
                               borderRadius: '9px',
                               background: isPlaying ? '#000000' : 'rgba(255,255,255,0.1)',
                               color: '#ffffff',
-                              fontSize: '0.72rem',
+                              fontSize: '0.75rem',
                               fontWeight: 900
                             }}
                           >
@@ -14527,24 +14477,26 @@ export default function MobileApkApp() {
                           src={ch.image}
                           alt={ch.name}
                           loading="lazy"
+                          decoding="async"
                           style={{ width: '48px', height: '62px', borderRadius: '9px', objectFit: 'cover' }}
                         />
                         <div>
                           <div style={{ fontWeight: 900, fontSize: '0.82rem' }}>{ch.name}</div>
-                          <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)' }}>{ch.role}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>{ch.role}</div>
                         </div>
                       </div>
                       {ch.vaName && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', textAlign: 'end' }}>
                           <div>
                             <div style={{ fontWeight: 800, fontSize: '0.76rem' }}>{ch.vaName}</div>
-                            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.55)' }}><BxIcon name="mic" className="bx-ico-lead" />JP Seiyuu</div>
+                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }}><BxIcon name="mic" className="bx-ico-lead" />JP Seiyuu</div>
                           </div>
                           {ch.vaImage && (
                             <img
                               src={ch.vaImage}
                               alt={ch.vaName}
                               loading="lazy"
+                          decoding="async"
                               style={{ width: '44px', height: '58px', borderRadius: '9px', objectFit: 'cover' }}
                             />
                           )}
@@ -14589,12 +14541,13 @@ export default function MobileApkApp() {
                     {relatedAnimes.map((rel) => (
                       <div key={rel.objectID} onClick={() => handleOpenAnime(rel)} style={{ cursor: 'pointer' }}>
                         <img
-                          src={rel.poster}
+                          src={coverForMode(rel.poster, dataSaver)}
                           alt={rel.titleEn}
                           loading="lazy"
+                          decoding="async"
                           style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '11px', objectFit: 'cover' }}
                         />
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {rel.titleEn}
                         </div>
                       </div>
@@ -14651,7 +14604,7 @@ export default function MobileApkApp() {
                           borderRadius: '8px',
                           background: 'rgba(255,255,255,0.05)',
                           border: '1px solid rgba(255,255,255,0.14)',
-                          fontSize: '0.72rem',
+                          fontSize: '0.75rem',
                           fontWeight: 800
                         }}
                       >
@@ -14666,7 +14619,7 @@ export default function MobileApkApp() {
                             borderRadius: '6px',
                             padding: '0.12rem 0.35rem',
                             fontWeight: 900,
-                            fontSize: '0.72rem'
+                            fontSize: '0.75rem'
                           }}
                         >
                           {[10, 9, 8, 7, 6, 5].map((s) => (
@@ -14727,22 +14680,22 @@ export default function MobileApkApp() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           <span style={{ fontWeight: 900, fontSize: '0.8rem' }}>{rv.author}</span>
                           {rv.sovereignTitle && (
-                            <span style={{ fontSize: '0.64rem', padding: '0.08rem 0.42rem', borderRadius: '99px', background: 'rgba(255,255,255,0.12)', fontWeight: 800 }}>
+                            <span style={{ fontSize: '0.75rem', padding: '0.08rem 0.42rem', borderRadius: '99px', background: 'rgba(255,255,255,0.12)', fontWeight: 800 }}>
                               {rv.sovereignTitle}
                             </span>
                           )}
                         </div>
-                        <span style={{ fontWeight: 900, fontSize: '0.74rem', background: '#fff', color: '#000', padding: '0.08rem 0.45rem', borderRadius: '6px' }}>
+                        <span style={{ fontWeight: 900, fontSize: '0.75rem', background: '#fff', color: '#000', padding: '0.08rem 0.45rem', borderRadius: '6px' }}>
                           <BxIcon name="star" className="bx-ico-lead" />{rv.score}/10
                         </span>
                       </div>
                       {rv.pillars && (
-                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.35rem', fontSize: '0.65rem', color: 'rgba(255,255,255,0.68)' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.35rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.68)' }}>
                           <span><BxIcon name="book" className="bx-ico-lead" />القصة: {rv.pillars.story}</span>•<span><BxIcon name="zap" className="bx-ico-lead" />التحريك: {rv.pillars.anim}</span>•
                           <span><BxIcon name="music" className="bx-ico-lead" />الموسيقى: {rv.pillars.ost}</span>•<span><BxIcon name="users" className="bx-ico-lead" />الشخصيات: {rv.pillars.char}</span>
                         </div>
                       )}
-                      <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.45 }}>{rv.text}</p>
+                      <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.45 }}>{rv.text}</p>
                     </div>
                   ))}
                 </div>
@@ -14816,7 +14769,7 @@ export default function MobileApkApp() {
                     <BxIcon name="close" />
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', fontSize: '0.68rem', fontWeight: 900, color: 'rgba(255,255,255,0.75)', marginBottom: '0.45rem' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', fontSize: '0.75rem', fontWeight: 900, color: 'rgba(255,255,255,0.75)', marginBottom: '0.45rem' }}>
                   {[quickPeekAnime.rating ? <><BxIcon name="star" className="bx-ico-lead" />{quickPeekAnime.rating}</> : '', quickPeekAnime.type, quickPeekAnime.year]
                     .filter(Boolean)
                     .map((part, partIdx) => (
@@ -14829,7 +14782,7 @@ export default function MobileApkApp() {
                 <p
                   style={{
                     margin: 0,
-                    fontSize: '0.73rem',
+                    fontSize: '0.875rem',
                     color: 'rgba(255,255,255,0.78)',
                     lineHeight: 1.48,
                     display: '-webkit-box',
@@ -14992,7 +14945,7 @@ export default function MobileApkApp() {
                 />
                 <div>
                   <div style={{ fontWeight: 900, fontSize: '0.8rem' }}>{storyPreviewAnime.item.titleEn}</div>
-                  <div style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.7)', fontWeight: 800 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 800 }}>
                     <BxIcon name="zap" className="bx-ico-lead" />BLACK X PREVIEW #{(storyPreviewAnime.index || 0) + 1}{storyPreviewAnime.item.rating ? <>{" •"}<BxIcon name="star" className="bx-ico-trail" />{" "}{storyPreviewAnime.item.rating}</> : ''}
                   </div>
                 </div>
@@ -15048,7 +15001,7 @@ export default function MobileApkApp() {
                     borderRadius: '6px',
                     background: '#ffffff',
                     color: '#000000',
-                    fontSize: '0.68rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900
                   }}
                 >
@@ -15061,7 +15014,7 @@ export default function MobileApkApp() {
                     padding: '0.18rem 0.55rem',
                     borderRadius: '6px',
                     background: 'rgba(255,255,255,0.14)',
-                    fontSize: '0.68rem',
+                    fontSize: '0.75rem',
                     fontWeight: 900
                   }}
                 >
@@ -15077,7 +15030,7 @@ export default function MobileApkApp() {
             <p
               style={{
                 margin: '0 0 1rem',
-                fontSize: '0.76rem',
+                fontSize: '0.875rem',
                 color: 'rgba(255,255,255,0.82)',
                 lineHeight: 1.55,
                 display: '-webkit-box',
@@ -15165,7 +15118,7 @@ export default function MobileApkApp() {
             style={{ transformOrigin: isRtl ? 'top left' : 'top right' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.3rem 0.6rem' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 900, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 900, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)' }}>
                 {isRtl ? 'القائمة' : 'MENU'}
               </span>
               <button
@@ -15205,7 +15158,7 @@ export default function MobileApkApp() {
                   <span style={{ fontWeight: 900, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {user?.displayName || (isRtl ? 'زائر' : 'Guest')}
                   </span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>
                     {user
                       ? isRtl
                         ? 'الملف الشخصي ومكتبتي'
@@ -15290,7 +15243,7 @@ export default function MobileApkApp() {
                 <div style={{ fontWeight: 900, fontSize: '0.78rem' }}>
                   BLACK X <span style={{ fontWeight: 500, opacity: 0.7 }}>original</span>
                 </div>
-                <div style={{ fontSize: '0.64rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>
                   {isRtl
                     ? `إصدار v${BX_APK_VERSION} • ${bxAnimeTotal ? `${formatBxCount(bxAnimeTotal)} أنمي • ` : ''}نفس سيرفرات الموقع`
                     : `v${BX_APK_VERSION} • ${bxAnimeTotal ? `${formatBxCount(bxAnimeTotal)} anime • ` : ''}same servers as the website`}
@@ -15369,7 +15322,7 @@ export default function MobileApkApp() {
                   borderRadius: '99px',
                   background: 'rgba(255,255,255,0.1)',
                   border: '1px solid rgba(255,255,255,0.25)',
-                  fontSize: '0.72rem',
+                  fontSize: '0.75rem',
                   fontWeight: 900,
                   marginBottom: '0.45rem'
                 }}
@@ -15379,7 +15332,7 @@ export default function MobileApkApp() {
               <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.25rem', fontWeight: 900 }}>
                 {isRtl ? 'اشترك في باقات BLACK X VIP للمتابعة' : 'BLACK X VIP Subscription Required'}
               </h1>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.55 }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.55 }}>
                 {isRtl
                   ? 'التطبيق يعمل حالياً بنظام العضوية المدفوعة الموحد مع الموقع الرسمي. اختر باقتك أو أدخل كود التفعيل الفوري، أو سجّل دخولك إذا كنت مشتركاً بالفعل.'
                   : 'VIP membership is currently enforced across all platforms. Redeem your VIP code or sign in to continue.'}
@@ -15467,7 +15420,7 @@ export default function MobileApkApp() {
                     199 {isRtl ? 'ج.م / شهرياً' : 'EGP / mo'}
                   </span>
                 </div>
-                <ul style={{ margin: '0 0 0.75rem', paddingInlineStart: '1.1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.82)', lineHeight: 1.6 }}>
+                <ul style={{ margin: '0 0 0.75rem', paddingInlineStart: '1.1rem', fontSize: '0.875rem', color: 'rgba(255,255,255,0.82)', lineHeight: 1.6 }}>
                   <li>{isRtl ? 'فتح جميع سيرفرات BLACK X المتاحة على الموقع' : 'Every BLACK X server available on the website'}</li>
                   <li>{isRtl ? 'فتح مكتبة المانجا والمانهوا كاملة بشاشة كاملة وتحميل مباشر' : 'Full Manga & Manhwa library + Direct Download'}</li>
                   <li>{isRtl ? 'تعمل على الموقع الرسمي وتطبيق الهاتف بنفس الحساب' : 'Works on both Website and Mobile APK'}</li>
@@ -15486,7 +15439,7 @@ export default function MobileApkApp() {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                       <BxIcon name="smartphone" className="bx-ico-lead" />{isRtl ? 'رقم محفظة فودافون كاش للتحويل:' : 'Vodafone Cash Wallet:'}
                     </div>
                     <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '0.95rem', letterSpacing: '0.05em' }}>
@@ -15506,7 +15459,7 @@ export default function MobileApkApp() {
                       color: '#000000',
                       border: 'none',
                       fontWeight: 900,
-                      fontSize: '0.72rem',
+                      fontSize: '0.75rem',
                       cursor: 'pointer'
                     }}
                   >
@@ -15562,7 +15515,7 @@ export default function MobileApkApp() {
                     99 {isRtl ? 'ج.م / شهرياً' : 'EGP / mo'}
                   </span>
                 </div>
-                <p style={{ margin: '0 0 0.55rem', fontSize: '0.73rem', color: 'rgba(255,255,255,0.72)' }}>
+                <p style={{ margin: '0 0 0.55rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.72)' }}>
                   {isRtl
                     ? 'مشاهدة جميع الأنميات والمانهوا بجودة 1080p بدون إعلانات عبر سيرفرات BLACK X.'
                     : 'Full 1080p Anime & Manhwa streaming across BLACK X servers.'}
@@ -15612,6 +15565,8 @@ export default function MobileApkApp() {
                   <button
                     type="button"
                     onClick={() => {
+                      apkSignOut();
+                      setSessionToken(null);
                       setUser(null);
                       localStorage.removeItem('bx_mob_user');
                     }}
@@ -15621,7 +15576,7 @@ export default function MobileApkApp() {
                       background: 'rgba(255,255,255,0.12)',
                       border: '1px solid rgba(255,255,255,0.24)',
                       color: '#fff',
-                      fontSize: '0.72rem',
+                      fontSize: '0.75rem',
                       fontWeight: 800,
                       cursor: 'pointer'
                     }}

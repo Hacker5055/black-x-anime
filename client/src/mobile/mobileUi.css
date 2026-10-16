@@ -1,5 +1,6 @@
 /*
- * BLACK X Mobile v15.1 — motion system + app chrome (header, dock, menu, toast, player HUD).
+ * BLACK X Mobile v16 — motion system + app chrome (header, dock, menu, toast, player HUD,
+ * skeletons, pull-to-refresh, update card, skip/next-episode overlays, view transitions).
  * Only transform / opacity are animated (compositor friendly) and every animation is disabled
  * for users that ask for reduced motion.
  * Entrance animations use `backwards` fill so the element's own :active press transform keeps
@@ -141,8 +142,8 @@
 }
 .bx-avatar-btn,
 .bx-round-btn {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 50%;
   display: inline-flex;
@@ -380,7 +381,7 @@
   justify-content: center;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 900;
 }
 
@@ -403,15 +404,15 @@
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  height: 36px;
-  min-width: 36px;
-  padding: 0 0.7rem;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 0.85rem;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.24);
   color: #ffffff;
   font: inherit;
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   font-weight: 900;
   white-space: nowrap;
   cursor: pointer;
@@ -477,6 +478,361 @@
   to { opacity: 1; transform: none; }
 }
 
+/* ---------- Skeleton placeholders (transform-only shimmer) ---------- */
+.bx-skel {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+}
+.bx-skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translate3d(-100%, 0, 0);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+  animation: bxShimmer 1.35s ease-in-out infinite;
+}
+.bx-skel.is-static::after {
+  content: none;
+  animation: none;
+}
+@keyframes bxShimmer {
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+/* ---------- Pull to refresh ---------- */
+.bx-ptr {
+  position: fixed;
+  top: calc(var(--bx-safe-top, 0px) + 6px);
+  left: 50%;
+  z-index: 260;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(14, 14, 18, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  opacity: 0;
+  transform: translate3d(-50%, -44px, 0);
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+.bx-ptr .bx-ptr-label {
+  white-space: nowrap;
+}
+.bx-ptr.is-refreshing .bx-ptr-label {
+  display: none;
+}
+
+/* ---------- Update card ---------- */
+.bx-update-card {
+  margin: 0.7rem 1rem 0.2rem;
+  padding: 0.9rem;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+.bx-update-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.bx-update-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #000000;
+  flex-shrink: 0;
+}
+.bx-update-title {
+  font-weight: 900;
+  font-size: 0.98rem;
+}
+.bx-update-sub {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.66);
+  font-weight: 700;
+}
+.bx-update-close {
+  width: 44px;
+  height: 44px;
+  font-size: 1rem;
+}
+.bx-update-notes {
+  margin: 0.65rem 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.bx-update-notes li {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.5;
+}
+.bx-update-notes li .bx-ico {
+  margin-top: 0.25em;
+}
+.bx-update-cta {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 14px;
+  border: none;
+  background: #ffffff;
+  color: #000000;
+  font-weight: 900;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* ---------- Cards: continue watching / generic hit targets ---------- */
+.bx-cw-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.66);
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+.bx-icon-hit {
+  width: 44px;
+  height: 44px;
+  margin: -8px -10px -8px 0;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* ---------- Player: skip button + next-episode countdown ---------- */
+.bx-skip-btn {
+  position: absolute;
+  inset-inline-end: 14px;
+  bottom: 68px;
+  z-index: 30;
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.62);
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.bx-next-card {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  /* above the native video control bar */
+  bottom: 58px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 16px;
+  background: rgba(10, 10, 14, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.bx-next-ring {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+}
+.bx-next-ring svg {
+  width: 46px;
+  height: 46px;
+  transform: rotate(-90deg);
+}
+.bx-next-ring circle {
+  fill: none;
+  stroke-width: 3.5;
+}
+.bx-next-track {
+  stroke: rgba(255, 255, 255, 0.18);
+}
+.bx-next-progress {
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-dasharray: 119.4;
+  stroke-dashoffset: 0;
+  animation: bxNextRing var(--bx-next-dur, 5s) linear forwards;
+}
+.bx-next-ring span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1rem;
+}
+@keyframes bxNextRing {
+  to {
+    stroke-dashoffset: 119.4;
+  }
+}
+.bx-next-kicker {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.62);
+}
+.bx-next-title {
+  font-size: 0.92rem;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bx-next-sub {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bx-next-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.bx-next-play,
+.bx-next-cancel {
+  min-height: 40px;
+  min-width: 84px;
+  padding: 0 0.8rem;
+  border-radius: 11px;
+  font-weight: 900;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.bx-next-play {
+  border: none;
+  background: #ffffff;
+  color: #000000;
+}
+.bx-next-cancel {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: #ffffff;
+}
+
+/* ---------- Settings rows added in v16 ---------- */
+.bx-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 56px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.bx-setting-row + .bx-setting-row {
+  margin-top: 0.5rem;
+}
+.bx-setting-title {
+  font-weight: 900;
+  font-size: 0.92rem;
+}
+.bx-setting-sub {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 700;
+}
+.bx-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+}
+.bx-seg button {
+  min-height: 38px;
+  min-width: 52px;
+  padding: 0 0.6rem;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 900;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.bx-seg button.is-on {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* ---------- Data saver: no decorative motion on big images ---------- */
+.bx-datasaver .bx-hero-img {
+  animation: none !important;
+}
+
+/* ---------- Shared-element transition (poster -> details) ---------- */
+::view-transition-group(bx-poster) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(bx-poster),
+::view-transition-new(bx-poster) {
+  animation-duration: 420ms;
+  height: 100%;
+  object-fit: cover;
+  overflow: clip;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+}
+.bx-vt-running .bx-details-sheet {
+  animation: none !important;
+}
+
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .bx-app *,
@@ -491,5 +847,13 @@
   .bx-app .bx-ico-spin {
     animation-duration: 1.4s !important;
     animation-iteration-count: infinite !important;
+  }
+  .bx-skel::after {
+    animation: none !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
