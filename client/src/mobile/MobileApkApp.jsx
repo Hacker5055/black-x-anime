@@ -64,10 +64,22 @@ import { todayScheduleId } from './scheduleDays.js';
 import { NextEpisodeCountdown, SkipSegmentOverlay } from './PlayerExtras.jsx';
 import { SPLASH_SOUND_KEY } from './splashPrefs.js';
 import {
+  WEB_APK_PATH,
+  enterWebFullscreen,
+  exitWebFullscreen,
+  isWebApp,
+  onWebFullscreenExit,
+  openComputerVersion,
+  rememberWebLanguage
+} from './webApp.js';
+import { installWebHistory, syncWebHistory } from './webHistory.js';
+import { parseWebLocation, webUrlFor } from './webRoutes.js';
+import {
   BX_APK_DOWNLOAD_URL,
   BX_APK_VERSION,
   BX_MANGA_SEARCH_ONLY_TAB,
   BX_MANGA_SERVER_TABS,
+  bxRequestJson,
   fetchBxSourceIds,
   fetchMobileAnimeSearch,
   fetchMobileChapterPages,
@@ -77,8 +89,12 @@ import {
   fetchMobileMangaList,
   findBxMangaByTitle,
   formatBxCount,
+  inferAnimeSource,
   mangaServerLabel,
-  resolveMobileEpisodeServer
+  mapBxMangaItem,
+  mapShowToMobileAnime,
+  resolveMobileEpisodeServer,
+  witcherSlug
 } from './bxServers.js';
 
 /**
@@ -260,8 +276,11 @@ async function queryAlgolia(indexName, payload = {}) {
 }
 
 /** Shown when a hidden title is reached anyway (old saved entry, other server). */
-const hiddenTitleMessage = () =>
-  (localStorage.getItem('bx_mob_lang') || 'ar') === 'ar' ? 'العمل ده مش متاح في التطبيق' : 'This title is not available in the app';
+const hiddenTitleMessage = () => {
+  const ar = (localStorage.getItem('bx_mob_lang') || 'ar') === 'ar';
+  if (isWebApp()) return ar ? 'العمل ده مش متاح على BLACK X' : 'This title is not available on BLACK X';
+  return ar ? 'العمل ده مش متاح في التطبيق' : 'This title is not available in the app';
+};
 
 function formatAnimeHit(hit) {
   if (!hit || !hit.objectID) return null;
@@ -349,8 +368,17 @@ export function dispatchPhoneNotification(title, body, notifId = 0) {
 }
 
 export default function MobileApkApp() {
+  // Phone website (webApp.js): the app interface served by black-x-anime.me on phones.
+  const isWeb = isWebApp();
+  // The page the address bar asked for when the app started (webRoutes.js), website only.
+  const [webStart] = useState(() => (isWeb ? parseWebLocation(window.location.pathname, window.location.search) : null));
   const [lang, setLang] = useState(() => localStorage.getItem('bx_mob_lang') || 'ar');
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'catalog' | 'schedule' | 'manga' | 'community' | 'profile'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (webStart?.kind === 'tab') return webStart.tab;
+    if (webStart?.kind === 'profile') return 'profile';
+    if (webStart?.kind === 'manga') return 'manga';
+    return 'home';
+  }); // 'home' | 'catalog' | 'schedule' | 'manga' | 'community' | 'profile'
 
   // Home & Catalog States
   const [popularList, setPopularList] = useState([]);
@@ -375,7 +403,7 @@ export default function MobileApkApp() {
   const [catalogType, setCatalogType] = useState(TYPE_FILTERS[0]);
   const [catalogState, setCatalogState] = useState(STATE_FILTERS[0]);
   const [catalogStudio, setCatalogStudio] = useState(STUDIO_FILTERS[0]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => (webStart?.kind === 'tab' && webStart.tab === 'catalog' ? webStart.query || '' : ''));
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [loadingMoreCatalog, setLoadingMoreCatalog] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
@@ -436,7 +464,7 @@ export default function MobileApkApp() {
   const [mangaSource, setMangaSource] = useState('all'); // website server id: 'all' | 'bx1' | 'bx2' | 'bx3' | 'bx4' (search only)
   const [mangaFilterType, setMangaFilterType] = useState('ALL'); // 'ALL' | 'MANHWA' | 'MANGA'
   const [mangaPage, setMangaPage] = useState(1);
-  const [mangaQuery, setMangaQuery] = useState('');
+  const [mangaQuery, setMangaQuery] = useState(() => (webStart?.kind === 'tab' && webStart.tab === 'manga' ? webStart.query || '' : ''));
   const [mangaLoading, setMangaLoading] = useState(false);
   const [loadingMoreManga, setLoadingMoreManga] = useState(false);
   const [selectedManga, setSelectedManga] = useState(null);
@@ -674,10 +702,10 @@ export default function MobileApkApp() {
   const [readerSettingsOpen, setReaderSettingsOpen] = useState(false);
   // Profile hub navigation (profile/ProfileTab.jsx): a stack of sub-pages over the profile
   // root. The top bar shows the page title + a back button; Android back pops one page.
-  const [profileStack, setProfileStack] = useState([]);
+  const [profileStack, setProfileStack] = useState(() => (webStart?.kind === 'profile' && webStart.page ? [webStart.page] : []));
   const profilePage = profileStack[profileStack.length - 1] || 'root';
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
-  const profileScrollMemoRef = useRef([]); // scroll position of every page under the top one
+  const profileScrollMemoRef = useRef(profileStack.map(() => 0)); // scroll position of every page under the top one
   const profileScrollTargetRef = useRef(null); // where the page that mounts next should scroll to
   const openProfilePage = useCallback(
     (id) => {
@@ -794,6 +822,12 @@ export default function MobileApkApp() {
 
   // Sync Native Immersive Fullscreen & Landscape Orientation + Volume Key Scroll Interceptor
   useEffect(() => {
+    if (isWebApp()) {
+      // Phone website: the browser's own full screen (+ landscape where allowed) for the player.
+      if (videoFullscreen && activeEpisode) enterWebFullscreen(true);
+      else exitWebFullscreen();
+      return;
+    }
     try {
       if (videoFullscreen && activeEpisode) {
         window.BlackXNativeAuth?.setFullscreen?.(true, true);
@@ -949,7 +983,9 @@ export default function MobileApkApp() {
   ]);
 
   // Push a browser history entry whenever the user navigates deeper so WebView gesture back also triggers popstate
+  // (APK only: the phone website keeps a single history entry on top, see webHistory.js)
   useEffect(() => {
+    if (isWebApp()) return;
     if (
       commandMenuOpen ||
       filterSheetOpen ||
@@ -1052,6 +1088,8 @@ export default function MobileApkApp() {
         });
         return true;
       }
+      // Phone website: nothing left to close, the browser's back button leaves the site.
+      if (isWebApp()) return false;
       // User is already on Home root: require double back press within 2.2s to exit app
       const now = Date.now();
       if (now - lastBackPressRef.current < 2200) {
@@ -1066,6 +1104,7 @@ export default function MobileApkApp() {
     };
 
     window.__bxHardwareBack = handleStepBack;
+    if (isWebApp()) return installWebHistory(handleStepBack);
     const onPopState = () => {
       handleStepBack();
     };
@@ -1074,6 +1113,12 @@ export default function MobileApkApp() {
       window.removeEventListener('popstate', onPopState);
     };
   }, [showToast, lang, closeProfilePage]);
+
+  // Phone website: leaving the browser's full screen (system back, swipe) leaves the player's too.
+  useEffect(() => {
+    if (!isWebApp() || !videoFullscreen) return undefined;
+    return onWebFullscreenExit(() => setVideoFullscreen(false));
+  }, [videoFullscreen]);
 
   // Real-Time Polling of Global Cloud VIP System (`settings/global_vip_system`) across all connected APK & Website instances
   // Shared app config (VIP enforcement, broadcast, pinned pick, latest APK) comes from the
@@ -2675,6 +2720,20 @@ export default function MobileApkApp() {
 
   const handleRealGoogleOAuthLogin = useCallback(async () => {
     setAuthBusy(true);
+    if (isWebApp()) {
+      // Phone website: Google's web popup (Firebase) confirms the account, then the server
+      // verifies the token exactly like the APK's (webGoogle.js).
+      let web = null;
+      try {
+        web = await import('./webGoogle.js');
+        const idToken = await web.webGoogleIdToken();
+        await completeVerifiedGoogleLogin({ idToken });
+      } catch (err) {
+        showToast(web ? web.webGoogleErrorMessage(err, lang) : lang === 'ar' ? 'ماقدرناش نفتح الدخول بجوجل' : 'Could not open Google sign-in', 'alert');
+        setAuthBusy(false);
+      }
+      return;
+    }
     // Google's own sign-in page (in the app's OAuth window) confirms the account; the
     // phone's account picker only pre-selects which account to use.
     const startOAuth = async (loginHint = '') => {
@@ -3811,6 +3870,7 @@ export default function MobileApkApp() {
     try {
       localStorage.setItem('bx_mob_lang', next);
     } catch (_) {}
+    if (isWebApp()) rememberWebLanguage(next);
     if (typeof document.startViewTransition === 'function') {
       try {
         document.startViewTransition(() => flushSync(() => setLang(next)));
@@ -3962,6 +4022,132 @@ export default function MobileApkApp() {
   );
   const visibleMangaHistory = useMemo(() => mangaHistory.filter((m) => !isHiddenManga(m)), [mangaHistory]);
   const watchedIds = useMemo(() => watchHistory.map((h) => h.objectID).filter(Boolean), [watchHistory]);
+
+  // ==================== PHONE WEBSITE: address bar, back button, links (webRoutes.js / webHistory.js) ====================
+  const webUrl = useMemo(() => {
+    if (!isWeb) return '';
+    const playerOpen = Boolean(activeEpisode && !playerMinimized);
+    const showSlug = selectedAnime ? animeSlugOf(selectedAnime) : '';
+    const mangaId = selectedManga?.bxId || '';
+    return webUrlFor({
+      tab: activeTab,
+      catalogQuery: searchQuery,
+      profilePage: profileStack[profileStack.length - 1] || '',
+      show: showSlug ? { slug: showSlug, source: selectedAnime?.source || '' } : null,
+      episode: playerOpen && showSlug ? Number(activeEpisode.number ?? activeEpisode.episode) || null : null,
+      manga: mangaId ? { id: mangaId, server: mangaActiveServer || selectedManga.bxServer || '' } : null,
+      chapter: mangaId && activeMangaChapter ? activeMangaChapter.chapterId || activeMangaChapter.id || null : null
+    });
+  }, [isWeb, activeTab, searchQuery, profileStack, selectedAnime, activeEpisode, playerMinimized, selectedManga, mangaActiveServer, activeMangaChapter]);
+  // Same rule as the APK's history push: anything the back button can close.
+  const webDepth =
+    commandMenuOpen ||
+    filterSheetOpen ||
+    playerMoreOpen ||
+    storyPreviewAnime ||
+    quickPeekAnime ||
+    videoFullscreen ||
+    heroTrailerOpen ||
+    (activeEpisode && !playerMinimized) ||
+    selectedAnime ||
+    activeMangaChapter ||
+    selectedManga ||
+    profileStack.length > 0 ||
+    signOutConfirmOpen ||
+    activeTab !== 'home'
+      ? 1
+      : 0;
+  useEffect(() => {
+    if (isWeb) syncWebHistory(webUrl, webDepth);
+  }, [isWeb, webUrl, webDepth]);
+
+  // Page title in the browser tab / history list.
+  useEffect(() => {
+    if (!isWeb) return;
+    const name = selectedAnime ? selectedAnime.titleEn || selectedAnime.titleRomaji : selectedManga ? selectedManga.name : '';
+    document.title = name ? `${name} — BLACK X` : 'BLACK X';
+  }, [isWeb, selectedAnime, selectedManga]);
+
+  // Guests on the profile: load Google's web sign-in ahead, so the popup opens right from the tap.
+  useEffect(() => {
+    if (!isWeb || user || activeTab !== 'profile') return;
+    import('./webGoogle.js')
+      .then((m) => m.prepareWebGoogle())
+      .catch(() => {});
+  }, [isWeb, user, activeTab]);
+
+  // Open the title / episode / manga a link points to (once, when the app starts).
+  const webDeepLinkDoneRef = useRef(false);
+  const webPendingChapterRef = useRef('');
+  useEffect(() => {
+    if (!webStart || webDeepLinkDoneRef.current) return;
+    webDeepLinkDoneRef.current = true;
+    const start = webStart;
+    const notFound = () =>
+      showToast(lang === 'ar' ? 'ماقدرناش نلاقي الصفحة دي — جرّب البحث' : 'We could not find that page — try searching', 'search');
+    if (start.kind === 'show' || start.kind === 'watch') {
+      (async () => {
+        const source = start.source === 'aniproject' ? 'aniproject' : inferAnimeSource({ slug: start.slug });
+        let show = null;
+        try {
+          const data = await bxRequestJson(`/api/stream/show/${encodeURIComponent(start.slug)}?source=${encodeURIComponent(source)}`, { timeoutMs: 20000 });
+          show = data?.show || null;
+        } catch (_) {
+          show = null;
+        }
+        let anime = null;
+        if (source === 'witanime') {
+          // Prefer the catalogue record: lists, history and favourites are keyed on its objectID.
+          const title = show ? show.titleRomaji || show.title || show.titleEn : start.slug.slice(3).replace(/-/g, ' ');
+          const pick = (res) => (res?.hits || []).find((h) => witcherSlug(h.objectID) === start.slug) || null;
+          const hit =
+            pick(await queryAlgolia('series_fav_count_desc', { query: title, hitsPerPage: 20 }).catch(() => null)) ||
+            // Not in the filtered index: a hidden title (its tags make the details refuse it below).
+            pick(await queryAlgoliaRaw('series_fav_count_desc', { query: title, hitsPerPage: 20 }).catch(() => null));
+          if (hit) anime = formatAnimeHit(hit);
+        }
+        if (!anime && show) {
+          anime = mapShowToMobileAnime({ ...show, slug: show.slug || start.slug, source });
+          if (anime && (isHiddenAnime(show) || show.bxHidden)) anime.bxHidden = true;
+        }
+        if (!anime) {
+          notFound();
+          return;
+        }
+        if (anime.bxHidden || isHiddenAnime(anime)) {
+          showToastMessage(hiddenTitleMessage(), 'info');
+          return;
+        }
+        handleOpenAnimeBase(anime, start.kind === 'watch' ? start.ep : null);
+      })();
+    } else if (start.kind === 'manga') {
+      (async () => {
+        let hit = null;
+        try {
+          const qs = start.server ? `?server=${encodeURIComponent(start.server)}` : '';
+          const data = await bxRequestJson(`/api/content/library/${encodeURIComponent(start.id)}${qs}`, { timeoutMs: 25000 });
+          const item = data?.item || null;
+          hit = item ? mapBxMangaItem({ ...item, id: item.id || start.id }, start.server || '') : null;
+        } catch (_) {
+          hit = null;
+        }
+        if (!hit) {
+          notFound();
+          return;
+        }
+        webPendingChapterRef.current = start.chapter || '';
+        handleOpenManga(hit, start.server || '');
+      })();
+    }
+  }, [webStart, handleOpenAnimeBase, handleOpenManga, showToast, lang]);
+  // …and the chapter, once the manga's chapters are in.
+  useEffect(() => {
+    const want = webPendingChapterRef.current;
+    if (!want || !mangaChapters.length) return;
+    webPendingChapterRef.current = '';
+    const ch = mangaChapters.find((c) => c.id === want || c.chapterId === want);
+    if (ch) handleReadMangaChapter(ch);
+  }, [mangaChapters, handleReadMangaChapter]);
 
   // ---- Profile hub wiring (ProfileTab.jsx renders, the state and actions live here) ----
   const startProfileEdit = () => {
@@ -5178,7 +5364,7 @@ export default function MobileApkApp() {
           mangaHistory={visibleMangaHistory}
           favorites={visibleFavorites}
           genres={HOME_GENRES}
-          apkRelease={apkRelease}
+          apkRelease={isWeb ? null : apkRelease}
           heroPaused={Boolean(selectedAnime) || Boolean(storyPreviewAnime)}
           onOpen={handleOpenAnime}
           onPeek={setQuickPeekAnime}
@@ -7221,9 +7407,21 @@ export default function MobileApkApp() {
           app={{
             version: BX_APK_VERSION,
             release: apkRelease,
-            downloadUrl: BX_APK_DOWNLOAD_URL,
+            web: isWeb,
+            downloadUrl: isWeb ? WEB_APK_PATH : BX_APK_DOWNLOAD_URL,
             catalogTotal: bxAnimeTotal || 0,
-            onUpdate: () => showToast(isRtl ? 'بينزّل آخر نسخة من التطبيق…' : 'Downloading the latest app…', 'download')
+            onUpdate: () =>
+              showToast(
+                isWeb
+                  ? isRtl
+                    ? 'بينزّل تطبيق BLACK X للأندرويد…'
+                    : 'Downloading the BLACK X Android app…'
+                  : isRtl
+                  ? 'بينزّل آخر نسخة من التطبيق…'
+                  : 'Downloading the latest app…',
+                'download'
+              ),
+            onComputer: openComputerVersion
           }}
           backup={{ onExport: handleExportVaultBackup, onImport: handleImportVaultBackup, fileRef: backupFileInputRef }}
           signOut={{ open: signOutConfirmOpen, setOpen: setSignOutConfirmOpen }}
@@ -9856,6 +10054,10 @@ export default function MobileApkApp() {
                       ? isRtl
                         ? 'الملف الشخصي ومكتبتي'
                         : 'Profile & library'
+                      : isWeb
+                      ? isRtl
+                        ? 'سجّل دخولك عشان مكتبتك تتحفظ على كل أجهزتك'
+                        : 'Sign in to keep your library on every device'
                       : isRtl
                       ? 'سجّل دخولك لمزامنة مكتبتك مع الموقع'
                       : 'Sign in to sync with the website'}
@@ -9910,7 +10112,21 @@ export default function MobileApkApp() {
                 label: isRtl ? 'الإعدادات' : 'Settings',
                 badge: null,
                 onClick: () => goToTab('profile', () => resetProfileStack(['settings']))
-              }
+              },
+              ...(isWeb
+                ? [
+                    {
+                      id: 'computer',
+                      icon: 'monitor',
+                      label: isRtl ? 'نسخة الكمبيوتر' : 'Computer version',
+                      badge: null,
+                      onClick: () => {
+                        setCommandMenuOpen(false);
+                        openComputerVersion();
+                      }
+                    }
+                  ]
+                : [])
             ].map((item, idx) => (
               <button key={item.id} type="button" className="bx-menu-item" style={{ '--i': idx + 1 }} onClick={item.onClick}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
@@ -9940,7 +10156,9 @@ export default function MobileApkApp() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>BLACK X</div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>
-                  {isRtl
+                  {isWeb
+                    ? `black-x-anime.me${bxAnimeTotal ? ` • ${formatBxCount(bxAnimeTotal)} ${isRtl ? 'أنمي' : 'anime'}` : ''}`
+                    : isRtl
                     ? `إصدار ${BX_APK_VERSION}${bxAnimeTotal ? ` • ${formatBxCount(bxAnimeTotal)} أنمي` : ''}`
                     : `Version ${BX_APK_VERSION}${bxAnimeTotal ? ` • ${formatBxCount(bxAnimeTotal)} anime` : ''}`}
                 </div>

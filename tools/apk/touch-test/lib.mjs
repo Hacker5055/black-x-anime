@@ -1,8 +1,9 @@
-// Headless real-touch harness for the BLACK X APK web bundle (assets/public of the built APK).
+// Headless real-touch harness for the BLACK X APK web bundle (assets/public of the built APK)
+// and for the website build (the phone website runs the same app interface; see web-suite.mjs).
 // The bundle is served from a local server; every network call the app makes (website API,
 // Algolia catalogue, Firestore, AniList) is answered by in-memory mocks, so nothing here
 // depends on the live site. Touch input goes through CDP touch events (page.touchscreen),
-// so scrolling and taps behave like a finger. Run it through ./run.sh (see README.md).
+// so scrolling and taps behave like a finger. Run it through ./run.sh / ./run-web.sh (README.md).
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +18,9 @@ export const DIST = path.resolve(process.env.DIST || '/tmp/bx-touch/public');
 export const PORT = Number(process.env.PORT || 8790);
 export const LOCAL = `http://127.0.0.1:${PORT}`;
 const VIDEO_FILE = process.env.VIDEO || '/tmp/bx-touch/test.webm';
+// The website build asks Google Fonts for Cairo / Space Grotesk; the test answers with the copies the
+// APK bundles, otherwise every Arabic label renders invisible in headless screenshots.
+const FONT_DIR = path.join(REPO, 'client/src/mobile/fonts');
 export const VIDEO_URL = `${LOCAL}/test.webm`;
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -78,6 +82,16 @@ export function startServer() {
     const p = decodeURIComponent(url.pathname);
     res.setHeader('Access-Control-Allow-Origin', '*');
     if (p === '/test.webm') return serveRange(req, res, VIDEO_FILE, 'video/webm');
+    // "Another site" for the back-button tests (the page the visitor came from).
+    if (p === '/__blank') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end('<!doctype html><title>before</title><p>another page</p>');
+    }
+    const font = p.match(/^\/__fonts\/([a-z0-9-]+\.woff2)$/);
+    if (font && fs.existsSync(path.join(FONT_DIR, font[1]))) {
+      res.writeHead(200, { 'Content-Type': 'font/woff2', 'Cache-Control': 'max-age=3600' });
+      return fs.createReadStream(path.join(FONT_DIR, font[1])).pipe(res);
+    }
     const m = p.match(/^\/(poster|page|wide)\/(\d+)\.svg$/);
     if (m) {
       res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=3600' });
@@ -278,7 +292,7 @@ function api(req, url, ctx) {
   const method = req.method();
   const auth = req.headers().authorization || '';
   let m;
-  if (p === '/api/app/config') return json(req, { enforced: false, broadcastMsg: '', pinnedRec: null, apk: APK_RELEASE, serverTime: new Date().toISOString() });
+  if (p === '/api/app/config') return json(req, { enforced: false, broadcastMsg: '', pinnedRec: null, apk: ctx.apkOverride || APK_RELEASE, serverTime: new Date().toISOString() });
   if (p === '/api/app/skip-times') return json(req, { found: true, malId: Number(url.searchParams.get('mal')) || null, segments: [{ type: 'op', start: 90, end: 180 }] });
   if (p === '/api/app/me') return auth ? json(req, { user: { ...TEST_USER, ...ctx.userPatch }, state: { favorites: [], progress: [], positions: {}, xp: 120 } }) : json(req, { error: 'auth_required' }, 401);
   // Username sign-in (password "secret-pass"), profile edits and requests to the developer.
@@ -304,10 +318,14 @@ function api(req, url, ctx) {
   if (p === '/api/stream/stats') return json(req, { animeTotal: ANIME.length + HIDDEN_ANIME.length });
   if ((m = p.match(/^\/api\/stream\/show\/([^/]+)$/))) {
     const slug = decodeURIComponent(m[1]);
+    if (slug.includes('missing')) return json(req, { error: 'not_found' }, 404);
+    // BLACK X 1 slugs name a catalogue record (same rule as the server's toWitcherSlug()).
+    const record = [...HIDDEN_ANIME, ...ANIME].find((a) => `aw-${a.objectID.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}` === slug);
     return json(req, {
       show: {
         slug,
-        title: slug,
+        title: record ? record.name : slug,
+        ...(record ? { titleRomaji: record.name, tagsAr: record.tags } : {}),
         ...(slug === 'a3rb-sneaky-isekai' ? { genres: ['عالم مختلف', 'اكشن'] } : {}),
         poster: `${LOCAL}/poster/1.svg`,
         banner: `${LOCAL}/wide/1.svg`,
@@ -387,11 +405,23 @@ function firestore(req, url, ctx) {
   return json(req, {});
 }
 
+const GOOGLE_FONTS_CSS = [
+  `@font-face{font-family:'Cairo';font-weight:200 1000;src:url(${LOCAL}/__fonts/cairo-arabic-wght.woff2) format('woff2');unicode-range:U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFF;}`,
+  `@font-face{font-family:'Cairo';font-weight:200 1000;src:url(${LOCAL}/__fonts/cairo-latin-wght.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F;}`,
+  `@font-face{font-family:'Space Grotesk';font-weight:300 700;src:url(${LOCAL}/__fonts/space-grotesk-latin-wght.woff2) format('woff2');}`
+].join('');
+
 function route(req, ctx) {
   const raw = req.url();
   if (raw.startsWith('data:') || raw.startsWith('blob:')) return req.continue();
   const url = new URL(raw);
+  // The website build calls its API on the same origin (/api/...), the APK calls black-x-anime.me.
+  if (url.host === `127.0.0.1:${PORT}` && url.pathname.startsWith('/api/')) {
+    ctx.net.push(`${req.method()} site${url.pathname}`);
+    return api(req, url, ctx);
+  }
   if (url.host === `127.0.0.1:${PORT}`) return req.continue();
+  if (url.host === 'fonts.googleapis.com') return req.respond({ status: 200, headers: CORS, contentType: 'text/css', body: GOOGLE_FONTS_CSS });
   if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: CORS });
   ctx.net.push(`${req.method()} ${url.host}${url.pathname}`);
   if (url.host === 'black-x-anime.me') return api(req, url, ctx);
@@ -467,6 +497,58 @@ export async function openApp(browser, { seed = {} } = {}) {
   await page.waitForFunction(() => document.querySelectorAll('.bx-poster').length > 4, { timeout: 20000 }).catch(() => {});
   await sleep(500);
   return { page, ctx };
+}
+
+/** Browser user agents for the website tests (a phone browser is NOT the APK's WebView). */
+export const PHONE_UA = UA.replace('; wv', '');
+export const DESKTOP_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+
+/**
+ * Opens the WEBSITE build at `route`. `phone: true` = a 412×915 touch phone (the website then
+ * serves the app interface), otherwise a 1440×900 computer with a mouse. `seed` fills
+ * localStorage before the first load; the splash is skipped (as on a second page view).
+ */
+export async function openWeb(browser, { route: routePath = '/', phone = true, seed = {}, wait = true } = {}) {
+  const page = await browser.newPage();
+  await page.setUserAgent(phone ? PHONE_UA : DESKTOP_UA);
+  await page.setViewport(
+    phone ? { width: 412, height: 915, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { width: 1440, height: 900, deviceScaleFactor: 1 }
+  );
+  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000, logins: [], profilePuts: [], requests: [], userPatch: {} };
+  ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    try {
+      route(req, ctx);
+    } catch (e) {
+      ctx.errors.push(`route: ${e.message}`);
+      req.abort().catch(() => {});
+    }
+  });
+  page.on('pageerror', (e) => ctx.errors.push(`pageerror: ${e.message}`));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') ctx.consoleErrors.push(msg.text().slice(0, 200));
+  });
+  await page.evaluateOnNewDocument((seedData) => {
+    try {
+      sessionStorage.setItem('bx_splash_played', '1');
+      if (!sessionStorage.getItem('__bx_seeded')) {
+        sessionStorage.setItem('__bx_seeded', '1');
+        for (const [k, v] of Object.entries(seedData)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+      }
+    } catch {
+      /* about:blank */
+    }
+  }, { bx_mob_lang: 'ar', blackx_lang: 'ar', ...seed });
+  await page.goto(`${LOCAL}${routePath}`, { waitUntil: 'domcontentloaded' });
+  if (wait) await waitWebReady(page);
+  return { page, ctx };
+}
+
+/** Waits for whichever interface the website chose: the app (.bx-dock) or the website pages (.app-shell). */
+export async function waitWebReady(page, timeout = 30000) {
+  await page.waitForFunction(() => (document.querySelector('.bx-dock') || document.querySelector('.app-shell')) && !document.querySelector('.bx-intro'), { timeout });
+  await sleep(700);
 }
 
 /* ------------------------------------------------------------------ touch helpers */

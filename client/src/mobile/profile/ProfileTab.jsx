@@ -183,7 +183,7 @@ function RootPage(props) {
   usePositionsTick();
   const isVip = vipTier !== 'free' || isDeveloper;
   const tierLabel = vipLabel(vipTier, isDeveloper, isRtl);
-  const hasUpdate = isNewerVersion(app.release?.version, app.version);
+  const hasUpdate = !app.web && isNewerVersion(app.release?.version, app.version);
 
   const historyRail = useMemo(() => {
     const out = [];
@@ -384,15 +384,35 @@ function RootPage(props) {
       <Group title={isRtl ? 'المساعدة' : 'Support'}>
         <Row icon="send" label={isRtl ? 'اطلب أنمي أو مانهوا' : 'Request a title'} onClick={() => onOpenPage('requests')} />
         <Row icon="save" label={isRtl ? 'نسخة احتياطية' : 'Backup'} sub={isRtl ? 'صدّر بياناتك أو استرجعها من ملف' : 'Export or restore your data'} onClick={() => onOpenPage('backup')} />
-        <Row
-          icon="smartphone"
-          label={isRtl ? 'تحديث التطبيق' : 'App update'}
-          sub={hasUpdate ? (isRtl ? `فيه إصدار جديد v${app.release.version}` : `v${app.release.version} is available`) : isRtl ? 'عندك آخر إصدار' : 'You are up to date'}
-          value={`v${app.version}`}
-          badge={hasUpdate ? (isRtl ? 'جديد' : 'New') : null}
-          href={app.downloadUrl}
-          onClick={app.onUpdate}
-        />
+        {app.web ? (
+          <>
+            {/* Phone website: nothing to update; offer the Android app and the computer pages instead. */}
+            <Row
+              icon="smartphone"
+              label={isRtl ? 'تطبيق الأندرويد' : 'Android app'}
+              sub={isRtl ? 'نزّل BLACK X على موبايلك' : 'Get BLACK X on your phone'}
+              value={`v${app.version}`}
+              href={app.downloadUrl}
+              onClick={app.onUpdate}
+            />
+            <Row
+              icon="monitor"
+              label={isRtl ? 'نسخة الكمبيوتر' : 'Computer version'}
+              sub={isRtl ? 'صفحات الموقع الكاملة' : 'The full website pages'}
+              onClick={app.onComputer}
+            />
+          </>
+        ) : (
+          <Row
+            icon="smartphone"
+            label={isRtl ? 'تحديث التطبيق' : 'App update'}
+            sub={hasUpdate ? (isRtl ? `فيه إصدار جديد v${app.release.version}` : `v${app.release.version} is available`) : isRtl ? 'عندك آخر إصدار' : 'You are up to date'}
+            value={`v${app.version}`}
+            badge={hasUpdate ? (isRtl ? 'جديد' : 'New') : null}
+            href={app.downloadUrl}
+            onClick={app.onUpdate}
+          />
+        )}
       </Group>
 
       {isDeveloper ? (
@@ -410,7 +430,7 @@ function RootPage(props) {
       ) : null}
 
       <p className="bxp-foot">
-        <span dir="ltr">BLACK X · v{app.version}</span>
+        <span dir="ltr">{app.web ? 'BLACK X · black-x-anime.me' : `BLACK X · v${app.version}`}</span>
         {app.catalogTotal > 0 ? (
           <>
             {' · '}

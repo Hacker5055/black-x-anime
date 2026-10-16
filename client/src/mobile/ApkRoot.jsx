@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import BlackXSplashVortex from '../components/BlackXSplashVortex.jsx';
 import { BX_APK_VERSION } from './bxServers.js';
 import { SPLASH_SEEN_KEY, SPLASH_SOUND_KEY } from './splashPrefs.js';
+import { seedWebLanguage } from './webApp.js';
 import './apkBase.css';
 
 const MobileApkApp = lazy(() => import('./MobileApkApp.jsx'));
@@ -39,7 +40,8 @@ class ApkErrorBoundary extends React.Component {
   }
 }
 
-function readLang() {
+function readLang(platform) {
+  if (platform === 'web') seedWebLanguage();
   try {
     return localStorage.getItem('bx_mob_lang') || 'ar';
   } catch {
@@ -52,19 +54,31 @@ function readLang() {
  * each installed version; later launches get a short 1.1 s version (still
  * skippable). Its sound is off unless the user turns it on in settings.
  */
-function initialSplash() {
+function initialSplash(platform) {
   let seen = '';
   try {
     seen = localStorage.getItem(SPLASH_SEEN_KEY) || '';
   } catch {
     seen = '';
   }
+  if (platform === 'web') {
+    // Phone website: once per browser session (links opened later in the same session go
+    // straight to their page), 2.5 s the first time, then the short version.
+    let played = false;
+    try {
+      played = sessionStorage.getItem('bx_splash_played') === '1';
+    } catch {
+      played = false;
+    }
+    return { active: !played, mode: undefined, durationMs: seen === BX_APK_VERSION ? 1100 : 2500, subtitleAr: '', subtitleEn: '' };
+  }
   return { active: true, mode: undefined, durationMs: seen === BX_APK_VERSION ? 1100 : 4000, subtitleAr: '', subtitleEn: '' };
 }
 
-export default function ApkRoot() {
-  const [lang] = useState(readLang);
-  const [splash, setSplash] = useState(initialSplash);
+/** `platform="web"`: the phone website (main.jsx), otherwise the APK (main-apk.jsx). */
+export default function ApkRoot({ platform = 'apk' }) {
+  const [lang] = useState(() => readLang(platform));
+  const [splash, setSplash] = useState(() => initialSplash(platform));
   const [soundOn] = useState(() => {
     try {
       return localStorage.getItem(SPLASH_SOUND_KEY) === 'on';
@@ -76,8 +90,8 @@ export default function ApkRoot() {
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    window.__BLACKX_APK__ = true;
-  }, [lang]);
+    if (platform !== 'web') window.__BLACKX_APK__ = true;
+  }, [lang, platform]);
 
   // Motion themes (profile setting / episode start) replay the splash on demand.
   useEffect(() => {
@@ -99,6 +113,7 @@ export default function ApkRoot() {
   const handleSplashDone = () => {
     try {
       localStorage.setItem(SPLASH_SEEN_KEY, BX_APK_VERSION);
+      if (platform === 'web') sessionStorage.setItem('bx_splash_played', '1');
     } catch {
       /* ignore */
     }
