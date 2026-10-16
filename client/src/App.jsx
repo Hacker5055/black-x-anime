@@ -1115,7 +1115,7 @@ class MobileErrorBoundary extends React.Component {
               cursor: 'pointer'
             }}
           >
-            ⚡ إعادة تحميل التطبيق
+            إعادة تحميل التطبيق
           </button>
         </div>
       );

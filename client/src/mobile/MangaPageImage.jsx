@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import BxIcon from './BxIcon.jsx';
 import { bxImageProxyUrl, normalizeMangaPageUrl } from './bxServers.js';
 
 /**
@@ -57,7 +58,7 @@ export default function MangaPageImage({ src, alt, style, onClick, loading = 'la
           cursor: 'pointer'
         }}
       >
-        <span style={{ fontSize: '1.4rem' }}>↻</span>
+        <BxIcon name="retry" style={{ fontSize: '1.4rem' }} />
         <span>
           {isRtl ? `تعذّر تحميل ${alt || 'الصفحة'} — اضغط لإعادة المحاولة` : `${alt || 'This page'} failed to load — tap to retry`}
         </span>

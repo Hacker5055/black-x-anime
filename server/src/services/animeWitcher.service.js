@@ -162,7 +162,7 @@ function formatAlgoliaHit(hit) {
     poster;
 
   const malScore = Number(hit.details?.mal_mean || hit.rating?.rate || 0);
-  const score = malScore > 0 ? (malScore <= 10 ? Math.round(malScore * 10) : Math.round(malScore)) : 92;
+  const score = malScore > 0 ? (malScore <= 10 ? Math.round(malScore * 10) : Math.round(malScore)) : null;
   const arTags = Array.isArray(hit.tags) ? hit.tags : [];
   const genres = enrichGenres(arTags);
 
@@ -189,10 +189,10 @@ function formatAlgoliaHit(hit) {
     year: Number(hit.details?.year) || null,
     season: hit.details?.season && !String(hit.details.season).includes('undefined') ? hit.details.season : null,
     studio: Array.isArray(hit.details?.studio) ? hit.details.studio.join(', ') : '',
-    ageRating: hit.details?.age || '+13',
+    ageRating: hit.details?.age || null,
     views: Number(hit.views || hit.statictes?.fav_count || 0),
     score,
-    rating: malScore > 0 ? Number(malScore.toFixed(1)) : 9.2,
+    rating: malScore > 0 ? Number(malScore.toFixed(1)) : null,
     youtubeTrailerId: hit.youtube_video_id || null,
     source: 'witanime',
     sourceName: 'سيرفر BLACK X 1',
@@ -480,11 +480,11 @@ export async function fetchWitcherShow(slugOrObjectId) {
         poster: '',
         banner: '',
         synopsis: '',
-        genres: ['اكشن', 'Action'],
+        genres: [],
         status: 'مستمر',
         year: null,
-        score: 92,
-        rating: 9.2
+        score: null,
+        rating: null
       };
 
   const show = {

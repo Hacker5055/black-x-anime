@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { db } from './db.js';
@@ -17,6 +18,14 @@ const JWT_SECRET = configuredJwtSecret || DEFAULT_DEV_JWT_SECRET;
 
 export function isAuthConfigured() {
   return !authDisabledByConfiguration;
+}
+
+/**
+ * Secret for a separate token family (e.g. APK sessions), derived from JWT_SECRET
+ * so tokens of one family can never be replayed against the other.
+ */
+export function deriveAuthSecret(label) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`blackx:${String(label)}`).digest('hex');
 }
 
 export function requireJwtSecret(_req, res, next) {

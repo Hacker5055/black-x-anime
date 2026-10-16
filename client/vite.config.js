@@ -33,9 +33,27 @@ function rootLabPreview(rootDir) {
   };
 }
 
+/**
+ * APK builds (VITE_BUILD_TARGET=apk, see tools/apk/build-apk.sh) start from
+ * src/main-apk.jsx instead of src/main.jsx, so the website shell, router,
+ * Firebase SDK and website pages are not bundled into the app at all.
+ */
+function apkEntry() {
+  const isApk = process.env.VITE_BUILD_TARGET === 'apk';
+  return {
+    name: 'blackx-apk-entry',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        return isApk ? html.replace('/src/main.jsx', '/src/main-apk.jsx') : html;
+      }
+    }
+  };
+}
+
 export default defineConfig({
   root: __dirname,
-  plugins: [rootLabPreview(resolve(__dirname, '..')), react()],
+  plugins: [apkEntry(), rootLabPreview(resolve(__dirname, '..')), react()],
   server: {
     host: '0.0.0.0',
     port: 3000,

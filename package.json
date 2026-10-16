@@ -20,7 +20,7 @@
     "lab": "vite --config client/vite.config.js --open /zellige-3d-lab.html",
     "check:ornaments": "node tools/ornament-node-smoke.mjs",
     "test:aniproject": "node --test server/test/aniproject.test.js",
-    "test:servers": "node --test server/test/crossSourceMatch.test.js server/test/cdnCache.test.js client/test/mobileServers.test.js"
+    "test:servers": "node --test server/test/crossSourceMatch.test.js server/test/cdnCache.test.js server/test/apkApp.test.js client/test/mobileServers.test.js"
   },
   "dependencies": {
     "@prisma/client": "6.19.2",
@@ -38,6 +38,7 @@
     "framer-motion": "^14.1.0",
     "hls.js": "^1.7.3",
     "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^1.57.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.4",

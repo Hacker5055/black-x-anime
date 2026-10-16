@@ -15,6 +15,7 @@ import MangaNovelReader from '../components/MangaNovelReader.jsx';
 import { OrnamentShop, WrappedCardPanel } from '../components/OrnamentShopAndWrapped.jsx';
 import { VipPlansSection, DevVipCodeGenerator, resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
+import BxIcon from '../mobile/BxIcon.jsx';
 import { auth, onProfileSnapshot, onDeveloperProfileSnapshot } from '../firebase.js';
 
 // Helper to build instant, zero-404 SVG anime character portraits
@@ -960,7 +961,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                       gap: '0.45rem'
                     }}
                   >
-                    <span>{m.icon}</span>
+                    <BxIcon name={m.iconName} />
                     <span>{lang === 'ar' ? m.nameAr : m.nameEn}</span>
                   </button>
                 );

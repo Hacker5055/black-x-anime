@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { publicUser } from '../auth.js';
 import { getFirestoreAuthHeaders } from './firestoreAuth.js';
+import { PASS_SENTINEL_BCRYPT, PASS_SENTINEL_GOOGLE, hashPasswordAsync } from './apkAccounts.js';
 
 const PROJECT_ID = 'spry-oxide-1h7sp';
 const DATABASE_ID = 'ai-studio-blackxanime-e47e1ba2-315f-4c3b-8557-71352813f36c';
@@ -142,12 +143,23 @@ export async function syncUserToCloud(userRow, rawPassword = null) {
   const uKey = cleanDocKey('user', userRow.username);
   const eKey = userRow.email ? cleanDocKey('email', userRow.email) : null;
 
-  const existingPassSha256 = rawPassword
-    ? sha256Hex(rawPassword)
-    : existingCloud?.passSha256 || '';
+  // Password material: bcrypt only. The old unsalted SHA-256 is never written again;
+  // `passSha256` keeps a sentinel because APK builds <= 15.1 accepted ANY password
+  // for a document whose `passSha256` was empty.
+  const existingBcrypt = /^\$2[aby]\$/.test(String(existingCloud?.passBcrypt || '')) ? existingCloud.passBcrypt : '';
+  const existingLegacy = /^[a-f0-9]{64}$/i.test(String(existingCloud?.passSha256 || '')) ? existingCloud.passSha256 : '';
+  const passBcrypt = rawPassword ? await hashPasswordAsync(rawPassword) : existingBcrypt;
+  const isGoogleOnly = !rawPassword && !passBcrypt && !existingLegacy;
+  const passSha256 = passBcrypt ? PASS_SENTINEL_BCRYPT : existingLegacy || (isGoogleOnly ? PASS_SENTINEL_GOOGLE : PASS_SENTINEL_BCRYPT);
+
+  // Keep fields written by the APK (VIP tier/expiry, resume positions, XP, ...).
+  const preserved = existingCloud && typeof existingCloud === 'object' ? { ...existingCloud } : {};
+  delete preserved.passSha256;
+  delete preserved.passBcrypt;
 
   const payloadObj = {
-    id: String(userRow.id),
+    ...preserved,
+    id: String(existingCloud?.id || userRow.id),
     username: String(userRow.username).toLowerCase(),
     email: String(userRow.email || '').toLowerCase(),
     displayName: pub.displayName || userRow.display_name || userRow.username,
@@ -155,9 +167,10 @@ export async function syncUserToCloud(userRow, rawPassword = null) {
     avatarColor: pub.avatarColor || userRow.avatar_color || '#ffffff',
     bio: pub.bio || userRow.bio || '',
     role: pub.role || userRow.role || 'user',
-    vipStatus: pub.vipStatus || userRow.vip_status || 'VIP Monarch',
+    vipStatus: pub.vipStatus || userRow.vip_status || existingCloud?.vipStatus || 'Free Tier',
     badges: Array.isArray(pub.badges) ? pub.badges : [],
-    passSha256: existingPassSha256,
+    passSha256,
+    ...(passBcrypt ? { passBcrypt } : {}),
     isGoogleAccount: Boolean(userRow.email?.includes('@gmail.com') || existingCloud?.isGoogleAccount),
     favorites,
     progress,

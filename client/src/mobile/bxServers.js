@@ -10,11 +10,14 @@
  * pages. Nothing here invents data: unknown values stay empty.
  */
 import { getServerUrl, isNativeApk } from '../api.js';
+import { APK_RELEASE, compareVersions } from '../../../shared/apkRelease.js';
 
 export const BX_PUBLIC_ORIGIN = 'https://black-x-anime.me';
 export const BX_APK_FILE_NAME = 'BLACK-X-Mobile-120Hz.apk';
 export const BX_APK_DOWNLOAD_URL = `${BX_PUBLIC_ORIGIN}/${BX_APK_FILE_NAME}`;
-export const BX_APK_VERSION = '15.0';
+// The version this APK was built as (the server reports the latest one in /api/app/config).
+export const BX_APK_VERSION = APK_RELEASE.version;
+export { compareVersions };
 
 /* -------------------------------------------------------------------------- */
 /* Base URL + JSON helper                                                      */
@@ -336,16 +339,19 @@ function deviceCanPlayHls() {
   try {
     if (typeof document === 'undefined') return false;
     const v = document.createElement('video');
-    return Boolean(v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl'));
+    if (v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl')) return true;
+    // Since v16 the APK player plays HLS through hls.js (Media Source Extensions).
+    const MS = window.ManagedMediaSource || window.MediaSource;
+    return Boolean(MS && typeof MS.isTypeSupported === 'function' && MS.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'));
   } catch {
     return false;
   }
 }
 
 /**
- * Website episode manifest -> APK server list. Only sources the APK's native
- * <video> player can open are kept: direct MP4 (and HLS where the WebView plays
- * it). Iframe-only hosts stay on the website player.
+ * Website episode manifest -> APK server list. Only sources the APK's <video>
+ * player can open are kept: direct MP4, and HLS (natively or through hls.js).
+ * Iframe-only hosts stay on the website player.
  */
 export function mapEpisodeEntries(data, { slug, episode, source, canPlayHls } = {}) {
   const hlsOk = typeof canPlayHls === 'boolean' ? canPlayHls : deviceCanPlayHls();
@@ -416,17 +422,17 @@ export async function resolveMobileEpisodeServer(server) {
 
 /** Mirrors the website library tabs (client/src/pages/Browse.jsx). */
 export const BX_MANGA_SERVER_TABS = Object.freeze([
-  Object.freeze({ id: 'all', ar: '🌐 جميع سيرفرات BLACK X', en: '🌐 All BLACK X Servers' }),
-  Object.freeze({ id: 'bx1', ar: '⚡ سيرفر BLACK X 1 (مانهوا عربية)', en: '⚡ BLACK X 1 (AR Manhwa)' }),
-  Object.freeze({ id: 'bx2', ar: '📖 سيرفر BLACK X 2 (مانجا عربية)', en: '📖 BLACK X 2 (AR Manga)' }),
-  Object.freeze({ id: 'bx3', ar: '👑 سيرفر BLACK X 3 (الفهرس العالمي)', en: '👑 BLACK X 3 (Global Index)' })
+  Object.freeze({ id: 'all', ar: 'جميع سيرفرات BLACK X', en: 'All BLACK X Servers' }),
+  Object.freeze({ id: 'bx1', ar: 'سيرفر BLACK X 1 (مانهوا عربية)', en: 'BLACK X 1 (AR Manhwa)' }),
+  Object.freeze({ id: 'bx2', ar: 'سيرفر BLACK X 2 (مانجا عربية)', en: 'BLACK X 2 (AR Manga)' }),
+  Object.freeze({ id: 'bx3', ar: 'سيرفر BLACK X 3 (الفهرس العالمي)', en: 'BLACK X 3 (Global Index)' })
 ]);
 
 /** Shown only while the website exposes it (search-only, like on the website). */
 export const BX_MANGA_SEARCH_ONLY_TAB = Object.freeze({
   id: 'bx4',
-  ar: '🔎 سيرفر BLACK X 4 (بحث فقط)',
-  en: '🔎 BLACK X 4 (Search only)',
+  ar: 'سيرفر BLACK X 4 (بحث فقط)',
+  en: 'BLACK X 4 (Search only)',
   searchOnly: true
 });
 

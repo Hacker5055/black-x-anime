@@ -288,7 +288,7 @@ class EnglishAnimeService {
       titleAr: titleEn,
       poster: m.coverImage?.extraLarge || m.coverImage?.large || '',
       banner: m.bannerImage || m.coverImage?.extraLarge || '',
-      score: m.averageScore ? (m.averageScore / 10).toFixed(1) : 9.0,
+      score: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
       status: m.status === 'FINISHED' ? 'مكتمل' : 'يعرض الان',
       genres: m.genres || ['Action', 'Fantasy'],
       description: descAr || cleanDesc,
