@@ -35,9 +35,12 @@ export default function ContinueWatchingRow({ history, isRtl, dataSaver = false,
           const pos = ep ? getPosition(episodeKey(h, ep)) : null;
           const pct = pos && pos.dur > 0 ? Math.min(100, Math.max(2, (pos.sec / pos.dur) * 100)) : null;
           const leftMin = pos && pos.dur > 0 && !pos.done ? Math.max(1, Math.ceil((pos.dur - pos.sec) / 60)) : null;
-          let line = ep ? (isRtl ? `الحلقة ${ep}` : `Episode ${ep}`) : '';
-          if (pos?.done) line += isRtl ? ' • خلصت' : ' • finished';
-          else if (leftMin) line += isRtl ? ` • فاضل ${leftMin} د` : ` • ${leftMin} min left`;
+          // Non-breaking spaces keep "5" with "الحلقة" and "14 د" together; the line may
+          // only wrap before the bullet.
+          const nb = '\u00a0';
+          let line = ep ? (isRtl ? `الحلقة${nb}${ep}` : `Episode${nb}${ep}`) : '';
+          if (pos?.done) line += isRtl ? ` •${nb}خلصت` : ` •${nb}finished`;
+          else if (leftMin) line += isRtl ? ` •${nb}فاضل${nb}${leftMin}${nb}د` : ` •${nb}${leftMin}${nb}min${nb}left`;
           return (
             <div
               key={`${h.objectID || h.slug}-${i}`}
@@ -62,30 +65,30 @@ export default function ContinueWatchingRow({ history, isRtl, dataSaver = false,
                 </span>
                 {pct !== null && (
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '4px', background: 'rgba(255,255,255,0.22)' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: '#ffffff', borderRadius: '0 2px 2px 0' }} />
+                    <div style={{ width: `${pct}%`, height: '100%', background: '#ffffff', borderRadius: '2px' }} />
                   </div>
                 )}
-              </div>
-              <div style={{ padding: '0.45rem 0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.3rem', background: '#0c0c10' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 900, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {h.titleEn || h.titleAr}
-                  </div>
-                  {line && <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.62)', whiteSpace: 'nowrap' }}>{line}</div>}
-                </div>
                 {onInfo && (
                   <button
                     type="button"
-                    className="bx-icon-hit"
+                    className="bx-icon-hit bx-cw-info"
                     aria-label={isRtl ? 'تفاصيل' : 'Details'}
                     onClick={(e) => {
                       e.stopPropagation();
                       onInfo(h);
                     }}
                   >
-                    <BxIcon name="info" />
+                    <span>
+                      <BxIcon name="info" />
+                    </span>
                   </button>
                 )}
+              </div>
+              <div style={{ padding: '0.45rem 0.55rem 0.5rem', background: '#0c0c10' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 900, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {h.titleEn || h.titleAr}
+                </div>
+                {line && <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.66)', lineHeight: 1.35 }}>{line}</div>}
               </div>
             </div>
           );
