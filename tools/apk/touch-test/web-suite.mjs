@@ -467,6 +467,54 @@ scenario('desktop', async (browser) => {
   check(G, 'no page errors on the computer home', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
   await page.close();
 
+  // Cards and the weekly schedule show only what the API says.
+  ({ page, ctx } = await openWeb(browser, { route: '/', phone: false }));
+  await waitFor(page, () => document.querySelectorAll('.wit-ep-card').length > 3, null, 10000);
+  const cardTexts = await page.evaluate(() => [...document.querySelectorAll('.wit-ep-card, .wit-anime-card')].map((c) => c.innerText));
+  const fhdCards = cardTexts.filter((tx) => /FHD/.test(tx));
+  check(G, 'computer cards: no «👑 FHD» badge (a card does not know the qualities)', cardTexts.length > 0 && fhdCards.length === 0, `${fhdCards.length}/${cardTexts.length} cards`);
+  const strayStatus = await page.evaluate(() => [...document.querySelectorAll('.wit-badge--status')].filter((b) => !b.closest('#schedule-section')).map((b) => b.textContent.trim()));
+  check(G, 'computer cards: no guessed «يعرض الآن» on titles the API gave no status', strayStatus.length === 0, strayStatus.join(', ') || 'none');
+  const unknownEp = await page.evaluate(() => [...document.querySelectorAll('.wit-ep-card')].find((c) => c.innerText.includes('Test Anime 2'))?.innerText ?? null);
+  check(G, 'latest episodes: a card without an episode number shows no «الحلقة ٠»', unknownEp !== null && !/الحلقة\s*[0٠](?![0-9٠-٩])|Ep\.?\s*0(?!\d)/.test(unknownEp), (unknownEp ?? 'card missing').replace(/\n/g, ' / ').slice(0, 120));
+  const pillUnderBell = await page.evaluate(() => {
+    const card = [...document.querySelectorAll('.wit-ep-card')].find((c) => c.querySelector('.wit-ep-card__num'));
+    const a = card?.querySelector('.wit-ep-card__num')?.getBoundingClientRect();
+    const b = card?.querySelector('.wit-bell-btn')?.getBoundingClientRect();
+    if (!a || !b) return null;
+    return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+  });
+  check(G, 'latest episodes: the episode label is not under the alert bell (it read «لقة ٧»)', pillUnderBell === false, String(pillUnderBell));
+
+  await page.evaluate(() => document.querySelector('#schedule-section')?.scrollIntoView());
+  await waitFor(page, () => document.querySelectorAll('#schedule-section .wit-anime-card').length > 0, null, 8000);
+  const schedCards = () => page.evaluate(() => [...document.querySelectorAll('#schedule-section .wit-anime-card')].map((c) => c.innerText.replace(/\s+/g, ' ').trim()));
+  const schedToday = await schedCards();
+  check(G, 'schedule: today lists the show airing today (AniList time), not the latest episodes', schedToday.length === 1 && schedToday[0].includes('Today Show'), schedToday.join(' | ').slice(0, 160));
+  check(G, 'schedule: the card shows the next episode and its air time', /الحلقة 5\D{1,6}\d{1,2}:\d{2}/.test(asciiDigits(schedToday[0] || '')), schedToday[0] || 'none');
+  const pickDay = (offset) => page.evaluate((off) => {
+    const names = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    const want = names[(new Date().getDay() + off) % 7];
+    const tab = [...document.querySelectorAll('#schedule-section .wit-day-tab')].find((b) => b.textContent.trim().startsWith(want));
+    tab?.click();
+    return Boolean(tab);
+  }, offset);
+  await pickDay(1);
+  await sleep(300);
+  const schedTomorrow = await schedCards();
+  check(G, 'schedule: tomorrow\'s tab lists tomorrow\'s show only', schedTomorrow.length === 1 && schedTomorrow[0].includes('Tomorrow Show'), schedTomorrow.join(' | ').slice(0, 160));
+  await pickDay(2);
+  await sleep(300);
+  const schedEmpty = await page.evaluate(() => ({ cards: document.querySelectorAll('#schedule-section .wit-anime-card').length, text: document.querySelector('#schedule-section')?.innerText || '' }));
+  check(G, 'schedule: a day with nothing on says so (it used to repeat the latest episodes)', schedEmpty.cards === 0 && /لا توجد حلقات مسجلة لهذا اليوم/.test(schedEmpty.text), `${schedEmpty.cards} cards`);
+
+  await page.evaluate(() => [...document.querySelectorAll('.wit-ep-card')].find((c) => c.innerText.includes('Test Anime 2'))?.click());
+  await waitFor(page, () => location.pathname !== '/', null, 5000);
+  const openedPath = await page.evaluate(() => location.pathname);
+  check(G, 'latest episodes: that card opens the title page (it opened /watch/<slug>/null)', openedPath === '/show/aw-test-anime-2', openedPath);
+  check(G, 'no page errors on the computer cards and schedule', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
   // Hidden genres on the computer website: title and player pages say "not available".
   const hiddenSlug = slugOf(HIDDEN_ANIME[0].name);
   for (const route of [`/show/${hiddenSlug}`, `/watch/${hiddenSlug}/1`]) {

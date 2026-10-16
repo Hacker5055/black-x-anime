@@ -53,7 +53,7 @@ ONLY=links,back bash tools/apk/touch-test/run-web.sh    # some scenarios
 DIST=/path/to/website/build bash tools/apk/touch-test/run-web.sh
 ```
 
-`web-suite.mjs` (117 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
+`web-suite.mjs` (127 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
 the site's same-origin `/api/*` goes to the mock, Google Fonts are answered with the bundled fonts so
 Arabic renders in screenshots). A 412×915 touch phone with a phone browser user agent, or a 1440×900
 computer. Scenarios: `boot` (phone → app interface, computer → website, `?ui=` switch remembered,
@@ -62,7 +62,9 @@ footer link back, no APK update card), `links` (`/show`, `/watch`, `/discover`, 
 `sync` (the address bar follows the page), `back` (browser back steps back one app level, leaves the
 site at home, no piled-up history, no entry before the first tap), `profile` (Android download and
 computer-version rows, Google opens Firebase's popup, not the APK window), `player` (+10 s, browser
-full screen + landscape), `genres` and `desktop` (computer home without invented values, hidden
+full screen + landscape), `genres` and `desktop` (computer home without invented values: no «👑 FHD»
+on the cards, no guessed «يعرض الآن», no «الحلقة ٠» (that card opens the title page), the episode label
+clear of the alert bell, a weekly schedule built from real air times (`/api/anime/schedule` mock); hidden
 titles «مش متاح», AniList queries with the exclusions, the player page seen as VIP Monarch: no
 «4K HDR • 60FPS» toggle, no colour filter over the video, no 4K / HDR / 60fps copy, no «VIP Fast CDN»
 switch, «Early Access» pill or 24-hour badge, real episode numbers with «الأحدث» on the newest; as a

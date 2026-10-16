@@ -276,7 +276,9 @@ export default function LandingHero({ items = [], onOpenAuth }) {
               <div className="hero-carousel__poster-overlay">
                 <span className="hero-carousel__poster-overlay-title">{displayTitle}</span>
                 <span className="hero-carousel__poster-overlay-meta">
-                  HD · {t('watch.sub')} · {current.episode ? `Ep. ${current.episode}` : t('browse.series')}
+                  {t('watch.sub')} · {Number(current.episode) > 0
+                    ? (lang === 'ar' ? `الحلقة ${formatNumber(current.episode)}` : `Ep. ${formatNumber(current.episode)}`)
+                    : t('browse.series')}
                 </span>
               </div>
             </div>

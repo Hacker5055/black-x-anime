@@ -5749,6 +5749,9 @@ body {
   position: absolute;
   bottom: 7px;
   inset-inline-end: 7px;
+  /* .ep-tile__num also sets inset-inline-start, which stretched the pill across the card
+     and put «الحلقة» under the alert bell (it read «لقة ٧»). Hug the text instead. */
+  inset-inline-start: auto;
   top: auto !important;
   background: rgba(4, 4, 4, 0.9) !important;
   backdrop-filter: blur(14px) !important;
