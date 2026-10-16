@@ -1342,7 +1342,11 @@ function WeeklyScheduleSection() {
           {dayItems.map((slot, i) => {
             const m = slot.media;
             const name = m.titleEnglish || m.titleRomaji || '';
-            const time = timeFormat.format(new Date(slot.airingAt * 1000));
+            const at = new Date(slot.airingAt * 1000);
+            // On today's tab, a show whose episode already aired today is listed with its NEXT
+            // episode, a week from now: say so, so «Ep. 4 • 10:00» is not read as airing today.
+            const nextWeek = at.getDay() === todayJs && at.toDateString() !== new Date().toDateString();
+            const time = timeFormat.format(at) + (nextWeek ? (lang === 'ar' ? ' • الأسبوع القادم' : ' • next week') : '');
             const ep = Number(slot.episode) > 0 ? formatNumber(slot.episode) : '';
             return (
               <ShowCard

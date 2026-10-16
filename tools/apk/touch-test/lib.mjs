@@ -320,7 +320,7 @@ function api(req, url, ctx) {
     });
   }
   // Real air times (AniList) for the computer home's weekly schedule: one show later today,
-  // one tomorrow, one in three days. Day buckets are UTC like the server; the page regroups.
+  // one that aired earlier today (next episode in a week), one tomorrow, one in three days. Day buckets are UTC like the server; the page regroups.
   if (p === '/api/anime/schedule') {
     const now = Math.floor(Date.now() / 1000);
     const slot = (id, name, inSec, episode) => ({
@@ -331,7 +331,13 @@ function api(req, url, ctx) {
         color: '#888888', genres: ['Action'], episodes: 12, status: 'RELEASING', format: 'TV', nextEpisode: episode, nextAiringAt: now + inSec
       }
     });
-    const slots = [slot(9101, 'Today Show', 60, 5), slot(9102, 'Tomorrow Show', 86400, 9), slot(9103, 'Later Show', 3 * 86400, 2)];
+    const slots = [
+      slot(9101, 'Today Show', 60, 5),
+      // Aired a minute ago, so AniList's next airing is the same weekday next week.
+      slot(9104, 'Aired Earlier Show', 7 * 86400 - 60, 7),
+      slot(9102, 'Tomorrow Show', 86400, 9),
+      slot(9103, 'Later Show', 3 * 86400, 2)
+    ];
     const days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
     for (const s of slots) days[new Date(s.airingAt * 1000).getUTCDay()].push(s);
     return json(req, { days, weekStart: now, weekEnd: now + 7 * 86400 });

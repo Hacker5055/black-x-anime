@@ -490,8 +490,11 @@ scenario('desktop', async (browser) => {
   await waitFor(page, () => document.querySelectorAll('#schedule-section .wit-anime-card').length > 0, null, 8000);
   const schedCards = () => page.evaluate(() => [...document.querySelectorAll('#schedule-section .wit-anime-card')].map((c) => c.innerText.replace(/\s+/g, ' ').trim()));
   const schedToday = await schedCards();
-  check(G, 'schedule: today lists the show airing today (AniList time), not the latest episodes', schedToday.length === 1 && schedToday[0].includes('Today Show'), schedToday.join(' | ').slice(0, 160));
-  check(G, 'schedule: the card shows the next episode and its air time', /الحلقة 5\D{1,6}\d{1,2}:\d{2}/.test(asciiDigits(schedToday[0] || '')), schedToday[0] || 'none');
+  const laterToday = schedToday.find((tx) => / Today Show /.test(` ${tx} `) && !tx.includes('Aired Earlier Show')) || '';
+  const airedToday = schedToday.find((tx) => tx.includes('Aired Earlier Show')) || '';
+  check(G, 'schedule: today lists the shows of today\'s weekday (AniList times), not the latest episodes', schedToday.length === 2 && Boolean(laterToday) && Boolean(airedToday) && !schedToday.some((tx) => /Test Anime/.test(tx)), schedToday.join(' | ').slice(0, 200));
+  check(G, 'schedule: the card shows the next episode and its air time', /الحلقة 5\D{1,6}\d{1,2}:\d{2}/.test(asciiDigits(laterToday)) && !/الأسبوع القادم/.test(laterToday), laterToday || 'none');
+  check(G, 'schedule: a show that already aired today says its next episode is next week', /الحلقة 7\D{1,6}\d{1,2}:\d{2}.*الأسبوع القادم/.test(asciiDigits(airedToday)), airedToday || 'none');
   const pickDay = (offset) => page.evaluate((off) => {
     const names = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     const want = names[(new Date().getDay() + off) % 7];
