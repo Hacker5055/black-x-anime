@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -8,13 +8,10 @@ import VideoPlayer from '../components/VideoPlayer.jsx';
 import LiveArabicSubtitlesPanel from '../components/LiveArabicSubtitlesPanel.jsx';
 import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
-import {
-  isEpisodeDelayedForFreeUser,
-  isAnimeEpisodeAlertEnabled,
-  toggleAnimeEpisodeAlert
-} from '../utils/deviceNotifications.js';
+import { isAnimeEpisodeAlertEnabled, toggleAnimeEpisodeAlert } from '../utils/deviceNotifications.js';
 import { DownloadModal } from '../components/DownloadModal.jsx';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
+import { isHiddenAnime } from '../../../shared/contentFilter.js';
 import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
 
 export default function Watch({ onOpenAuth }) {
@@ -230,8 +227,6 @@ export default function Watch({ onOpenAuth }) {
   const title = show ? ((lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn) : slug;
   const vipTier = resolveUserVipTier(user);
   const isVipMember = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
-  const [vipFastCdn, setVipFastCdn] = useState(() => isVipMember);
-  const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
 
   // Broadcast active stream session to the Website Mini Floating Player
   useEffect(() => {
@@ -258,14 +253,6 @@ export default function Watch({ onOpenAuth }) {
   }, [slug]);
 
   const maxEpisodeNum = episodes.length ? Math.max(...episodes.map((e) => Number(e.episode || 0))) : 0;
-  const isLatestOfficialEp = !isAniProject && episodes.length > 1 && Number(episode) === maxEpisodeNum;
-  // AniProject has no verified release dates or same-day VIP contract. Never
-  // block its last listed episode just because it is last in the list.
-  const isDelayedForFree = !isAniProject && isEpisodeDelayedForFreeUser({
-    episodeNumber: episode,
-    totalEpisodes: maxEpisodeNum,
-    vipTier
-  });
 
   if (showQuery.loading && sourcesLoading) return <LiquidLoader />;
   if (showQuery.error && !show) {
@@ -277,102 +264,23 @@ export default function Watch({ onOpenAuth }) {
       </div>
     );
   }
+  // Ecchi / Harem / Isekai are hidden from BLACK X (shared/contentFilter.js; the API marks them).
+  if (show && isHiddenAnime(show)) {
+    return (
+      <div className="glass" style={{ padding: '2.5rem' }}>
+        <EmptyState icon="✕" title={lang === 'ar' ? 'العمل ده مش متاح على BLACK X' : 'This title is not available on BLACK X'}>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate('/')}>{t('common.back')}</button>
+        </EmptyState>
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="watch-layout">
         <div className="watch-main">
           {/* ---------- the player ---------- */}
-          {isDelayedForFree ? (
-            <div className="player-shell glass">
-              <div
-                className="player-stage"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: '390px',
-                  padding: '2.5rem 1.5rem',
-                  textAlign: 'center',
-                  background: '#050508',
-                  border: '1px solid rgba(255, 255, 255, 0.2)'
-                }}
-              >
-                <div style={{ fontSize: '3.2rem', marginBottom: '0.75rem' }}>⏳👑</div>
-                <span
-                  style={{
-                    padding: '0.32rem 0.95rem',
-                    borderRadius: '999px',
-                    background: '#ffffff',
-                    border: '1px solid #ffffff',
-                    color: '#000000',
-                    fontWeight: 900,
-                    fontSize: '0.8rem',
-                    marginBottom: '0.85rem'
-                  }}
-                >
-                  {lang === 'ar'
-                    ? '👑 عرض اليوم الرسمي — متاح فوراً لمشتركي VIP فقط'
-                    : '👑 Official Release Day — Instant Access for VIP Members'}
-                </span>
-                <h2 style={{ margin: '0 0 0.6rem', fontSize: '1.45rem', fontWeight: 900 }}>
-                  {lang === 'ar'
-                    ? `الحلقة ${formatNumber(episode)} متاحة الآن لمشتركي VIP، وتفتح للنسخة المجانية بعد 24 ساعة`
-                    : `Episode ${formatNumber(episode)} is live now for VIP members, and unlocks for Free users in 24 hours`}
-                </h2>
-                <p style={{ maxWidth: '560px', color: 'rgba(255,255,255,0.72)', fontSize: '0.92rem', lineHeight: 1.65, marginBottom: '1.25rem' }}>
-                  {lang === 'ar'
-                    ? 'مشتركو باقات ⚡ VIP Basic و 🔮 VIP Monarch يشاهدون الحلقات الرسمية في نفس يوم صدورها وبجودة FHD 1080p / 4K بدون تأخير.'
-                    : '⚡ VIP Basic and 🔮 VIP Monarch members watch official episodes on release day in FHD 1080p / 4K with zero delay.'}
-                </p>
-
-                <div
-                  style={{
-                    padding: '0.65rem 1.4rem',
-                    borderRadius: '999px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.28)',
-                    fontFamily: 'monospace',
-                    fontSize: '1.1rem',
-                    fontWeight: 900,
-                    color: '#ffffff',
-                    marginBottom: '1.5rem'
-                  }}
-                >
-                  ⏱️ {lang === 'ar' ? 'الوقت المتبقي للنسخة المجانية: 23 ساعة و 59 دقيقة' : 'Free Release Countdown: 23h 59m'}
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/profile?tab=referrals')}
-                    style={{
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: '1.5px solid #ffffff',
-                      fontWeight: 900,
-                      padding: '0.85rem 1.6rem',
-                      borderRadius: '999px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    👑 {lang === 'ar' ? 'اشترك في VIP أو فعّل كودك للمشاهدة فوراً' : 'Upgrade to VIP / Redeem Code to Watch Now'}
-                  </button>
-                  {prevEp && (
-                    <button
-                      type="button"
-                      className="btn btn--ghost"
-                      onClick={() => navigate(`/watch/${slug}/${prevEp.episode}`)}
-                      style={{ fontWeight: 800, padding: '0.85rem 1.35rem', borderRadius: '999px' }}
-                    >
-                      🎬 {lang === 'ar' ? `مشاهدة الحلقة السابقة المتاحة مجاناً (${formatNumber(prevEp.episode)})` : `Watch Previous Free Episode (${formatNumber(prevEp.episode)})`}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : sourcesLoading ? (
+          {sourcesLoading ? (
             <div className="player-shell glass">
               <div className="player-stage" style={{ display: 'grid', placeItems: 'center', minHeight: '320px' }}>
                 <div className="liquid-loader">
@@ -397,7 +305,7 @@ export default function Watch({ onOpenAuth }) {
               </div>
             </div>
           ) : (
-            <div style={!isAniProject && monarch4kHdr ? { filter: 'contrast(1.1) saturate(1.18) brightness(1.03)', transition: 'filter 0.3s ease' } : undefined}>
+            <div>
               <VideoPlayer
                 key={`${slug}-${episode}-${sourceParam || 'auto'}`}
                 entries={episodeData.entries}
@@ -408,8 +316,6 @@ export default function Watch({ onOpenAuth }) {
                 episodeLabel={t('watch.episodePicker', { n: formatNumber(episode) })}
                 startTime={resumeAt}
                 resumePrompt={resumeAt > 0}
-                vipTier={vipTier}
-                onRequireVip={() => navigate('/profile?tab=referrals')}
                 onProgress={(pos, dur) => {
                   lastPos.current = { pos, dur };
                   saveRef.current?.(pos, dur);
@@ -432,119 +338,16 @@ export default function Watch({ onOpenAuth }) {
             </div>
           )}
 
-          {/* Do not advertise unverified VIP CDN/4K access for the AniProject provider. */}
-          {isAniProject ? (
+          {/* Nothing here advertises VIP streaming modes. There is no 4K / HDR / 60 fps mode, no
+              uncompressed «VIP Fast CDN» switch and no early access: the old Monarch 4K toggle only tinted
+              the video, the Fast CDN toggle changed nothing (the API already lists direct servers first for
+              VIP) and free users were never delayed. All removed with the owner's OK (2026-10-16); do not
+              bring them back. The upgrade button lives with the actions under the player. */}
+          {isAniProject && (
             <div className="glass" style={{ marginTop: '0.85rem', padding: '0.8rem 1rem', color: 'rgba(255,255,255,0.8)' }}>
               {lang === 'ar'
                 ? '🔎 سيرفر BLACK X 4 — جودة البث والترجمة حسب الخادم المصدر؛ إذا تعذر التشغيل، تحقق من إعدادات CORS أو ANIPROJECT_MEDIA_HOSTS.'
                 : '🔎 BLACK X 4 — quality and subtitles depend on the upstream server. If playback fails, check CORS or ANIPROJECT_MEDIA_HOSTS.'}
-            </div>
-          ) : (
-            <div
-              className="glass"
-              style={{
-                marginTop: '0.85rem',
-                padding: '0.75rem 1.15rem',
-                borderRadius: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
-                border: monarch4kHdr ? '1px solid rgba(168,85,247,0.55)' : vipFastCdn ? '1px solid rgba(245,158,11,0.45)' : '1px solid rgba(255,255,255,0.1)'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', fontWeight: 900, color: '#ffffff' }}>
-                  <img src="/blackx-logo.png" alt="BLACK X" style={{ width: '18px', height: '18px', borderRadius: '5px', objectFit: 'cover' }} />
-                  <span>{lang === 'ar' ? 'محرك البث (Streaming Engine):' : 'Streaming Engine:'}</span>
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (vipTier === 'free') {
-                      pushToast(
-                        lang === 'ar'
-                          ? '🔒 سيرفرات VIP Fast CDN فائقة السرعة بدون ضغط متاحة لباقة ⚡ VIP Basic (99 ج.م) أو 🔮 VIP Monarch!'
-                          : '🔒 VIP Fast CDN requires ⚡ VIP Basic or 🔮 VIP Monarch!',
-                        'info'
-                      );
-                      navigate('/profile?tab=referrals');
-                      return;
-                    }
-                    setVipFastCdn((v) => !v);
-                    pushToast(lang === 'ar' ? '🚀 تم التبديل إلى سيرفر VIP Fast CDN فائق السرعة بدون ضغط!' : '🚀 Switched to VIP Fast CDN!', 'success');
-                  }}
-                  style={{
-                    padding: '0.38rem 0.9rem',
-                    borderRadius: '999px',
-                    fontWeight: 900,
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    background: vipFastCdn ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                    color: vipFastCdn ? '#000000' : '#ffffff',
-                    border: vipFastCdn ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)'
-                  }}
-                >
-                  ⚡ VIP Fast CDN {vipFastCdn ? '✓' : '🔒'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (vipTier !== 'vip_monarch') {
-                      pushToast(
-                        lang === 'ar'
-                          ? '🔒 البث بدقة 4K HDR ومعدل إطارات 60fps متاح حصرياً لباقة 🔮 VIP Monarch (إمبراطور الظلال - 199 ج.م)!'
-                          : '🔒 4K HDR 60fps streaming requires 🔮 VIP Monarch!',
-                        'info'
-                      );
-                      navigate('/profile?tab=referrals');
-                      return;
-                    }
-                    setMonarch4kHdr((v) => !v);
-                    pushToast(lang === 'ar' ? '🔮 تم تفعيل معالج البث 4K HDR • 60FPS الفائق!' : '🔮 4K HDR • 60FPS Mode Active!', 'success');
-                  }}
-                  style={{
-                    padding: '0.38rem 0.9rem',
-                    borderRadius: '999px',
-                    fontWeight: 900,
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    background: monarch4kHdr ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                    color: monarch4kHdr ? '#000000' : '#ffffff',
-                    border: monarch4kHdr ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)'
-                  }}
-                >
-                  🔮 4K HDR • 60FPS {monarch4kHdr ? '✓' : '🔒'}
-                </button>
-
-                {vipTier === 'vip_monarch' && (
-                  <span style={{ fontSize: '0.74rem', fontWeight: 900, color: '#000000', padding: '0.2rem 0.65rem', borderRadius: '999px', background: '#ffffff' }}>
-                    ⏳ {lang === 'ar' ? 'وصول مبكر (Early Access مفعّل)' : 'Early Access Unlocked'}
-                  </span>
-                )}
-              </div>
-
-              {vipTier === 'free' && (
-                <button
-                  type="button"
-                  onClick={() => navigate('/profile?tab=referrals')}
-                  style={{
-                    fontSize: '0.76rem',
-                    background: '#ffffff',
-                    color: '#000000',
-                    border: 'none',
-                    borderRadius: '999px',
-                    padding: '0.42rem 0.95rem',
-                    fontWeight: 900,
-                    cursor: 'pointer'
-                  }}
-                >
-                  👑 {lang === 'ar' ? 'ترقية إلى VIP / تفعيل كود اشتراك' : 'Upgrade to VIP / Redeem Code'}
-                </button>
-              )}
             </div>
           )}
 
@@ -604,6 +407,11 @@ export default function Watch({ onOpenAuth }) {
                   onClick={markWatched}
                 >
                   ✓ {t('watch.markWatched')}
+                </button>
+              )}
+              {!isAniProject && vipTier === 'free' && (
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate('/profile?tab=referrals')}>
+                  👑 {lang === 'ar' ? 'ترقية إلى VIP / تفعيل كود اشتراك' : 'Upgrade to VIP / Redeem Code'}
                 </button>
               )}
               {nextEp && (
@@ -857,17 +665,18 @@ export default function Watch({ onOpenAuth }) {
                     </span>
                     {isLatest && (
                       <span
+                        className="watch-ep__latest"
                         style={{
                           fontSize: '0.66rem',
                           fontWeight: 900,
                           padding: '0.12rem 0.45rem',
                           borderRadius: '99px',
-                          background: vipTier === 'free' ? 'rgba(245,158,11,0.22)' : 'rgba(16,185,129,0.22)',
-                          color: vipTier === 'free' ? '#fde047' : '#34d399',
-                          border: vipTier === 'free' ? '1px solid #f59e0b' : '1px solid #10b981'
+                          background: 'rgba(255,255,255,0.12)',
+                          color: '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.35)'
                         }}
                       >
-                        {vipTier === 'free' ? '⏳ 24س / VIP 👑' : '👑 يوم العرض VIP'}
+                        {lang === 'ar' ? 'الأحدث' : 'Latest'}
                       </span>
                     )}
                     {e.episode === episode && <span className="watch-ep__now">{t('show.playing')}</span>}

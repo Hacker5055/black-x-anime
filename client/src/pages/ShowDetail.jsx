@@ -7,12 +7,12 @@ import { api } from '../api.js';
 import { useAsync, useDominantColor, applyLiveColor, pushToast } from '../hooks/hooks.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { RatingPanel } from '../components/Features.jsx';
-import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import {
   isAnimeEpisodeAlertEnabled,
   toggleAnimeEpisodeAlert
 } from '../utils/deviceNotifications.js';
 import { auth, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
+import { isHiddenAnime } from '../../../shared/contentFilter.js';
 
 export default function ShowDetail({ onOpenAuth }) {
   const { slug } = useParams();
@@ -30,7 +30,6 @@ export default function ShowDetail({ onOpenAuth }) {
   const [progress, setProgress] = useState({});
   const [epFilter, setEpFilter] = useState('');
   const [alertEnabled, setAlertEnabled] = useState(() => isAnimeEpisodeAlertEnabled(slug));
-  const vipTier = resolveUserVipTier(user);
 
   useEffect(() => {
     setAlertEnabled(isAnimeEpisodeAlertEnabled(slug));
@@ -105,6 +104,17 @@ export default function ShowDetail({ onOpenAuth }) {
     );
   }
 
+  // Ecchi / Harem / Isekai are hidden from BLACK X (shared/contentFilter.js; the API marks them).
+  if (isHiddenAnime(show)) {
+    return (
+      <div className="glass" style={{ padding: '2.5rem' }}>
+        <EmptyState icon="✕" title={lang === 'ar' ? 'العمل ده مش متاح على BLACK X' : 'This title is not available on BLACK X'}>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate('/')}>{t('common.back')}</button>
+        </EmptyState>
+      </div>
+    );
+  }
+
   const title = (lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn;
   const otherTitle = lang === 'ar' ? show.titleEn : show.titleAr;
   const eps = (show.episodes || []).map((e, idx) => ({
@@ -113,6 +123,22 @@ export default function ShowDetail({ onOpenAuth }) {
     number: Number(e.number ?? e.episode) > 0 ? Number(e.number ?? e.episode) : idx + 1
   }));
   const continueEp = eps.find((e) => progress[e.episode] && !progress[e.episode].completed) || eps[0];
+  // Once per render (it used to be recomputed for every episode: ~1M comparisons for a 1,000-episode show).
+  const latestEpNum = eps.reduce((max, e) => Math.max(max, Number(e.episode) || 0), 0);
+  // Facts the API really has (no invented likes, views, match %, quality or duration).
+  const episodeTotal = Number(show.episodeCount) > 0 ? Number(show.episodeCount) : eps.length;
+  const ratingRaw = Number(show.rating) || (Number(show.score) > 0 ? Number(show.score) : 0);
+  const ratingTen = ratingRaw > 0 ? (ratingRaw > 10 ? ratingRaw / 10 : ratingRaw).toFixed(1) : '';
+  const serverLabel = isAniProject ? 'BLACK X 4' : String(show.sourceName || show.sourceLabel || '').replace(/^سيرفر\s+/, '') || 'BLACK X';
+  const facts = [
+    { label: lang === 'ar' ? 'النوع' : 'Type', value: show.type || '' },
+    { label: lang === 'ar' ? 'الحالة' : 'Status', value: show.status || '' },
+    { label: lang === 'ar' ? 'عدد الحلقات' : 'Episodes', value: episodeTotal ? formatNumber(episodeTotal) : '' },
+    { label: lang === 'ar' ? 'السنة' : 'Year', value: show.year ? String(show.year) : '' },
+    { label: lang === 'ar' ? 'الموسم' : 'Season', value: show.season || '' },
+    { label: lang === 'ar' ? 'الاستوديو' : 'Studio', value: show.studio || '' },
+    { label: lang === 'ar' ? 'السيرفر' : 'Server', value: serverLabel }
+  ].filter((f) => f.value);
 
   return (
     <>
@@ -185,7 +211,7 @@ export default function ShowDetail({ onOpenAuth }) {
                   fontWeight: 900
                 }}
               >
-                {isAniProject ? 'BLACK X 4' : '4K Ultra • 120Hz'}
+                {serverLabel}
               </span>
             </div>
 
@@ -197,86 +223,40 @@ export default function ShowDetail({ onOpenAuth }) {
                 {show.episodeCount ? t('show.episodeCount', { n: formatNumber(show.episodeCount) }) : `${eps.length} EP`}
               </span>
               {!isAniProject && (
-                <>
-                  <span className="badge badge--open" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)' }}>
-                    {t('watch.sub')}
-                  </span>
-                  <span className="badge" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)', fontWeight: 900 }}>
-                    👑 FHD 1080p • VIP
-                  </span>
-                </>
+                <span className="badge badge--open" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)' }}>
+                  {t('watch.sub')}
+                </span>
               )}
+              {ratingTen ? (
+                <span className="badge" style={{ borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.22)', fontWeight: 900 }}>
+                  ★ {ratingTen}
+                </span>
+              ) : null}
             </div>
 
-            {/* Do not invent popularity, quality or release figures for the search-only source. */}
             {isAniProject ? (
               <p style={{ margin: '0.95rem 0', color: 'rgba(255,255,255,0.72)', fontSize: '0.85rem' }}>
                 {lang === 'ar'
                   ? 'الحلقات المتاحة من BLACK X 4 مدرجة أدناه. جودة البث والترجمة تعتمد على الخادم المصدر.'
                   : 'Available BLACK X 4 episodes are listed below. Playback quality and subtitles depend on the upstream source.'}
               </p>
-            ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-                  gap: '0.4rem',
-                  padding: '0.75rem 0.5rem',
-                  margin: '0.95rem 0',
-                  borderRadius: '20px',
-                  background: 'rgba(12, 12, 18, 0.9)',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  textAlign: 'center'
-                }}
-              >
-                {[
-                  { icon: '🎞️', val: show.episodeCount || eps.length || '12', lbl: lang === 'ar' ? 'حلقات' : 'Eps' },
-                  { icon: '♥', val: '1.4K', lbl: lang === 'ar' ? 'إعجاب' : 'Likes' },
-                  { icon: '👁', val: '24.8K', lbl: lang === 'ar' ? 'مشاهدة' : 'Views' },
-                  { icon: '💬', val: '186', lbl: lang === 'ar' ? 'تقييم' : 'Reviews' },
-                  { icon: '🧬', val: '98%', lbl: lang === 'ar' ? 'تطابق' : 'Match' },
-                  { icon: '★', val: '9.5', lbl: lang === 'ar' ? 'التقييم' : 'Score' }
-                ].map((st, idx) => (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                    <span style={{ fontSize: '0.92rem', lineHeight: 1 }}>{st.icon}</span>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 900, color: '#ffffff' }}>{st.val}</span>
-                    <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'rgba(255,255,255,0.58)' }}>{st.lbl}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            ) : null}
 
             {show.description && (
               <p className="detail-synopsis" style={{ color: 'rgba(255,255,255,0.82)' }}>{show.description}</p>
             )}
 
-            {/* Official slothUI Pro Metadata Grid */}
-            <div className="wit-meta-grid">
-              <div className="wit-meta-item">
-                <span className="wit-meta-label">{lang === 'ar' ? 'النوع:' : 'Type:'}</span>
-                <span className="wit-meta-val">{isAniProject ? (lang === 'ar' ? 'أنمي' : 'Anime') : 'TV • 120Hz'}</span>
+            {/* What the API knows about the title; unknown facts are left out. */}
+            {facts.length > 0 && (
+              <div className="wit-meta-grid">
+                {facts.map((f) => (
+                  <div key={f.label} className="wit-meta-item">
+                    <span className="wit-meta-label">{f.label}:</span>
+                    <span className="wit-meta-val" dir="auto">{f.value}</span>
+                  </div>
+                ))}
               </div>
-              <div className="wit-meta-item">
-                <span className="wit-meta-label">{lang === 'ar' ? 'حالة الأنمي:' : 'Status:'}</span>
-                <span className="wit-meta-val" style={{ color: '#ffffff' }}>{isAniProject ? (show.status || '—') : (lang === 'ar' ? 'يعرض الآن' : 'Airing')}</span>
-              </div>
-              <div className="wit-meta-item">
-                <span className="wit-meta-label">{lang === 'ar' ? 'عدد الحلقات:' : 'Episodes:'}</span>
-                <span className="wit-meta-val">{show.episodeCount || eps.length || '?'}</span>
-              </div>
-              <div className="wit-meta-item">
-                <span className="wit-meta-label">{lang === 'ar' ? 'مدة الحلقة:' : 'Duration:'}</span>
-                <span className="wit-meta-val">{isAniProject ? '—' : (lang === 'ar' ? '24 دقيقة' : '24 min')}</span>
-              </div>
-              <div className="wit-meta-item">
-                <span className="wit-meta-label">{lang === 'ar' ? 'المصدر:' : 'Source:'}</span>
-                <span className="wit-meta-val">{isAniProject ? 'BLACK X 4' : (lang === 'ar' ? 'مانجا يابانية' : 'Manga')}</span>
-              </div>
-              <div className="wit-meta-item">
-                <span className="wit-meta-label">{lang === 'ar' ? 'الجودة المتوفرة:' : 'Quality:'}</span>
-                <span className="wit-meta-val" style={{ color: '#ffffff' }}>{isAniProject ? (lang === 'ar' ? 'حسب المصدر' : 'Varies by source') : '👑 FHD 1080p VIP / HD'}</span>
-              </div>
-            </div>
+            )}
 
             {/* Official slothUI Pro Capsule CTA + Circular Orbs Row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap', marginBlockStart: '1.15rem' }}>
@@ -392,6 +372,7 @@ export default function ShowDetail({ onOpenAuth }) {
                 width: '185px'
               }}
             />
+            {isAniProject && (
             <span
               style={{
                 fontSize: '0.76rem',
@@ -403,12 +384,9 @@ export default function ShowDetail({ onOpenAuth }) {
                 color: '#ffffff'
               }}
             >
-              {isAniProject
-                ? (lang === 'ar' ? '🔎 الحلقات المتاحة من سيرفر BLACK X 4' : '🔎 Episodes available on BLACK X 4')
-                : vipTier === 'free'
-                  ? (lang === 'ar' ? '⏳ الحلقات الرسمية الجديدة تفتح لمشتركي VIP في نفس اليوم، وتتأخر 24 ساعة للنسخة المجانية' : '⏳ Official new episodes drop same-day for VIP, 24h delay for Free')
-                  : (lang === 'ar' ? '👑 عضويتك VIP: جميع الحلقات الرسمية تنزل لك في نفس اليوم وبجودة FHD 1080p!' : '👑 VIP Active: Same-day official episodes & FHD 1080p unlocked!')}
+              {lang === 'ar' ? '🔎 الحلقات المتاحة من سيرفر BLACK X 4' : '🔎 Episodes available on BLACK X 4'}
             </span>
+            )}
             <span className="chip" style={{ cursor: 'default' }}>{formatNumber(eps.length)} {t('common.episodes')}</span>
           </div>
         </div>
@@ -424,35 +402,28 @@ export default function ShowDetail({ onOpenAuth }) {
               .map((e) => {
                 const p = progress[e.episode];
                 const pct = p && p.duration ? Math.min(1, p.position / p.duration) : p?.completed ? 1 : 0;
-                const maxEp = eps.length ? Math.max(...eps.map((item) => Number(item.episode || 0))) : 0;
-                const isLatest = !isAniProject && eps.length > 1 && Number(e.episode) === maxEp;
+                const isLatest = !isAniProject && eps.length > 1 && Number(e.episode) === latestEpNum;
                 return (
                   <button
                     key={e.episode}
                     type="button"
                     className={`ep-chip ${p?.completed ? 'watched' : ''}`}
                     onClick={() => navigate(`/watch/${slug}/${e.episode}${srcSuffix}`)}
-                    style={
-                      isLatest
-                        ? {
-                            borderColor: vipTier === 'free' ? '#f59e0b' : '#10b981',
-                            position: 'relative'
-                          }
-                        : undefined
-                    }
+                    style={isLatest ? { borderColor: 'rgba(255,255,255,0.6)', position: 'relative' } : undefined}
                   >
                     <span>{lang === 'ar' ? `الحلقة ${formatNumber(e.episode)}` : `EP ${formatNumber(e.episode)}`}</span>
                     {isLatest && (
                       <span
+                        className="ep-chip__latest"
                         style={{
                           fontSize: '0.62rem',
                           fontWeight: 900,
-                          color: vipTier === 'free' ? '#fde047' : '#34d399',
+                          color: '#ffffff',
                           display: 'block',
                           marginTop: '2px'
                         }}
                       >
-                        {vipTier === 'free' ? '⏳ VIP اليوم' : '👑 VIP'}
+                        {lang === 'ar' ? 'الأحدث' : 'Latest'}
                       </span>
                     )}
                     {p && (

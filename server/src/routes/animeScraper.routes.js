@@ -5,6 +5,7 @@
  * and under `/api/anime-scraper/...`
  */
 import express from 'express';
+import { filterAnimeList } from '../lib/hiddenTitles.js';
 import {
   scraperSearchAnime,
   scraperGetEpisodes,
@@ -83,7 +84,7 @@ animeScraperRouter.get('/get-anime-info/:s_id', async (req, res) => {
 animeScraperRouter.get('/random-anime', async (req, res) => {
   try {
     const count = Math.min(48, Math.max(4, Number(req.query.count) || 24));
-    const results = await scraperRandomAnime(count);
+    const results = await filterAnimeList(await scraperRandomAnime(count)); // hidden genres
     res.json({ items: results, count: results.length });
   } catch (err) {
     res.status(502).json({ error: 'random-anime failed', detail: err.message, items: [] });

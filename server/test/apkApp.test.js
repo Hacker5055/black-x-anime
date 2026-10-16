@@ -13,6 +13,7 @@ const store = await import('../src/services/settingsStore.js');
 const accounts = await import('../src/services/apkAccounts.js');
 const aniskip = await import('../src/services/aniskip.js');
 const apkApp = await import('../src/routes/apkApp.js');
+const { APK_RELEASE } = await import('../../shared/apkRelease.js');
 
 // ------------------------------------------------------------ fake Firestore
 const docs = new Map(); // id -> { fields, updateTime }
@@ -125,7 +126,8 @@ test('config exposes enforcement, broadcast, pin and release — never codes or 
   assert.equal(body.enforced, false);
   assert.equal(body.broadcastMsg, 'hello');
   assert.equal(body.pinnedRec.titleEn, 'One Piece');
-  assert.equal(body.apk.version, '16.0');
+  assert.equal(body.apk.version, APK_RELEASE.version);
+  assert.match(body.apk.version, /^\d+\.\d+$/);
   const raw = JSON.stringify(body);
   assert.ok(!raw.includes('SECRET-1'));
   assert.ok(!raw.includes('victim@example.com'));

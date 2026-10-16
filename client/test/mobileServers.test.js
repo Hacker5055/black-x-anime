@@ -4,6 +4,7 @@ import {
   animeSlugOf,
   bxApiBase,
   bxImageProxyUrl,
+  fetchMobileAnimeSearch,
   fetchMobileChapterPages,
   fetchMobileMangaChapters,
   fetchMobileMangaList,
@@ -16,6 +17,16 @@ import {
   preferPixeldrainMirror,
   unwrapPlayerUrl
 } from '../src/mobile/bxServers.js';
+import {
+  ALGOLIA_BLOCKED_TAGS,
+  getHiddenIds,
+  isBlockedGenre,
+  isHiddenAnime,
+  isHiddenManga,
+  refreshHiddenIds,
+  visibleGenres,
+  withAlgoliaExclusions
+} from '../src/mobile/contentFilter.js';
 
 function withFetch(handler, fn) {
   const original = globalThis.fetch;
@@ -261,4 +272,108 @@ test('inside the APK a CORS/network failure is retried through the native HTTP b
   } finally {
     delete globalThis.window;
   }
+});
+
+/* ---- Hidden genres (Ecchi, Harem, Isekai): contentFilter.js ---- */
+
+test('hidden genres: every spelling, whole words only, nothing else', () => {
+  for (const g of ['ايتشي', 'إيتشي', 'إتشي', 'Ecchi', 'حريم', 'حريم عكسي', 'Reverse Harem', 'Male Harem', 'عالم مختلف', 'عالم آخر', 'إيسيكاي', 'Isekai']) {
+    assert.equal(isBlockedGenre(g), true, g);
+  }
+  for (const g of ['اكشن', 'خيال', 'فانتازيا', 'شونين', 'إيتشيغو', 'تحريم', 'عالم', 'اعادة بعث', 'تناسخ', 'Fantasy', 'Reincarnation', '']) {
+    assert.equal(isBlockedGenre(g), false, g);
+  }
+  assert.deepEqual(visibleGenres(['اكشن', 'عالم مختلف', 'كوميدي', 'ايتشي']), ['اكشن', 'كوميدي']);
+});
+
+test('Algolia exclusions AND with the query filters (exact index values)', () => {
+  assert.deepEqual(ALGOLIA_BLOCKED_TAGS, ['ايتشي', 'حريم', 'عالم مختلف']);
+  const neg = ['tags:-ايتشي', 'tags:-حريم', 'tags:-عالم مختلف'];
+  assert.deepEqual(withAlgoliaExclusions({ query: '', facetFilters: [['type:فيلم']] }).facetFilters, [['type:فيلم'], ...neg]);
+  assert.deepEqual(withAlgoliaExclusions({ facetFilters: 'type:فيلم' }).facetFilters, ['type:فيلم', ...neg]);
+  assert.deepEqual(withAlgoliaExclusions({ query: 'x' }), { query: 'x', facetFilters: neg });
+});
+
+test('typed search drops hidden genres (Arabic tags and English genres)', async () => {
+  await withFetch(
+    (url) => {
+      if (url.startsWith('/api/stream/search?q=')) {
+        return {
+          items: [
+            { slug: 'aw-ok', objectID: 'Ok Show', title: 'Ok Show', tagsAr: ['اكشن'] },
+            { slug: 'aw-isekai', objectID: 'Isekai Show', title: 'Isekai Show', tagsAr: ['خيال', 'عالم مختلف'] },
+            { slug: 'en-harem', title: 'Harem Show', genres: ['Comedy', 'Harem'], source: 'english' },
+            { slug: 'a3rb-ecchi', title: 'Ecchi Show', genres: ['إيتشي'] }
+          ]
+        };
+      }
+      return { status: 404, body: {} };
+    },
+    async () => {
+      const list = await fetchMobileAnimeSearch('show');
+      assert.deepEqual(list.map((a) => a.slug), ['aw-ok']);
+    }
+  );
+});
+
+test('manga lists drop hidden genres; AniList excludes them server-side', async () => {
+  await withFetch(
+    (url) => {
+      if (url.startsWith('/api/content/library?')) {
+        return {
+          items: [
+            { id: 'ok-manhwa', title_en: 'Ok Manhwa', type: 'MANHWA', genres: ['أكشن'] },
+            { id: 'isekai-manhwa', title_en: 'Isekai Manhwa', type: 'MANHWA', genres: ['إيسيكاي', 'سحر'] },
+            { id: 'harem-manga', title_en: 'Harem Manga', type: 'MANGA', genres: ['حريم'] }
+          ]
+        };
+      }
+      if (url === 'https://graphql.anilist.co') {
+        return {
+          data: {
+            Page: {
+              media: [
+                { id: 7, title: { english: 'Clean Title' }, countryOfOrigin: 'JP', genres: ['Drama'], coverImage: { large: 'c.jpg' } },
+                { id: 8, title: { english: 'Ecchi Title' }, countryOfOrigin: 'JP', genres: ['Comedy', 'Ecchi'], coverImage: { large: 'e.jpg' } }
+              ]
+            }
+          }
+        };
+      }
+      return { status: 404, body: {} };
+    },
+    async (calls) => {
+      const list = await fetchMobileMangaList({ server: 'all', page: 1 });
+      assert.deepEqual(list.map((m) => m.objectID), ['bx:ok-manhwa', 'bx:al:7']);
+      const anilist = calls.filter((c) => c.url === 'https://graphql.anilist.co').map((c) => JSON.parse(c.opts.body));
+      assert.equal(anilist.length, 3);
+      for (const body of anilist) {
+        assert.match(body.query, /genre_not_in: \$genreNotIn, tag_not_in: \$tagNotIn/);
+        assert.deepEqual(body.variables.genreNotIn, ['Ecchi', 'Hentai']);
+        assert.deepEqual(body.variables.tagNotIn, ['Isekai', 'Male Harem', 'Female Harem', 'Mixed Gender Harem']);
+      }
+      assert.equal(isHiddenManga({ genres: ['Ecchi'] }), true);
+      assert.equal(isHiddenManga({ genres: ['Drama'] }), false);
+    }
+  );
+});
+
+test('hidden ids: one unfiltered query per tag, then cached for a day', async () => {
+  const asked = [];
+  const rawQuery = async (index, body) => {
+    asked.push({ index, body });
+    const tag = body.facetFilters[0][0];
+    return { hits: tag === 'tags:عالم مختلف' ? [{ objectID: 'Isekai A' }, { objectID: 'Both B' }] : [{ objectID: 'Both B' }] };
+  };
+  const ids = await refreshHiddenIds(rawQuery, { force: true });
+  assert.deepEqual([...ids].sort(), ['Both B', 'Isekai A']);
+  assert.deepEqual(asked.map((a) => a.body.facetFilters), ALGOLIA_BLOCKED_TAGS.map((t) => [[`tags:${t}`]]));
+  assert.ok(asked.every((a) => a.body.hitsPerPage === 1000 && a.body.attributesToRetrieve[0] === 'objectID'));
+  assert.equal(getHiddenIds(), ids);
+  assert.equal(await refreshHiddenIds(rawQuery), null); // within a day: no new queries
+  assert.equal(asked.length, 3);
+  // Saved entries carry no genres: matched by id. Cards are matched by their tags.
+  assert.equal(isHiddenAnime({ objectID: 'Isekai A', titleEn: 'Isekai A' }), true);
+  assert.equal(isHiddenAnime({ objectID: 'Clean', tags: ['اكشن'] }), false);
+  assert.equal(isHiddenAnime({ objectID: 'Other', tags: ['حريم'] }), true);
 });

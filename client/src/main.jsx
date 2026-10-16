@@ -1,10 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import App from './App.jsx';
-import { I18nProvider } from './i18n/I18nProvider.jsx';
-import { AuthProvider } from './context/AuthContext.jsx';
-import './styles/app.css';
+import { decideWebUi } from './webUi.js';
 
 // Unregister any injected proxy service worker (_service-worker.js on *.ai.studio)
 // that intercepts <video> Range requests and breaks video streaming
@@ -25,14 +21,42 @@ if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => setTimeout(cleanSw, 600));
 }
 
-createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <I18nProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </I18nProvider>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+const root = createRoot(document.getElementById('root'));
+
+function showBootError() {
+  root.render(
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#000', color: '#fff', fontFamily: 'system-ui, sans-serif', textAlign: 'center', padding: '1.5rem' }}>
+      <div>
+        <p style={{ margin: '0 0 1rem' }}>BLACK X — تعذّر تحميل الصفحة / The page could not load</p>
+        <button type="button" onClick={() => window.location.reload()} style={{ minHeight: 44, padding: '0.7rem 1.4rem', borderRadius: 12, border: 0, background: '#fff', color: '#000', fontWeight: 700 }}>
+          إعادة المحاولة / Retry
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Phones get the app interface (the same code as the APK, without the website's pages and
+// stylesheet); computers and tablets get the website. See webUi.js.
+if (decideWebUi() === 'app') {
+  window.__BLACKX_WEB_APP__ = true;
+  import('./mobile/ApkRoot.jsx')
+    .then(({ default: ApkRoot }) => {
+      root.render(
+        <React.StrictMode>
+          <ApkRoot platform="web" />
+        </React.StrictMode>
+      );
+    })
+    .catch(showBootError);
+} else {
+  import('./SiteRoot.jsx')
+    .then(({ default: SiteRoot }) => {
+      root.render(
+        <React.StrictMode>
+          <SiteRoot />
+        </React.StrictMode>
+      );
+    })
+    .catch(showBootError);
+}

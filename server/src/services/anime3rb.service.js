@@ -69,10 +69,11 @@ function normalizeAnimeItem(item, thumbBase) {
   const titleEn = String(item.EN_Title || item.Synonyms || animeId).trim();
   const titleAr = String(item.AR_Title || item.EN_Title || titleEn).trim();
   const poster = item.Thumbnail ? `${thumbBase}${item.Thumbnail}` : '';
-  const epCount = Math.max(1, parseInt(item.Episodes, 10) || 12);
+  // Unknown values stay unknown (no invented 12 episodes, 8.6 score or "Action, Fantasy").
+  const epCount = parseInt(item.Episodes, 10) > 0 ? parseInt(item.Episodes, 10) : null;
   const rawScore = parseFloat(item.Score);
-  const score = Number.isFinite(rawScore) && rawScore > 0 && rawScore <= 10 ? Number(rawScore.toFixed(1)) : 8.6;
-  const genres = String(item.Genres || 'Action, Fantasy')
+  const score = Number.isFinite(rawScore) && rawScore > 0 && rawScore <= 10 ? Number(rawScore.toFixed(1)) : null;
+  const genres = String(item.Genres || '')
     .split(',')
     .map((g) => g.trim())
     .filter(Boolean);
@@ -96,7 +97,7 @@ function normalizeAnimeItem(item, thumbBase) {
     episodes: epCount,
     episodeCount: epCount,
     genres,
-    description: `${titleAr}${item.Synonyms ? ` — ${item.Synonyms}` : ''} (${genres.join(' • ')})`,
+    description: `${titleAr}${item.Synonyms ? ` — ${item.Synonyms}` : ''}${genres.length ? ` (${genres.join(' • ')})` : ''}`,
     url: `/show/${slug}?source=anime3rb`,
     source: 'anime3rb',
     sourceLabel: 'سيرفر BLACK X 2'
@@ -324,11 +325,11 @@ class Anime3rbService {
         banner: '',
         score: null,
         rating: null,
-        status: 'مكتمل',
+        status: '',
         season: '',
-        episodes: 12,
-        episodeCount: 12,
-        genres: ['Action', 'Drama'],
+        episodes: null,
+        episodeCount: null,
+        genres: [],
         description: searchQuery,
         url: `/show/${toSlug(clean, searchQuery)}?source=anime3rb`,
         source: 'anime3rb',
@@ -378,7 +379,8 @@ class Anime3rbService {
     } catch {}
 
     if (!episodesList.length) {
-      const count = Math.max(1, record.episodeCount || 12);
+      // Only a count the catalogue really reported (never an invented 12 episodes).
+      const count = Number(record.episodeCount) > 0 ? Number(record.episodeCount) : 0;
       episodesList = Array.from({ length: count }, (_, idx) => ({
         episode: idx + 1,
         title: `الحلقة ${idx + 1}`,

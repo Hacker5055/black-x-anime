@@ -28,6 +28,13 @@ const ANIME_GENRES = [
   { id: 'Sports', ar: '⚽ رياضي', en: '⚽ Sports' }
 ];
 
+/** Score on a 0–100 scale from a 0–10 or 0–100 value; null when unknown (never a made-up 9.2). */
+function score100(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n > 10 ? n : n * 10);
+}
+
 export default function TrendingAnime() {
   const { lang, formatNumber } = useI18n();
   const { user } = useAuth();
@@ -223,8 +230,8 @@ export default function TrendingAnime() {
             titleAr: s.titleAr || s.titleEn || s.slug,
             poster: s.poster,
             episodes: s.episode ?? s.episodes ?? null,
-            score: s.source === 'aniproject' ? (s.score ?? null) : (s.score || 94),
-            genres: s.source === 'aniproject' ? (s.genres || []) : (s.genres || ['Action', 'Fantasy']),
+            score: score100(s.rating || s.score),
+            genres: Array.isArray(s.genres) ? s.genres : [],
             isDirectStream: true,
             isMalOnly: false,
             source: s.source || (String(s.slug).startsWith('a3rb-') ? 'anime3rb' : 'witanime'),
@@ -294,9 +301,10 @@ export default function TrendingAnime() {
         titleEn: sub.titleEn,
         titleAr: sub.titleAr,
         poster: sub.poster,
-        episodes: sub.latestEpisode || 12,
-        score: 94,
-        genres: ['Action', 'Fantasy'],
+        // Saved alerts keep no score or genres: unknown values are not invented.
+        episodes: sub.latestEpisode || null,
+        score: null,
+        genres: [],
         isDirectStream: true,
         source: 'witanime',
         sourceLabel: 'سيرفر BLACK X 1'
@@ -325,9 +333,9 @@ export default function TrendingAnime() {
           titleAr: cat.titleAr || cat.title || cat.titleEn || cat.slug,
           poster: cat.poster,
           banner: cat.banner,
-          episodes: cat.episodeCount || cat.episodes || 24,
-          score: Math.round((cat.rating || cat.score || 9.2) > 10 ? (cat.rating || cat.score || 92) : (cat.rating || cat.score || 9.2) * 10),
-          genres: cat.genres || ['أكشن', 'فانتازيا'],
+          episodes: cat.episodeCount || cat.episodes || null,
+          score: score100(cat.rating || cat.score),
+          genres: Array.isArray(cat.genres) ? cat.genres : [],
           isDirectStream: true,
           source: catSource,
           sourceLabel
@@ -353,9 +361,9 @@ export default function TrendingAnime() {
           titleEn: item.titleEn || item.slug,
           titleAr: item.titleAr || item.titleEn || item.slug,
           poster: item.poster,
-          episodes: item.episode || item.episodes || 1,
-          score: 92,
-          genres: ['Action', 'Adventure'],
+          episodes: item.episode || item.episodes || null,
+          score: score100(item.rating || item.score),
+          genres: Array.isArray(item.genres) ? item.genres : [],
           isDirectStream: true,
           source: itemSrc,
           sourceLabel
@@ -386,9 +394,9 @@ export default function TrendingAnime() {
           titleAr: a.titleArabic || matchedStream?.titleAr || a.titleEnglish || a.titleRomaji,
           poster: a.coverUrl || matchedStream?.poster,
           banner: a.bannerUrl,
-          episodes: a.episodes || matchedStream?.episode || 12,
-          score: a.score || 90,
-          genres: Array.isArray(a.genres) ? a.genres : ['Action', 'Fantasy'],
+          episodes: a.episodes || matchedStream?.episode || null,
+          score: score100(a.score),
+          genres: Array.isArray(a.genres) ? a.genres : [],
           isDirectStream: Boolean(matchedStream?.slug),
           isMalOnly: !matchedStream?.slug,
           source: matchedStream?.slug ? 'witanime' : 'blackx-index',
@@ -408,9 +416,9 @@ export default function TrendingAnime() {
           titleEn: rnd.titleEn || rnd.name || rnd.slug,
           titleAr: rnd.titleAr || rnd.name || rnd.titleEn || rnd.slug,
           poster: rnd.poster || rnd.img || rnd.src,
-          episodes: rnd.episodes || 12,
-          score: 93,
-          genres: ['Action', 'Adventure', 'Fantasy'],
+          episodes: rnd.episodes || null,
+          score: score100(rnd.rating || rnd.score),
+          genres: Array.isArray(rnd.genres) ? rnd.genres : [],
           isDirectStream: Boolean(rnd.slug),
           isMalOnly: false,
           isRandomPick: true,
@@ -910,14 +918,14 @@ export default function TrendingAnime() {
                     </span>
                   </div>
 
-                  {(item.source !== 'aniproject' || item.score != null) && (
+                  {item.score != null && (
                     <span style={{
                       position: 'absolute', top: '8px', insetInlineEnd: '8px',
                       padding: '0.2rem 0.5rem', borderRadius: '8px',
                       background: 'rgba(0, 0, 0, 0.82)', color: '#fbbf24',
                       fontSize: '0.74rem', fontWeight: 900
                     }}>
-                      ★ {((item.score || 90) / 10).toFixed(1)}
+                      ★ {(item.score / 10).toFixed(1)}
                     </span>
                   )}
 

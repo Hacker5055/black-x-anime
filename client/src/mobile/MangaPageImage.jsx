@@ -50,15 +50,15 @@ export default function MangaPageImage({ src, alt, style, onClick, loading = 'la
           borderTop: '1px solid rgba(255,255,255,0.08)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
           color: 'rgba(255,255,255,0.75)',
-          fontSize: '0.8rem',
-          fontWeight: 800,
+          fontSize: '0.8125rem',
+          fontWeight: 600,
           lineHeight: 1.5,
           textAlign: 'center',
           padding: '1rem',
           cursor: 'pointer'
         }}
       >
-        <BxIcon name="retry" style={{ fontSize: '1.4rem' }} />
+        <BxIcon name="retry" style={{ fontSize: '1.375rem' }} />
         <span>
           {isRtl ? `تعذّر تحميل ${alt || 'الصفحة'} — اضغط لإعادة المحاولة` : `${alt || 'This page'} failed to load — tap to retry`}
         </span>

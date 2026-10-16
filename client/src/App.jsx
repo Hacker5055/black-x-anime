@@ -21,6 +21,8 @@ import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 import BxIcon from './components/BxIcon.jsx';
 import { useAnimeCatalogTotal, formatCount } from './hooks/useCatalogStats.js';
+import { isPhoneDevice, switchWebUi } from './webUi.js';
+import { ANILIST_EXCLUSION_ARGS, hasBlockedGenre } from '../../shared/contentFilter.js';
 
 function serverFourSearchItems(animeData, mangaData, query) {
   return [
@@ -121,23 +123,25 @@ function SpotlightSearchModal({ open, onClose }) {
         const gql = `
           query ($s: String, $genre: String, $country: CountryCode, $sort: [MediaSort]) {
             anime: Page(page: 1, perPage: 10) {
-              media(type: ANIME, search: $s, genre: $genre, sort: $sort, isAdult: false) {
+              media(type: ANIME, search: $s, genre: $genre, sort: $sort, isAdult: false, ${ANILIST_EXCLUSION_ARGS}) {
                 id
                 title { english romaji native }
                 averageScore
                 episodes
                 genres
+                tags { name }
                 coverImage { large }
               }
             }
             manga: Page(page: 1, perPage: 10) {
-              media(type: MANGA, search: $s, genre: $genre, countryOfOrigin: $country, sort: $sort, isAdult: false) {
+              media(type: MANGA, search: $s, genre: $genre, countryOfOrigin: $country, sort: $sort, isAdult: false, ${ANILIST_EXCLUSION_ARGS}) {
                 id
                 countryOfOrigin
                 title { english romaji native }
                 averageScore
                 chapters
                 genres
+                tags { name }
                 coverImage { large }
               }
             }
@@ -182,7 +186,7 @@ function SpotlightSearchModal({ open, onClose }) {
         const animeItems =
           scope === 'MANGA' || activeCat.country
             ? []
-            : (json?.data?.anime?.media || []).map((m) => {
+            : (json?.data?.anime?.media || []).filter((m) => !hasBlockedGenre(m.genres, m.tags)).map((m) => {
                 const title = m.title?.english || m.title?.romaji || m.title?.native || 'Anime';
                 return {
                   id: `anime-${m.id}`,
@@ -190,8 +194,9 @@ function SpotlightSearchModal({ open, onClose }) {
                   badgeAr: 'أنمي',
                   badgeEn: 'ANIME',
                   title,
-                  score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.2',
-                  meta: `${m.episodes || 12} EP • ${srvObj.id.toUpperCase()}`,
+                  // Unknown score / episode count stay unknown (no invented numbers).
+                  score: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
+                  meta: `${m.episodes ? `${m.episodes} EP • ` : ''}${srvObj.id.toUpperCase()}`,
                   poster: m.coverImage?.large || '/blackx-logo.png',
                   to: `/trending?q=${encodeURIComponent(title)}&source=${encodeURIComponent(srvObj.animeSrc)}&genre=${encodeURIComponent(animeGenreParam)}&filter=${encodeURIComponent(animeFilterParam)}`
                 };
@@ -200,7 +205,7 @@ function SpotlightSearchModal({ open, onClose }) {
         const mangaItems =
           scope === 'ANIME'
             ? []
-            : (json?.data?.manga?.media || []).map((m) => {
+            : (json?.data?.manga?.media || []).filter((m) => !hasBlockedGenre(m.genres, m.tags)).map((m) => {
                 const title = m.title?.english || m.title?.romaji || m.title?.native || 'Manga';
                 const isManhwa = m.countryOfOrigin === 'KR';
                 const isManhua = m.countryOfOrigin === 'CN';
@@ -210,8 +215,8 @@ function SpotlightSearchModal({ open, onClose }) {
                   badgeAr: isManhwa ? 'مانهوا' : isManhua ? 'مانهاوا' : 'مانجا',
                   badgeEn: isManhwa ? 'MANHWA' : isManhua ? 'MANHUA' : 'MANGA',
                   title,
-                  score: m.averageScore ? (m.averageScore / 10).toFixed(1) : '9.4',
-                  meta: `${m.chapters || 100}+ CH • ${srvObj.id.toUpperCase()}`,
+                  score: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
+                  meta: `${m.chapters ? `${m.chapters} CH • ` : ''}${srvObj.id.toUpperCase()}`,
                   poster: m.coverImage?.large || '/blackx-logo.png',
                   to: `/browse?q=${encodeURIComponent(title)}&server=${encodeURIComponent(srvObj.mangaSrv)}&filter=${encodeURIComponent(mangaFilterParam)}`
                 };
@@ -988,8 +993,17 @@ function ScrollToTop() {
 }
 
 function Footer() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [footerText, setFooterText] = useState(null);
+  // Phones get the app interface by default (webUi.js); anyone on a touch screen who chose the
+  // website pages can go back to it from here.
+  const [touchScreen] = useState(() => {
+    try {
+      return isPhoneDevice() || window.matchMedia('(pointer: coarse)').matches;
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     let alive = true;
@@ -1044,6 +1058,26 @@ function Footer() {
         <div style={{ marginTop: '0.35rem', opacity: 0.68, fontSize: '0.82rem' }}>
           © {new Date().getFullYear()} · {footerText?.notice || t('footer.rights')}
         </div>
+        {touchScreen ? (
+          <button
+            type="button"
+            onClick={() => switchWebUi('app')}
+            style={{
+              marginTop: '0.9rem',
+              minHeight: '44px',
+              padding: '0.6rem 1.2rem',
+              borderRadius: '999px',
+              border: '1px solid rgba(255,255,255,0.28)',
+              background: 'transparent',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            {lang === 'ar' ? 'واجهة الموبايل' : 'Phone interface'}
+          </button>
+        ) : null}
       </div>
     </footer>
   );
@@ -1316,6 +1350,8 @@ export default function App() {
                 <Route path="/watch/:slug/:ep" element={<Watch onOpenAuth={openAuth} />} />
                 <Route path="/mylist" element={<MyList onOpenAuth={openAuth} />} />
                 <Route path="/profile" element={<ProfileDashboard onOpenAuth={openAuth} />} />
+                <Route path="/profile/*" element={<ProfileDashboard onOpenAuth={openAuth} />} />
+                <Route path="/schedule" element={<Navigate to="/discover" replace />} />
                 <Route path="/account" element={<Navigate to="/profile" replace />} />
                 <Route path="/settings" element={<Navigate to="/profile" replace />} />
                 {/* legacy prediction-engine routes → home */}

@@ -4,6 +4,8 @@
  * Direct Multi-Quality MP4 Resolvers: PixelDrain (PD), FireStream (SF), MediaFire (MF/MF2), StreamTape (ST), KrakenFiles (KF), UpStream (US)
  */
 
+import { ALGOLIA_BLOCKED_TAGS, hasBlockedGenre, withAlgoliaExclusions } from '../../../shared/contentFilter.js';
+
 const ALGOLIA_APP_ID = 'QVHT7NPEJG';
 const ALGOLIA_API_KEY = 'ce13098070fa521b536571bafbcfc083';
 const ALGOLIA_BASE = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes`;
@@ -133,10 +135,7 @@ function enrichGenres(arTags = []) {
       set.add(AR_TAG_TO_EN[tag]);
     }
   }
-  if (set.size === 0) {
-    set.add('اكشن');
-    set.add('Action');
-  }
+  // A record without tags has no known genre: never invent one.
   return Array.from(set);
 }
 
@@ -323,8 +322,10 @@ export async function fetchWitcherCatalog({
     payload.facetFilters = [[`tags:${arTag}`]];
   }
 
-  const data = await queryAlgoliaIndex(indexName, payload);
-  const items = (data?.hits || []).map(formatAlgoliaHit).filter(Boolean);
+  // Ecchi / Harem / Isekai are excluded by Algolia itself, so totals and pages stay real
+  // (shared/contentFilter.js). Hits are checked once more in case a tag is spelled differently.
+  const data = await queryAlgoliaIndex(indexName, withAlgoliaExclusions(payload));
+  const items = (data?.hits || []).filter((h) => !hasBlockedGenre(h?.tags)).map(formatAlgoliaHit).filter(Boolean);
 
   return {
     page: algoliaPage + 1,
@@ -351,6 +352,7 @@ export async function fetchWitcherLatest(page = 1, hitsPerPage = 48) {
   const list = [];
 
   for (const h of [...(recentRes?.hits || []), ...(newestRes?.hits || [])]) {
+    if (hasBlockedGenre(h?.tags)) continue; // hidden genres (the `recent` index cannot facet on tags)
     const formatted = formatAlgoliaHit(h);
     if (!formatted || seen.has(formatted.slug)) continue;
     seen.add(formatted.slug);
@@ -365,6 +367,40 @@ export async function fetchWitcherLatest(page = 1, hitsPerPage = 48) {
 }
 
 /**
+ * Every hidden BLACK X 1 title (Ecchi / Harem / Isekai): objectID, slug and names. One query
+ * per tag, each well under Algolia's 1,000-hit page cap. Used by server/src/lib/hiddenTitles.js
+ * to recognise the same titles on other servers and in saved lists (which carry no genres).
+ */
+export async function fetchHiddenWitcherRecords() {
+  const results = await Promise.all(
+    ALGOLIA_BLOCKED_TAGS.map((tag) =>
+      queryAlgoliaIndex('series_fav_count_desc', {
+        query: '',
+        facetFilters: [[`tags:${tag}`]],
+        hitsPerPage: 1000,
+        attributesToRetrieve: ['objectID', 'name', 'details.english_title'],
+        attributesToHighlight: [],
+        attributesToSnippet: [],
+        analytics: false
+      })
+    )
+  );
+  const out = new Map();
+  for (const res of results) {
+    for (const h of res?.hits || []) {
+      if (!h?.objectID || out.has(h.objectID)) continue;
+      out.set(h.objectID, {
+        objectID: String(h.objectID),
+        slug: toWitcherSlug(h.objectID),
+        // Main and English names only: alternative names can be generic franchise names.
+        names: [h.name, h.details?.english_title].filter(Boolean).map(String)
+      });
+    }
+  }
+  return [...out.values()];
+}
+
+/**
  * Search across all 6,973 anime in Anime Witcher
  */
 export async function searchWitcherShows(query, hitsPerPage = 40) {
@@ -374,7 +410,7 @@ export async function searchWitcherShows(query, hitsPerPage = 40) {
     query: q,
     hitsPerPage
   });
-  return (data?.hits || []).map(formatAlgoliaHit).filter(Boolean);
+  return (data?.hits || []).filter((h) => !hasBlockedGenre(h?.tags)).map(formatAlgoliaHit).filter(Boolean);
 }
 
 /**
@@ -382,12 +418,15 @@ export async function searchWitcherShows(query, hitsPerPage = 40) {
  */
 export async function fetchWitcherRandomAnime(count = 24) {
   const randomPage = Math.floor(Math.random() * 45); // top 45 pages (~2,700 popular anime)
-  const data = await queryAlgoliaIndex('series_fav_count_desc', {
-    query: '',
-    page: randomPage,
-    hitsPerPage: Math.min(60, Math.max(24, count * 2))
-  });
-  const items = (data?.hits || []).map(formatAlgoliaHit).filter(Boolean);
+  const data = await queryAlgoliaIndex(
+    'series_fav_count_desc',
+    withAlgoliaExclusions({
+      query: '',
+      page: randomPage,
+      hitsPerPage: Math.min(60, Math.max(24, count * 2))
+    })
+  );
+  const items = (data?.hits || []).filter((h) => !hasBlockedGenre(h?.tags)).map(formatAlgoliaHit).filter(Boolean);
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [items[i], items[j]] = [items[j], items[i]];

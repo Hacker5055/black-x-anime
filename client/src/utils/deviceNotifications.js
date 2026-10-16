@@ -155,12 +155,3 @@ export async function toggleAnimeEpisodeAlert(anime, lang = 'ar') {
 
   return true;
 }
-
-/**
- * Helper to check if an episode is subject to the 24-hour Free Tier delay
- * Official new episodes are available immediately on release day for VIP Basic & VIP Monarch,
- * and delayed by 24 hours for Free Tier users.
- */
-export function isEpisodeDelayedForFreeUser() {
-  return false;
-}

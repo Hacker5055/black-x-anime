@@ -71,7 +71,7 @@ function CustomTooltip({ active, payload, lang }) {
           </strong>
         </div>
         <div style={{ fontSize: '0.82rem', color: 'var(--cyan)', fontWeight: 700 }}>
-          ★ {data.score} / 100 ({Number((data.score / 10).toFixed(1))} / 10)
+          {data.score != null ? `★ ${data.score} / 100 (${Number((data.score / 10).toFixed(1))} / 10)` : '★ —'}
         </div>
         <div style={{ fontSize: '0.72rem', color: 'var(--ink-dim)', marginTop: '0.2rem' }}>
           👥 {Number(data.votes || 0).toLocaleString()} {lang === 'ar' ? 'صوت' : 'votes'}
@@ -153,10 +153,11 @@ export default function AnimeRankingsSection({ onOpenAuth }) {
         rank: it.rank || idx + 1,
         name: shortName,
         fullName: (lang === 'ar' && it.titleArabic) ? it.titleArabic : (it.titleEnglish || it.titleRomaji),
-        score: it.communityScore || 90,
-        popularity: Math.round((it.popularity || 100000) / 1000), // in thousands
-        episodes: it.episodes || 12,
-        votes: it.votesCount || 10000,
+        // Real values only (AniList score / popularity, members' votes); unknown = no bar.
+        score: Number(it.score) > 0 ? Number(it.score) : null,
+        popularity: Number(it.popularity) > 0 ? Math.round(Number(it.popularity) / 1000) : null, // in thousands
+        episodes: it.episodes ?? null,
+        votes: Number(it.votesCount) || 0,
         coverUrl: it.coverUrl,
         color: it.color || d3ColorScale(idx)
       };
@@ -175,17 +176,16 @@ export default function AnimeRankingsSection({ onOpenAuth }) {
       });
       if (res?.ok) {
         pushToast(t('rankings.ratingSuccess'), 'success');
-        // Update item in local state
+        // The server answers with the real member stats (count + average) after saving the vote.
+        const stats = res.stats || {};
         setItems((prev) =>
           prev.map((it) => {
             if (it.id === rateModalItem.id) {
-              const newVotes = (it.votesCount || 0) + 1;
-              const newScore = Math.min(100, Math.round(((it.communityScore || 90) * 0.95) + (selectedRating * 10 * 0.05)));
+              const votes = Number(stats.votes) || 0;
               return {
                 ...it,
-                communityScore: newScore,
-                scoreTen: Number((newScore / 10).toFixed(1)),
-                votesCount: newVotes
+                communityScore: votes > 0 && stats.avgScore ? Number((stats.avgScore * 10).toFixed(1)) : null,
+                votesCount: votes
               };
             }
             return it;
@@ -599,21 +599,22 @@ export default function AnimeRankingsSection({ onOpenAuth }) {
                             gap: '0.25rem'
                           }}
                         >
-                          ⭐ {anime.communityScore || 90}
+                          ⭐ {anime.scoreTen != null ? anime.scoreTen : '—'}
                         </span>
                         <span style={{ fontSize: '0.74rem', color: 'var(--ink-dim)' }}>
-                          {anime.scoreTen || 9.0} / 10
+                          / 10
                         </span>
                       </div>
 
                       {/* Votes & Episodes */}
                       <div style={{ fontSize: '0.75rem', color: 'var(--ink-dim)', marginBottom: '0.45rem' }}>
-                        👥 {Number(anime.votesCount || 10000).toLocaleString()} {t('rankings.votes')}
-                        {anime.episodes && ` · ${anime.episodes} ${t('common.episodes')}`}
+                        👥 {Number(anime.votesCount || 0).toLocaleString()} {t('rankings.votes')}
+                        {anime.communityScore != null && ` · ★ ${(anime.communityScore / 10).toFixed(1)}`}
+                        {anime.episodes ? ` · ${anime.episodes} ${t('common.episodes')}` : ''}
                       </div>
 
                       {/* Mini Rating Breakdown Visual Bar */}
-                      {anime.distribution && (
+                      {Array.isArray(anime.distribution) && anime.distribution.length > 0 && (
                         <div
                           style={{
                             display: 'flex',
@@ -721,7 +722,11 @@ export default function AnimeRankingsSection({ onOpenAuth }) {
                   {(lang === 'ar' && rateModalItem.titleArabic) ? rateModalItem.titleArabic : (rateModalItem.titleEnglish || rateModalItem.titleRomaji)}
                 </strong>
                 <div style={{ fontSize: '0.8rem', color: 'var(--cyan)', marginTop: '0.2rem' }}>
-                  Current Score: {rateModalItem.communityScore} / 100
+                  {rateModalItem.communityScore != null
+                    ? `${lang === 'ar' ? 'متوسط الأعضاء' : 'Members’ average'}: ${(rateModalItem.communityScore / 10).toFixed(1)} / 10 (${rateModalItem.votesCount})`
+                    : lang === 'ar'
+                    ? 'لسه محدش من الأعضاء قيّمه'
+                    : 'No member votes yet'}
                 </div>
               </div>
             </div>

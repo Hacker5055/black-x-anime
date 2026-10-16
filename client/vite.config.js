@@ -45,7 +45,12 @@ function apkEntry() {
     transformIndexHtml: {
       order: 'pre',
       handler(html) {
-        return isApk ? html.replace('/src/main.jsx', '/src/main-apk.jsx') : html;
+        if (!isApk) return html;
+        // The APK bundles its fonts (src/mobile/fonts): drop the Google Fonts requests.
+        return html
+          .replace('/src/main.jsx', '/src/main-apk.jsx')
+          .replace(/\s*<link rel="preconnect" href="https:\/\/fonts\.(googleapis|gstatic)\.com"[^>]*>/g, '')
+          .replace(/\s*<link\s+href="https:\/\/fonts\.googleapis\.com\/css2[^"]*"\s+rel="stylesheet"\s*\/>/g, '');
       }
     }
   };
