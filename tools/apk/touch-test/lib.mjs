@@ -125,6 +125,35 @@ export const ANIME = Array.from({ length: 60 }, (_, i) => {
   };
 });
 
+/**
+ * Titles the app must never show (Ecchi / Harem / Isekai, contentFilter.js), with the exact
+ * tag values of the real index. They lead every list (top views and rating), so a missing
+ * exclusion shows up at once.
+ */
+function hiddenAnime(k, name, tags, { type = 'مسلسل', state = 'مكتمل', showTime = WEEK[(k + 3) % 7] } = {}) {
+  return {
+    objectID: name,
+    name,
+    mal_id: 9000 + k,
+    details: { english_title: name, state, year: '2024', season: 'Fall', studio: ['MAPPA'], mal_mean: 9.6, age: 'PG-13' },
+    type,
+    show_time: showTime,
+    poster_uri: `${LOCAL}/poster/${50 + k}.svg`,
+    cover_uri: `${LOCAL}/wide/${50 + k}.svg`,
+    story: 'عمل مخفي للاختبار.',
+    tags,
+    duration: '24 min',
+    views: 900000 + k
+  };
+}
+export const HIDDEN_ANIME = [
+  hiddenAnime(1, 'Hidden Isekai Hero', ['خيال', 'عالم مختلف']),
+  hiddenAnime(2, 'Hidden Ecchi Club', ['كوميدي', 'ايتشي']),
+  hiddenAnime(3, 'Hidden Harem House', ['رومانسي', 'حريم']),
+  hiddenAnime(4, 'Hidden Isekai Movie', ['عالم مختلف'], { type: 'فيلم' }),
+  hiddenAnime(5, 'Hidden Airing Harem', ['اكشن', 'حريم'], { state: 'مستمر', showTime: TODAY })
+];
+
 export const MANGA = Array.from({ length: 12 }, (_, i) => ({
   id: `test-manhwa-${i + 1}`,
   title: `Test Manhwa ${i + 1}`,
@@ -134,6 +163,13 @@ export const MANGA = Array.from({ length: 12 }, (_, i) => ({
   rating: 8.1,
   availableServers: ['bx1']
 }));
+
+/** Manga the app must never show: genres as the website's servers / AniList report them. */
+export const HIDDEN_MANGA = [
+  ['hidden-isekai-manhwa', 'Hidden Isekai Manhwa', ['إيسيكاي', 'سحر']],
+  ['hidden-harem-manga', 'Hidden Harem Manga', ['حريم', 'كوميدي']],
+  ['hidden-ecchi-manga', 'Hidden Ecchi Manga', ['Ecchi']]
+].map(([id, title, genres], i) => ({ id, title, poster: `${LOCAL}/poster/${56 + i}.svg`, type: 'MANHWA', server: 'bx1', rating: 9.4, genres, availableServers: ['bx1'] }));
 
 export const TEST_USER = {
   id: 'u_tester',
@@ -191,9 +227,17 @@ function facetMatch(hit, f) {
   const i = s.indexOf(':');
   if (i < 0) return true;
   let attr = s.slice(0, i);
-  const val = s.slice(i + 1);
-  const neg = attr.startsWith('-');
-  if (neg) attr = attr.slice(1);
+  let val = s.slice(i + 1);
+  // Algolia negates with a minus before the value ("tags:-ايتشي"); "-tags:x" is accepted too.
+  let neg = false;
+  if (attr.startsWith('-')) {
+    neg = true;
+    attr = attr.slice(1);
+  }
+  if (val.startsWith('-')) {
+    neg = true;
+    val = val.slice(1);
+  }
   const v = getPath(hit, attr);
   const ok = Array.isArray(v) ? v.map(String).includes(val) : String(v ?? '') === val;
   return neg ? !ok : ok;
@@ -202,16 +246,17 @@ function facetMatch(hit, f) {
 /** Like Algolia: nbHits counts every match, but only the first `limit` hits
  * (paginationLimitedTo, 1,000 by default) can be paged through; nbPages stops there. */
 function algolia(index, body, limit = 1000) {
-  let list = ANIME.slice();
+  let list = index === 'recent' ? [...HIDDEN_ANIME, ...ANIME.slice().reverse()] : [...HIDDEN_ANIME, ...ANIME];
   const q = String(body.query || '').trim().toLowerCase();
   if (q) list = list.filter((a) => a.name.toLowerCase().includes(q));
   const ff = Array.isArray(body.facetFilters) ? body.facetFilters : body.facetFilters ? [body.facetFilters] : [];
   for (const group of ff) {
     const ors = Array.isArray(group) ? group : [group];
+    // The real `recent` index keeps tags on its records but cannot facet on them.
+    if (index === 'recent' && ors.every((f) => /^-?tags:/.test(String(f)))) continue;
     list = list.filter((a) => ors.some((f) => facetMatch(a, f)));
   }
-  if (index === 'recent') list.reverse();
-  else if (/best|rank|rating|score/.test(index)) list.sort((x, y) => y.details.mal_mean - x.details.mal_mean);
+  if (/best|rank|rating|score/.test(index)) list.sort((x, y) => y.details.mal_mean - x.details.mal_mean);
   const hpp = Number(body.hitsPerPage) || 20;
   const page = Number(body.page) || 0;
   const reachable = list.slice(0, Math.min(list.length, limit));
@@ -238,13 +283,14 @@ function api(req, url, ctx) {
   if (p === '/api/app/me') return auth ? json(req, { user: TEST_USER, state: { favorites: [], progress: [], positions: {}, xp: 120 } }) : json(req, { error: 'auth_required' }, 401);
   if (p === '/api/app/state') return auth ? json(req, { ok: true, state: safeJson(req.postData()) }) : json(req, { error: 'auth_required' }, 401);
   if (p === '/api/stream/sources') return json(req, { sources: [{ id: 'witanime' }, { id: 'anime3rb' }, { id: 'english' }] });
-  if (p === '/api/stream/stats') return json(req, { animeTotal: ANIME.length });
+  if (p === '/api/stream/stats') return json(req, { animeTotal: ANIME.length + HIDDEN_ANIME.length });
   if ((m = p.match(/^\/api\/stream\/show\/([^/]+)$/))) {
     const slug = decodeURIComponent(m[1]);
     return json(req, {
       show: {
         slug,
         title: slug,
+        ...(slug === 'a3rb-sneaky-isekai' ? { genres: ['عالم مختلف', 'اكشن'] } : {}),
         poster: `${LOCAL}/poster/1.svg`,
         banner: `${LOCAL}/wide/1.svg`,
         episodes: Array.from({ length: 12 }, (_, i) => ({ number: i + 1, title: `Episode ${i + 1}`, thumb: `${LOCAL}/wide/${i + 1}.svg` }))
@@ -258,7 +304,7 @@ function api(req, url, ctx) {
   if (p === '/api/stream/resolve') return json(req, { source: { directUrl: VIDEO_URL } });
   if (p === '/api/stream/search') {
     const q = String(url.searchParams.get('q') || '').toLowerCase();
-    const items = ANIME.filter((a) => a.name.toLowerCase().includes(q)).map((a) => ({
+    const items = [...HIDDEN_ANIME, ...ANIME].filter((a) => a.name.toLowerCase().includes(q)).map((a) => ({
       slug: `aw-${a.objectID.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
       objectID: a.objectID,
       title: a.name,
@@ -270,15 +316,24 @@ function api(req, url, ctx) {
       type: a.type,
       status: a.details.state,
       year: a.details.year,
+      tagsAr: a.tags,
       source: 'witanime'
     }));
+    // Another server whose search rows carry no genres; its show page does (Isekai).
+    if (q.includes('sneaky')) items.push({ slug: 'a3rb-sneaky-isekai', title: 'Sneaky Isekai Show', titleEn: 'Sneaky Isekai Show', poster: `${LOCAL}/poster/57.svg`, source: 'anime3rb' });
+    if (q.includes('hidden')) {
+      items.push(
+        { slug: 'en-hidden-isekai', title: 'Hidden English Isekai', titleEn: 'Hidden English Isekai', poster: `${LOCAL}/poster/58.svg`, genres: ['Action', 'Isekai'], source: 'english' },
+        { slug: 'aw-hidden-gem-detective', objectID: 'Hidden Gem Detective', title: 'Hidden Gem Detective', titleEn: 'Hidden Gem Detective', poster: `${LOCAL}/poster/59.svg`, tagsAr: ['غموض'], source: 'witanime' }
+      );
+    }
     return json(req, { items });
   }
   if (p === '/api/search') {
     const q = String(url.searchParams.get('query') || '').toLowerCase();
-    return json(req, { manga: MANGA.filter((x) => x.title.toLowerCase().includes(q)) });
+    return json(req, { manga: [...HIDDEN_MANGA, ...MANGA].filter((x) => x.title.toLowerCase().includes(q)) });
   }
-  if (p === '/api/content/library') return json(req, { items: MANGA, page: 1, hasNextPage: false });
+  if (p === '/api/content/library') return json(req, { items: [...HIDDEN_MANGA, ...MANGA], page: 1, hasNextPage: false });
   if ((m = p.match(/^\/api\/content\/library\/([^/]+)$/))) {
     return json(req, {
       item: {
@@ -329,6 +384,7 @@ function route(req, ctx) {
     return json(req, algolia(index, body, ctx.paginationLimit));
   }
   if (url.host === 'firestore.googleapis.com') return firestore(req, url, ctx);
+  if (url.host === 'graphql.anilist.co') ctx.anilist.push(safeJson(req.postData()));
   if (url.host === 'graphql.anilist.co') return json(req, { data: { Page: { pageInfo: { hasNextPage: false, currentPage: 1 }, media: [], airingSchedules: [] }, Media: null } });
   ctx.blocked.push(raw.slice(0, 160));
   return req.respond({ status: 404, headers: CORS, contentType: 'text/plain', body: 'blocked in test' });
@@ -353,7 +409,7 @@ export async function openApp(browser, { seed = {} } = {}) {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
   await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], paginationLimit: 1000 };
+  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000 };
   ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
   await page.setRequestInterception(true);
   page.on('request', (req) => {

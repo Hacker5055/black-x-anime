@@ -35,6 +35,14 @@ import { animeSlugOf, episodeKey, flushPositions, formatClock, getPosition, merg
 import { checkFollowedTitles, lastAlertRun } from './episodeAlerts.js';
 import { attachHls, needsHlsJs } from './hlsPlayer.js';
 import { haptic, hapticsEnabled, setHapticsEnabled } from './haptics.js';
+import {
+  getHiddenIds,
+  isHiddenAnime,
+  isHiddenManga,
+  refreshHiddenIds,
+  visibleGenres,
+  withAlgoliaExclusions
+} from './contentFilter.js';
 import { coverForMode, useDataSaver } from './dataSaver.js';
 import { installPointerTracker, transitionBackToCard, transitionFromTappedPoster } from './viewTransition.js';
 import SearchBox from './SearchBox.jsx';
@@ -59,7 +67,6 @@ import {
   BX_APK_VERSION,
   BX_MANGA_SEARCH_ONLY_TAB,
   BX_MANGA_SERVER_TABS,
-  fetchAnimeCatalogTotal,
   fetchBxSourceIds,
   fetchMobileAnimeSearch,
   fetchMobileChapterPages,
@@ -109,7 +116,7 @@ const GENRE_CHIPS = [
   { id: 'seinen', ar: 'سينين', en: 'Seinen', tag: 'سينين' },
   { id: 'mystery', ar: 'غموض', en: 'Mystery', tag: 'غموض' },
   { id: 'historical', ar: 'تاريخي', en: 'Historical', tag: 'تاريخي' },
-  { id: 'isekai', ar: 'عالم مختلف', en: 'Isekai', tag: 'عالم مختلف' },
+  // Isekai («عالم مختلف»), Ecchi and Harem are hidden from the whole app: see contentFilter.js
   { id: 'superpower', ar: 'قوة خارقة', en: 'Super Power', tag: 'قوة خارقة' },
   { id: 'military', ar: 'عسكري', en: 'Military', tag: 'عسكري' },
   { id: 'sports', ar: 'رياضي', en: 'Sports', tag: 'رياضي' },
@@ -225,7 +232,7 @@ function cleanCloudKey(prefix, val) {
   return `${prefix}_${safe}`.slice(0, 120);
 }
 
-async function queryAlgolia(indexName, payload = {}) {
+async function queryAlgoliaRaw(indexName, payload = {}) {
   const res = await fetch(`${ALGOLIA_BASE}/${encodeURIComponent(indexName)}/query`, {
     method: 'POST',
     headers: {
@@ -238,6 +245,22 @@ async function queryAlgolia(indexName, payload = {}) {
   if (!res.ok) throw new Error(`Algolia ${res.status}`);
   return res.json();
 }
+
+/**
+ * Every anime list in the app goes through here. The hidden genres (contentFilter.js) are
+ * excluded by Algolia itself, so totals and pages stay real. Hits are checked once more (tags
+ * and hidden ids): the `recent` index keeps tags on its records but cannot facet on them, and
+ * the index could one day spell a tag differently.
+ */
+async function queryAlgolia(indexName, payload = {}) {
+  const res = await queryAlgoliaRaw(indexName, withAlgoliaExclusions(payload));
+  if (res && Array.isArray(res.hits)) res.hits = res.hits.filter((hit) => !isHiddenAnime(hit));
+  return res;
+}
+
+/** Shown when a hidden title is reached anyway (old saved entry, other server). */
+const hiddenTitleMessage = () =>
+  (localStorage.getItem('bx_mob_lang') || 'ar') === 'ar' ? 'العمل ده مش متاح في التطبيق' : 'This title is not available in the app';
 
 function formatAnimeHit(hit) {
   if (!hit || !hit.objectID) return null;
@@ -493,6 +516,8 @@ export default function MobileApkApp() {
       return [];
     }
   });
+  // Hidden BLACK X 1 ids (contentFilter.js) for saved entries that carry no genres.
+  const [hiddenIds, setHiddenIds] = useState(() => getHiddenIds());
   const [userXp, setUserXp] = useState(() => Number(localStorage.getItem('bx_mob_xp') || 0));
   const [communityPosts, setCommunityPosts] = useState([]);
   const [newPostText, setNewPostText] = useState('');
@@ -2141,7 +2166,8 @@ export default function MobileApkApp() {
     if (!homeRefreshTick) setHomeLoading(true);
     Promise.all([
       queryAlgolia('series_fav_count_desc', { query: '', hitsPerPage: 24 }).catch(() => ({ hits: [] })),
-      queryAlgolia('recent', { query: '', hitsPerPage: 20 }).catch(() => ({ hits: [] })),
+      // `recent` cannot facet on tags, so hidden titles are dropped from its hits: ask for a few more.
+      queryAlgolia('recent', { query: '', hitsPerPage: 30 }).catch(() => ({ hits: [] })),
       queryAlgolia('best_mal_ranked', { query: '', hitsPerPage: 20 }).catch(() => ({ hits: [] })),
       queryAlgolia('series_fav_count_desc', { query: '', facetFilters: [[`show_time:${todayScheduleId()}`]], hitsPerPage: 16 }).catch(() => ({ hits: [] })),
       queryAlgolia('series_fav_count_desc', { query: '', facetFilters: [['type:فيلم']], hitsPerPage: 20 }).catch(() => ({ hits: [] })),
@@ -2149,7 +2175,7 @@ export default function MobileApkApp() {
     ]).then(([pop, rec, top, today, mov, air]) => {
       if (!alive) return;
       setPopularList((pop.hits || []).map(formatAnimeHit).filter(Boolean));
-      setLatestList((rec.hits || []).map(formatAnimeHit).filter(Boolean));
+      setLatestList((rec.hits || []).map(formatAnimeHit).filter(Boolean).slice(0, 20));
       setTopRankedList((top.hits || []).map(formatAnimeHit).filter(Boolean));
       setTodayList((today.hits || []).map(formatAnimeHit).filter(Boolean));
       setMoviesList((mov.hits || []).map(formatAnimeHit).filter(Boolean));
@@ -2175,12 +2201,23 @@ export default function MobileApkApp() {
     return facets;
   }, [catalogGenre, catalogType, catalogState, catalogStudio]);
 
-  // Website totals and optional servers (same data the website shows)
+  // Catalogue total, hidden ids and optional servers
   useEffect(() => {
     let alive = true;
-    fetchAnimeCatalogTotal().then((total) => {
-      if (alive) setBxAnimeTotal(total);
-    });
+    // What the app can actually show: Algolia's total with the hidden genres excluded
+    // (so not the website's /api/stream/stats number).
+    queryAlgolia('series_fav_count_desc', { query: '', hitsPerPage: 0 })
+      .then((res) => {
+        const total = Number(res?.nbHits);
+        if (alive) setBxAnimeTotal(Number.isFinite(total) && total > 0 ? total : null);
+      })
+      .catch(() => {});
+    // Saved entries (favorites, history, follows) carry no genres: hide them by id. Once a day.
+    refreshHiddenIds(queryAlgoliaRaw)
+      .then((ids) => {
+        if (alive && ids) setHiddenIds(ids);
+      })
+      .catch(() => {});
     fetchBxSourceIds().then((ids) => {
       if (alive) setMangaSearchOnlyEnabled(ids.has('aniproject'));
     });
@@ -2669,6 +2706,10 @@ export default function MobileApkApp() {
   // Open an Anime Detail Sheet & fetch its episodes, characters/seiyuu, related seasons, and cloud reviews
   const handleOpenAnimeBase = useCallback(async (anime, autoPlayEpNum = null) => {
     if (!anime?.objectID) return;
+    if (isHiddenAnime(anime)) {
+      showToastMessage(hiddenTitleMessage(), 'info');
+      return;
+    }
     setSelectedAnime(anime);
     setDetailTab('episodes');
     setEpRangeChunk(-1);
@@ -2749,8 +2790,15 @@ export default function MobileApkApp() {
     setAnimeEpisodes([]);
     setEpisodesError('');
     try {
-      const { episodes } = await fetchMobileEpisodes(anime);
+      const { show, episodes } = await fetchMobileEpisodes(anime);
       if (animeOpenSeqRef.current !== openSeq) return;
+      // The website's show page can carry genres the card did not (other servers, old entries).
+      if (show && isHiddenAnime(show)) {
+        setSelectedAnime(null);
+        setAnimeEpisodes([]);
+        showToastMessage(hiddenTitleMessage(), 'info');
+        return;
+      }
       setAnimeEpisodes(episodes);
       if (!episodes.length) setEpisodesError('empty');
     } catch (_) {
@@ -2765,6 +2813,10 @@ export default function MobileApkApp() {
   // Cards open the details sheet with a shared-element transition from the tapped poster.
   const handleOpenAnime = useCallback(
     (anime, autoPlayEpNum = null) => {
+      if (isHiddenAnime(anime)) {
+        showToastMessage(hiddenTitleMessage(), 'info');
+        return;
+      }
       haptic('tap');
       transitionFromTappedPoster(() => {
         handleOpenAnimeBase(anime, autoPlayEpNum);
@@ -3112,6 +3164,10 @@ export default function MobileApkApp() {
   // library. Nothing falls back to another title: an empty server says so and offers the others.
   const handleOpenManga = useCallback(async (mangaHit, preferredServer = '') => {
     if (!mangaHit) return;
+    if (isHiddenManga(mangaHit)) {
+      showToastMessage(hiddenTitleMessage(), 'info');
+      return;
+    }
     const openSeq = ++mangaOpenSeqRef.current;
     setSelectedManga(mangaHit);
     setActiveMangaChapter(null);
@@ -3231,7 +3287,7 @@ export default function MobileApkApp() {
       Object.values(latestRef.current.watchlistMap || {}).forEach((entry) => {
         if (entry && (entry.status === 'watching' || entry.status === 'planned')) list.push(entry);
       });
-      return list;
+      return list.filter((t) => !isHiddenAnime(t));
     };
     const run = async () => {
       if (running || cancelled || document.visibilityState === 'hidden') return;
@@ -3300,6 +3356,7 @@ export default function MobileApkApp() {
           objectID: selectedManga.objectID,
           name: selectedManga.name,
           poster_uri: selectedManga.poster?.large || selectedManga.poster_uri || '',
+          genres: Array.isArray(selectedManga.genres) ? selectedManga.genres.slice(0, 8) : [],
           source: selectedManga.source,
           sourceId: selectedManga.sourceId,
           slug: selectedManga.slug,
@@ -3850,6 +3907,14 @@ export default function MobileApkApp() {
     const seen = new Set();
     return list.filter((x) => x.objectID !== (hit?.objectID || seed.objectID) && !seen.has(x.objectID) && seen.add(x.objectID));
   }, []);
+  // Saved lists as shown on screen, without hidden genres (the stored and synced data is untouched).
+  const visibleFavorites = useMemo(() => favorites.filter((f) => !isHiddenAnime(f, hiddenIds)), [favorites, hiddenIds]);
+  const visibleHistory = useMemo(() => watchHistory.filter((h) => !isHiddenAnime(h, hiddenIds)), [watchHistory, hiddenIds]);
+  const visibleWatchlist = useMemo(
+    () => Object.values(watchlistMap).filter((w) => w && !isHiddenAnime(w, hiddenIds)),
+    [watchlistMap, hiddenIds]
+  );
+  const visibleMangaHistory = useMemo(() => mangaHistory.filter((m) => !isHiddenManga(m)), [mangaHistory]);
   const watchedIds = useMemo(() => watchHistory.map((h) => h.objectID).filter(Boolean), [watchHistory]);
 
   return (
@@ -4118,7 +4183,7 @@ export default function MobileApkApp() {
                 : 'Latest airing episode releases this week:'}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-              {(favorites.length > 0 ? favorites.slice(0, 6) : latestList.slice(0, 6)).map((item, idx) => (
+              {(visibleFavorites.length > 0 ? visibleFavorites.slice(0, 6) : latestList.slice(0, 6)).map((item, idx) => (
                 <div
                   key={item.objectID || idx}
                   onClick={() => {
@@ -4261,10 +4326,10 @@ export default function MobileApkApp() {
           dataSaver={dataSaver}
           loading={homeLoading}
           lists={homeLists}
-          watchHistory={watchHistory}
+          watchHistory={visibleHistory}
           watchedIds={watchedIds}
-          mangaHistory={mangaHistory}
-          favorites={favorites}
+          mangaHistory={visibleMangaHistory}
+          favorites={visibleFavorites}
           genres={HOME_GENRES}
           apkRelease={apkRelease}
           heroPaused={Boolean(selectedAnime) || Boolean(storyPreviewAnime)}
@@ -4482,7 +4547,7 @@ export default function MobileApkApp() {
           }}
           items={scheduleItems}
           loading={scheduleLoading}
-          favorites={favorites}
+          favorites={visibleFavorites}
           dataSaver={dataSaver}
           onOpen={handleOpenAnime}
           onPeek={setQuickPeekAnime}
@@ -5815,18 +5880,18 @@ export default function MobileApkApp() {
               )}
 
               {/* Continue Reading Progress Strip inside Manga Tab (Matches Reference UI 3 "Continue reading") */}
-              {mangaHistory.length > 0 && !mangaQuery && (
+              {visibleMangaHistory.length > 0 && !mangaQuery && (
                 <div style={{ marginBottom: '0.95rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
                     <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
                       <BxIcon name="book" className="bx-ico-lead" />{isRtl ? 'كمّل قراءة' : 'Continue Reading'}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
-                      {mangaHistory.length} {isRtl ? 'عمل' : 'Series'}
+                      {visibleMangaHistory.length} {isRtl ? 'عمل' : 'Series'}
                     </span>
                   </div>
                   <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-                    {mangaHistory.slice(0, 8).map((mh, idx) => (
+                    {visibleMangaHistory.slice(0, 8).map((mh, idx) => (
                       <div
                         key={`mhist-${idx}`}
                         onClick={() => handleOpenManga(mh)}
@@ -6288,11 +6353,11 @@ export default function MobileApkApp() {
               </div>
               <div className="bx-profile-stats">
                 <button type="button" onClick={() => { setProfileSubTab('vault'); setLibrarySubTab('favorites'); }}>
-                  <strong>{favorites.length}</strong>
+                  <strong>{visibleFavorites.length}</strong>
                   <span>{isRtl ? 'في قائمتي' : 'My list'}</span>
                 </button>
                 <button type="button" onClick={() => { setProfileSubTab('vault'); setLibrarySubTab('history'); }}>
-                  <strong>{watchHistory.length}</strong>
+                  <strong>{visibleHistory.length}</strong>
                   <span>{isRtl ? 'اتفرجت عليه' : 'Watched'}</span>
                 </button>
                 <div>
@@ -8019,14 +8084,14 @@ export default function MobileApkApp() {
             </h3>
             <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginBottom: '0.85rem', paddingBottom: '0.2rem' }}>
               {[
-                { id: 'favorites', ar: `المفضلة (${favorites.length})`, en: `Favorites (${favorites.length})` },
+                { id: 'favorites', ar: `المفضلة (${visibleFavorites.length})`, en: `Favorites (${visibleFavorites.length})` },
                 { id: 'offline', ar: `بدون نت (${offlineChapters.length})`, en: `Offline (${offlineChapters.length})` },
                 { id: 'panels', ar: `لقطاتي (${savedPanels.length})`, en: `Snapshots (${savedPanels.length})` },
                 { id: 'watching', ar: 'أشاهد حالياً', en: 'Watching' },
                 { id: 'completed', ar: 'مكتمل', en: 'Completed' },
                 { id: 'planned', ar: 'أخطط لمشاهدته', en: 'Plan to Watch' },
-                { id: 'history', ar: `سجل الحلقات (${watchHistory.length})`, en: `History (${watchHistory.length})` },
-                { id: 'manga_history', ar: `سجل المانجا (${mangaHistory.length})`, en: `Manga (${mangaHistory.length})` }
+                { id: 'history', ar: `سجل الحلقات (${visibleHistory.length})`, en: `History (${visibleHistory.length})` },
+                { id: 'manga_history', ar: `سجل المانجا (${visibleMangaHistory.length})`, en: `Manga (${visibleMangaHistory.length})` }
               ].map((lt) => {
                 const active = librarySubTab === lt.id;
                 return (
@@ -8053,13 +8118,13 @@ export default function MobileApkApp() {
             </div>
 
             {librarySubTab === 'favorites' && (
-              favorites.length === 0 ? (
+              visibleFavorites.length === 0 ? (
                 <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? <>{"قائمتك المفضلة فارغة حالياً. اضغط على ("}<BxIcon name="plus" className="bx-ico-trail" />{") في أي أنمي لإضافته!"}</> : 'No favorites added yet.'}
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
-                  {favorites.map((fav) => (
+                  {visibleFavorites.map((fav) => (
                     <div key={fav.objectID || fav.slug} onClick={() => handleOpenAnime(fav)} style={{ cursor: 'pointer' }}>
                       <img src={coverForMode(fav.poster, dataSaver)} alt={fav.titleEn} style={{ width: '100%', aspectRatio: '2/2.85', borderRadius: '12px', objectFit: 'cover' }} />
                       <div style={{ fontSize: '0.75rem', fontWeight: 700, marginTop: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -8072,7 +8137,7 @@ export default function MobileApkApp() {
             )}
 
             {['watching', 'completed', 'planned'].includes(librarySubTab) && (() => {
-              const items = Object.values(watchlistMap).filter((w) => w.status === librarySubTab);
+              const items = visibleWatchlist.filter((w) => w.status === librarySubTab);
               return items.length === 0 ? (
                 <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? 'القايمة دي فاضية لسه.' : 'No anime in this list yet.'}
@@ -8242,13 +8307,13 @@ export default function MobileApkApp() {
             )}
 
             {librarySubTab === 'history' && (
-              watchHistory.length === 0 ? (
+              visibleHistory.length === 0 ? (
                 <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? 'لم تشاهد أي حلقة بعد.' : 'No watch history yet.'}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {watchHistory.map((h) => (
+                  {visibleHistory.map((h) => (
                     <div
                       key={h.id}
                       onClick={() => handleOpenAnime({ objectID: h.objectID, slug: h.slug, titleEn: h.titleEn, poster: h.poster })}
@@ -8276,13 +8341,13 @@ export default function MobileApkApp() {
             )}
 
             {librarySubTab === 'manga_history' && (
-              mangaHistory.length === 0 ? (
+              visibleMangaHistory.length === 0 ? (
                 <div style={{ padding: '1.25rem', borderRadius: '12px', background: '#0a0a0e', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
                   {isRtl ? 'لم تقرأ أي فصل مانجا أو مانهوا بعد.' : 'No manga reading history yet.'}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {mangaHistory.map((mh, idx) => (
+                  {visibleMangaHistory.map((mh, idx) => (
                     <div
                       key={idx}
                       onClick={() => {
@@ -9612,9 +9677,9 @@ export default function MobileApkApp() {
                 {selectedAnime.state && <span>{selectedAnime.state}</span>}
                 {animeEpisodes.length > 0 && <span>{isRtl ? `${animeEpisodes.length} حلقة` : `${animeEpisodes.length} episodes`}</span>}
               </div>
-              {Array.isArray(selectedAnime.tags) && selectedAnime.tags.length > 0 && (
+              {visibleGenres(selectedAnime.tags).length > 0 && (
                 <div className="bx-detail-tags">
-                  {selectedAnime.tags.slice(0, 4).map((t) => (
+                  {visibleGenres(selectedAnime.tags).slice(0, 4).map((t) => (
                     <span key={t}>{t}</span>
                   ))}
                 </div>
@@ -10932,7 +10997,7 @@ export default function MobileApkApp() {
                 id: 'mylist',
                 icon: 'bookmark',
                 label: isRtl ? 'قائمتي' : 'My list',
-                badge: favorites.length || null,
+                badge: visibleFavorites.length || null,
                 onClick: () =>
                   goToTab('profile', () => {
                     setProfileSubTab('vault');

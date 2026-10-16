@@ -327,6 +327,122 @@ scenario('search', async (browser) => {
   check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
 });
 
+/* ==================================================================== genres */
+scenario('genres', async (browser) => {
+  const G = 'genres';
+  // Ecchi / Harem / Isekai are hidden from the whole app (client/src/mobile/contentFilter.js).
+  // The mock puts such titles first in every list (lib.mjs HIDDEN_ANIME / HIDDEN_MANGA).
+  const HIDDEN = ['Hidden Isekai Hero', 'Hidden Ecchi Club', 'Hidden Harem House', 'Hidden Isekai Movie', 'Hidden Airing Harem', 'Hidden English Isekai', 'Hidden Isekai Manhwa', 'Hidden Harem Manga', 'Hidden Ecchi Manga'];
+  const saved = (name, extra = {}) => ({ slug: `aw-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, objectID: name, titleEn: name, titleAr: name, poster: `${LOCAL}/poster/2.svg`, banner: `${LOCAL}/wide/2.svg`, ...extra });
+  const { page, ctx } = await openApp(browser, {
+    seed: {
+      // Saved before the update, so without genres: matched by the hidden-id list.
+      bx_mob_favorites: [saved('Hidden Isekai Hero'), saved('Test Anime 5')],
+      bx_mob_history: [
+        saved('Hidden Harem House', { id: 'h1', episode: 3, docId: '003', position: 300, duration: 1440, updatedAt: new Date().toISOString() }),
+        saved('Test Anime 7', { id: 'h2', episode: 2, docId: '002', position: 200, duration: 1440, updatedAt: new Date(Date.now() - 60000).toISOString() })
+      ]
+    }
+  });
+  const leaks = () => page.evaluate((names) => names.filter((n) => document.body.innerText.includes(n)), HIDDEN);
+  const NEG = ['tags:-ايتشي', 'tags:-حريم', 'tags:-عالم مختلف'];
+  await sleep(1200);
+  const lists = ctx.algolia.filter((a) => a.body.hitsPerPage !== 1000);
+  check(G, 'every catalogue query excludes Ecchi / Harem / Isekai', lists.length >= 6 && lists.every((a) => NEG.every((f) => (a.body.facetFilters || []).includes(f))), `${lists.length} queries`);
+  const idq = ctx.algolia.filter((a) => a.body.hitsPerPage === 1000).map((a) => JSON.stringify(a.body.facetFilters));
+  check(G, 'hidden ids fetched once per tag (for saved lists)', idq.length === 3, idq.join(' '));
+
+  // Home: rows mount lazily, so scroll through all of them (latest episodes = `recent`, which
+  // cannot facet on tags: only the app's second check keeps them out there).
+  for (let i = 0; i < 9; i++) {
+    await swipe(page, 206, 780, 206, 180);
+    await sleep(300);
+  }
+  await sleep(700);
+  const homeLeaks = await leaks();
+  check(G, 'home shows none of them (every row, latest episodes too)', homeLeaks.length === 0, homeLeaks.join(', '));
+  const chips = await text(page, '.bx-chip-row .bx-chip');
+  check(G, 'browse by genre has no Isekai', chips.length >= 10 && !chips.some((c) => c.includes('عالم مختلف')), chips.join(' | '));
+  await toTop(page);
+  const cont = await page.evaluate(() => {
+    const head = [...document.querySelectorAll('.bx-section-title')].find((h) => h.textContent.trim() === 'كمّل المشاهدة');
+    return head ? (head.closest('section')?.innerText || '').replace(/\s+/g, ' ') : '';
+  });
+  check(G, 'continue watching keeps only visible saved titles', cont.includes('Test Anime 7') && !cont.includes('Hidden'), cont.slice(0, 120));
+
+  // Search: grid + real total (60 of the 65 titles), no Isekai in the filter sheet
+  await tapTab(page, 'البحث');
+  await page.waitForFunction(() => document.querySelectorAll('main .bx-poster').length >= 6, { timeout: 10000 }).catch(() => {});
+  const more = await page.evaluate(() => [...document.querySelectorAll('main .bx-btn')].map((b) => b.innerText.trim()).find((t) => t.startsWith('عرض المزيد')) || '');
+  check(G, 'search grid and total leave them out (48 of 60)', (await leaks()).length === 0 && more.includes('48') && more.includes('60'), more);
+  await tapEl(page, '.bx-search-tools .bx-chip', { text: 'فلترة', scroll: false });
+  await sleep(700);
+  const sheetChips = await text(page, '.bx-bottom-sheet .bx-chip');
+  check(G, 'filter sheet has no Isekai genre', sheetChips.length > 10 && sheetChips.includes('قوة خارقة') && !sheetChips.some((c) => c.includes('عالم مختلف')), `${sheetChips.length} chips`);
+  await tapEl(page, '.bx-bottom-sheet .bx-btn-primary', { text: 'عرض النتائج' });
+  await sleep(900);
+
+  // Typed search (website servers): Arabic tags and English genres are both filtered
+  await tapEl(page, '.bx-search-bar input', { scroll: false });
+  await page.keyboard.type('Hidden', { delay: 25 });
+  await sleep(2300);
+  const found = await text(page, 'main .bx-poster-title');
+  check(G, 'typed search drops them (Arabic tags, English genres, manga)', found.length === 1 && found[0] === 'Hidden Gem Detective' && (await leaks()).length === 0, found.join(', '));
+  await tapEl(page, '.bx-search-clear', { scroll: false });
+  await sleep(600);
+
+  // A server whose search rows carry no genres: its show page says Isekai, so it is refused
+  await tapEl(page, '.bx-search-bar input', { scroll: false });
+  await page.keyboard.type('Sneaky', { delay: 25 });
+  await sleep(2300);
+  await page.evaluate(() => {
+    window.__bxToastsSeen = [];
+    new MutationObserver(() => {
+      document.querySelectorAll('.bx-toast').forEach((t) => window.__bxToastsSeen.push(t.innerText.trim()));
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await tapEl(page, 'main .bx-poster', { text: 'Sneaky Isekai Show' });
+  await sleep(2600);
+  const toasts = await page.evaluate(() => [...new Set(window.__bxToastsSeen)]);
+  const stillOpen = await page.evaluate(() => Boolean(document.querySelector('.bx-details-sheet')));
+  check(G, "details refuse a title whose show page is hidden-genre", !stillOpen && toasts.some((t) => t.includes('مش متاح في التطبيق')), `open=${stillOpen} toasts=${toasts.join(' | ')}`);
+  await tapEl(page, '.bx-search-clear', { scroll: false }).catch(() => {});
+  await sleep(500);
+
+  // Schedule opens on today: the airing harem show is today's
+  await tapTab(page, 'الجدول');
+  await page.waitForFunction(() => (document.querySelector('main')?.innerText || '').includes('Test Anime 1'), { timeout: 10000 }).catch(() => {});
+  await sleep(600);
+  const sched = await page.evaluate(() => document.querySelector('main')?.innerText || '');
+  check(G, "today's schedule leaves them out", sched.includes('Test Anime 1') && !sched.includes('Hidden'), sched.replace(/\s+/g, ' ').slice(0, 90));
+
+  // Manga: website servers filtered by their genres, AniList asked without them
+  await tapTab(page, 'المانجا');
+  await page.waitForFunction(() => document.body.innerText.includes('Test Manhwa 1'), { timeout: 15000 }).catch(() => {});
+  await sleep(600);
+  const mangaLeaks = await leaks();
+  check(G, 'manga library leaves them out', (await page.evaluate(() => document.body.innerText.includes('Test Manhwa 1'))) && mangaLeaks.length === 0, mangaLeaks.join(', '));
+  const al = ctx.anilist.filter((b) => /type: MANGA/.test(b?.query || ''));
+  check(G, 'AniList is asked without Ecchi / Isekai / Harem', al.length > 0 && al.every((b) => b.variables?.genreNotIn?.includes('Ecchi') && b.variables?.tagNotIn?.includes('Isekai') && b.variables?.tagNotIn?.includes('Male Harem')), `${al.length} AniList queries`);
+
+  // Menu: "My list" badge and the catalogue total count what the app can show
+  await tapTab(page, 'الرئيسية');
+  await toTop(page);
+  await tapEl(page, '.bx-topbar [aria-label="القائمة"], [aria-label="القائمة"]', { scroll: false });
+  await sleep(700);
+  const menu = await page.evaluate(() => ({
+    mylist: [...document.querySelectorAll('.bx-menu-item')].find((e) => e.innerText.includes('قائمتي'))?.innerText.replace(/\s+/g, ' ').trim() || '',
+    ver: document.body.innerText.match(/إصدار 17\.0[^\n]*/)?.[0] || ''
+  }));
+  check(G, 'menu: "My list" badge counts visible favorites only (1)', /قائمتي\s*1\b/.test(menu.mylist) || menu.mylist.endsWith('1'), menu.mylist);
+  check(G, 'menu total = titles the app can show (60, not 65)', /60 أنمي/.test(menu.ver), menu.ver);
+  await tapEl(page, '.bx-menu-item', { text: 'قائمتي' });
+  await sleep(1200);
+  const lib = await page.evaluate(() => (document.querySelector('main')?.innerText || '').replace(/\s+/g, ' '));
+  check(G, 'my list shows the visible favorite, not the hidden one', lib.includes('المفضلة (1)') && lib.includes('Test Anime 5') && !lib.includes('Hidden'), lib.slice(0, 140));
+  check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+});
+
 /* =================================================================== catalog */
 scenario('catalog', async (browser) => {
   const G = 'catalog';

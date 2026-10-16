@@ -11,6 +11,7 @@
  */
 import { getServerUrl, isNativeApk } from '../api.js';
 import { APK_RELEASE, compareVersions } from '../../../shared/apkRelease.js';
+import { ANILIST_GENRE_NOT_IN, ANILIST_TAG_NOT_IN, isHiddenAnime, isHiddenManga } from './contentFilter.js';
 
 export const BX_PUBLIC_ORIGIN = 'https://black-x-anime.me';
 export const BX_APK_FILE_NAME = 'BLACK-X-Mobile-120Hz.apk';
@@ -252,6 +253,8 @@ export async function fetchMobileAnimeSearch(query, { source = 'all' } = {}) {
   const seen = new Set();
   const out = [];
   for (const show of Array.isArray(data?.items) ? data.items : Array.isArray(data?.results) ? data.results : []) {
+    // Hidden genres (contentFilter.js): checked on the raw show, whose `genres` may be English.
+    if (isHiddenAnime(show)) continue;
     const mapped = mapShowToMobileAnime(show);
     if (!mapped || seen.has(mapped.slug)) continue;
     seen.add(mapped.slug);
@@ -547,9 +550,9 @@ function mapAniListMedia(m) {
 export async function fetchAniListMasterPage(page = 1, country = null, search = '') {
   try {
     const query = `
-      query ($page: Int, $perPage: Int, $countryOfOrigin: CountryCode, $search: String, $sort: [MediaSort]) {
+      query ($page: Int, $perPage: Int, $countryOfOrigin: CountryCode, $search: String, $sort: [MediaSort], $genreNotIn: [String], $tagNotIn: [String]) {
         Page(page: $page, perPage: $perPage) {
-          media(type: MANGA, countryOfOrigin: $countryOfOrigin, search: $search, sort: $sort, isAdult: false) {
+          media(type: MANGA, countryOfOrigin: $countryOfOrigin, search: $search, sort: $sort, isAdult: false, genre_not_in: $genreNotIn, tag_not_in: $tagNotIn) {
             id
             title { romaji english native }
             countryOfOrigin
@@ -566,7 +569,10 @@ export async function fetchAniListMasterPage(page = 1, country = null, search = 
     const variables = {
       page,
       perPage: 24,
-      sort: search ? ['SEARCH_MATCH', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC']
+      sort: search ? ['SEARCH_MATCH', 'POPULARITY_DESC'] : ['POPULARITY_DESC', 'TRENDING_DESC'],
+      // Hidden genres (contentFilter.js), excluded by AniList itself.
+      genreNotIn: [...ANILIST_GENRE_NOT_IN],
+      tagNotIn: [...ANILIST_TAG_NOT_IN]
     };
     if (country) variables.countryOfOrigin = country;
     if (search) variables.search = search;
@@ -577,7 +583,7 @@ export async function fetchAniListMasterPage(page = 1, country = null, search = 
     });
     if (!res.ok) return [];
     const json = await res.json();
-    return (json?.data?.Page?.media || []).map(mapAniListMedia).filter(Boolean);
+    return (json?.data?.Page?.media || []).map(mapAniListMedia).filter((m) => m && !isHiddenManga(m));
   } catch {
     return [];
   }
@@ -615,7 +621,7 @@ export async function fetchMobileMangaList({ server = 'all', query = '', page = 
       withMasterIndex ? fetchAniListMasterPage(1, null, q) : Promise.resolve([])
     ]);
     const rows = Array.isArray(res?.manga) ? res.manga : Array.isArray(res?.results) ? res.results : [];
-    return dedupeMangaHits([...rows.map((r) => mapBxMangaItem(r, srv)), ...master]);
+    return dedupeMangaHits([...rows.map((r) => mapBxMangaItem(r, srv)), ...master]).filter((m) => !isHiddenManga(m));
   }
 
   // BLACK X 4 is search-only on the website as well.
@@ -631,7 +637,7 @@ export async function fetchMobileMangaList({ server = 'all', query = '', page = 
   }
   const [res, ...masters] = await Promise.all(tasks);
   const base = (Array.isArray(res?.items) ? res.items : []).map((r) => mapBxMangaItem(r, srv));
-  return dedupeMangaHits([...base, ...masters.flat()]);
+  return dedupeMangaHits([...base, ...masters.flat()]).filter((m) => !isHiddenManga(m));
 }
 
 export function normalizeServerList(list) {

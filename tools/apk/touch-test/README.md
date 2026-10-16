@@ -23,10 +23,13 @@ server answers video `Range` requests with 206 (without that every seek restarts
 Taps and swipes are CDP touch events (`page.touchscreen`), never `element.click()`, because the
 v16.0 bug (no tab could be scrolled by finger) passed every mouse/JS-click check.
 
-Scenarios (138 checks): `nav` (dock, finger scroll on pages and rails, directional view
+Scenarios (154 checks): `nav` (dock, finger scroll on pages and rails, directional view
 transitions, avatar → profile, menu, long press → quick peek, language switch), `search` (grid,
 typing, recent searches, filter sheet), `catalog` ("load more" stops at Algolia's pagination
-limit with a note instead of a dead button; the mock caps paging like `paginationLimitedTo`), `schedule` (opens on today), `player` (resume, auto-hide,
+limit with a note instead of a dead button; the mock caps paging like `paginationLimitedTo`), `genres` (Ecchi,
+Harem and Isekai never show up: home rows, latest episodes, search and its total, filter sheet, typed
+search, title pages, schedule, manga, AniList query, saved lists and menu counts; hidden titles lead
+every mock list), `schedule` (opens on today), `player` (resume, auto-hide,
 pause, ±10 s buttons and double tap, intro marks, full screen + native immersive call, settings
 sheet over the player, ±10 min, speed, lock, next episode, saved position, back order sheet →
 full screen → player → details → home), `manga` (chapters, reader pages, immersive, finger
