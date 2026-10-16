@@ -11,23 +11,23 @@
  * no longer work (they get a non-dismissible banner).
  */
 export const APK_RELEASE = Object.freeze({
-  version: '16.0',
+  version: '16.1',
   minSupported: '15.0',
   url: 'https://black-x-anime.me/BLACK-X-Mobile-120Hz.apk',
   publishedAt: '2026-10-16',
   notesAr: Object.freeze([
+    'تصليح اللمس: التمرير بالصباع رجع يشتغل في كل الصفحات',
     'تسجيل الدخول والـ VIP بقوا عن طريق سيرفر الموقع (أمان أعلى)',
     'فتح أسرع وسلاسة أكتر في الرئيسية والبحث',
     'تخطي المقدمة بتوقيتات حقيقية والحلقة الجاية بعدّاد',
-    'كمّل المشاهدة من نفس الثانية على أي موبايل',
-    'تنبيهات للأنميات اللي في المفضلة بس'
+    'كمّل المشاهدة من نفس الثانية على أي موبايل'
   ]),
   notesEn: Object.freeze([
+    'Touch fix: finger scrolling works again on every page',
     'Sign-in and VIP now go through the website server (more secure)',
     'Faster start and smoother home and search',
     'Real intro-skip timestamps and a next-episode countdown',
-    'Resume from the same second on any phone',
-    'Alerts only for titles in your favorites'
+    'Resume from the same second on any phone'
   ])
 });
 

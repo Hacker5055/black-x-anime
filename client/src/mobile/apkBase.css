@@ -11,9 +11,18 @@ html[lang='ar'] {
 *::after {
   box-sizing: border-box;
 }
+/* The page scrolls on the viewport (window). Keep it that way:
+   - `overflow-x: hidden` + `overscroll-behavior` belong on <html> (the viewport).
+   - <body> and #root use `clip`, which hides sideways overflow WITHOUT turning
+     them into scroll containers. In v16.0 they had `overflow-x: hidden` (so both
+     became non-scrollable scroll containers) and <body> had
+     `overscroll-behavior-y: none`, which stopped every finger swipe from reaching
+     the viewport: no tab could be scrolled by touch. */
 html {
   scroll-behavior: smooth;
   background: #000000;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 body {
   margin: 0;
@@ -24,13 +33,10 @@ body {
   font-size: 15.5px;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
-  overscroll-behavior-y: none;
 }
-html,
 body,
 #root {
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100vw;
 }
 h1,
