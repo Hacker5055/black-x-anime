@@ -878,18 +878,10 @@ export default function TrendingAnime() {
                         BLACK X 4
                       </span>
                     ) : (
-                      <span
-                        style={{
-                          padding: '0.2rem 0.55rem',
-                          borderRadius: '8px',
-                          background: 'rgba(0, 0, 0, 0.82)',
-                          border: '1px solid rgba(234, 179, 8, 0.6)',
-                          color: '#fde047',
-                          fontSize: '0.68rem',
-                          fontWeight: 900
-                        }}
-                      >
-                        👑 FHD 1080p VIP
+                      // The real server name. (It said «👑 FHD 1080p VIP» on every title: the card does
+                      // not know the qualities, and streaming is the same for VIP and free accounts.)
+                      <span style={{ padding: '0.2rem 0.55rem', borderRadius: '8px', background: '#111', border: '1px solid #aaa', color: '#fff', fontSize: '0.68rem', fontWeight: 900 }}>
+                        {String(item.sourceLabel || '').replace(/^سيرفر\s+/, '') || 'BLACK X'}
                       </span>
                     )}
                     <span

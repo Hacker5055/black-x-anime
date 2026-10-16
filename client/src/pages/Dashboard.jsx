@@ -1268,17 +1268,42 @@ function LatestSection({ items, loading, error, onRetry }) {
   );
 }
 
-/* --------------------------- 3. WitAnime Weekly Airing Schedule (مواعيد الحلقات) --------------------------- */
-function WeeklyScheduleSection({ items = [] }) {
-  const { lang } = useI18n();
+/* --------------------------- 3. Weekly airing schedule (real AniList air times) --------------------------- */
+// /api/anime/schedule lists the next air time of the most popular anime on air now (a weekly
+// show airs again within 7 days, so every weekday is covered). Days are grouped here by the
+// visitor's own clock; the API's UTC day buckets are only transport. This section used to show
+// the first six "latest episodes" under every day tab: there was no schedule behind it.
+function groupScheduleByLocalDay(days) {
+  const byDay = {};
+  for (const list of Object.values(days || {})) {
+    for (const slot of Array.isArray(list) ? list : []) {
+      const at = Number(slot?.airingAt);
+      if (!slot?.media || !(at > 0)) continue;
+      const day = new Date(at * 1000).getDay();
+      if (!byDay[day]) byDay[day] = [];
+      byDay[day].push(slot);
+    }
+  }
+  const minuteOfDay = (slot) => {
+    const d = new Date(slot.airingAt * 1000);
+    return d.getHours() * 60 + d.getMinutes();
+  };
+  Object.values(byDay).forEach((list) => list.sort((a, b) => minuteOfDay(a) - minuteOfDay(b)));
+  return byDay;
+}
+
+function WeeklyScheduleSection() {
+  const { t, lang, formatNumber } = useI18n();
   const navigate = useNavigate();
   const todayJs = new Date().getDay();
   const [selectedDay, setSelectedDay] = useState(todayJs);
-
-  const dayItems = useMemo(() => {
-    if (!items.length) return [];
-    return items.filter((_, idx) => idx % 7 === selectedDay % 7 || idx < 6).slice(0, 6);
-  }, [items, selectedDay]);
+  const { data, loading, error, reload } = useAsync(() => api.get('/api/anime/schedule'), []);
+  const byDay = useMemo(() => groupScheduleByLocalDay(data?.days), [data]);
+  const dayItems = byDay[selectedDay] || [];
+  const timeFormat = useMemo(
+    () => new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: 'numeric', minute: '2-digit' }),
+    [lang]
+  );
 
   return (
     <section className="wit-section" id="schedule-section">
@@ -1304,22 +1329,41 @@ function WeeklyScheduleSection({ items = [] }) {
         ))}
       </div>
 
-      <div className="wit-grid-anime grid-anime">
-        {dayItems.map((it, i) => (
-          <ShowCard
-            key={`sched-${it.slug}-${i}`}
-            show={{
-              slug: it.slug,
-              titleEn: it.titleEn,
-              titleAr: it.titleAr,
-              poster: it.poster,
-              episodes: it.episode
-            }}
-            delay={i}
-            onClick={() => navigate(`/show/${it.slug}`)}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <SkeletonGrid count={6} />
+      ) : error ? (
+        <EmptyState icon="📡" title={t('error.upstream')}>
+          <button type="button" className="btn btn--ghost" onClick={reload}>{t('common.retry')}</button>
+        </EmptyState>
+      ) : dayItems.length === 0 ? (
+        <EmptyState icon="🗓️" title={lang === 'ar' ? 'لا توجد حلقات مسجلة لهذا اليوم' : 'No episodes listed for this day'} />
+      ) : (
+        <div className="wit-grid-anime grid-anime">
+          {dayItems.map((slot, i) => {
+            const m = slot.media;
+            const name = m.titleEnglish || m.titleRomaji || '';
+            const time = timeFormat.format(new Date(slot.airingAt * 1000));
+            const ep = Number(slot.episode) > 0 ? formatNumber(slot.episode) : '';
+            return (
+              <ShowCard
+                key={`sched-${m.id}`}
+                show={{
+                  slug: `find-${m.id}`,
+                  titleEn: name,
+                  titleAr: m.titleArabic,
+                  poster: m.coverUrl,
+                  color: m.color,
+                  episodes: m.episodes,
+                  status: m.status
+                }}
+                meta={ep ? `${lang === 'ar' ? `الحلقة ${ep}` : `Ep. ${ep}`} • ${time}` : time}
+                delay={i}
+                onClick={() => navigate(`/trending?q=${encodeURIComponent(name)}`)}
+              />
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -1565,7 +1609,7 @@ export default function Dashboard({ onOpenAuth }) {
       <AnimeDiscover compact />
 
       {/* 3. Weekly Airing Schedule (مواعيد الحلقات) */}
-      <WeeklyScheduleSection items={pinnedItems} />
+      <WeeklyScheduleSection />
 
       {/* 4. Manga & Manhwa Library */}
       <LibraryShowcaseSection />

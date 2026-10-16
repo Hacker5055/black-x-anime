@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { showStatusLabel } from '../utils/showStatus.js';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import {
   isAnimeEpisodeAlertEnabled,
@@ -81,6 +82,8 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
 
   const title = (lang === 'ar' ? show.titleAr : show.titleEn) || show.titleEn || show.slug;
   const posterSrc = show.poster || show.coverUrl || show.banner || '';
+  // Only the status the API sent; unknown hides the badge (never a guessed "Airing").
+  const statusLabel = showStatusLabel(show.status, lang);
   const targetSlug = show.slug || String(show.titleEn || 'anime').toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const [subbed, setSubbed] = useState(() => isAnimeEpisodeAlertEnabled(targetSlug));
 
@@ -126,17 +129,16 @@ export default function ShowCard({ show, progress, onClick, delay = 0, meta }) {
           <Poster src={posterSrc} alt={title} cls="bx-3d-card__img" />
           <div className="bx-3d-card__vignette" aria-hidden="true" />
 
-          {/* Floating 3D Status Badge */}
-          <span className="wit-badge wit-badge--status bx-3d-float-z2">
-            {show.status === 'FINISHED'
-              ? (lang === 'ar' ? 'مكتمل' : 'Completed')
-              : (lang === 'ar' ? 'يعرض الان' : 'Airing')}
-          </span>
+          {/* Floating 3D Status Badge (real status only) */}
+          {statusLabel && (
+            <span className="wit-badge wit-badge--status bx-3d-float-z2">{statusLabel}</span>
+          )}
 
-          {/* Floating 3D Type / VIP FHD Badge */}
-          <span className="wit-badge wit-badge--type bx-3d-float-z2">
-            {show.kind === 'movie' ? 'MOVIE' : '👑 FHD'}
-          </span>
+          {/* Floating 3D Type Badge: movies only. No quality badge: a card does not know
+              which qualities a title's servers offer (the old one said «👑 FHD» on every card). */}
+          {show.kind === 'movie' && (
+            <span className="wit-badge wit-badge--type bx-3d-float-z2">{lang === 'ar' ? 'فيلم' : 'Movie'}</span>
+          )}
 
           {/* Floating 3D Episode Count Pill */}
           {show.episodes && (
@@ -190,6 +192,12 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
   const tilt = useLuxury3DTilt();
   const title = (lang === 'ar' ? item.titleAr : item.titleEn) || item.titleEn || item.slug;
   const [subbed, setSubbed] = useState(() => isAnimeEpisodeAlertEnabled(item.slug));
+  // Some feeds (BLACK X 1 and 2) do not say which episode is new. Then the card shows no
+  // number (it used to say «الحلقة ٠») and opens the title page: /watch/<slug>/null broke.
+  const epNum = Number(item.episode) > 0 ? Number(item.episode) : 0;
+  const target = epNum
+    ? `/watch/${item.slug}/${epNum}`
+    : (typeof item.url === 'string' && item.url.startsWith('/show/') ? item.url : `/show/${item.slug}`);
 
   const handleBellClick = async (e) => {
     e.stopPropagation();
@@ -215,10 +223,10 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
         onTouchMove={tilt.onTouchMove}
         onTouchEnd={tilt.onTouchEnd}
         className="wit-ep-card bx-3d-card ep-tile reveal"
-        onClick={() => (onClick ? onClick(item) : navigate(`/watch/${item.slug}/${item.episode}`))}
+        onClick={() => (onClick ? onClick(item) : navigate(target))}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && navigate(`/watch/${item.slug}/${item.episode}`)}
+        onKeyDown={(e) => e.key === 'Enter' && navigate(target)}
       >
         <div className="bx-3d-card__glare" aria-hidden="true" />
         <div className="bx-3d-card__rim" aria-hidden="true" />
@@ -227,13 +235,14 @@ export function EpisodeTile({ item, onClick, delay = 0, progress }) {
           <Poster src={item.poster} alt={title} cls="bx-3d-card__img" />
           <div className="bx-3d-card__vignette" aria-hidden="true" />
 
-          {/* Floating 3D Episode Number Badge */}
-          <div className="wit-ep-card__num ep-tile__num bx-3d-float-z2">
-            {lang === 'ar' ? `الحلقة ${formatNumber(item.episode)}` : `${t('common.ep')} ${formatNumber(item.episode)}`}
-          </div>
-
-          {/* Floating 3D FHD VIP Tag */}
-          <span className="wit-ep-card__vip bx-3d-float-z2">👑 FHD</span>
+          {/* Floating 3D Episode Number Badge (only when the feed says which episode) */}
+          {(epNum > 0 || item.kind === 'movie') && (
+            <div className="wit-ep-card__num ep-tile__num bx-3d-float-z2">
+              {epNum > 0
+                ? (lang === 'ar' ? `الحلقة ${formatNumber(epNum)}` : `${t('common.ep')} ${formatNumber(epNum)}`)
+                : (lang === 'ar' ? 'فيلم' : 'Movie')}
+            </div>
+          )}
 
           {/* Floating 3D Quick Alert Bell */}
           <button

@@ -69,10 +69,12 @@ router.get('/season', async (req, res) => {
 
 router.get('/schedule', async (req, res) => {
   try {
-    // current week window (from today 00:00 UTC-ish forward 7 days)
+    // The next 7 days from now: each weekly show appears once, on its weekday.
+    // (Starting at 00:00 UTC dropped the shows that had already aired today,
+    // because their next episode lands just after a window ending 7 days later.)
     const now = Math.floor(Date.now() / 1000);
-    const weekStart = now - (now % 86400);
-    const weekEnd = weekStart + 7 * 86400;
+    const weekStart = now;
+    const weekEnd = now + 7 * 86400;
     const items = await fetchSchedule(weekStart, weekEnd);
     const days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }; // JS getUTCDay: 0=Sun
     for (const item of items) {

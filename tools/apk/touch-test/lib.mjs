@@ -309,7 +309,33 @@ function webShow(a) {
 function api(req, url, ctx) {
   const p = url.pathname;
   // Website-only lists (the server already removed the hidden genres from them).
-  if (p === '/api/stream/latest') return json(req, { items: ANIME.slice(0, 8).map((a, i) => ({ ...webShow(a), episode: i + 3 })) });
+  if (p === '/api/stream/latest') {
+    return json(req, {
+      items: ANIME.slice(0, 8).map((a, i) => ({
+        ...webShow(a),
+        status: a.details.state,
+        // Like the live feed: BLACK X 1 and 2 do not always say which episode is new.
+        episode: i === 1 ? null : i + 3
+      }))
+    });
+  }
+  // Real air times (AniList) for the computer home's weekly schedule: one show later today,
+  // one tomorrow, one in three days. Day buckets are UTC like the server; the page regroups.
+  if (p === '/api/anime/schedule') {
+    const now = Math.floor(Date.now() / 1000);
+    const slot = (id, name, inSec, episode) => ({
+      episode,
+      airingAt: now + inSec,
+      media: {
+        id, titleRomaji: name, titleEnglish: name, titleArabic: null, coverUrl: `${LOCAL}/poster/${(id % 8) + 1}.svg`,
+        color: '#888888', genres: ['Action'], episodes: 12, status: 'RELEASING', format: 'TV', nextEpisode: episode, nextAiringAt: now + inSec
+      }
+    });
+    const slots = [slot(9101, 'Today Show', 60, 5), slot(9102, 'Tomorrow Show', 86400, 9), slot(9103, 'Later Show', 3 * 86400, 2)];
+    const days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+    for (const s of slots) days[new Date(s.airingAt * 1000).getUTCDay()].push(s);
+    return json(req, { days, weekStart: now, weekEnd: now + 7 * 86400 });
+  }
   if (p === '/api/anime/trending') {
     return json(req, {
       anime: ANIME.slice(20, 26).map((a) => ({ id: a.mal_id, title_english: a.name, title_romaji: a.name, cover_url: a.poster_uri, banner_url: a.cover_uri, genres: ['Action'], score: 81, season_year: 2024 }))

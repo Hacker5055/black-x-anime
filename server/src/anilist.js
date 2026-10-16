@@ -145,29 +145,40 @@ export async function fetchSeason(season, seasonYear) {
   );
 }
 
-export async function fetchSchedule(weekStart, weekEnd) {
-  return cachedQuery(
-    `anilist:schedule:v2:${weekStart}`,
+/**
+ * Air times for the most popular Japanese anime on air now, between two unix
+ * times (seconds). One AniList request; the hidden genres are excluded by the
+ * query itself and again by visibleMedia. A weekly show's next episode always
+ * falls within the next 7 days, so a 7-day window covers every weekday.
+ * (The old airingSchedules query got only the first 50 slots of the week,
+ * which ran out after two or three days and left the rest of the week empty.)
+ */
+export async function fetchSchedule(fromSec, toSec) {
+  const airing = await cachedQuery(
+    'anilist:airing-now:v1',
     15 * 60 * 1000,
-    `query ($start: Int, $end: Int) {
+    `query {
       Page(perPage: 50) {
-        airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) {
-          episode
-          airingAt
-          media { ${MEDIA_FRAGMENT} }
-        }
+        media(status: RELEASING, type: ANIME, countryOfOrigin: "JP", sort: POPULARITY_DESC, isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
       }
     }`,
-    { start: weekStart, end: weekEnd },
+    {},
     (data) =>
-      data.Page.airingSchedules
-        .filter((s) => visibleMedia(s.media))
-        .map((s) => ({
-          episode: s.episode,
-          airingAt: s.airingAt,
-          media: mediaToJson(normalizeMedia(s.media))
-        }))
+      data.Page.media
+        .filter(visibleMedia)
+        .map((m) => mediaToJson(normalizeMedia(m)))
+        .filter((m) => m.nextAiringAt > 0)
+        // The schedule cards never show the synopsis; keep the response small.
+        .map((m) => {
+          const slim = { ...m };
+          delete slim.description;
+          return slim;
+        })
   );
+  return airing
+    .filter((m) => m.nextAiringAt >= fromSec && m.nextAiringAt < toSec)
+    .map((m) => ({ episode: m.nextEpisode, airingAt: m.nextAiringAt, media: m }))
+    .sort((a, b) => a.airingAt - b.airingAt);
 }
 
 export async function fetchAnime(id) {
