@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import BxIcon from './BxIcon.jsx';
+import PosterCard from './PosterCard.jsx';
 import { SkeletonRow } from './Skeleton.jsx';
-import { coverForMode } from './dataSaver.js';
 
 const CACHE_KEY = 'bx_mob_byw_v16';
 
@@ -10,7 +9,7 @@ const CACHE_KEY = 'bx_mob_byw_v16';
  * from the catalogue (no tracking, no server-side profile). Hidden when there is
  * nothing real to show.
  */
-export default function BecauseYouWatchedRow({ seed, excludeIds, loadSimilar, onOpen, isRtl, dataSaver = false }) {
+export default function BecauseYouWatchedRow({ seed, excludeIds, loadSimilar, onOpen, onPeek, isRtl, dataSaver = false }) {
   const seedId = seed?.objectID || '';
   const [state, setState] = useState(() => {
     try {
@@ -60,39 +59,16 @@ export default function BecauseYouWatchedRow({ seed, excludeIds, loadSimilar, on
   if (state.items.length < 3) return null;
   const seedTitle = seed.titleEn || seed.titleAr || '';
   return (
-    <section style={{ padding: '0.9rem 1rem 0.2rem' }}>
-      <h2 style={{ margin: '0 0 0.55rem', fontSize: '1rem', fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        <BxIcon name="sparkles" className="bx-ico-lead" />
-        {isRtl ? `عشان اتفرجت على ${seedTitle}` : `Because you watched ${seedTitle}`}
-      </h2>
-      <div className="bx-mob-scroll bx-stagger" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
+    <section className="bx-section">
+      <div className="bx-section-head">
+        <h2 className="bx-section-title bx-ellipsis">
+          {isRtl ? 'عشان اتفرجت على ' : 'Because you watched '}
+          <bdi>{seedTitle}</bdi>
+        </h2>
+      </div>
+      <div className="bx-row bx-mob-scroll">
         {state.items.map((item) => (
-          <div
-            key={item.objectID}
-            data-bx-oid={item.objectID}
-            className="bx-mob-card bx-press"
-            role="button"
-            tabIndex={0}
-            aria-label={item.titleEn}
-            onClick={() => onOpen?.(item)}
-            style={{ minWidth: '116px', maxWidth: '116px', cursor: 'pointer' }}
-          >
-            <img
-              src={coverForMode(item.poster, dataSaver)}
-              alt={item.titleEn}
-              loading="lazy"
-              decoding="async"
-              style={{ width: '116px', height: '164px', objectFit: 'cover', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.12)', background: '#0b0b0e' }}
-            />
-            <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {item.titleEn}
-            </div>
-            {(item.year || item.type) && (
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
-                {[item.type, item.year].filter(Boolean).join(' • ')}
-              </div>
-            )}
-          </div>
+          <PosterCard key={item.objectID} item={item} onOpen={onOpen} onPeek={onPeek} dataSaver={dataSaver} />
         ))}
       </div>
     </section>

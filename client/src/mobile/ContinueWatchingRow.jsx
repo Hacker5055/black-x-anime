@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import BxIcon from './BxIcon.jsx';
 import { episodeKey, getPosition, subscribePositions } from './resumeStore.js';
-import { coverForMode } from './dataSaver.js';
+import PosterCard from './PosterCard.jsx';
+import SectionHead from './SectionHead.jsx';
 
 /**
  * "Continue watching" with the real progress of each show's last episode
@@ -22,75 +23,37 @@ export default function ContinueWatchingRow({ history, isRtl, dataSaver = false,
   }
   if (!items.length) return null;
   return (
-    <section style={{ padding: '0.9rem 1rem 0.2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-        <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 900 }}>
-          <BxIcon name="play" className="bx-ico-lead" />
-          {isRtl ? 'كمّل المشاهدة' : 'Continue watching'}
-        </h2>
-      </div>
-      <div className="bx-mob-scroll bx-stagger" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
+    <section className="bx-section">
+      <SectionHead title={isRtl ? 'كمّل المشاهدة' : 'Continue watching'} isRtl={isRtl} />
+      <div className="bx-row bx-mob-scroll">
         {items.map((h, i) => {
           const ep = Number(h.episode) || 0;
           const pos = ep ? getPosition(episodeKey(h, ep)) : null;
           const pct = pos && pos.dur > 0 ? Math.min(100, Math.max(2, (pos.sec / pos.dur) * 100)) : null;
           const leftMin = pos && pos.dur > 0 && !pos.done ? Math.max(1, Math.ceil((pos.dur - pos.sec) / 60)) : null;
-          // Non-breaking spaces keep "5" with "الحلقة" and "14 د" together; the line may
-          // only wrap before the bullet.
+          // Non-breaking spaces keep "5" with "الحلقة" and "14 د" together.
           const nb = '\u00a0';
           let line = ep ? (isRtl ? `الحلقة${nb}${ep}` : `Episode${nb}${ep}`) : '';
           if (pos?.done) line += isRtl ? ` •${nb}خلصت` : ` •${nb}finished`;
           else if (leftMin) line += isRtl ? ` •${nb}فاضل${nb}${leftMin}${nb}د` : ` •${nb}${leftMin}${nb}min${nb}left`;
+          const card = { ...h, objectID: h.objectID || h.slug, rating: '' };
           return (
-            <div
+            <PosterCard
               key={`${h.objectID || h.slug}-${i}`}
-              data-bx-oid={h.objectID || ''}
-              className="bx-mob-card bx-press"
-              role="button"
-              tabIndex={0}
-              aria-label={`${h.titleEn || h.titleAr || ''} ${line}`}
-              onClick={() => onResume?.(h, pos?.done ? ep + 1 : ep || 1)}
-              style={{ minWidth: '128px', maxWidth: '128px', background: '#09090c', border: '1px solid rgba(255,255,255,0.14)', borderRadius: '12px', overflow: 'hidden', cursor: 'pointer' }}
-            >
-              <div style={{ position: 'relative', width: '128px', height: '168px' }}>
-                <img
-                  src={coverForMode(h.poster, dataSaver)}
-                  alt={h.titleEn || h.titleAr || ''}
-                  loading="lazy"
-                  decoding="async"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.84)' }}
-                />
+              item={card}
+              width={128}
+              badge={null}
+              progress={pct ?? undefined}
+              subtitle={line}
+              overlay={
                 <span className="bx-cw-play" aria-hidden="true">
-                  <BxIcon name="play" />
+                  <BxIcon name="play" filled />
                 </span>
-                {pct !== null && (
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '4px', background: 'rgba(255,255,255,0.22)' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: '#ffffff', borderRadius: '2px' }} />
-                  </div>
-                )}
-                {onInfo && (
-                  <button
-                    type="button"
-                    className="bx-icon-hit bx-cw-info"
-                    aria-label={isRtl ? 'تفاصيل' : 'Details'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onInfo(h);
-                    }}
-                  >
-                    <span>
-                      <BxIcon name="info" />
-                    </span>
-                  </button>
-                )}
-              </div>
-              <div style={{ padding: '0.45rem 0.55rem 0.5rem', background: '#0c0c10' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 900, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {h.titleEn || h.titleAr}
-                </div>
-                {line && <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.66)', lineHeight: 1.35 }}>{line}</div>}
-              </div>
-            </div>
+              }
+              dataSaver={dataSaver}
+              onOpen={() => onResume?.(h, pos?.done ? ep + 1 : ep || 1)}
+              onPeek={onInfo ? () => onInfo(h) : undefined}
+            />
           );
         })}
       </div>

@@ -29,7 +29,7 @@ export const BLACK_X_MOTION_THEMES = [
   {
     id: 'cyber',
     iconName: 'zap',
-    nameAr: '3. مصفوفة الغليتش 120Hz',
+    nameAr: '3. مصفوفة الغليتش',
     nameEn: '3. Cyber Matrix Glitch',
     subAr: 'مطر رقمي وشبكة ثلاثية الأبعاد وغليتش سايبربانك',
     subEn: 'Digital Rain, 3D Wireframe Grid & Glitch Lock'
@@ -1022,7 +1022,7 @@ export default function BlackXSplashVortex({
               fontFamily: 'monospace'
             }}
           >
-            {activeMeta.nameEn.toUpperCase()} · {isWebProfile ? 'WEB · 60 FPS CAP' : '120Hz ENGINE'}
+            {activeMeta.nameEn.toUpperCase()}{isWebProfile ? ' · WEB · 60 FPS CAP' : ''}
           </div>
         </div>
       </div>

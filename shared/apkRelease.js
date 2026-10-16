@@ -11,23 +11,23 @@
  * no longer work (they get a non-dismissible banner).
  */
 export const APK_RELEASE = Object.freeze({
-  version: '16.1',
+  version: '17.0',
   minSupported: '15.0',
   url: 'https://black-x-anime.me/BLACK-X-Mobile-120Hz.apk',
   publishedAt: '2026-10-16',
   notesAr: Object.freeze([
-    'تصليح اللمس: التمرير بالصباع رجع يشتغل في كل الصفحات',
-    'تسجيل الدخول والـ VIP بقوا عن طريق سيرفر الموقع (أمان أعلى)',
-    'فتح أسرع وسلاسة أكتر في الرئيسية والبحث',
-    'تخطي المقدمة بتوقيتات حقيقية والحلقة الجاية بعدّاد',
-    'كمّل المشاهدة من نفس الثانية على أي موبايل'
+    'شكل جديد: رئيسية أنضف وكل قسم بيعرض حاجة مختلفة',
+    'التنقل: حسابك من صورتك فوق، والتابات بأساميها وحركة انسيابية',
+    'مشغل بأزرار جديدة: ±10 ثواني و±10 دقايق وعلامات المقدمة',
+    'البحث بفلترة في مكان واحد، والجدول بيفتح على النهارده',
+    'المجتمع: لايك واحد لكل حساب ووقت حقيقي للبوستات'
   ]),
   notesEn: Object.freeze([
-    'Touch fix: finger scrolling works again on every page',
-    'Sign-in and VIP now go through the website server (more secure)',
-    'Faster start and smoother home and search',
-    'Real intro-skip timestamps and a next-episode countdown',
-    'Resume from the same second on any phone'
+    'New look: a cleaner home where every row shows something different',
+    'Navigation: your account from your picture, labelled tabs and smooth motion',
+    'New player controls: ±10 s, ±10 min and intro marks on the seek bar',
+    'Search filters in one sheet, and the schedule opens on today',
+    'Community: one like per account and real post times'
   ])
 });
 
