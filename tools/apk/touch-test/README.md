@@ -44,3 +44,23 @@ session can still open the sign-in page) and `motion` (reduced motion,
 rapid taps, taps during a running transition).
 
 A pass here is necessary, not sufficient: it does not replace a test on a real phone.
+
+## The website (phones = the app interface, computers = the website pages)
+
+```bash
+bash tools/apk/touch-test/run-web.sh                    # builds the website into /tmp, ~2.5 min
+ONLY=links,back bash tools/apk/touch-test/run-web.sh    # some scenarios
+DIST=/path/to/website/build bash tools/apk/touch-test/run-web.sh
+```
+
+`web-suite.mjs` (98 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
+the site's same-origin `/api/*` goes to the mock, Google Fonts are answered with the bundled fonts so
+Arabic renders in screenshots). A 412×915 touch phone with a phone browser user agent, or a 1440×900
+computer. Scenarios: `boot` (phone → app interface, computer → website, `?ui=` switch remembered,
+footer link back, no APK update card), `links` (`/show`, `/watch`, `/discover`, `/browse`,
+`/community`, `/trending?q=`, `/profile/...`, `/mylist`, manga chapter links, hidden and dead links),
+`sync` (the address bar follows the page), `back` (browser back steps back one app level, leaves the
+site at home, no piled-up history, no entry before the first tap), `profile` (Android download and
+computer-version rows, Google opens Firebase's popup, not the APK window), `player` (+10 s, browser
+full screen + landscape), `genres` and `desktop` (computer home without invented values, hidden
+titles «مش متاح», AniList queries with the exclusions).
