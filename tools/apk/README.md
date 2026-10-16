@@ -29,9 +29,11 @@ The script:
 
 After building, check that `apksigner verify` says `Verifies`, that every stored entry
 (especially `resources.arsc`) starts on a 4-byte boundary, and that the native entries
-are byte-identical to the previous APK. Test the bundle in a browser first: serve the
-Vite output and open it at `http://localhost:<port>/` (the APK build renders the mobile
-UI everywhere; `?apk_ui=1` does the same on the normal website build).
+are byte-identical to the previous APK. Then run the real-touch suite on the new APK:
+`bash tools/apk/touch-test/run.sh` (see `tools/apk/touch-test/README.md`; it extracts
+`assets/public/` from the APK and works in `/tmp`). For a quick look, serve the Vite output
+and open it at `http://localhost:<port>/` (the APK build renders the mobile UI everywhere;
+`?apk_ui=1` does the same on the normal website build).
 
 ## Tools
 

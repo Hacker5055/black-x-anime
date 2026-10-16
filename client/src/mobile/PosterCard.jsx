@@ -7,9 +7,40 @@ const LONG_PRESS_MS = 460;
 const MOVE_TOLERANCE = 10;
 
 /**
+ * The finger that made a long press is still down when the quick peek opens. When it is
+ * lifted the browser may still send a click, and that click hits whatever opened under
+ * the finger (the peek backdrop, which closed itself at once). Swallow exactly that one
+ * click: anything after the release window is a new, deliberate tap.
+ */
+function swallowReleaseClick() {
+  if (typeof document === 'undefined') return;
+  let timer = 0;
+  const done = () => {
+    clearTimeout(timer);
+    document.removeEventListener('click', swallow, true);
+    window.removeEventListener('pointerup', onRelease, true);
+    window.removeEventListener('pointercancel', onRelease, true);
+  };
+  const swallow = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    done();
+  };
+  const onRelease = () => {
+    clearTimeout(timer);
+    timer = setTimeout(done, 350); // the click follows the release right away
+  };
+  document.addEventListener('click', swallow, true);
+  window.addEventListener('pointerup', onRelease, true);
+  window.addEventListener('pointercancel', onRelease, true);
+  timer = setTimeout(done, 15000); // never keep listening if the release was missed
+}
+
+/**
  * Long-press support for cards: a press held still for ~0.46 s calls `onLongPress`
- * (the quick peek sheet) and swallows the click that follows. Moving the finger
- * (scrolling) or lifting early cancels it, so a normal tap still opens the title.
+ * (the quick peek sheet) and swallows the click that the same finger's release makes.
+ * Moving the finger (scrolling) or lifting early cancels it, so a normal tap still
+ * opens the title.
  */
 export function useLongPress(onLongPress) {
   const timer = useRef(null);
@@ -35,6 +66,7 @@ export function useLongPress(onLongPress) {
         timer.current = null;
         fired.current = true;
         haptic('select');
+        swallowReleaseClick();
         onLongPress();
       }, LONG_PRESS_MS);
     },

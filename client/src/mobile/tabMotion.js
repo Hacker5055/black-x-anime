@@ -18,6 +18,45 @@ export const TAB_ORDER = ['home', 'catalog', 'schedule', 'manga', 'community'];
 const VT_ATTR = 'bxVt';
 const FRESH_MS = 700;
 let pending = null; // { kind, at } of the navigation that is mounting a page right now
+let running = null; // the ViewTransition that is animating right now
+let relayInstalled = false;
+
+/**
+ * While a view transition runs, the browser hit-tests the transition snapshot, so every
+ * tap lands on <html> and a quick second tap on the dock was simply lost (any tap within
+ * ~0.4 s of the previous tab switch). The dock and the top bar never move during a
+ * transition (they have their own view-transition-name), so a tap that lands on <html>
+ * over one of their buttons finishes the running transition at once and is handed to
+ * that button.
+ */
+function ensureTapRelay() {
+  if (relayInstalled || typeof document === 'undefined') return;
+  relayInstalled = true;
+  document.addEventListener(
+    'click',
+    (e) => {
+      const t = running;
+      const root = document.documentElement;
+      if (!t || (e.target !== root && e.target !== document.body)) return;
+      const x = e.clientX;
+      const y = e.clientY;
+      const button = [...document.querySelectorAll('.bx-dock button, .bx-topbar button')].find((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      });
+      if (!button) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        t.skipTransition();
+      } catch {
+        /* already finished */
+      }
+      t.finished.finally(() => requestAnimationFrame(() => button.click()));
+    },
+    true
+  );
+}
 
 function reducedMotion() {
   try {
@@ -61,6 +100,7 @@ export function navigateWithMotion(from, to, rtl, update) {
   const vtBusy = root.classList.contains('bx-vt-running');
 
   if (typeof document.startViewTransition === 'function' && !vtBusy) {
+    ensureTapRelay();
     root.dataset[VT_ATTR] = motion;
     root.classList.add('bx-vt-running');
     pending = { kind: 'vt', at: Date.now() };
@@ -69,7 +109,9 @@ export function navigateWithMotion(from, to, rtl, update) {
         pending = { kind: 'vt', at: Date.now() };
         flushSync(update);
       });
+      running = t;
       t.finished.finally(() => {
+        if (running === t) running = null;
         delete root.dataset[VT_ATTR];
         root.classList.remove('bx-vt-running');
       });
