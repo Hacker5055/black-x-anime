@@ -343,6 +343,9 @@ export default function MobileApkApp() {
   const [catalogTotal, setCatalogTotal] = useState(null); // real Algolia nbHits / search result count
   const [bxAnimeTotal, setBxAnimeTotal] = useState(null); // website /api/stream/stats
   const [catalogPage, setCatalogPage] = useState(0);
+  // Pages Algolia will actually serve (nbPages). The index only pages through its first
+  // 1,000 hits (paginationLimitedTo), so this stops there even when nbHits is 7,000+.
+  const [catalogPages, setCatalogPages] = useState(0);
   const [catalogSort, setCatalogSort] = useState('series_fav_count_desc');
   const [catalogGenre, setCatalogGenre] = useState(GENRE_CHIPS[0]);
   const [catalogType, setCatalogType] = useState(TYPE_FILTERS[0]);
@@ -2200,6 +2203,7 @@ export default function MobileApkApp() {
           setCatalogItems(items);
           setCatalogTotal(items.length);
           setCatalogPage(0);
+          setCatalogPages(0);
           return;
         }
         const body = {
@@ -2215,7 +2219,9 @@ export default function MobileApkApp() {
         const total = Number(res.nbHits);
         setCatalogTotal(Number.isFinite(total) && total >= 0 ? total : null);
         setCatalogPage(0);
+        setCatalogPages(Number(res.nbPages) || 0);
       } catch (_) {
+        if (alive) setCatalogPages(0);
         if (alive && q) {
           setCatalogItems([]);
           setCatalogTotal(0);
@@ -2234,9 +2240,12 @@ export default function MobileApkApp() {
   const handleLoadMoreCatalog = async () => {
     // Website search results arrive in a single response; only the catalogue is paged.
     if (loadingMoreCatalog || searchQuery.trim()) return;
+    const nextPage = catalogPage + 1;
+    // Never ask for a page Algolia cannot serve: past its pagination limit it answers with
+    // no hits, which used to leave a "load more" button that did nothing (1000 of 7,009).
+    if (nextPage >= catalogPages) return;
     setLoadingMoreCatalog(true);
     try {
-      const nextPage = catalogPage + 1;
       const body = {
         query: '',
         page: nextPage,
@@ -2247,10 +2256,17 @@ export default function MobileApkApp() {
       const res = await queryAlgolia(catalogSort, body);
       const more = (res.hits || []).map(formatAnimeHit).filter(Boolean);
       if (more.length) {
-        setCatalogItems((prev) => [...prev, ...more]);
+        setCatalogItems((prev) => {
+          const seen = new Set(prev.map((a) => a.objectID));
+          return [...prev, ...more.filter((a) => !seen.has(a.objectID))];
+        });
         setCatalogPage(nextPage);
+        if (Number(res.nbPages)) setCatalogPages(Number(res.nbPages));
+      } else {
+        setCatalogPages(nextPage); // nothing past this page
       }
     } catch (_) {
+      showToast(lang === 'ar' ? 'مقدرناش نحمّل المزيد — اتأكد من النت وجرّب تاني' : 'Could not load more — check your connection', 'alert');
     } finally {
       setLoadingMoreCatalog(false);
     }
@@ -4396,7 +4412,7 @@ export default function MobileApkApp() {
                 ))}
               </div>
 
-              {!searchQuery.trim() && Number.isFinite(catalogTotal) && catalogItems.length < catalogTotal && (
+              {!searchQuery.trim() && catalogItems.length > 0 && catalogPage + 1 < catalogPages && (
                 <button
                   type="button"
                   className="bx-btn bx-btn-outline bx-btn-block"
@@ -4409,13 +4425,46 @@ export default function MobileApkApp() {
                       <BxIcon name="loader" spin />
                       {isRtl ? 'بيحمّل...' : 'Loading...'}
                     </>
+                  ) : Number.isFinite(catalogTotal) ? (
+                    isRtl ? (
+                      `عرض المزيد (${catalogItems.length.toLocaleString()} من ${catalogTotal.toLocaleString()})`
+                    ) : (
+                      `Load more (${catalogItems.length.toLocaleString()} of ${catalogTotal.toLocaleString()})`
+                    )
                   ) : isRtl ? (
-                    `عرض المزيد (${catalogItems.length} من ${catalogTotal.toLocaleString()})`
+                    'عرض المزيد'
                   ) : (
-                    `Load more (${catalogItems.length} of ${catalogTotal.toLocaleString()})`
+                    'Load more'
                   )}
                 </button>
               )}
+              {/* The search service pages through the first 1,000 hits of a list only: say so and
+                  point to search / sort / filters instead of a button that loads nothing. */}
+              {!searchQuery.trim() &&
+                !catalogLoading &&
+                catalogItems.length > 0 &&
+                catalogPage + 1 >= catalogPages &&
+                Number.isFinite(catalogTotal) &&
+                catalogItems.length < catalogTotal && (
+                  <div className="bx-catalog-cap" role="note">
+                    <p>
+                      {isRtl
+                        ? `ظاهر أول ${catalogItems.length.toLocaleString()} من ${catalogTotal.toLocaleString()} عمل. خدمة البحث بتعرض أول ${catalogItems.length.toLocaleString()} بس في كل ترتيب، فعشان توصل للباقي دوّر بالاسم أو غيّر الترتيب والفلترة.`
+                        : `Showing the first ${catalogItems.length.toLocaleString()} of ${catalogTotal.toLocaleString()} titles. The search service lists only the first ${catalogItems.length.toLocaleString()} for each sort, so search by name or change the sort and filters to reach the rest.`}
+                    </p>
+                    <button
+                      type="button"
+                      className="bx-btn bx-btn-outline bx-btn-block"
+                      onClick={() => {
+                        haptic('tap');
+                        setFilterSheetOpen(true);
+                      }}
+                    >
+                      <BxIcon name="sliders" />
+                      {isRtl ? 'الترتيب والفلترة' : 'Sort & filters'}
+                    </button>
+                  </div>
+                )}
             </>
           )}
         </main>

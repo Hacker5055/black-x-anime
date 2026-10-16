@@ -327,6 +327,39 @@ scenario('search', async (browser) => {
   check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
 });
 
+/* =================================================================== catalog */
+scenario('catalog', async (browser) => {
+  const G = 'catalog';
+  const { page, ctx } = await openApp(browser);
+  // Algolia pages through the first 1,000 hits of a list only (paginationLimitedTo) while
+  // nbHits counts all 7,000+; the mock does the same with a limit scaled to its 60 titles.
+  ctx.paginationLimit = 50;
+  await tapTab(page, 'البحث');
+  await page.waitForFunction(() => document.querySelectorAll('main .bx-poster').length >= 6, { timeout: 10000 }).catch(() => {});
+  const moreText = () => page.evaluate(() => [...document.querySelectorAll('main .bx-btn')].map((b) => b.innerText.trim()).find((t) => t.startsWith('عرض المزيد')) || '');
+  const b1 = await moreText();
+  check(G, 'load-more shows loaded / real total', b1.includes('48') && b1.includes('60'), b1);
+  await tapEl(page, 'main .bx-btn', { text: 'عرض المزيد' });
+  await page.waitForFunction(() => document.querySelectorAll('main .bx-poster').length >= 50, { timeout: 8000 }).catch(() => {});
+  await sleep(500);
+  const n = await page.evaluate(() => document.querySelectorAll('main .bx-poster').length);
+  check(G, 'load-more appends the next page', n === 50, `${n} cards`);
+  const st = await page.evaluate(() => ({ note: document.querySelector('.bx-catalog-cap p')?.innerText.trim() || '' }));
+  check(G, 'no dead load-more button at the service limit', !(await moreText()), await moreText());
+  check(G, 'the limit is explained (first 50 of 60 → search / sort / filters)', st.note.includes('50') && st.note.includes('60') && st.note.includes('دوّر بالاسم'), st.note);
+  const pages = ctx.algolia.filter((a) => !a.body.query && a.index === 'series_fav_count_desc' && a.body.hitsPerPage === 48).map((a) => a.body.page);
+  check(G, 'never asks for a page past the limit', Math.max(...pages) <= 1, pages.join(','));
+  await tapEl(page, '.bx-catalog-cap .bx-btn');
+  await sleep(700);
+  check(G, 'the note opens sort & filters', (await page.evaluate(() => document.querySelector('.bx-bottom-sheet .bx-sheet-head')?.innerText || '')).includes('فلترة'));
+  await tapEl(page, '.bx-bottom-sheet .bx-chip', { text: 'أفلام', exact: true });
+  await tapEl(page, '.bx-bottom-sheet .bx-btn-primary', { text: 'عرض النتائج' });
+  await sleep(1400);
+  const after = await page.evaluate(() => ({ cards: document.querySelectorAll('main .bx-poster').length, note: Boolean(document.querySelector('.bx-catalog-cap')) }));
+  check(G, 'a narrower filter lists everything (8 movies, no note)', after.cards === 8 && !after.note && !(await moreText()), JSON.stringify(after));
+  check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+});
+
 /* ================================================================== schedule */
 scenario('schedule', async (browser) => {
   const G = 'schedule';

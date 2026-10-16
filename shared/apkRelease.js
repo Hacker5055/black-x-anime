@@ -19,14 +19,14 @@ export const APK_RELEASE = Object.freeze({
     'شكل جديد: رئيسية أنضف وكل قسم بيعرض حاجة مختلفة',
     'التنقل: حسابك من صورتك فوق، والتابات بأساميها وحركة انسيابية',
     'مشغل بأزرار جديدة: ±10 ثواني و±10 دقايق وعلامات المقدمة',
-    'البحث بفلترة في مكان واحد، والجدول بيفتح على النهارده',
+    'البحث بفلترة في مكان واحد و«عرض المزيد» مبقاش بيعلّق، والجدول بيفتح على النهارده',
     'المجتمع: لايك واحد لكل حساب ووقت حقيقي للبوستات'
   ]),
   notesEn: Object.freeze([
     'New look: a cleaner home where every row shows something different',
     'Navigation: your account from your picture, labelled tabs and smooth motion',
     'New player controls: ±10 s, ±10 min and intro marks on the seek bar',
-    'Search filters in one sheet, and the schedule opens on today',
+    'Search filters in one sheet, a "Load more" that no longer stalls, and the schedule opens on today',
     'Community: one like per account and real post times'
   ])
 });

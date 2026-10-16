@@ -199,7 +199,9 @@ function facetMatch(hit, f) {
   return neg ? !ok : ok;
 }
 
-function algolia(index, body) {
+/** Like Algolia: nbHits counts every match, but only the first `limit` hits
+ * (paginationLimitedTo, 1,000 by default) can be paged through; nbPages stops there. */
+function algolia(index, body, limit = 1000) {
   let list = ANIME.slice();
   const q = String(body.query || '').trim().toLowerCase();
   if (q) list = list.filter((a) => a.name.toLowerCase().includes(q));
@@ -212,7 +214,18 @@ function algolia(index, body) {
   else if (/best|rank|rating|score/.test(index)) list.sort((x, y) => y.details.mal_mean - x.details.mal_mean);
   const hpp = Number(body.hitsPerPage) || 20;
   const page = Number(body.page) || 0;
-  return { hits: list.slice(page * hpp, page * hpp + hpp), nbHits: list.length, page, nbPages: Math.ceil(list.length / hpp), hitsPerPage: hpp, query: body.query || '', params: '', facets: {} };
+  const reachable = list.slice(0, Math.min(list.length, limit));
+  return {
+    hits: reachable.slice(page * hpp, page * hpp + hpp),
+    nbHits: list.length,
+    page,
+    nbPages: Math.ceil(reachable.length / hpp),
+    hitsPerPage: hpp,
+    query: body.query || '',
+    params: '',
+    facets: {},
+    ...(page * hpp >= limit ? { message: `you can only fetch the ${limit} hits for this query` } : {})
+  };
 }
 
 function api(req, url, ctx) {
@@ -313,7 +326,7 @@ function route(req, ctx) {
     const index = decodeURIComponent(url.pathname.split('/')[3] || '');
     const body = safeJson(req.postData());
     ctx.algolia.push({ index, body });
-    return json(req, algolia(index, body));
+    return json(req, algolia(index, body, ctx.paginationLimit));
   }
   if (url.host === 'firestore.googleapis.com') return firestore(req, url, ctx);
   if (url.host === 'graphql.anilist.co') return json(req, { data: { Page: { pageInfo: { hasNextPage: false, currentPage: 1 }, media: [], airingSchedules: [] }, Media: null } });
@@ -340,7 +353,7 @@ export async function openApp(browser, { seed = {} } = {}) {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
   await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [] };
+  const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], paginationLimit: 1000 };
   ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
   await page.setRequestInterception(true);
   page.on('request', (req) => {
