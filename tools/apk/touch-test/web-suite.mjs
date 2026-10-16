@@ -476,6 +476,26 @@ scenario('desktop', async (browser) => {
   check(G, 'title page: real facts (type, year, rating, server)', /مسلسل/.test(detail) && /2022/.test(detail) && /★ 6\.7/.test(detail) && /BLACK X 1/.test(detail), detail.replace(/\n/g, ' / ').slice(0, 220));
   await page.close();
 
+  // Player page seen by VIP Monarch, the tier of the removed «4K HDR • 60FPS» toggle (it only put a
+  // CSS colour filter on the video): no toggle, no filter, no 4K / HDR / 60fps copy; the rest stays.
+  ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 2')}/1`, phone: false, seed: { 'blackx.vipTier': 'vip_monarch' } }));
+  const monarchView = await waitFor(page, () => /وصول مبكر/.test(document.querySelector('.app-shell')?.innerText || '') && document.querySelector('.player-shell'), null, 10000);
+  const watchState = await page.evaluate(() => {
+    const text = document.querySelector('.app-shell')?.innerText || '';
+    const filtered = [];
+    for (let el = document.querySelector('.player-shell'); el && el !== document.body; el = el.parentElement) {
+      const f = getComputedStyle(el).filter;
+      if (f && f !== 'none') filtered.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}: ${f}`);
+    }
+    return { text, filtered };
+  });
+  check(G, 'player page as VIP Monarch: player and streaming bar render («VIP Fast CDN», «وصول مبكر»)', Boolean(monarchView) && /VIP Fast CDN/.test(watchState.text));
+  const fake4k = watchState.text.match(/4K|HDR|60\s*FPS/gi) || [];
+  check(G, 'player page: no «4K HDR • 60FPS» toggle and no 4K / HDR / 60fps claim', fake4k.length === 0, fake4k.join(', ') || 'clean');
+  check(G, 'player page: no colour filter over the video', watchState.filtered.length === 0, watchState.filtered.join(' | ') || 'none');
+  check(G, 'no page errors on the player page', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
   // The browser's own AniList queries ask AniList to drop the hidden genres.
   ({ page, ctx } = await openWeb(browser, { route: '/browse', phone: false }));
   await sleep(2500);

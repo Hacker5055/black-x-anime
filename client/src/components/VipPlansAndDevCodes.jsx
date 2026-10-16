@@ -579,9 +579,6 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem', fontSize: '0.88rem' }}>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#e9d5ff', fontWeight: 800 }}>
-                <span>🎬</span> {lang === 'ar' ? 'بث بدقة 4K HDR ومعدل إطارات 60fps فائق السلاسة' : 'True 4K HDR & 60fps ultra-smooth streaming'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.55rem', color: '#e9d5ff', fontWeight: 800 }}>
                 <span>⏳</span> {lang === 'ar' ? 'وصول مبكر للحلقات وفصول المانجا قبل نشرها للجميع' : 'Early Access to episodes & manga chapters before public release'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#e9d5ff', fontWeight: 800 }}>
@@ -944,7 +941,7 @@ export function DevVipCodeGenerator() {
   };
 
   const copyWhatsAppMessage = (c) => {
-    const planLabel = c.tier === 'vip_monarch' ? '🔮 VIP Monarch (إمبراطور الظلال - 4K HDR)' : '⚡ VIP Basic (صياد النخبة)';
+    const planLabel = c.tier === 'vip_monarch' ? '🔮 VIP Monarch (إمبراطور الظلال)' : '⚡ VIP Basic (صياد النخبة)';
     const msg = `🎉 مرحباً بك في منصة BLACK X!\nتم إصدار كود اشتراكك الرسمي:\n\n👑 الباقة: ${planLabel}\n🔑 كود التفعيل: ${c.code}\n⏳ المدة: ${c.durationDays >= 36500 ? 'مدى الحياة' : `${c.durationDays} يوم`}\n💰 القيمة: ${c.priceEgp} ج.م\n\nلتفعيل الكود: افتح حسابك في BLACK X ⬅️ قسم باقات VIP ⬅️ الصق الكود واضغط تفعيل الآن!`;
     navigator.clipboard?.writeText(msg);
     pushToast('💬 تم نسخ رسالة التفعيل الجاهزة لإرسالها للمشترك (واتساب / تيليجرام)!', 'success');

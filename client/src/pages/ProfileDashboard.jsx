@@ -2134,7 +2134,6 @@ export default function ProfileDashboard({ onOpenAuth }) {
                     🔮 VIP Monarch (إمبراطور الظلال)
                   </h4>
                   <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#f5d0fe', lineHeight: 1.8 }}>
-                    <li>{lang === 'ar' ? 'بث بدقة 4K HDR ومعدل إطارات 60fps' : 'Ultra 4K HDR & 60fps stream'}</li>
                     <li>{lang === 'ar' ? 'وصول مبكر للحلقات وفصول المانجا قبل نشرها' : 'Early access to episodes & chapters'}</li>
                     <li>{lang === 'ar' ? 'استوديو الذكاء الاصطناعي 3D Prompt Studio' : '3D AI Prompt Studio unlock'}</li>
                     <li>{lang === 'ar' ? 'غرف جماعية تتسع لـ 100 مشاهد + رسائل صوتية مفتوحة' : '100-user rooms + unlimited voice notes'}</li>

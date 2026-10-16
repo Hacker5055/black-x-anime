@@ -638,46 +638,20 @@ router.get('/episode/:slug/:ep', optionalAuth, async (req, res) => {
       };
     });
 
-    let entriesWithVip = prioritizedEntries;
-    const resolvedMap = { ...(data.resolved || {}) };
-    if (isVipMonarch && prioritizedEntries.length > 0 && !isAniProjectAnimeSlug(req.params.slug)) {
-      const firstReal = prioritizedEntries[0];
-      const vipId = `vip-monarch-4k-${cleanSlug}-${episode}`;
-      let firstResolved = resolvedMap[firstReal.id] || null;
-      if (!firstResolved && (firstReal.embedUrl || firstReal.directUrl)) {
-        firstResolved = {
-          embedUrl: firstReal.embedUrl || null,
-          directUrl: firstReal.directUrl || null
-        };
-      }
-      if (firstResolved) {
-        resolvedMap[vipId] = firstResolved;
-      }
-      entriesWithVip = [
-        {
-          id: vipId,
-          realEntryId: firstReal.id,
-          witaSlug: firstReal.witaSlug || null,
-          embedUrl: firstReal.embedUrl || firstResolved?.embedUrl || null,
-          directUrl: firstReal.directUrl || firstResolved?.directUrl || null,
-          token: firstReal.token || 'vip-4k',
-          server: '👑 BLACK X Monarch 4K HDR (60fps Ultra)',
-          quality: '4K HDR',
-          version: firstReal.version || 'sub',
-          lang: 'ar/jp',
-          isMonarchExclusive: true,
-          badge: '4K 60fps'
-        },
-        ...prioritizedEntries
-      ];
-    } else if (isVipBasic) {
-      entriesWithVip.sort((a, b) => (b.isFastCdn ? 1 : 0) - (a.isFastCdn ? 1 : 0));
+    // VIP (Basic and Monarch) only changes the order: direct/CDN servers first (stable sort).
+    // There is no 4K / HDR / 60 fps server. Monarch used to get a synthetic
+    // «👑 BLACK X Monarch 4K HDR (60fps Ultra)» entry that replayed the first real server
+    // under a fake quality label; it was removed with the owner's OK (2026-10-16).
+    // Never add invented servers or quality labels here.
+    const entries = prioritizedEntries;
+    if (isVipBasic) {
+      entries.sort((a, b) => (b.isFastCdn ? 1 : 0) - (a.isFastCdn ? 1 : 0));
     }
 
     res.json({
       ...data,
-      resolved: resolvedMap,
-      entries: entriesWithVip,
+      resolved: { ...(data.resolved || {}) },
+      entries,
       vipTier: vipStatus || 'Free Otaku',
       isVipBasic,
       isVipMonarch
@@ -703,51 +677,6 @@ router.post('/resolve', async (req, res) => {
     } catch {
       return res.status(502).json({ error: 'upstream' });
     }
-  }
-
-  // Handle VIP Monarch 4K synthetic entry by resolving the primary entry of the episode
-  if (String(entryId).startsWith('vip-monarch-4k-')) {
-    try {
-      if (String(slug).startsWith('en-') || String(slug).startsWith('mal-')) {
-        const enData = await englishAnimeService.getEpisode(String(slug), ep);
-        const first = enData?.entries?.[0];
-        if (first) {
-          if (first.embedUrl || first.directUrl) {
-            return res.json({ source: { embedUrl: first.embedUrl || null, directUrl: first.directUrl || null } });
-          }
-          if (first.witaSlug) {
-            const witaSource = await resolveEntry(first.witaSlug, ep, first.id);
-            if (witaSource) return res.json({ source: witaSource });
-          }
-        }
-      } else {
-        const awEp = await fetchWitcherEpisode(String(slug), ep).catch(() => null);
-        const awFirst = awEp?.entries?.[0];
-        if (awFirst && (awFirst.directUrl || awFirst.embedUrl)) {
-          return res.json({
-            source: {
-              embedUrl: awFirst.embedUrl || null,
-              directUrl: awFirst.directUrl || null
-            }
-          });
-        }
-        const bx2Ep = await anime3rbService.getEpisode(String(slug).replace(/^a3rb-/, ''), ep).catch(() => null);
-        if (bx2Ep?.entries?.[0]?.embedUrl || bx2Ep?.entries?.[0]?.directUrl) {
-          return res.json({
-            source: {
-              embedUrl: bx2Ep.entries[0].embedUrl || null,
-              directUrl: bx2Ep.entries[0].directUrl || null
-            }
-          });
-        }
-        const witaEp = await fetchEpisode(String(slug), ep);
-        const first = witaEp?.entries?.[0];
-        if (first) {
-          const source = await resolveEntry(String(slug), ep, first.id);
-          if (source) return res.json({ source });
-        }
-      }
-    } catch (_) {}
   }
 
   // If this is an Anime Witcher (BLACK X 1) entry, resolve via resolveWitcherEntry

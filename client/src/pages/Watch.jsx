@@ -232,7 +232,6 @@ export default function Watch({ onOpenAuth }) {
   const vipTier = resolveUserVipTier(user);
   const isVipMember = vipTier === 'vip_basic' || vipTier === 'vip_monarch';
   const [vipFastCdn, setVipFastCdn] = useState(() => isVipMember);
-  const [monarch4kHdr, setMonarch4kHdr] = useState(() => vipTier === 'vip_monarch');
 
   // Broadcast active stream session to the Website Mini Floating Player
   useEffect(() => {
@@ -334,8 +333,8 @@ export default function Watch({ onOpenAuth }) {
                 </h2>
                 <p style={{ maxWidth: '560px', color: 'rgba(255,255,255,0.72)', fontSize: '0.92rem', lineHeight: 1.65, marginBottom: '1.25rem' }}>
                   {lang === 'ar'
-                    ? 'مشتركو باقات ⚡ VIP Basic و 🔮 VIP Monarch يشاهدون الحلقات الرسمية في نفس يوم صدورها وبجودة FHD 1080p / 4K بدون تأخير.'
-                    : '⚡ VIP Basic and 🔮 VIP Monarch members watch official episodes on release day in FHD 1080p / 4K with zero delay.'}
+                    ? 'مشتركو باقات ⚡ VIP Basic و 🔮 VIP Monarch يشاهدون الحلقات الرسمية في نفس يوم صدورها وبجودة FHD 1080p بدون تأخير.'
+                    : '⚡ VIP Basic and 🔮 VIP Monarch members watch official episodes on release day in FHD 1080p with zero delay.'}
                 </p>
 
                 <div
@@ -408,7 +407,7 @@ export default function Watch({ onOpenAuth }) {
               </div>
             </div>
           ) : (
-            <div style={!isAniProject && monarch4kHdr ? { filter: 'contrast(1.1) saturate(1.18) brightness(1.03)', transition: 'filter 0.3s ease' } : undefined}>
+            <div>
               <VideoPlayer
                 key={`${slug}-${episode}-${sourceParam || 'auto'}`}
                 entries={episodeData.entries}
@@ -443,7 +442,9 @@ export default function Watch({ onOpenAuth }) {
             </div>
           )}
 
-          {/* Do not advertise unverified VIP CDN/4K access for the AniProject provider. */}
+          {/* Do not advertise unverified VIP CDN access for the AniProject provider.
+              There is no 4K / HDR / 60 fps mode: the old Monarch «4K HDR • 60FPS» toggle only tinted
+              the video with a CSS filter and was removed (owner's OK, 2026-10-16). Do not bring it back. */}
           {isAniProject ? (
             <div className="glass" style={{ marginTop: '0.85rem', padding: '0.8rem 1rem', color: 'rgba(255,255,255,0.8)' }}>
               {lang === 'ar'
@@ -462,7 +463,7 @@ export default function Watch({ onOpenAuth }) {
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: '0.75rem',
-                border: monarch4kHdr ? '1px solid rgba(168,85,247,0.55)' : vipFastCdn ? '1px solid rgba(245,158,11,0.45)' : '1px solid rgba(255,255,255,0.1)'
+                border: vipFastCdn ? '1px solid rgba(245,158,11,0.45)' : '1px solid rgba(255,255,255,0.1)'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -499,36 +500,6 @@ export default function Watch({ onOpenAuth }) {
                   }}
                 >
                   ⚡ VIP Fast CDN {vipFastCdn ? '✓' : '🔒'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (vipTier !== 'vip_monarch') {
-                      pushToast(
-                        lang === 'ar'
-                          ? '🔒 البث بدقة 4K HDR ومعدل إطارات 60fps متاح حصرياً لباقة 🔮 VIP Monarch (إمبراطور الظلال - 199 ج.م)!'
-                          : '🔒 4K HDR 60fps streaming requires 🔮 VIP Monarch!',
-                        'info'
-                      );
-                      navigate('/profile?tab=referrals');
-                      return;
-                    }
-                    setMonarch4kHdr((v) => !v);
-                    pushToast(lang === 'ar' ? '🔮 تم تفعيل معالج البث 4K HDR • 60FPS الفائق!' : '🔮 4K HDR • 60FPS Mode Active!', 'success');
-                  }}
-                  style={{
-                    padding: '0.38rem 0.9rem',
-                    borderRadius: '999px',
-                    fontWeight: 900,
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    background: monarch4kHdr ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                    color: monarch4kHdr ? '#000000' : '#ffffff',
-                    border: monarch4kHdr ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.22)'
-                  }}
-                >
-                  🔮 4K HDR • 60FPS {monarch4kHdr ? '✓' : '🔒'}
                 </button>
 
                 {vipTier === 'vip_monarch' && (
