@@ -1,7 +1,8 @@
 import React from 'react';
 import BxIcon from './BxIcon.jsx';
-import PosterCard from './PosterCard.jsx';
+import PosterCard, { useLongPress } from './PosterCard.jsx';
 import SectionHead from './SectionHead.jsx';
+import ScrollRow from './ScrollRow.jsx';
 import HeroSlideScope from './HeroSlideScope.jsx';
 import LazyMount from './LazyMount.jsx';
 import UpdateBanner from './UpdateBanner.jsx';
@@ -9,6 +10,8 @@ import ContinueWatchingRow from './ContinueWatchingRow.jsx';
 import BecauseYouWatchedRow from './BecauseYouWatchedRow.jsx';
 import { SkeletonHero, SkeletonRow } from './Skeleton.jsx';
 import { coverForMode } from './dataSaver.js';
+import { airingFor, airingLine, buildScheduleDay, formatAirClock } from './airingSchedule.js';
+import { todayScheduleId } from './scheduleDays.js';
 
 const HERO_SLIDES = 5;
 
@@ -18,11 +21,81 @@ function PosterRail({ title, items, loading, onMore, isRtl, onOpen, onPeek, data
   return (
     <section className="bx-section">
       <SectionHead title={title} onMore={onMore} isRtl={isRtl} />
-      <div className="bx-row bx-mob-scroll">
+      <ScrollRow label={title}>
         {items.map((item) => (
           <PosterCard key={item.objectID} item={item} onOpen={onOpen} onPeek={onPeek} dataSaver={dataSaver} />
         ))}
-      </div>
+      </ScrollRow>
+    </section>
+  );
+}
+
+/** A wide (16:9) card: the show's banner art, its title and the real next air time when known. */
+function WideCard({ item, line, onOpen, onPeek, dataSaver }) {
+  const { handlers, consumeClick } = useLongPress(onPeek ? () => onPeek(item) : null);
+  const fallback =
+    item.rating || item.type ? (
+      <>
+        {item.rating ? (
+          <span className="bx-wide-rating">
+            <BxIcon name="star" size="0.95em" filled />
+            {item.rating}
+          </span>
+        ) : null}
+        {item.rating && item.type ? ' • ' : ''}
+        {item.type || ''}
+      </>
+    ) : null;
+  return (
+    <div
+      className="bx-wide-card bx-mob-card"
+      data-bx-oid={item.objectID}
+      role="button"
+      tabIndex={0}
+      aria-label={item.titleEn}
+      {...handlers}
+      onClick={(e) => {
+        if (consumeClick()) {
+          e.preventDefault();
+          return;
+        }
+        onOpen(item);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onOpen(item);
+      }}
+    >
+      <img src={coverForMode(item.banner || item.poster, dataSaver)} alt="" loading="lazy" decoding="async" draggable={false} />
+      <span className="bx-wide-shade" aria-hidden="true" />
+      <span className="bx-wide-copy">
+        <span className="bx-wide-title" dir="auto">
+          {item.titleEn}
+        </span>
+        {line || fallback ? <span className={`bx-wide-sub${line ? ' is-airing' : ''}`}>{line || fallback}</span> : null}
+      </span>
+    </div>
+  );
+}
+
+/** "Airing now" as wide cards (a different shape from the poster rails around it). */
+function AiringRail({ title, items, loading, onMore, isRtl, onOpen, onPeek, dataSaver, airingMap, now }) {
+  if (loading && !items.length) return <SkeletonRow cards={2} cardWidth={272} cardHeight={153} animated={false} />;
+  if (!items.length) return null;
+  return (
+    <section className="bx-section">
+      <SectionHead title={title} onMore={onMore} isRtl={isRtl} />
+      <ScrollRow className="bx-wide-row" label={title}>
+        {items.map((item) => (
+          <WideCard
+            key={item.objectID}
+            item={item}
+            line={airingLine(airingFor(item, airingMap), now, isRtl)}
+            onOpen={onOpen}
+            onPeek={onPeek}
+            dataSaver={dataSaver}
+          />
+        ))}
+      </ScrollRow>
     </section>
   );
 }
@@ -43,6 +116,7 @@ export default function HomeTab({
   mangaHistory,
   favorites,
   genres,
+  airingMap,
   apkRelease,
   heroPaused,
   onOpen,
@@ -53,9 +127,17 @@ export default function HomeTab({
   onGenre,
   onOpenManga,
   onMangaLibrary,
-  loadSimilar
+  loadSimilar,
+  onClassicSite
 }) {
-  const { popular = [], topRated = [], airing = [], latest = [], movies = [], today = [] } = lists;
+  const { popular = [], topRated = [], airing = [], latest = [], movies = [], today: todayTagged = [] } = lists;
+  const now = Date.now();
+  // Today's shows by their real air time (AniList) when known, in time order; the catalogue's
+  // weekday tag for the rest (airingSchedule.js). Before the times arrive it is the tagged list.
+  const today = React.useMemo(
+    () => buildScheduleDay({ dayId: todayScheduleId(), airingItems: airing, dayItems: todayTagged, map: airingMap }),
+    [airing, todayTagged, airingMap]
+  );
   const isFav = (item) => favorites.some((f) => f.objectID === item?.objectID);
   const resumeEpisode = (item) => watchHistory.find((h) => h.objectID === item?.objectID)?.episode || 1;
 
@@ -71,13 +153,13 @@ export default function HomeTab({
           const meta = [hero.year, hero.type, hero.tags?.[0]].filter(Boolean);
           return (
             <section className="bx-hero" {...swipe}>
-              <img
-                key={hero.objectID}
-                className="bx-hero-img"
-                src={coverForMode(hero.poster || hero.banner, dataSaver)}
-                alt=""
-                decoding="async"
-              />
+              {/* Phones: the tall poster. Wide screens: the show's landscape banner (one image is loaded). */}
+              <picture key={hero.objectID}>
+                {hero.banner && hero.banner !== hero.poster ? (
+                  <source media="(min-width: 1024px)" srcSet={coverForMode(hero.banner, dataSaver)} />
+                ) : null}
+                <img className="bx-hero-img" src={coverForMode(hero.poster || hero.banner, dataSaver)} alt="" decoding="async" />
+              </picture>
               <div className="bx-hero-shade" aria-hidden="true" />
               <div className="bx-hero-copy" key={`copy-${hero.objectID}`}>
                 <div className="bx-hero-meta">
@@ -155,7 +237,7 @@ export default function HomeTab({
       {today.length > 0 && (
         <section className="bx-section">
           <SectionHead title={isRtl ? 'بتنزل النهارده' : 'Airing today'} onMore={() => onSeeAll('schedule')} isRtl={isRtl} />
-          <div className="bx-row bx-mob-scroll bx-stories">
+          <ScrollRow className="bx-stories" label={isRtl ? 'بتنزل النهارده' : 'Airing today'}>
             {today.slice(0, 14).map((item, idx) => (
               <button
                 key={`today-${item.objectID}`}
@@ -169,9 +251,10 @@ export default function HomeTab({
                 <span className="bx-story-name" dir="auto">
                   {item.titleEn}
                 </span>
+                {item.airing ? <span className="bx-story-time">{formatAirClock(item.airing.airingAt, isRtl)}</span> : null}
               </button>
             ))}
-          </div>
+          </ScrollRow>
         </section>
       )}
 
@@ -180,7 +263,7 @@ export default function HomeTab({
         <LazyMount minHeight={250} placeholder={<SkeletonRow cards={3} cardWidth={150} cardHeight={200} animated={false} />}>
           <section className="bx-section">
             <SectionHead title={isRtl ? 'أعلى 10 تقييماً' : 'Top 10 by rating'} onMore={() => onSeeAll('best_mal_ranked')} isRtl={isRtl} />
-            <div className="bx-row bx-mob-scroll bx-top10-row">
+            <ScrollRow className="bx-top10-row" label={isRtl ? 'أعلى 10 تقييماً' : 'Top 10 by rating'}>
               {topRated.slice(0, 10).map((item, idx) => (
                 <div key={`top-${item.objectID}`} className="bx-top10">
                   <span className="bx-top10-num" aria-hidden="true">
@@ -189,14 +272,14 @@ export default function HomeTab({
                   <PosterCard item={item} onOpen={onOpen} onPeek={onPeek} dataSaver={dataSaver} width={112} />
                 </div>
               ))}
-            </div>
+            </ScrollRow>
           </section>
         </LazyMount>
       )}
 
       {/* 6–8. Distinct catalogue rows */}
-      <LazyMount minHeight={250} placeholder={<SkeletonRow cards={4} animated={false} />}>
-        <PosterRail
+      <LazyMount minHeight={220} placeholder={<SkeletonRow cards={2} cardWidth={272} cardHeight={153} animated={false} />}>
+        <AiringRail
           title={isRtl ? 'بيتعرض دلوقتي' : 'Airing now'}
           items={airing}
           loading={loading}
@@ -205,6 +288,8 @@ export default function HomeTab({
           onOpen={onOpen}
           onPeek={onPeek}
           dataSaver={dataSaver}
+          airingMap={airingMap}
+          now={now}
         />
       </LazyMount>
       <LazyMount minHeight={250} placeholder={<SkeletonRow cards={4} animated={false} />}>
@@ -236,7 +321,7 @@ export default function HomeTab({
       {mangaHistory.length > 0 && (
         <section className="bx-section">
           <SectionHead title={isRtl ? 'كمّل قراءة' : 'Continue reading'} onMore={onMangaLibrary} isRtl={isRtl} />
-          <div className="bx-row bx-mob-scroll">
+          <ScrollRow label={isRtl ? 'كمّل قراءة' : 'Continue reading'}>
             {mangaHistory.slice(0, 10).map((mh, i) => (
               <button key={`${mh.objectID}-${i}`} type="button" className="bx-read-card" onClick={() => onOpenManga(mh)}>
                 <img src={mh.poster_uri} alt="" loading="lazy" decoding="async" />
@@ -248,14 +333,14 @@ export default function HomeTab({
                 </span>
               </button>
             ))}
-          </div>
+          </ScrollRow>
         </section>
       )}
 
       {/* 10. Browse by genre */}
       <section className="bx-section bx-section-last">
         <SectionHead title={isRtl ? 'تصفح حسب النوع' : 'Browse by genre'} isRtl={isRtl} />
-        <div className="bx-row bx-chip-row">
+        <div className="bx-row bx-chip-row bx-genre-row">
           {genres.map((g) => (
             <button key={g.id} type="button" className="bx-chip" onClick={() => onGenre(g)}>
               {isRtl ? g.ar : g.en}
@@ -263,6 +348,16 @@ export default function HomeTab({
           ))}
         </div>
       </section>
+
+      {/* Website only: the classic pages stay one tap away (webUi.js) */}
+      {onClassicSite ? (
+        <footer className="bx-home-foot">
+          <button type="button" className="bx-classic-link" onClick={onClassicSite}>
+            <BxIcon name="monitor" size="1em" />
+            {isRtl ? 'التصميم القديم للموقع (الترتيب، حفلة المشاهدة…)' : 'Classic website (rankings, watch party…)'}
+          </button>
+        </footer>
+      ) : null}
     </main>
   );
 }

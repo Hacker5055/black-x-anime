@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { BLACK_X_MOTION_THEMES } from '../components/BlackXSplashVortex.jsx';
-import MangaPageImage from './MangaPageImage.jsx';
 import BxIcon, { stripEmoji } from './BxIcon.jsx';
 import './mobileUi.css';
+import './desktop.css';
 import ToastHost from './ToastHost.jsx';
 import { showToastMessage } from './toastStore.js';
 import {
@@ -54,6 +54,12 @@ import PlayerControls from './PlayerControls.jsx';
 import BottomSheet from './BottomSheet.jsx';
 import usePresence from './usePresence.js';
 import ScheduleTab from './ScheduleTab.jsx';
+import AlertsSheet from './AlertsSheet.jsx';
+import CommunityTab from './CommunityTab.jsx';
+import VipGate from './VipGate.jsx';
+import AccessMenu from './AccessMenu.jsx';
+import StoryPreview from './StoryPreview.jsx';
+import MangaTab from './MangaTab.jsx';
 import ProfileTab, { profilePageTitle } from './profile/ProfileTab.jsx';
 import MobileDock from './MobileDock.jsx';
 import PosterCard from './PosterCard.jsx';
@@ -61,6 +67,7 @@ import SectionHead from './SectionHead.jsx';
 import FilterSheet, { SORT_OPTIONS, activeFilterCount } from './FilterSheet.jsx';
 import { navigateStack, navigateWithMotion, pageEnterClass } from './tabMotion.js';
 import { todayScheduleId } from './scheduleDays.js';
+import { airingFor, buildScheduleDay, fetchAiringTimes } from './airingSchedule.js';
 import { NextEpisodeCountdown, SkipSegmentOverlay } from './PlayerExtras.jsx';
 import { SPLASH_SOUND_KEY } from './splashPrefs.js';
 import {
@@ -87,10 +94,9 @@ import {
   fetchMobileEpisodes,
   fetchMobileMangaChapters,
   fetchMobileMangaList,
+  fetchPopularMangaTitles,
   findBxMangaByTitle,
-  formatBxCount,
   inferAnimeSource,
-  mangaServerLabel,
   mapBxMangaItem,
   mapShowToMobileAnime,
   resolveMobileEpisodeServer,
@@ -148,34 +154,6 @@ const GENRE_CHIPS = [
 ];
 
 const RECENT_SEARCHES_KEY = 'bx_mob_recent_searches';
-
-const POST_CATEGORIES = [
-  { id: 'discussion', ar: 'نقاش', en: 'Discussion' },
-  { id: 'recommend', ar: 'ترشيح', en: 'Recommendation' },
-  { id: 'theory', ar: 'نظرية', en: 'Theory' },
-  { id: 'review', ar: 'مراجعة', en: 'Review' },
-  { id: 'spoiler', ar: 'فيه حرق', en: 'Spoiler' }
-];
-
-/** "دلوقتي" / "من 5 د" / "من 3 س" / "من يومين" / a date — from the real createdAt of a post. */
-function postTimeLabel(p, lang) {
-  const ar = lang === 'ar';
-  const at = Date.parse(p?.createdAt || '');
-  if (!Number.isFinite(at)) return p?.time && p.time !== 'الآن' && p.time !== 'Just now' ? p.time : '';
-  const sec = Math.max(0, (Date.now() - at) / 1000);
-  if (sec < 60) return ar ? 'دلوقتي' : 'now';
-  const min = Math.floor(sec / 60);
-  if (min < 60) return ar ? `من ${min} د` : `${min}m`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return ar ? `من ${hr} س` : `${hr}h`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return ar ? (day === 1 ? 'امبارح' : day === 2 ? 'من يومين' : `من ${day} أيام`) : `${day}d`;
-  try {
-    return new Date(at).toLocaleDateString(ar ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short' });
-  } catch (_) {
-    return '';
-  }
-}
 
 const TOPBAR_TITLES = {
   schedule: { ar: 'جدول الحلقات', en: 'Schedule' },
@@ -273,6 +251,17 @@ async function queryAlgolia(indexName, payload = {}) {
   const res = await queryAlgoliaRaw(indexName, withAlgoliaExclusions(payload));
   if (res && Array.isArray(res.hits)) res.hits = res.hits.filter((hit) => !isHiddenAnime(hit));
   return res;
+}
+
+/** One catalogue record by objectID (Algolia getObject), or null. */
+async function fetchAnimeRecord(objectID) {
+  const res = await fetch(`${ALGOLIA_BASE}/series_fav_count_desc/${encodeURIComponent(objectID)}`, {
+    headers: { 'X-Algolia-Application-Id': ALGOLIA_APP_ID, 'X-Algolia-API-Key': ALGOLIA_API_KEY }
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Algolia ${res.status}`);
+  const hit = await res.json();
+  return hit && hit.objectID ? hit : null;
 }
 
 /** Shown when a hidden title is reached anyway (old saved entry, other server). */
@@ -421,6 +410,10 @@ export default function MobileApkApp() {
   const [scheduleDay, setScheduleDay] = useState(() => todayScheduleId());
   const [scheduleItems, setScheduleItems] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
+  // Real next air time per MAL id (airingSchedule.js); empty until /api/anime/schedule answers.
+  const [airingMap, setAiringMap] = useState(() => new Map());
+  const airingMapRef = useRef(airingMap);
+  airingMapRef.current = airingMap;
 
   // Active Anime Detail & Episode Player States
   const [selectedAnime, setSelectedAnime] = useState(null);
@@ -463,6 +456,8 @@ export default function MobileApkApp() {
   const [mangaList, setMangaList] = useState([]);
   const [mangaSource, setMangaSource] = useState('all'); // website server id: 'all' | 'bx1' | 'bx2' | 'bx3' | 'bx4' (search only)
   const [mangaFilterType, setMangaFilterType] = useState('ALL'); // 'ALL' | 'MANHWA' | 'MANGA'
+  // Quick-search chips of the manga tab: AniList's most popular manga (fetchPopularMangaTitles).
+  const [mangaPopularTitles, setMangaPopularTitles] = useState([]);
   const [mangaPage, setMangaPage] = useState(1);
   const [mangaQuery, setMangaQuery] = useState(() => (webStart?.kind === 'tab' && webStart.tab === 'manga' ? webStart.query || '' : ''));
   const [mangaLoading, setMangaLoading] = useState(false);
@@ -552,7 +547,8 @@ export default function MobileApkApp() {
   const [newPostText, setNewPostText] = useState('');
   const [postCategory, setPostCategory] = useState('discussion'); // 'discussion' | 'recommend' | 'theory' | 'spoiler' | 'review'
   const [postIsSpoiler, setPostIsSpoiler] = useState(false);
-  const [revealedSpoilers, setRevealedSpoilers] = useState({});
+  // The anime a new post is about (CommunityTab.jsx postAnimeSnapshot), or null.
+  const [postAnime, setPostAnime] = useState(null);
   const [replyingToPostId, setReplyingToPostId] = useState(null);
   const [replyText, setReplyText] = useState('');
 
@@ -646,7 +642,8 @@ export default function MobileApkApp() {
   const [pinLocked, setPinLocked] = useState(() => Boolean(localStorage.getItem('bx_mob_pin_code')));
   const [pinInput, setPinInput] = useState('');
   const [pinSetupInput, setPinSetupInput] = useState('');
-  const [radarModalOpen, setRadarModalOpen] = useState(false);
+  // Small sheets that the back button closes: 'alerts' | 'epOptions' | 'postAnime' | null
+  const [appSheet, setAppSheet] = useState(null);
   const [devGrantTarget, setDevGrantTarget] = useState('');
   const [devGrantTier, setDevGrantTier] = useState('vip_monarch');
   const [devGrantDays, setDevGrantDays] = useState(30);
@@ -949,6 +946,7 @@ export default function MobileApkApp() {
   useEffect(() => {
     navRef.current = {
       commandMenuOpen,
+      appSheet,
       filterSheetOpen,
       playerMoreOpen,
       storyPreviewAnime,
@@ -966,6 +964,7 @@ export default function MobileApkApp() {
     };
   }, [
     commandMenuOpen,
+    appSheet,
     filterSheetOpen,
     playerMoreOpen,
     storyPreviewAnime,
@@ -988,6 +987,7 @@ export default function MobileApkApp() {
     if (isWebApp()) return;
     if (
       commandMenuOpen ||
+      appSheet ||
       filterSheetOpen ||
       playerMoreOpen ||
       storyPreviewAnime ||
@@ -1008,6 +1008,7 @@ export default function MobileApkApp() {
     }
   }, [
     commandMenuOpen,
+    appSheet,
     filterSheetOpen,
     playerMoreOpen,
     storyPreviewAnime,
@@ -1029,6 +1030,10 @@ export default function MobileApkApp() {
       const s = navRef.current;
       if (s.commandMenuOpen) {
         setCommandMenuOpen(false);
+        return true;
+      }
+      if (s.appSheet) {
+        setAppSheet(null);
         return true;
       }
       if (s.filterSheetOpen) {
@@ -2277,6 +2282,10 @@ export default function MobileApkApp() {
       refreshDoneRef.current?.();
       refreshDoneRef.current = null;
     });
+    // Real air times for the "airing now" cards (in the background: the rows never wait for it).
+    fetchAiringTimes({ force: homeRefreshTick > 0 }).then((map) => {
+      if (alive) setAiringMap(map);
+    });
     return () => {
       alive = false;
     };
@@ -2401,21 +2410,36 @@ export default function MobileApkApp() {
     }
   };
 
-  // Load Weekly Airing Schedule by Day of Week
+  // Airing schedule of one day: the real air times (AniList via /api/anime/schedule, matched by
+  // MAL id — airingSchedule.js) of every show on air, plus the catalogue's shows tagged with
+  // that weekday. The on-air list is fetched once per refresh and reused while switching days.
+  const scheduleAiringRef = useRef({ tick: -1, items: null });
   useEffect(() => {
     if (activeTab !== 'schedule') return;
     let alive = true;
     setScheduleLoading(true);
-    const facetFilters =
-      scheduleDay === 'all_airing' ? [['details.state:مستمر']] : [[`show_time:${scheduleDay}`]];
-    queryAlgolia('series_fav_count_desc', {
-      query: '',
-      facetFilters,
-      hitsPerPage: 60
-    })
-      .then((res) => {
+    const force = scheduleAiringRef.current.tick !== -1 && scheduleAiringRef.current.tick !== scheduleRefreshTick;
+    const airingItemsPromise =
+      scheduleAiringRef.current.items && scheduleAiringRef.current.tick === scheduleRefreshTick
+        ? Promise.resolve(scheduleAiringRef.current.items)
+        : queryAlgolia('series_fav_count_desc', { query: '', facetFilters: [['details.state:مستمر']], hitsPerPage: 100 })
+            .then((res) => {
+              const list = (res.hits || []).map(formatAnimeHit).filter(Boolean);
+              scheduleAiringRef.current = { tick: scheduleRefreshTick, items: list };
+              return list;
+            })
+            .catch(() => []);
+    const dayItemsPromise =
+      scheduleDay === 'all_airing'
+        ? Promise.resolve([])
+        : queryAlgolia('series_fav_count_desc', { query: '', facetFilters: [[`show_time:${scheduleDay}`]], hitsPerPage: 60 })
+            .then((res) => (res.hits || []).map(formatAnimeHit).filter(Boolean))
+            .catch(() => []);
+    Promise.all([airingItemsPromise, dayItemsPromise, fetchAiringTimes({ force })])
+      .then(([airingItems, dayItems, map]) => {
         if (!alive) return;
-        setScheduleItems((res.hits || []).map(formatAnimeHit).filter(Boolean));
+        setAiringMap(map);
+        setScheduleItems(buildScheduleDay({ dayId: scheduleDay, airingItems, dayItems, map }));
       })
       .catch(() => {
         if (alive) setScheduleItems([]);
@@ -2854,7 +2878,7 @@ export default function MobileApkApp() {
             nativeName: e.node?.name?.native || '',
             role: e.role === 'MAIN' ? 'رئيسي' : 'مساعد',
             image: e.node?.image?.large || '',
-            vaName: e.voiceActors?.[0]?.name?.full || 'Seiyuu Japan',
+            vaName: e.voiceActors?.[0]?.name?.full || '',
             vaImage: e.voiceActors?.[0]?.image?.large || ''
           }))
         );
@@ -3139,6 +3163,9 @@ export default function MobileApkApp() {
           titleEn: anime.titleEn,
           titleAr: anime.titleAr,
           poster: anime.poster,
+          // genres (profile "top genres") and the MAL id (real air times) of what was watched
+          ...(Array.isArray(anime.tags) && anime.tags.length ? { tags: anime.tags.slice(0, 6) } : {}),
+          ...(anime.malId ? { malId: anime.malId } : {}),
           updatedAt: new Date().toISOString()
         };
         setWatchHistory((prev) => {
@@ -3251,6 +3278,9 @@ export default function MobileApkApp() {
               poster: anime.poster,
               banner: anime.banner,
               rating: anime.rating,
+              // the MAL id lets alerts and the schedule use the real air time of a saved title
+              ...(anime.malId ? { malId: anime.malId } : {}),
+              ...(Array.isArray(anime.tags) && anime.tags.length ? { tags: anime.tags.slice(0, 6) } : {}),
               createdAt: new Date().toISOString()
             },
             ...prev
@@ -3380,13 +3410,17 @@ export default function MobileApkApp() {
     return () => window.removeEventListener('error', handleGlobalImgError, true);
   }, []);
 
-  // 2. Real Android Phone Status-Bar Notification Radar for New Anime Episodes
-  // New-episode alerts only for titles the user follows (favorites + "watching"/"planned"),
-  // checked while the app is open: every 30 minutes and when it returns to the foreground.
+  // 2. New-episode alerts (episodeAlerts.js) only for titles the user follows (favorites +
+  // "watching"/"planned"), checked while the app is open: every 30 minutes (15 when it returns to
+  // the foreground), and — using the real air times (airingSchedule.js) — every 10 minutes for 6
+  // hours after one of those titles aired in Japan, so its episode is announced soon after it lands.
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     let cancelled = false;
     let running = false;
+    let fullRunAt = lastAlertRun();
+    let hotRunAt = 0;
+    const HOT_MS = 6 * 3600 * 1000;
     const followedTitles = () => {
       const list = [...(latestRef.current.favorites || [])];
       Object.values(latestRef.current.watchlistMap || {}).forEach((entry) => {
@@ -3394,18 +3428,38 @@ export default function MobileApkApp() {
       });
       return list.filter((t) => !isHiddenAnime(t));
     };
-    const run = async () => {
+    // Followed titles that aired in the last 6 hours. Right after an episode airs AniList moves
+    // to the next one (a week later), so the slot a week before the next airing counts too.
+    const recentlyAired = (titles) => {
+      const now = Date.now();
+      const map = airingMapRef.current;
+      return titles.filter((t) => {
+        const a = airingFor(t, map);
+        if (!a) return false;
+        const at = a.airingAt * 1000;
+        return [at, at - 7 * 86400 * 1000].some((slot) => now >= slot && now - slot < HOT_MS);
+      });
+    };
+    const run = async (reason) => {
       if (running || cancelled || document.visibilityState === 'hidden') return;
-      if (Date.now() - lastAlertRun() < 15 * 60 * 1000) return;
       const titles = followedTitles();
       if (!titles.length) return;
+      const hot = recentlyAired(titles);
+      const now = Date.now();
+      const fullDue = now - fullRunAt >= (reason === 'tick' ? 30 : 15) * 60 * 1000;
+      const hotDue = hot.length > 0 && now - Math.max(hotRunAt, fullRunAt) >= 10 * 60 * 1000;
+      if (!fullDue && !hotDue) return;
+      const hotIds = new Set(hot.map((t) => t.objectID || t.slug));
+      const ordered = fullDue ? [...hot, ...titles.filter((t) => !hotIds.has(t.objectID || t.slug))] : hot;
       running = true;
+      if (fullDue) fullRunAt = now;
+      hotRunAt = now;
       try {
         try {
           window.BlackXNativeAuth?.requestNotificationPermission?.();
         } catch (_) {}
         await checkFollowedTitles({
-          titles,
+          titles: ordered,
           fetchEpisodes: async (t) => (await fetchMobileEpisodes(t))?.episodes || [],
           notify: (t, ep) => {
             const ar = (localStorage.getItem('bx_mob_lang') || 'ar') === 'ar';
@@ -3421,12 +3475,16 @@ export default function MobileApkApp() {
         running = false;
       }
     };
-    const first = setTimeout(run, 9000);
-    const timer = setInterval(run, 30 * 60 * 1000);
+    const first = setTimeout(() => run('start'), 9000);
+    const timer = setInterval(() => run('tick'), 5 * 60 * 1000);
     const onVisible = () => {
-      if (document.visibilityState === 'visible') run();
+      if (document.visibilityState === 'visible') run('visible');
     };
     document.addEventListener('visibilitychange', onVisible);
+    // The air times arrive with the home / schedule data; load them here too for alerts.
+    fetchAiringTimes().then((map) => {
+      if (!cancelled && map && map.size) setAiringMap((cur) => (cur && cur.size ? cur : map));
+    });
     return () => {
       cancelled = true;
       clearTimeout(first);
@@ -3659,6 +3717,32 @@ export default function MobileApkApp() {
       return '';
     }
   };
+  // Composer: find the anime a post is about (same catalogue search as the search tab).
+  const searchAnimeForPost = useCallback(
+    (q) =>
+      queryAlgolia('series_fav_count_desc', { query: q, hitsPerPage: 8 }).then((res) => (res.hits || []).map(formatAnimeHit).filter(Boolean)),
+    []
+  );
+  // Feed: open the anime a post is about from its catalogue record (fresh, so the page is complete).
+  const openPostAnime = useCallback(
+    async (snap) => {
+      if (!snap?.objectID) return;
+      try {
+        const hit = await fetchAnimeRecord(snap.objectID);
+        if (!hit) throw new Error('missing');
+        if (isHiddenAnime(hit)) {
+          showToastMessage(hiddenTitleMessage(), 'info');
+          return;
+        }
+        const anime = formatAnimeHit(hit);
+        if (anime) handleOpenAnime(anime);
+      } catch {
+        showToast(lang === 'ar' ? 'مقدرناش نفتح الأنمي ده دلوقتي' : 'Could not open that anime right now', 'alert');
+      }
+    },
+    [handleOpenAnime, showToast, lang]
+  );
+
   const handlePublishPost = async (e) => {
     e.preventDefault();
     if (!newPostText.trim()) return;
@@ -3673,6 +3757,7 @@ export default function MobileApkApp() {
       role: user.role || 'user',
       category: postCategory,
       isSpoiler: postIsSpoiler || postCategory === 'spoiler',
+      ...(postAnime ? { anime: postAnime } : {}),
       createdAt: new Date().toISOString(),
       time: shortDateNow(), // older app versions show this text as-is
       text: newPostText.trim(),
@@ -3684,6 +3769,7 @@ export default function MobileApkApp() {
     setCommunityPosts(updated);
     setNewPostText('');
     setPostIsSpoiler(false);
+    setPostAnime(null);
     const nextXp = userXp + 15;
     setUserXp(nextXp);
     localStorage.setItem('bx_mob_xp', String(nextXp));
@@ -3778,6 +3864,30 @@ export default function MobileApkApp() {
     [communityPosts, replyText, user, showToast, lang]
   );
 
+  // Details tabs: a tab with nothing to show is not offered (no «الشخصيات (0)»); counts only
+  // when there is something to count. Reviews stay, because that tab is where one is written.
+  const detailTrailerId = selectedAnime ? selectedAnime.trailer || selectedAnime.youtubeId || '' : '';
+  const detailTabs = useMemo(() => {
+    const isRtl = lang === 'ar'; // (the component's isRtl is declared further down)
+    const tabs = [{ id: 'episodes', label: isRtl ? `الحلقات (${animeEpisodes.length})` : `Episodes (${animeEpisodes.length})` }];
+    if (charactersLoading) tabs.push({ id: 'characters', label: isRtl ? 'الشخصيات' : 'Cast' });
+    else if (animeCharacters.length) tabs.push({ id: 'characters', label: isRtl ? `الشخصيات (${animeCharacters.length})` : `Cast (${animeCharacters.length})` });
+    if (detailTrailerId) tabs.push({ id: 'trailer', label: isRtl ? 'التريلر والمشابهة' : 'Trailer & more' });
+    else if (relatedAnimes.length) tabs.push({ id: 'trailer', label: isRtl ? 'أعمال مشابهة' : 'More like this' });
+    tabs.push({
+      id: 'reviews',
+      label: animeReviews.length ? (isRtl ? `التقييمات (${animeReviews.length})` : `Reviews (${animeReviews.length})`) : isRtl ? 'التقييمات' : 'Reviews'
+    });
+    return tabs;
+  }, [lang, animeEpisodes.length, charactersLoading, animeCharacters.length, detailTrailerId, relatedAnimes.length, animeReviews.length]);
+  useEffect(() => {
+    if (!detailTabs.some((t) => t.id === detailTab)) setDetailTab('episodes');
+  }, [detailTabs, detailTab]);
+
+  // Episode options sheet: the filler switch only exists when the server marks filler episodes.
+  const hasFillerData = useMemo(() => animeEpisodes.some((ep) => ep && ep.filler), [animeEpisodes]);
+  const epOptionsCount = (epLayoutMode === 'grid' ? 1 : 0) + (epAscending ? 0 : 1) + (hideFiller && hasFillerData ? 1 : 0);
+
   // Filtered & sorted episodes inside Anime Detail Sheet (with 50-episode range chunking support)
   const displayedEpisodes = useMemo(() => {
     let list = [...animeEpisodes];
@@ -3799,6 +3909,43 @@ export default function MobileApkApp() {
     if (!epAscending) list.reverse();
     return list;
   }, [animeEpisodes, hideFiller, epSearchQuery, epAscending, epRangeChunk]);
+
+  // Manga tab: popular titles for the quick-search chips (once per session, cached a day).
+  const mangaPopularLoadedRef = useRef(false);
+  useEffect(() => {
+    if (activeTab !== 'manga' || mangaPopularLoadedRef.current) return;
+    mangaPopularLoadedRef.current = true;
+    let alive = true;
+    fetchPopularMangaTitles(10).then((titles) => {
+      if (alive) setMangaPopularTitles(titles);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [activeTab]);
+
+  // Manga filters (server + type) in the shared filter sheet.
+  const MANGA_KIND_FILTERS = useMemo(
+    () => [
+      { id: 'ALL', ar: 'الكل', en: 'All' },
+      { id: 'MANHWA', ar: 'مانهوا كورية وصينية', en: 'Manhwa' },
+      { id: 'MANGA', ar: 'مانجا يابانية', en: 'Manga' }
+    ],
+    []
+  );
+  const mangaServerTabs = useMemo(
+    () => [...BX_MANGA_SERVER_TABS, ...(mangaSearchOnlyEnabled ? [BX_MANGA_SEARCH_ONLY_TAB] : [])],
+    [mangaSearchOnlyEnabled]
+  );
+  const mangaFilterCount = (mangaSource !== 'all' ? 1 : 0) + (mangaFilterType !== 'ALL' ? 1 : 0);
+  const mangaFilterSummary = (() => {
+    const isRtl = lang === 'ar'; // (the component's isRtl is declared further down)
+    const srv = mangaServerTabs.find((t) => t.id === mangaSource) || mangaServerTabs[0];
+    const kind = MANGA_KIND_FILTERS.find((k) => k.id === mangaFilterType) || MANGA_KIND_FILTERS[0];
+    const parts = [srv ? (isRtl ? srv.ar : srv.en) : ''];
+    if (kind.id !== 'ALL') parts.push(isRtl ? kind.ar : kind.en);
+    return parts.filter(Boolean).join(' • ');
+  })();
 
   // Filtered & sorted chapters inside Manhwa Series Hub
   const displayedMangaChapters = useMemo(() => {
@@ -4016,6 +4163,22 @@ export default function MobileApkApp() {
   // Saved lists as shown on screen, without hidden genres (the stored and synced data is untouched).
   const visibleFavorites = useMemo(() => favorites.filter((f) => !isHiddenAnime(f, hiddenIds)), [favorites, hiddenIds]);
   const visibleHistory = useMemo(() => watchHistory.filter((h) => !isHiddenAnime(h, hiddenIds)), [watchHistory, hiddenIds]);
+  // The titles new-episode alerts watch: my list + "watching" / "planned" (episodeAlerts.js).
+  const followedForAlerts = useMemo(() => {
+    const out = [];
+    const seen = new Set();
+    const add = (t) => {
+      const id = t?.objectID || t?.slug;
+      if (!id || seen.has(id) || isHiddenAnime(t, hiddenIds)) return;
+      seen.add(id);
+      out.push(t);
+    };
+    favorites.forEach(add);
+    Object.values(watchlistMap || {}).forEach((entry) => {
+      if (entry && (entry.status === 'watching' || entry.status === 'planned')) add(entry);
+    });
+    return out;
+  }, [favorites, watchlistMap, hiddenIds]);
   const visibleWatchlist = useMemo(
     () => Object.values(watchlistMap).filter((w) => w && !isHiddenAnime(w, hiddenIds)),
     [watchlistMap, hiddenIds]
@@ -4042,6 +4205,7 @@ export default function MobileApkApp() {
   // Same rule as the APK's history push: anything the back button can close.
   const webDepth =
     commandMenuOpen ||
+    appSheet ||
     filterSheetOpen ||
     playerMoreOpen ||
     storyPreviewAnime ||
@@ -5085,198 +5249,49 @@ export default function MobileApkApp() {
         </div>
       )}
 
-      {/* New Release Radar Modal ( رادار الحلقات والفصول الجديدة) */}
-      {radarModalOpen && (
-        <div
-          onClick={() => setRadarModalOpen(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9700,
-            background: 'rgba(0,0,0,0.88)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem'
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: '420px',
-              maxHeight: '82vh',
-              overflowY: 'auto',
-              background: '#08080c',
-              border: '1.5px solid #ffffff',
-              borderRadius: '18px',
-              padding: '1.1rem'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.9375rem' }}>
-                <img
-                  src="/blackx-logo.png"
-                  alt="BLACK X"
-                  style={{ width: '24px', height: '24px', borderRadius: '8px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.28)' }}
-                />
-                <span><BxIcon name="bell" className="bx-ico-lead" />{isRtl ? 'رادار وإشعارات الحلقات الجديدة للهاتف' : 'Phone Episode Notifications Radar'}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRadarModalOpen(false)}
-                style={{
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.25rem 0.65rem',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="close" />
-              </button>
-            </div>
-
-            {/* Real Native Phone Notification Control Box */}
-            <div
-              style={{
-                padding: '0.75rem',
-                borderRadius: '12px',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                marginBottom: '0.85rem'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>
-                  <BxIcon name="smartphone" className="bx-ico-lead" />{isRtl ? 'إشعارات الموبايل' : 'Phone notifications'}
-                </span>
-                <span
-                  style={{
-                    padding: '0.12rem 0.48rem',
-                    borderRadius: '999px',
-                    background: '#ffffff',
-                    color: '#000000',
-                    fontSize: '0.75rem',
-                    fontWeight: 700
-                  }}
-                >
-                  ACTIVE • مفعل تلقائياً
-                </span>
-              </div>
-              <p style={{ margin: '0 0 0.55rem', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
-                {isRtl
-                  ? 'يرسل التطبيق إشعارات حقيقية لشريط حالة هاتفك فور نزول كل حلقة أنمي جديدة. اضغط بالأسفل لاختبار إشعار الهاتف الآن:'
-                  : 'Automatically sends real Android status-bar notifications when new anime episodes drop:'}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  const sampleAnime = latestList[0] || popularList[0] || { titleEn: 'Solo Leveling', latestEp: 12 };
-                  dispatchPhoneNotification(
-                    'حلقة أنمي جديدة على BLACK X!',
-                    `نزلت الآن أحدث حلقات (${sampleAnime.titleEn}) على BLACK X — اضغط للمشاهدة!`,
-                    Math.floor(Date.now() % 90000) + 1000
-                  );
-                  showToast('اتبعت إشعار تجربة للموبايل', 'smartphone');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.58rem',
-                  borderRadius: '999px',
-                  border: 'none',
-                  background: '#ffffff',
-                  color: '#000000',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="bell" className="bx-ico-lead" />{isRtl ? 'ابعت إشعار تجربة' : 'Send Phone Notification Now'}
-              </button>
-            </div>
-
-            <p style={{ margin: '0 0 0.65rem', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.5 }}>
-              {isRtl
-                ? <>{"أحدث الحلقات الصادرة هذا الأسبوع (اضغط المشاهدة أو"}<BxIcon name="bell" className="bx-ico-lead" />{"لإرسال تنبيه للهاتف):"}</>
-                : 'Latest airing episode releases this week:'}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-              {(visibleFavorites.length > 0 ? visibleFavorites.slice(0, 6) : latestList.slice(0, 6)).map((item, idx) => (
-                <div
-                  key={item.objectID || idx}
-                  onClick={() => {
-                    setRadarModalOpen(false);
-                    handleOpenAnime(item);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.65rem',
-                    padding: '0.55rem',
-                    borderRadius: '12px',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <img
-                    src={item.poster || '/blackx-logo.png'}
-                    alt={item.titleEn}
-                    style={{ width: '46px', height: '64px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {item.titleEn}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.18rem' }}>
-                      <BxIcon name="dot" className="bx-ico-lead" />{isRtl ? 'متاح الآن على سيرفرات BLACK X' : 'Available now on the BLACK X servers'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      dispatchPhoneNotification(
-                        `حلقة جديدة: ${item.titleEn}`,
-                        `شاهد الآن أحدث حلقات (${item.titleAr || item.titleEn}) على BLACK X!`,
-                        2000 + idx
-                      );
-                      showToast(`اتبعت إشعار (${item.titleEn}) للموبايل`, 'smartphone');
-                    }}
-                    style={{
-                      padding: '0.28rem 0.5rem',
-                      borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.12)',
-                      border: '1px solid rgba(255,255,255,0.25)',
-                      color: '#ffffff',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <BxIcon name="bell" />
-                  </button>
-                  <span
-                    style={{
-                      padding: '0.28rem 0.55rem',
-                      borderRadius: '8px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontSize: '0.75rem',
-                      fontWeight: 700
-                    }}
-                  >
-                    <BxIcon name="play" />
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* New-episode alerts (AlertsSheet.jsx): how they really work, the followed titles with their
+          real air times, and a test notification that says it is a test. */}
+      <AlertsSheet
+        open={appSheet === 'alerts'}
+        onClose={() => setAppSheet(null)}
+        isRtl={isRtl}
+        followed={followedForAlerts}
+        airingMap={airingMap}
+        lastRun={appSheet === 'alerts' ? lastAlertRun() : 0}
+        dataSaver={dataSaver}
+        onTest={() => {
+          haptic('tap');
+          const sent = dispatchPhoneNotification(
+            isRtl ? 'إشعار تجربة من BLACK X' : 'BLACK X test notification',
+            isRtl ? 'لو شايف الإشعار ده يبقى الإشعارات شغالة على جهازك.' : 'If you can see this, notifications work on this device.',
+            Math.floor(Date.now() % 90000) + 1000
+          );
+          let denied = false;
+          try {
+            denied = !sent && typeof Notification !== 'undefined' && Notification.permission === 'denied';
+          } catch {
+            denied = false;
+          }
+          showToast(
+            sent
+              ? isRtl
+                ? 'اتبعت إشعار التجربة'
+                : 'Test notification sent'
+              : denied
+              ? isRtl
+                ? 'الإشعارات مقفولة من إعدادات المتصفح'
+                : 'Notifications are blocked in the browser settings'
+              : isRtl
+              ? 'وافق على إذن الإشعارات وهيوصلك إشعار التجربة'
+              : 'Allow notifications and the test will arrive',
+            'bell'
+          );
+        }}
+        onOpen={(item) => {
+          setAppSheet(null);
+          handleOpenAnime(item);
+        }}
+      />
 
       {/* Top bar: only the user's picture + the access menu (logo / version / shortcuts live in the menu now) */}
       {!selectedAnime && !activeMangaChapter && (
@@ -5364,6 +5379,7 @@ export default function MobileApkApp() {
           mangaHistory={visibleMangaHistory}
           favorites={visibleFavorites}
           genres={HOME_GENRES}
+          airingMap={airingMap}
           apkRelease={isWeb ? null : apkRelease}
           heroPaused={Boolean(selectedAnime) || Boolean(storyPreviewAnime)}
           onOpen={handleOpenAnime}
@@ -5378,12 +5394,13 @@ export default function MobileApkApp() {
           }}
           onMangaLibrary={() => goToTab('manga')}
           loadSimilar={loadSimilarTitles}
+          onClassicSite={isWeb ? openComputerVersion : undefined}
         />
       )}
 
       {/* ==================== TAB 2: SEARCH (every BLACK X anime server, like the website) ==================== */}
       {activeTab === 'catalog' && !selectedAnime && (
-        <main className={pageCls} style={{ padding: '0.25rem 1rem 1rem' }}>
+        <main className={`${pageCls} bx-search-page`} style={{ padding: '0.25rem 1rem 1rem' }}>
           <div className="bx-search-bar">
             <BxIcon name="search" />
             <SearchBox
@@ -5585,1748 +5602,119 @@ export default function MobileApkApp() {
           onOpen={handleOpenAnime}
           onPeek={setQuickPeekAnime}
           onToggleFavorite={toggleFavorite}
-          onAlerts={() => setRadarModalOpen(true)}
+          onAlerts={() => setAppSheet('alerts')}
         />
       )}
 
       {/* ==================== TAB 3: MANGA & MANHWA (website BLACK X manga servers + FULLSCREEN 120Hz READER) ==================== */}
       {activeTab === 'manga' && !selectedAnime && (
-        <main className={activeMangaChapter ? undefined : pageCls} style={{ padding: activeMangaChapter ? '0' : '0.85rem 1rem' }}>
-          {activeMangaChapter ? (
-            <div
-              ref={mangaReaderContainerRef}
-              onTouchStart={() => setReaderTouchPaused(true)}
-              onTouchEnd={() => setReaderTouchPaused(false)}
-              onScroll={(e) => {
-                const el = e.currentTarget;
-                const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
-                const pct = Math.min(100, Math.max(0, Math.round((el.scrollTop / maxScroll) * 100)));
-                setReadProgressPct(pct);
-              }}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                width: '100vw',
-                height: '100vh',
-                zIndex: 9500,
-                background: '#000000',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                padding: 0,
-                margin: 0
-              }}
-            >
-              {/* Floating Auto-Hiding Pro Manga/Webtoon Reader Control Bar (Tap page once to toggle HUD) */}
-              {readerHudVisible && (
-                <div
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 9600,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.42rem',
-                    padding: '0.65rem 0.8rem',
-                    background: 'rgba(0, 0, 0, 0.92)',
-                    borderBottom: '1px solid rgba(255,255,255,0.16)'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                    <button
-                      type="button"
-                      className="bx-icon-btn bx-icon-btn-sm"
-                      aria-label={isRtl ? 'رجوع للفصول' : 'Back to chapters'}
-                      onClick={() => {
-                        setAutoScrollSpeed(0);
-                        setActiveMangaChapter(null);
-                      }}
-                    >
-                      <BxIcon name={isRtl ? 'arrow-right' : 'arrow-left'} />
-                    </button>
-
-                    {/* Quick Chapter Jump Dropdown */}
-                    <select
-                      value={activeMangaChapter.id}
-                      onChange={(e) => {
-                        const target = mangaChapters.find((c) => c.id === e.target.value);
-                        if (target) handleReadMangaChapter(target);
-                      }}
-                      aria-label={isRtl ? 'اختار الفصل' : 'Choose chapter'}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        height: '40px',
-                        padding: '0 0.6rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem'
-                      }}
-                    >
-                      {mangaChapters.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {isRtl ? `الفصل ${c.chapter}` : `Ch. ${c.chapter}`}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      className="bx-icon-btn bx-icon-btn-sm"
-                      aria-label={isRtl ? 'احفظ اللوحة دي' : 'Save this panel'}
-                      onClick={handleBookmarkCurrentPanel}
-                    >
-                      <BxIcon name="bookmark" />
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`bx-icon-btn bx-icon-btn-sm${readerSettingsOpen ? ' is-on' : ''}`}
-                      aria-label={isRtl ? 'إعدادات القراءة' : 'Reader settings'}
-                      aria-expanded={readerSettingsOpen}
-                      onClick={() => setReaderSettingsOpen((v) => !v)}
-                    >
-                      <BxIcon name="settings" />
-                    </button>
-                  </div>
-
-                  {/* Clean Collapsible Reader Studio Drawer (Opens only when الإعدادات is tapped) */}
-                  {readerSettingsOpen && (
-                    <div
-                      style={{
-                        marginTop: '0.35rem',
-                        padding: '0.65rem',
-                        borderRadius: '12px',
-                        background: '#09090d',
-                        border: '1px solid rgba(255,255,255,0.18)',
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                        gap: '0.4rem'
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={handleCycleReadingBgm}
-                        style={{
-                          padding: '0.42rem 0.6rem',
-                          borderRadius: '8px',
-                          background: readingBgmMode !== 'off' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: readingBgmMode !== 'off' ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="headphones" className="bx-ico-lead" />
-                        {isRtl
-                          ? `موسيقى: ${readingBgmMode === 'drone' ? 'هادية' : readingBgmMode === 'rain' ? 'مطر' : readingBgmMode === 'battle' ? 'حماس' : 'مقفولة'}`
-                          : `Music: ${readingBgmMode === 'drone' ? 'calm' : readingBgmMode === 'rain' ? 'rain' : readingBgmMode === 'battle' ? 'epic' : 'off'}`}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setReaderMode((m) => (m === 'webtoon' ? 'page' : 'webtoon'))}
-                        style={{
-                          padding: '0.42rem 0.6rem',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.1)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          color: '#fff',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {readerMode === 'webtoon' ? <><BxIcon name="scroll" className="bx-ico-lead" />{isRtl ? 'عرض طولي' : 'Vertical'}</> : <><BxIcon name="file" className="bx-ico-lead" />{isRtl ? 'صفحة صفحة' : 'Pages'}</>}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setReaderZoom((z) => (z === 100 ? 125 : z === 125 ? 150 : z === 150 ? 200 : 100))}
-                        style={{
-                          padding: '0.42rem 0.6rem',
-                          borderRadius: '8px',
-                          background: readerZoom > 100 ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: readerZoom > 100 ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="search" className="bx-ico-lead" />تكبير: {readerZoom}%
-                      </button>
-
-                      {readerMode === 'page' && (
-                        <button
-                          type="button"
-                          onClick={() => setDualPageSpread((d) => !d)}
-                          style={{
-                            padding: '0.42rem 0.6rem',
-                            borderRadius: '8px',
-                            background: dualPageSpread ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                            color: dualPageSpread ? '#000000' : '#ffffff',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <BxIcon name="book" className="bx-ico-lead" />{dualPageSpread ? 'عرض: صفحتين' : 'عرض: صفحة واحدة'}
-                        </button>
-                      )}
-
-                      {readerMode === 'webtoon' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const speeds = [0, 0.5, 1, 2, 3.5, 5];
-                            const next = speeds[(speeds.indexOf(autoScrollSpeed) + 1) % speeds.length];
-                            setAutoScrollSpeed(next);
-                          }}
-                          style={{
-                            padding: '0.42rem 0.6rem',
-                            borderRadius: '8px',
-                            background: autoScrollSpeed > 0 ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                            color: autoScrollSpeed > 0 ? '#000000' : '#ffffff',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <BxIcon name="arrow-down" className="bx-ico-lead" />{autoScrollSpeed === 0 ? 'تمرير تلقائي: إيقاف' : `تمرير تلقائي: ${autoScrollSpeed}x`}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setVolumeKeyScroll((v) => !v)}
-                        style={{
-                          padding: '0.42rem 0.6rem',
-                          borderRadius: '8px',
-                          background: volumeKeyScroll ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: volumeKeyScroll ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="volume" className="bx-ico-lead" />أزرار الصوت: {volumeKeyScroll ? 'تمرير' : 'صوت'}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReaderEyeFilter((f) => (f === 'normal' ? 'warm' : f === 'warm' ? 'contrast' : 'normal'))
-                        }
-                        style={{
-                          padding: '0.42rem 0.6rem',
-                          borderRadius: '8px',
-                          background: readerEyeFilter !== 'normal' ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                          color: readerEyeFilter !== 'normal' ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {readerEyeFilter === 'normal'
-                          ? <><BxIcon name="eye" className="bx-ico-lead" />{"ألوان أصلية"}</>
-                          : readerEyeFilter === 'warm'
-                          ? <><BxIcon name="moon" className="bx-ico-lead" />{"حماية العين"}</>
-                          : <><BxIcon name="zap" className="bx-ico-lead" />{"تباين فائق"}</>}
-                      </button>
-
-                      {readerMode === 'webtoon' && (
-                        <button
-                          type="button"
-                          onClick={() => setSeamlessStitch((s) => !s)}
-                          style={{
-                            padding: '0.42rem 0.6rem',
-                            borderRadius: '8px',
-                            background: seamlessStitch ? '#ffffff' : 'rgba(255,255,255,0.1)',
-                            color: seamlessStitch ? '#000000' : '#ffffff',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <BxIcon name="scissors" className="bx-ico-lead" />دمج الشرائح: {seamlessStitch ? 'مفعل' : 'عادي'}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        disabled={savingOfflineChapter}
-                        onClick={handleSaveChapterOffline}
-                        style={{
-                          padding: '0.42rem 0.6rem',
-                          borderRadius: '8px',
-                          background: offlineChapters.some((x) => x.id === activeMangaChapter.id)
-                            ? '#ffffff'
-                            : 'rgba(255,255,255,0.12)',
-                          color: offlineChapters.some((x) => x.id === activeMangaChapter.id) ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {savingOfflineChapter
-                          ? <><BxIcon name="loader" />{"..."}</>
-                          : offlineChapters.some((x) => x.id === activeMangaChapter.id)
-                          ? <><BxIcon name="check" className="bx-ico-lead" />{"محفوظ بدون نت"}</>
-                          : <><BxIcon name="download" className="bx-ico-lead" />{"حفظ الفصل بدون نت"}</>}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {mangaPagesLoading ? (
-                <div style={{ textAlign: 'center', padding: '6rem 1.5rem', color: 'rgba(255,255,255,0.6)' }}>
-                  {isRtl ? <><BxIcon name="loader" className="bx-ico-lead" />{"بيحمّل صفحات الفصل..."}</> : <><BxIcon name="loader" className="bx-ico-lead" />{"Loading fullscreen chapter pages..."}</>}
-                </div>
-              ) : mangaPages.length === 0 ? (
-                <div
-                  style={{
-                    minHeight: '70vh',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.8rem',
-                    padding: '2rem 1.4rem',
-                    textAlign: 'center',
-                    color: 'rgba(255,255,255,0.78)',
-                    fontSize: '0.9375rem',
-                    fontWeight: 600,
-                    lineHeight: 1.6
-                  }}
-                >
-                  <div>
-                    {mangaPagesError === 'network'
-                      ? isRtl
-                        ? 'تعذّر الاتصال بسيرفرات BLACK X — تأكد من الإنترنت ثم أعد المحاولة.'
-                        : 'Could not reach the BLACK X servers — check your connection and retry.'
-                      : isRtl
-                        ? `مفيش صفحات للفصل ده على ${mangaServerLabel(activeMangaChapter?.server || mangaActiveServer)} دلوقتي — جرّب سيرفر تاني`
-                        : `No pages for this chapter on ${mangaServerLabel(activeMangaChapter?.server || mangaActiveServer)} right now — try another server on the title page.`}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!activeMangaChapter) return;
-                        delete prefetchedChapterRef.current[activeMangaChapter.id];
-                        handleReadMangaChapter(activeMangaChapter);
-                      }}
-                      style={{
-                        padding: '0.55rem 1.1rem',
-                        borderRadius: '999px',
-                        background: '#ffffff',
-                        color: '#000000',
-                        border: 'none',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isRtl ? <><BxIcon name="retry" className="bx-ico-lead" />{"إعادة المحاولة"}</> : <><BxIcon name="retry" className="bx-ico-lead" />{"Retry"}</>}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveMangaChapter(null)}
-                      style={{
-                        padding: '0.55rem 1.1rem',
-                        borderRadius: '999px',
-                        background: 'rgba(255,255,255,0.1)',
-                        color: '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isRtl ? <><BxIcon name="arrow-right" className="bx-ico-lead" />{"قائمة الفصول والسيرفرات"}</> : <><BxIcon name="arrow-left" className="bx-ico-lead" />{"Chapters & servers"}</>}
-                    </button>
-                  </div>
-                </div>
-              ) : readerMode === 'page' && mangaPages.length > 0 ? (
-                <div style={{ textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div
-                    onDoubleClick={() => {
-                      const nextZ = readerZoom === 100 ? 200 : 100;
-                      setReaderZoom(nextZ);
-                      showToast(nextZ === 200 ? 'تكبير اللوحة 200%' : 'الحجم الطبيعي 100%', 'search');
-                    }}
-                    style={{
-                      overflowX: 'auto',
-                      display: dualPageSpread ? 'grid' : 'block',
-                      gridTemplateColumns: dualPageSpread ? '1fr 1fr' : 'none',
-                      gap: '2px',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <MangaPageImage
-                      isRtl={isRtl}
-                      loading="eager"
-                      src={mangaPages[currentPageIdx]}
-                      alt={isRtl ? `الصفحة ${currentPageIdx + 1}` : `Page ${currentPageIdx + 1}`}
-                      onClick={() => {
-                        if (currentPageIdx + (dualPageSpread ? 2 : 1) < mangaPages.length)
-                          setCurrentPageIdx((p) => p + (dualPageSpread ? 2 : 1));
-                        else setReaderHudVisible((v) => !v);
-                      }}
-                      style={{
-                        width: `${readerZoom}%`,
-                        maxWidth: readerZoom === 100 ? '100%' : 'none',
-                        height: 'auto',
-                        display: 'block',
-                        margin: '0 auto',
-                        cursor: 'pointer',
-                        filter:
-                          readerEyeFilter === 'warm'
-                            ? 'sepia(0.24) brightness(0.92)'
-                            : readerEyeFilter === 'contrast'
-                            ? 'contrast(1.16) saturate(1.12)'
-                            : 'none'
-                      }}
-                    />
-                    {dualPageSpread && mangaPages[currentPageIdx + 1] && (
-                      <MangaPageImage
-                        isRtl={isRtl}
-                        loading="eager"
-                        src={mangaPages[currentPageIdx + 1]}
-                        alt={isRtl ? `الصفحة ${currentPageIdx + 2}` : `Page ${currentPageIdx + 2}`}
-                        onClick={() => {
-                          if (currentPageIdx + 2 < mangaPages.length) setCurrentPageIdx((p) => p + 2);
-                          else setReaderHudVisible((v) => !v);
-                        }}
-                        style={{
-                          width: `${readerZoom}%`,
-                          maxWidth: readerZoom === 100 ? '100%' : 'none',
-                          height: 'auto',
-                          display: 'block',
-                          margin: '0 auto',
-                          cursor: 'pointer',
-                          filter:
-                            readerEyeFilter === 'warm'
-                              ? 'sepia(0.24) brightness(0.92)'
-                              : readerEyeFilter === 'contrast'
-                              ? 'contrast(1.16) saturate(1.12)'
-                              : 'none'
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 0.75rem' }}>
-                    <button
-                      type="button"
-                      disabled={currentPageIdx === 0}
-                      onClick={() => setCurrentPageIdx((p) => Math.max(0, p - 1))}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        borderRadius: '12px',
-                        background: 'rgba(255,255,255,0.12)',
-                        color: '#fff',
-                        border: 'none',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isRtl ? <><BxIcon name="arrow-right" className="bx-ico-lead" />{"الصفحة السابقة"}</> : <><BxIcon name="arrow-left" className="bx-ico-lead" />{"Prev Page"}</>}
-                    </button>
-                    <span style={{ fontWeight: 700, fontSize: '0.8125rem' }}>
-                      {currentPageIdx + 1} / {mangaPages.length}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={currentPageIdx + 1 >= mangaPages.length}
-                      onClick={() => setCurrentPageIdx((p) => Math.min(mangaPages.length - 1, p + 1))}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        borderRadius: '12px',
-                        background: '#ffffff',
-                        color: '#000',
-                        border: 'none',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isRtl ? <>{"الصفحة التالية"}<BxIcon name="arrow-left" className="bx-ico-trail" /></> : <>{"Next Page"}<BxIcon name="arrow-right" className="bx-ico-trail" /></>}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={() => setReaderHudVisible((v) => !v)}
-                  onDoubleClick={() => {
-                    const nextZ = readerZoom === 100 ? 200 : 100;
-                    setReaderZoom(nextZ);
-                    showToast(nextZ === 200 ? 'تكبير اللوحة 200%' : 'الحجم الطبيعي 100%', 'search');
-                  }}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 0,
-                    width: '100vw',
-                    overflowX: 'auto',
-                    lineHeight: 0,
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  {mangaPages.map((pg, idx) => (
-                    <MangaPageImage
-                      key={`${idx}-${pg}`}
-                      isRtl={isRtl}
-                      src={pg}
-                      alt={isRtl ? `الصفحة ${idx + 1}` : `Page ${idx + 1}`}
-                      loading="lazy"
-                          decoding="async"
-                      style={{
-                        width: `${readerZoom}%`,
-                        maxWidth: readerZoom === 100 ? '100vw' : 'none',
-                        height: 'auto',
-                        display: 'block',
-                        margin: seamlessStitch && idx > 0 ? '-1px auto 0' : '0 auto',
-                        filter:
-                          readerEyeFilter === 'warm'
-                            ? 'sepia(0.24) brightness(0.92)'
-                            : readerEyeFilter === 'contrast'
-                            ? 'contrast(1.16) saturate(1.12)'
-                            : 'none'
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Micro Progress Bar & Reading ETA Indicator at Bottom of Reader */}
-              {!mangaPagesLoading && mangaPages.length > 0 && (
-                <>
-                  <div
-                    style={{
-                      position: 'fixed',
-                      bottom: '10px',
-                      left: '12px',
-                      zIndex: 9650,
-                      padding: '0.22rem 0.6rem',
-                      borderRadius: '999px',
-                      background: 'rgba(0,0,0,0.82)',
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      color: '#ffffff',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      pointerEvents: 'none'
-                    }}
-                  >
-                    {(() => {
-                      const pct =
-                        readerMode === 'page'
-                          ? Math.round(((currentPageIdx + 1) / Math.max(1, mangaPages.length)) * 100)
-                          : readProgressPct;
-                      const remMin = Math.max(
-                        1,
-                        Math.ceil(((100 - pct) / 100) * Math.max(2, Math.round(mangaPages.length * 0.18)))
-                      );
-                      return isRtl
-                        ? `${pct}% • متبقي ~${pct >= 98 ? 0 : remMin} د`
-                        : `${pct}% • ~${pct >= 98 ? 0 : remMin}m left`;
-                    })()}
-                  </div>
-                  <div
-                    style={{
-                      position: 'fixed',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: '3px',
-                      background: 'rgba(255,255,255,0.14)',
-                      zIndex: 9650,
-                      pointerEvents: 'none'
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${
-                          readerMode === 'page'
-                            ? Math.round(((currentPageIdx + 1) / Math.max(1, mangaPages.length)) * 100)
-                            : readProgressPct
-                        }%`,
-                        height: '100%',
-                        background: '#ffffff',
-                        transition: 'width 0.15s ease-out'
-                      }}
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Bottom Next / Previous Chapter Navigation Bar */}
-              {!mangaPagesLoading && mangaChapters.length > 1 && (
-                <div style={{ display: 'flex', gap: '0.6rem', padding: '1rem 0.75rem 2.5rem', background: '#000' }}>
-                  {(() => {
-                    const idx = mangaChapters.findIndex((c) => c.id === activeMangaChapter.id);
-                    const prevCh = idx > 0 ? mangaChapters[idx - 1] : null;
-                    const nextCh = idx !== -1 && idx + 1 < mangaChapters.length ? mangaChapters[idx + 1] : null;
-                    return (
-                      <>
-                        {prevCh && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                              handleReadMangaChapter(prevCh);
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '0.75rem',
-                              borderRadius: '12px',
-                              background: 'rgba(255,255,255,0.1)',
-                              border: '1px solid rgba(255,255,255,0.2)',
-                              color: '#fff',
-                              fontWeight: 700,
-                              fontSize: '0.8125rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <BxIcon name="skip-back" className="bx-ico-lead" />{isRtl ? `الفصل ${prevCh.chapter}` : `Ch. ${prevCh.chapter}`}
-                          </button>
-                        )}
-                        {nextCh && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                              handleReadMangaChapter(nextCh);
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '0.75rem',
-                              borderRadius: '12px',
-                              background: '#ffffff',
-                              border: 'none',
-                              color: '#000',
-                              fontWeight: 700,
-                              fontSize: '0.8125rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <BxIcon name="skip-forward" className="bx-ico-lead" />{isRtl ? `الفصل ${nextCh.chapter}` : `Ch. ${nextCh.chapter}`}
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          ) : selectedManga ? (
-            <div className="bx-page">
-              {/* ==================== v12.0 SLOTH-UI & SOLO LEVELING LUXURY MANGA SERIES HUB ==================== */}
-              <div
-                style={{
-                  position: 'relative',
-                  borderRadius: '18px',
-                  overflow: 'hidden',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  marginBottom: '1rem',
-                  background: '#08080c',
-                  boxShadow: '0 22px 55px rgba(0,0,0,0.92)'
-                }}
-              >
-                {/* Top Ambient Blurred Backdrop Banner */}
-                <div style={{ position: 'relative', height: '165px', overflow: 'hidden' }}>
-                  <img
-                    src={selectedManga.poster?.large || selectedManga.poster_uri}
-                    alt={selectedManga.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      filter: 'blur(22px) brightness(0.32)',
-                      transform: 'scale(1.2)'
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, #08080c 100%)'
-                    }}
-                  />
-
-                  {/* Top Floating Circular Back Button & [X] Original Badge */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '12px',
-                      left: '12px',
-                      right: '12px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedManga(null)}
-                      style={{
-                        background: 'rgba(14,14,20,0.82)',
-                        color: '#ffffff',
-                        border: '1px solid rgba(255,255,255,0.24)',
-                        borderRadius: '999px',
-                        padding: '0.42rem 0.9rem',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isRtl ? <><BxIcon name="arrow-right" className="bx-ico-lead" />{"مكتبة المانجا"}</> : <><BxIcon name="arrow-left" className="bx-ico-lead" />{"Manga Library"}</>}
-                    </button>
-
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.38rem', padding: '0.28rem 0.7rem', borderRadius: '999px', background: 'rgba(14,14,20,0.82)', border: '1px solid rgba(255,255,255,0.22)' }}>
-                      <span
-                        style={{
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '50%',
-                          background: '#ffffff',
-                          color: '#000000',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        X
-                      </span>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>
-                        {mangaActiveServer ? mangaServerLabel(mangaActiveServer) : selectedManga.sourceLabel || 'BLACK X MANGA'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Solo Leveling Floating Cover Art overlapping the Dark Sheet */}
-                <div style={{ position: 'relative', zIndex: 2, padding: '0 1.1rem 1.15rem', marginTop: '-92px', textAlign: 'center' }}>
-                  <div
-                    style={{
-                      width: '136px',
-                      height: '194px',
-                      margin: '0 auto 0.75rem',
-                      borderRadius: '18px',
-                      overflow: 'hidden',
-                      border: '2px solid rgba(255,255,255,0.38)',
-                      boxShadow: '0 18px 42px rgba(0,0,0,0.92)'
-                    }}
-                  >
-                    <img
-                      src={selectedManga.poster?.large || selectedManga.poster_uri}
-                      alt={selectedManga.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  </div>
-
-                  <h2 style={{ margin: '0 0 0.32rem', fontSize: '1.375rem', fontWeight: 800, lineHeight: 1.25 }}>
-                    {selectedManga.name}
-                  </h2>
-
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                    <span style={{ padding: '0.18rem 0.65rem', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700 }}>
-                      {selectedManga.type || (isRtl ? 'مانجا / مانهوا' : 'Manga / Manhwa')}
-                    </span>
-                    {selectedManga.rate && (
-                      <span style={{ padding: '0.18rem 0.65rem', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700 }}>
-                        <BxIcon name="star" className="bx-ico-lead" />{selectedManga.rate}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* 4-Column Manga Micro-Stats Strip */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(4, 1fr)',
-                      gap: '0.35rem',
-                      padding: '0.6rem 0.4rem',
-                      marginBottom: '0.8rem',
-                      borderRadius: '18px',
-                      background: '#0d0d13',
-                      border: '1px solid rgba(255,255,255,0.12)'
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700 }}>{mangaChaptersLoading ? '…' : mangaChapters.length}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{isRtl ? 'فصل متاح' : 'Chapters'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700 }}>{selectedManga.rate ? <><BxIcon name="star" className="bx-ico-lead" />{selectedManga.rate}</> : '—'}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{isRtl ? 'التقييم' : 'Rating'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700 }}>
-                        {selectedManga.status === 'completed'
-                          ? isRtl
-                            ? 'مكتمل'
-                            : 'Completed'
-                          : selectedManga.status === 'ongoing'
-                            ? isRtl
-                              ? 'مستمر'
-                              : 'Ongoing'
-                            : '—'}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{isRtl ? 'الحالة' : 'Status'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.8125rem', fontWeight: 700 }}>{mangaActiveServer ? mangaServerLabel(mangaActiveServer).replace('BLACK X ', 'BX ') : '—'}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{isRtl ? 'السيرفر' : 'Server'}</div>
-                    </div>
-                  </div>
-
-                  {/* Servers for this title: the same list the website library modal shows */}
-                  {mangaServers.length > 0 && (
-                    <div style={{ marginBottom: '0.85rem', textAlign: isRtl ? 'right' : 'left' }}>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>
-                        <BxIcon name="satellite" className="bx-ico-lead" />{isRtl ? 'سيرفرات العمل ده:' : 'Servers for this title:'}
-                      </div>
-                      <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.15rem' }}>
-                        {mangaServers.map((srv) => {
-                          const active = srv.id === mangaActiveServer;
-                          return (
-                            <button
-                              key={srv.id}
-                              type="button"
-                              disabled={mangaChaptersLoading}
-                              onClick={() => {
-                                if (!active) handleOpenManga(selectedManga, srv.id);
-                              }}
-                              style={{
-                                padding: '0.38rem 0.8rem',
-                                borderRadius: '999px',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                whiteSpace: 'nowrap',
-                                cursor: 'pointer',
-                                background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                                color: active ? '#000000' : '#ffffff',
-                                border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.16)'
-                              }}
-                            >
-                              {isRtl ? srv.ar : srv.en}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Synopsis Box with Audio Narrator (Matches MANGARA & Solo Leveling Description Box) */}
-                  <div
-                    style={{
-                      textAlign: isRtl ? 'right' : 'left',
-                      padding: '0.75rem 0.85rem',
-                      borderRadius: '18px',
-                      background: '#0d0d13',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      marginBottom: '0.85rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>
-                        <BxIcon name="book" className="bx-ico-lead" />{isRtl ? 'القصة' : 'Description'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleToggleSpeakText(
-                            selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || selectedManga.name
-                          )
-                        }
-                        style={{
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '999px',
-                          background: ttsSpeaking ? '#ffffff' : 'rgba(255,255,255,0.12)',
-                          color: ttsSpeaking ? '#000000' : '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {ttsSpeaking ? (isRtl ? <><BxIcon name="mute" className="bx-ico-lead" />{"إيقاف"}</> : <><BxIcon name="mute" className="bx-ico-lead" />{"Stop"}</>) : isRtl ? <><BxIcon name="volume" className="bx-ico-lead" />{"استماع"}</> : <><BxIcon name="volume" className="bx-ico-lead" />{"Listen"}</>}
-                      </button>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '0.9375rem', color: 'rgba(255,255,255,0.76)', lineHeight: 1.55 }}>
-                      {(selectedManga.story_ar || selectedManga.story?.ar || selectedManga.story_en || (isRtl ? 'عمل مانهوا ومانجا حصري مترجم بالكامل بجودة عالية عبر سيرفرات BLACK X.' : 'Exclusive translated Manga & Manhwa series on BLACK X.')).slice(0, 280)}
-                    </p>
-                  </div>
-
-                  {/* SlothUI Full-Width Pill Primary Read CTA Button */}
-                  {mangaChapters.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const savedHist = mangaHistory.find((mh) => mh.mangaId === selectedManga.objectID);
-                        const targetCh =
-                          (savedHist && mangaChapters.find((c) => c.id === savedHist.chapterId || String(c.chapter) === String(savedHist.chapter))) ||
-                          mangaChapters[mangaChapters.length - 1] ||
-                          mangaChapters[0];
-                        if (targetCh) handleReadMangaChapter(targetCh);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.82rem 1rem',
-                        borderRadius: '999px',
-                        border: 'none',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 700,
-                        fontSize: '0.9375rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        boxShadow: '0 10px 28px rgba(255,255,255,0.2)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <span><BxIcon name="book" /></span>
-                      <span>
-                        {(() => {
-                          const savedHist = mangaHistory.find((mh) => mh.mangaId === selectedManga.objectID);
-                          if (savedHist) {
-                            return isRtl
-                              ? `متابعة القراءة — الفصل ${savedHist.chapter}`
-                              : `Continue Reading — Chapter ${savedHist.chapter}`;
-                          }
-                          const firstCh = mangaChapters[mangaChapters.length - 1] || mangaChapters[0];
-                          return isRtl
-                            ? `ابدأ القراءة الآن — الفصل ${firstCh?.chapter || 1}`
-                            : `Read Now — Chapter ${firstCh?.chapter || 1}`;
-                        })()}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Highlighted "1 New Chapter / أحدث فصل متاح" Quick Banner Card (Matches 19 Tian Reference UI) */}
-              {mangaChapters.length > 0 && (
-                <div
-                  onClick={() => handleReadMangaChapter(mangaChapters[0])}
-                  style={{
-                    padding: '0.8rem 0.95rem',
-                    borderRadius: '18px',
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1.5px solid rgba(255,255,255,0.28)',
-                    marginBottom: '0.85rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ffffff', marginBottom: '2px' }}>
-                      <BxIcon name="flame" className="bx-ico-lead" />{isRtl ? 'أحدث فصل' : 'Latest Chapter Available'}
-                    </div>
-                    <div style={{ fontSize: '0.9375rem', fontWeight: 700 }}>
-                      <BxIcon name="book" className="bx-ico-lead" />{isRtl ? `الفصل ${mangaChapters[0].chapter}` : `Chapter ${mangaChapters[0].chapter}`}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      padding: '0.38rem 0.85rem',
-                      borderRadius: '999px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontSize: '0.75rem',
-                      fontWeight: 700
-                    }}
-                  >
-                    {isRtl ? <>{"اقرأ الفصل"}<BxIcon name="arrow-left" className="bx-ico-trail" /></> : <>{"Read"}<BxIcon name="arrow-right" className="bx-ico-trail" /></>}
-                  </span>
-                </div>
-              )}
-
-              {/* Chapter Search & Sort Controls */}
-              <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', marginBottom: '0.65rem' }}>
-                <input
-                  type="search"
-                  value={mangaChSearch}
-                  onChange={(e) => setMangaChSearch(e.target.value)}
-                  placeholder={isRtl ? 'ابحث برقم الفصل...' : 'Search chapter #...'}
-                  style={{
-                    flex: 1,
-                    padding: '0.56rem 0.9rem',
-                    borderRadius: '999px',
-                    background: '#0d0d12',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: '#ffffff',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    outline: 'none'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMangaChAsc((v) => !v)}
-                  style={{
-                    padding: '0.56rem 0.85rem',
-                    borderRadius: '999px',
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#ffffff',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {mangaChAsc ? (isRtl ? <><BxIcon name="arrow-up" className="bx-ico-lead" />{"الأقدم أولاً"}</> : <><BxIcon name="arrow-up" className="bx-ico-lead" />{"Oldest"}</>) : isRtl ? <><BxIcon name="download" className="bx-ico-lead" />{"الأحدث أولاً"}</> : <><BxIcon name="download" className="bx-ico-lead" />{"Newest"}</>}
-                </button>
-              </div>
-
-              {/* MANGARA Table Header Row: Chapter Name <-> Status */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0.35rem 0.5rem',
-                  marginBottom: '0.45rem',
-                  borderBottom: '1px solid rgba(255,255,255,0.12)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.68)'
-                }}
-              >
-                <span><BxIcon name="book" className="bx-ico-lead" />{isRtl ? `قائمة الفصول (${displayedMangaChapters.length})` : `Chapter Name (${displayedMangaChapters.length})`}</span>
-                <span>{isRtl ? 'الحالة / القراءة' : 'Status'}</span>
-              </div>
-
-              {mangaChaptersLoading ? (
-                <SkeletonList count={6} thumbWidth={56} thumbHeight={56} padding="0" />
-              ) : mangaChapters.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: 'center',
-                    padding: '1.4rem 1rem',
-                    borderRadius: '18px',
-                    background: '#0c0c11',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: 'rgba(255,255,255,0.75)',
-                    fontSize: '0.9375rem',
-                    fontWeight: 600,
-                    lineHeight: 1.6
-                  }}
-                >
-                  <div style={{ marginBottom: '0.7rem' }}>
-                    {mangaChaptersError === 'network'
-                      ? isRtl
-                        ? 'تعذّر الاتصال بسيرفرات BLACK X — تأكد من الإنترنت ثم أعد المحاولة.'
-                        : 'Could not reach the BLACK X servers — check your connection and retry.'
-                      : mangaChaptersError === 'not_found'
-                        ? isRtl
-                          ? 'لم نجد هذا العمل على سيرفرات BLACK X — ابحث عنه بالاسم من مكتبة المانجا.'
-                          : 'This title was not found on the BLACK X servers — search for it in the library.'
-                        : isRtl
-                          ? 'مفيش فصول على السيرفر ده دلوقتي — جرّب سيرفر تاني من فوق.'
-                          : 'No chapters on this server right now — try another server above.'}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenManga(selectedManga, mangaActiveServer)}
-                    style={{
-                      padding: '0.5rem 1.1rem',
-                      borderRadius: '999px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: 'none',
-                      fontWeight: 700,
-                      fontSize: '0.75rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isRtl ? <><BxIcon name="retry" className="bx-ico-lead" />{"إعادة المحاولة"}</> : <><BxIcon name="retry" className="bx-ico-lead" />{"Retry"}</>}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {displayedMangaChapters.map((ch) => {
-                    const isRead = mangaHistory.some(
-                      (mh) => mh.mangaId === selectedManga.objectID && String(mh.chapter) === String(ch.chapter)
-                    );
-                    const isOffline = offlineChapters.some((x) => x.id === ch.id);
-                    return (
-                      <button
-                        key={ch.id}
-                        type="button"
-                        onClick={() => handleReadMangaChapter(ch)}
-                        style={{
-                          padding: '0.75rem 0.9rem',
-                          borderRadius: '18px',
-                          background: isRead ? 'rgba(255,255,255,0.04)' : '#0c0c11',
-                          border: isRead ? '1px solid rgba(255,255,255,0.22)' : '1px solid rgba(255,255,255,0.12)',
-                          color: '#fff',
-                          textAlign: 'start',
-                          fontWeight: 700,
-                          fontSize: '0.8125rem',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                          <span
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '50%',
-                              background: isRead ? 'rgba(255,255,255,0.12)' : '#ffffff',
-                              color: isRead ? '#ffffff' : '#000000',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '0.75rem',
-                              fontWeight: 700
-                            }}
-                          >
-                            {isRead ? <BxIcon name="check" /> : <BxIcon name="book" />}
-                          </span>
-                          <span>
-                            {isRtl ? `الفصل ${ch.chapter}` : `Chapter ${ch.chapter}`}
-                            {ch.title && !/^(?:الفصل|Chapter)\s*[\d.]+\s*$/i.test(String(ch.title).trim())
-                              ? ` — ${String(ch.title).replace(/^(?:الفصل|Chapter)\s*[\d.]+\s*[-—–:]\s*/i, '')}`
-                              : ''}
-                          </span>
-                        </span>
-                        <span
-                          style={{
-                            padding: '0.2rem 0.6rem',
-                            borderRadius: '999px',
-                            background: isOffline ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                            color: isOffline ? '#000000' : 'rgba(255,255,255,0.78)',
-                            fontSize: '0.75rem',
-                            fontWeight: 700
-                          }}
-                        >
-                          {isOffline ? <><BxIcon name="download" className="bx-ico-lead" />{"بدون نت"}</> : isRead ? (isRtl ? 'مقروء' : 'Read') : isRtl ? <>{"قراءة"}<BxIcon name="chevron-right" className="bx-ico-trail bx-ico-dir" /></> : <>{"Read"}<BxIcon name="chevron-right" className="bx-ico-trail bx-ico-dir" /></>}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* ==================== v12.0 SLOTH-UI & MANGARA MANGA DISCOVERY STUDIO ==================== */}
-              {/* Top Rounded Pill Search Bar */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.55rem',
-                  background: '#111116',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  borderRadius: '999px',
-                  padding: '0.68rem 1.05rem',
-                  marginBottom: '0.7rem'
-                }}
-              >
-                <span><BxIcon name="search" /></span>
-                <input
-                  type="search"
-                  value={mangaQuery}
-                  onChange={(e) => setMangaQuery(e.target.value)}
-                  placeholder={isRtl ? 'ابحث في سيرفرات المانجا والمانهوا (مثال: Solo Leveling)...' : 'Search the manga & manhwa servers...'}
-                  style={{
-                    flex: 1,
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: '#fff',
-                    fontSize: '0.8125rem',
-                    fontWeight: 700
-                  }}
-                />
-                {mangaQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setMangaQuery('')}
-                    style={{ background: 'none', border: 'none', color: '#fff', fontSize: '0.9375rem', cursor: 'pointer' }}
-                  >
-                    <BxIcon name="close" />
-                  </button>
-                )}
-              </div>
-
-              {/* Popular Manga Search Pills (Matches Reference UI 3 "Popular search") */}
-              <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.38rem', overflowX: 'auto', marginBottom: '0.85rem', paddingBottom: '0.15rem' }}>
-                {['Solo Leveling', 'One Piece', 'Berserk', 'Blue Lock', 'Jujutsu Kaisen', 'Omniscient Reader', 'Chainsaw Man', 'Attack on Titan'].map((tag) => {
-                  const active = mangaQuery.toLowerCase() === tag.toLowerCase();
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setMangaQuery(active ? '' : tag)}
-                      style={{
-                        padding: '0.3rem 0.72rem',
-                        borderRadius: '999px',
-                        background: active ? '#ffffff' : 'rgba(255,255,255,0.05)',
-                        color: active ? '#000000' : 'rgba(255,255,255,0.82)',
-                        border: active ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.18)',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* SlothUI & MANGARA Featured Spotlight Hero Banner ("New Release! / Trending Today") */}
-              {!mangaLoading && mangaList.length > 0 && !mangaQuery && (
-                <div
-                  onClick={() => handleOpenManga(mangaList[0])}
-                  style={{
-                    position: 'relative',
-                    width: '100%',
-                    height: '225px',
-                    borderRadius: '18px',
-                    overflow: 'hidden',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    boxShadow: '0 18px 44px rgba(0,0,0,0.9)',
-                    marginBottom: '1rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <img
-                    src={mangaList[0].poster?.large || mangaList[0].poster_uri}
-                    alt={mangaList[0].name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      objectPosition: 'center 22%',
-                      filter: 'brightness(0.68) contrast(1.12)'
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: 'linear-gradient(180deg, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.18) 35%, rgba(0,0,0,0.95) 100%)'
-                    }}
-                  />
-
-                  {/* Top-Right Star Rating Pill */}
-                  {mangaList[0].rate && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '12px',
-                        right: '14px',
-                        padding: '0.24rem 0.62rem',
-                        borderRadius: '999px',
-                        background: 'rgba(10,10,15,0.82)',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        fontSize: '0.75rem',
-                        fontWeight: 700
-                      }}
-                    >
-                      <BxIcon name="star" className="bx-ico-lead" />{mangaList[0].rate}
-                    </div>
-                  )}
-
-                  {/* Bottom Title + 50/50 Dual SlothUI Pill Buttons */}
-                  <div style={{ position: 'absolute', bottom: '14px', left: '14px', right: '14px' }}>
-                    <h2
-                      style={{
-                        margin: '0 0 0.55rem',
-                        fontSize: '1.375rem',
-                        fontWeight: 800,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        textShadow: '0 4px 16px #000'
-                      }}
-                    >
-                      {mangaList[0].name}
-                    </h2>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenManga(mangaList[0]);
-                        }}
-                        style={{
-                          padding: '0.58rem 0.8rem',
-                          borderRadius: '999px',
-                          background: '#ffffff',
-                          color: '#000000',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="book" className="bx-ico-lead" />{isRtl ? 'اقرأ الآن' : 'Read Now'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenManga(mangaList[0]);
-                        }}
-                        style={{
-                          padding: '0.58rem 0.8rem',
-                          borderRadius: '999px',
-                          background: 'rgba(22,22,30,0.85)',
-                          color: '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.24)',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <BxIcon name="info" className="bx-ico-lead" />{isRtl ? 'الفصول والقصة' : 'Chapters'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Continue Reading Progress Strip inside Manga Tab (Matches Reference UI 3 "Continue reading") */}
-              {visibleMangaHistory.length > 0 && !mangaQuery && (
-                <div style={{ marginBottom: '0.95rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                      <BxIcon name="book" className="bx-ico-lead" />{isRtl ? 'كمّل قراءة' : 'Continue Reading'}
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
-                      {visibleMangaHistory.length} {isRtl ? 'عمل' : 'Series'}
-                    </span>
-                  </div>
-                  <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.65rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-                    {visibleMangaHistory.slice(0, 8).map((mh, idx) => (
-                      <div
-                        key={`mhist-${idx}`}
-                        onClick={() => handleOpenManga(mh)}
-                        style={{
-                          minWidth: '175px',
-                          maxWidth: '175px',
-                          padding: '0.5rem',
-                          borderRadius: '18px',
-                          background: '#0c0c12',
-                          border: '1px solid rgba(255,255,255,0.14)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.55rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <img
-                          src={mh.poster_uri}
-                          alt={mh.name}
-                          style={{ width: '44px', height: '62px', borderRadius: '12px', objectFit: 'cover', flexShrink: 0 }}
-                        />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {mh.name}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.68)', fontWeight: 600, margin: '2px 0 6px' }}>
-                            {isRtl ? `الفصل ${mh.lastChapter || mh.chapter || 1}` : `Ch. ${mh.lastChapter || mh.chapter || 1}`}
-                          </div>
-                          <div style={{ height: '3px', borderRadius: '999px', background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}>
-                            <div style={{ width: '68%', height: '100%', background: '#ffffff' }} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* BLACK X manga servers: the same tabs as the website library */}
-              <div
-                className="bx-mob-scroll"
-                style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', marginBottom: '0.55rem', paddingBottom: '0.15rem' }}
-              >
-                {[...BX_MANGA_SERVER_TABS, ...(mangaSearchOnlyEnabled ? [BX_MANGA_SEARCH_ONLY_TAB] : [])].map((srv) => {
-                  const active = mangaSource === srv.id;
-                  return (
-                    <button
-                      key={srv.id}
-                      type="button"
-                      onClick={() => setMangaSource(srv.id)}
-                      style={{
-                        padding: '0.4rem 0.82rem',
-                        borderRadius: '999px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
-                        background: active ? '#ffffff' : 'rgba(255,255,255,0.06)',
-                        color: active ? '#000000' : '#ffffff',
-                        border: active ? '1.5px solid #ffffff' : '1px solid rgba(255,255,255,0.14)'
-                      }}
-                    >
-                      {isRtl ? srv.ar : srv.en}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Manga vs Manhwa Filter Chips */}
-              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.85rem' }}>
-                {[
-                  { id: 'ALL', ar: 'الكل', en: 'All' },
-                  { id: 'MANHWA', ar: 'مانهوا كورية وصينية', en: 'Manhwa' },
-                  { id: 'MANGA', ar: 'مانجا يابانية', en: 'Manga' }
-                ].map((ft) => {
-                  const active = mangaFilterType === ft.id;
-                  return (
-                    <button
-                      key={ft.id}
-                      type="button"
-                      onClick={() => setMangaFilterType(ft.id)}
-                      style={{
-                        padding: '0.34rem 0.8rem',
-                        borderRadius: '999px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.04)',
-                        color: '#fff',
-                        border: active ? '1.5px solid #fff' : '1px solid rgba(255,255,255,0.12)'
-                      }}
-                    >
-                      {isRtl ? ft.ar : ft.en}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {mangaLoading ? (
-                <SkeletonGrid count={9} columns={3} padding="0" />
-              ) : (
-                <>
-                  {/* Horizontal "Latest Updates" Compact Row Strip (Matches Reference UI 1 Left Screen) */}
-                  {!mangaQuery && mangaList.length > 4 && (
-                    <div style={{ marginBottom: '1.05rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                          <BxIcon name="zap" className="bx-ico-lead" />{isRtl ? 'مختارات من سيرفرات BLACK X' : 'Picks from the BLACK X servers'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {mangaList.slice(1, 4).map((m) => (
-                          <div
-                            key={`latest-row-${m.objectID}`}
-                            onClick={() => handleOpenManga(m)}
-                            style={{
-                              padding: '0.55rem 0.7rem',
-                              borderRadius: '18px',
-                              background: '#0b0b10',
-                              border: '1px solid rgba(255,255,255,0.12)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '0.7rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0, flex: 1 }}>
-                              <img
-                                src={m.poster?.large || m.poster_uri}
-                                alt={m.name}
-                                loading="lazy"
-                          decoding="async"
-                                style={{ width: '52px', height: '70px', borderRadius: '12px', objectFit: 'cover', flexShrink: 0 }}
-                              />
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div dir="auto" style={{ fontWeight: 700, fontSize: '0.9375rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: isRtl ? 'right' : 'left' }}>
-                                  {m.name}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '6px', fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>
-                                  {m.rate ? (
-                                    <span style={{ color: '#ffffff', direction: 'ltr' }}>
-                                      <BxIcon name="star" className="bx-ico-lead" filled />
-                                      {m.rate}
-                                    </span>
-                                  ) : null}
-                                  {m.type ? <span>{m.type}</span> : null}
-                                </div>
-                              </div>
-                            </div>
-                            <span
-                              style={{
-                                width: '34px',
-                                height: '34px',
-                                borderRadius: '50%',
-                                background: '#ffffff',
-                                color: '#000000',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                flexShrink: 0
-                              }}
-                            >
-                              <BxIcon name="book" />
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {mangaList.length === 0 && (
-                    <div
-                      style={{
-                        textAlign: 'center',
-                        padding: '2rem 1rem',
-                        color: 'rgba(255,255,255,0.68)',
-                        fontSize: '0.9375rem',
-                        fontWeight: 600,
-                        lineHeight: 1.6
-                      }}
-                    >
-                      {mangaSource === 'bx4' && !mangaQuery.trim()
-                        ? isRtl
-                          ? <><BxIcon name="search" className="bx-ico-lead" />{"سيرفر BLACK X 4 للبحث فقط — اكتب اسم العمل في خانة البحث."}</>
-                          : <><BxIcon name="search" className="bx-ico-lead" />{"BLACK X 4 is search-only — type a title in the search box."}</>
-                        : isRtl
-                          ? 'مفيش نتايج على السيرفر ده دلوقتي — جرّب سيرفر تاني من فوق.'
-                          : 'No results on this server right now — try another server above.'}
-                    </div>
-                  )}
-
-                  {/* 3-column manga grid: cover, title, the real rating only */}
-                  <div className="bx-grid bx-stagger">
-                    {mangaList
-                      .filter((m) => {
-                        if (mangaFilterType === 'MANHWA') return String(m.type || '').includes('مانهوا');
-                        if (mangaFilterType === 'MANGA') return String(m.type || '').includes('مانجا');
-                        return true;
-                      })
-                      .map((m) => (
-                        <PosterCard
-                          key={m.objectID}
-                          item={{ objectID: `manga-${m.objectID}`, titleEn: m.name, poster: m.poster?.large || m.poster_uri, rating: m.rate || '' }}
-                          dataSaver={dataSaver}
-                          onOpen={() => handleOpenManga(m)}
-                        />
-                      ))}
-                  </div>
-
-                  {mangaList.length > 0 && !mangaQuery.trim() && mangaSource !== 'bx4' && (
-                    <button
-                      type="button"
-                      onClick={handleLoadMoreManga}
-                      disabled={loadingMoreManga}
-                      style={{
-                        width: '100%',
-                        marginTop: '1.1rem',
-                        padding: '0.85rem',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 700,
-                        fontSize: '0.8125rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {loadingMoreManga
-                        ? isRtl
-                          ? <><BxIcon name="loader" className="bx-ico-lead" />{"بيحمّل..."}</>
-                          : <><BxIcon name="loader" className="bx-ico-lead" />{"Loading more..."}</>
-                        : isRtl
-                        ? <><BxIcon name="plus" className="bx-ico-lead" />{"عرض المزيد من مكتبة المانجا والمانهوا (صفحة "}{mangaPage + 1}{")"}</>
-                        : <><BxIcon name="plus" className="bx-ico-lead" />{"Load More Manga & Manhwa (Page "}{mangaPage + 1}{")"}</>}
-                    </button>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </main>
+        <MangaTab
+          {...{
+            activeMangaChapter,
+            autoScrollSpeed,
+            currentPageIdx,
+            dataSaver,
+            displayedMangaChapters,
+            dualPageSpread,
+            handleBookmarkCurrentPanel,
+            handleCycleReadingBgm,
+            handleLoadMoreManga,
+            handleOpenManga,
+            handleReadMangaChapter,
+            handleSaveChapterOffline,
+            handleToggleSpeakText,
+            isRtl,
+            loadingMoreManga,
+            mangaActiveServer,
+            mangaChAsc,
+            mangaChSearch,
+            mangaChapters,
+            mangaChaptersError,
+            mangaChaptersLoading,
+            mangaFilterCount,
+            mangaFilterSummary,
+            mangaFilterType,
+            mangaHistory,
+            mangaList,
+            mangaLoading,
+            mangaPage,
+            mangaPages,
+            mangaPagesError,
+            mangaPagesLoading,
+            mangaPopularTitles,
+            mangaQuery,
+            mangaReaderContainerRef,
+            mangaServers,
+            mangaSource,
+            offlineChapters,
+            pageCls,
+            prefetchedChapterRef,
+            readProgressPct,
+            readerEyeFilter,
+            readerHudVisible,
+            readerMode,
+            readerSettingsOpen,
+            readerZoom,
+            readingBgmMode,
+            savingOfflineChapter,
+            seamlessStitch,
+            selectedManga,
+            setActiveMangaChapter,
+            setAutoScrollSpeed,
+            setCurrentPageIdx,
+            setDualPageSpread,
+            setFilterSheetOpen,
+            setMangaChAsc,
+            setMangaChSearch,
+            setMangaQuery,
+            setReadProgressPct,
+            setReaderEyeFilter,
+            setReaderHudVisible,
+            setReaderMode,
+            setReaderSettingsOpen,
+            setReaderTouchPaused,
+            setReaderZoom,
+            setSeamlessStitch,
+            setSelectedManga,
+            setVolumeKeyScroll,
+            showToast,
+            ttsSpeaking,
+            visibleMangaHistory,
+            volumeKeyScroll
+          }}
+        />
       )}
 
-      {/* ==================== TAB 4: COMMUNITY (one feed, shared with the website) ==================== */}
+      {/* ==================== TAB 4: COMMUNITY (CommunityTab.jsx — one feed, shared with the website) ==================== */}
       {activeTab === 'community' && !selectedAnime && (
-        <main className={pageCls} style={{ padding: '0.25rem 1rem 1rem' }}>
-          {user ? (
-            <form onSubmit={handlePublishPost} className="bx-composer">
-              <div className="bx-composer-row">
-                <span className="bx-post-avatar" aria-hidden="true">
-                  {(user.displayName?.[0] || user.username?.[0] || 'X').toUpperCase()}
-                </span>
-                <textarea
-                  value={newPostText}
-                  onChange={(e) => setNewPostText(e.target.value)}
-                  placeholder={isRtl ? 'شارك رأيك أو نظريتك...' : 'Share your thoughts...'}
-                  rows={2}
-                  maxLength={600}
-                  dir="auto"
-                  aria-label={isRtl ? 'اكتب بوست' : 'Write a post'}
-                />
-              </div>
-              <div className="bx-composer-foot">
-                <div className="bx-composer-cats">
-                  {POST_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      className={`bx-chip bx-chip-sm${postCategory === cat.id ? ' is-active' : ''}`}
-                      aria-pressed={postCategory === cat.id}
-                      onClick={() => setPostCategory(cat.id)}
-                    >
-                      {isRtl ? cat.ar : cat.en}
-                    </button>
-                  ))}
-                </div>
-                <button type="submit" className="bx-btn bx-btn-primary bx-btn-sm" disabled={!newPostText.trim()}>
-                  {isRtl ? 'نشر' : 'Post'}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="bx-signin-card">
-              <span className="bx-signin-ico" aria-hidden="true">
-                <BxIcon name="message" />
-              </span>
-              <div className="bx-signin-copy">
-                <strong>{isRtl ? 'سجّل دخولك عشان تكتب وتعمل لايك' : 'Sign in to post and like'}</strong>
-                <span>{isRtl ? 'تقدر تقرا البوستات من غير حساب.' : 'You can read posts without an account.'}</span>
-              </div>
-              <button type="button" className="bx-btn bx-btn-primary bx-btn-sm" onClick={() => goToTab('profile')}>
-                {isRtl ? 'دخول' : 'Sign in'}
-              </button>
-            </div>
-          )}
-
-          {communityPosts.length === 0 ? (
-            <div className="bx-empty">
-              <BxIcon name="message" size="2rem" />
-              <p>{isRtl ? 'لسه مفيش بوستات. اكتب أول بوست!' : 'No posts yet. Write the first one!'}</p>
-            </div>
-          ) : (
-            <div className="bx-feed bx-stagger">
-              {communityPosts.map((p) => {
-                const isBlurred = p.isSpoiler && !revealedSpoilers[p.id];
-                const liked = Boolean(myPostKey && Array.isArray(p.likedBy) && p.likedBy.includes(myPostKey));
-                const likes = Math.max(0, Number(p.likes) || 0);
-                const replies = Array.isArray(p.replies) ? p.replies : [];
-                const cat = POST_CATEGORIES.find((c) => c.id === p.category);
-                return (
-                  <article key={p.id} className="bx-post">
-                    <header className="bx-post-head">
-                      <span className="bx-post-avatar" aria-hidden="true">
-                        {(p.author?.[0] || 'X').toUpperCase()}
-                      </span>
-                      <div className="bx-post-who">
-                        <span className="bx-post-author" dir="auto">
-                          {p.author}
-                        </span>
-                        {p.role === 'developer' && <span className="bx-post-role">{isRtl ? 'المطور' : 'Developer'}</span>}
-                      </div>
-                      <span className="bx-post-time">{postTimeLabel(p, lang)}</span>
-                    </header>
-                    {cat && cat.id !== 'discussion' && <span className="bx-post-cat">{isRtl ? cat.ar : cat.en}</span>}
-                    {isBlurred ? (
-                      <button
-                        type="button"
-                        className="bx-spoiler-btn"
-                        onClick={() => setRevealedSpoilers((prev) => ({ ...prev, [p.id]: true }))}
-                      >
-                        <BxIcon name="eye-off" />
-                        {isRtl ? 'فيه حرق — اضغط عشان تشوفه' : 'Spoiler — tap to reveal'}
-                      </button>
-                    ) : (
-                      <p className="bx-post-text" dir="auto">
-                        {p.text}
-                      </p>
-                    )}
-                    <footer className="bx-post-actions">
-                      <button
-                        type="button"
-                        className={`bx-post-act${liked ? ' is-on' : ''}`}
-                        aria-pressed={liked}
-                        aria-label={isRtl ? 'لايك' : 'Like'}
-                        onClick={() => handleLikePost(p.id)}
-                      >
-                        <BxIcon name="heart" filled={liked} />
-                        {likes > 0 ? likes : ''}
-                      </button>
-                      <button
-                        type="button"
-                        className="bx-post-act"
-                        aria-label={isRtl ? 'رد' : 'Reply'}
-                        onClick={() => {
-                          if (!user) {
-                            showToast(isRtl ? 'سجّل دخولك الأول عشان ترد' : 'Sign in to reply', 'user');
-                            return;
-                          }
-                          setReplyingToPostId((cur) => (cur === p.id ? null : p.id));
-                        }}
-                      >
-                        <BxIcon name="message" />
-                        {replies.length > 0 ? replies.length : ''}
-                      </button>
-                    </footer>
-
-                    {replies.length > 0 && (
-                      <div className="bx-replies">
-                        {replies.map((r) => (
-                          <div key={r.id} className="bx-reply">
-                            <strong dir="auto">{r.author}</strong>
-                            <span dir="auto">{r.text}</span>
-                            <time>{postTimeLabel(r, lang)}</time>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {replyingToPostId === p.id && user && (
-                      <div className="bx-reply-box">
-                        <input
-                          type="text"
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder={isRtl ? 'اكتب ردك...' : 'Write a reply...'}
-                          maxLength={300}
-                          dir="auto"
-                        />
-                        <button type="button" className="bx-btn bx-btn-primary bx-btn-sm" disabled={!replyText.trim()} onClick={() => handleAddPostReply(p.id)}>
-                          {isRtl ? 'إرسال' : 'Send'}
-                        </button>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </main>
+        <CommunityTab
+          pageClassName={pageCls}
+          isRtl={isRtl}
+          lang={lang}
+          dataSaver={dataSaver}
+          user={user}
+          posts={communityPosts}
+          myPostKey={myPostKey}
+          draft={newPostText}
+          onDraft={setNewPostText}
+          category={postCategory}
+          onCategory={setPostCategory}
+          postAnime={postAnime}
+          onPostAnime={setPostAnime}
+          onPublish={handlePublishPost}
+          onLike={handleLikePost}
+          onReply={handleAddPostReply}
+          replyingToPostId={replyingToPostId}
+          onReplyingTo={setReplyingToPostId}
+          replyText={replyText}
+          onReplyText={setReplyText}
+          onSignIn={() => goToTab('profile')}
+          onNeedSignIn={() => showToast(isRtl ? 'سجّل دخولك الأول عشان ترد' : 'Sign in to reply', 'user')}
+          pickerOpen={appSheet === 'postAnime'}
+          onPickerOpen={(open) => setAppSheet(open ? 'postAnime' : null)}
+          searchAnime={searchAnimeForPost}
+          onOpenAnime={openPostAnime}
+        />
       )}
 
       {/* ==================== TAB 5: PROFILE HUB (profile/ProfileTab.jsx) ==================== */}
@@ -7489,6 +5877,7 @@ export default function MobileApkApp() {
           {activeEpisode && (
             <div
               ref={playerPageRef}
+              className={`bx-player-shell ${videoFullscreen ? 'is-full' : playerMinimized ? 'is-mini' : 'is-page'}`}
               style={
                 videoFullscreen
                   ? {
@@ -7588,6 +5977,7 @@ export default function MobileApkApp() {
 
               <div
                 data-bx-video="1"
+                className={`bx-video-box ${videoFullscreen ? 'is-full' : playerMinimized ? 'is-mini' : 'is-page'}`}
                 onClick={playerMinimized ? () => setPlayerMinimized(false) : undefined}
                 onTouchStart={playerMinimized ? undefined : handleVideoTouchStart}
                 onTouchMove={playerMinimized ? undefined : handleVideoTouchMove}
@@ -8854,12 +7244,7 @@ export default function MobileApkApp() {
                 borderBottom: '1px solid rgba(255,255,255,0.14)'
               }}
             >
-              {[
-                { id: 'episodes', label: isRtl ? `الحلقات (${animeEpisodes.length})` : `Season 1 (${animeEpisodes.length})` },
-                { id: 'characters', label: isRtl ? `الشخصيات (${animeCharacters.length})` : `Cast (${animeCharacters.length})` },
-                { id: 'trailer', label: isRtl ? 'التريلر والمشابهة' : 'More Like This' },
-                { id: 'reviews', label: isRtl ? `التقييمات (${animeReviews.length})` : `Reviews (${animeReviews.length})` }
-              ].map((dt) => {
+              {detailTabs.map((dt) => {
                 const active = detailTab === dt.id;
                 return (
                   <button
@@ -8938,79 +7323,31 @@ export default function MobileApkApp() {
                   </div>
                 )}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '0.4rem',
-                    marginBottom: '0.65rem',
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  <input
-                    type="search"
-                    value={epSearchQuery}
-                    onChange={(e) => setEpSearchQuery(e.target.value)}
-                    placeholder={isRtl ? 'ابحث برقم الحلقة...' : 'Search Ep #...'}
-                    style={{
-                      flex: 1,
-                      minWidth: '105px',
-                      padding: '0.4rem 0.65rem',
-                      borderRadius: '8px',
-                      background: '#0b0b0e',
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      color: '#fff',
-                      fontSize: '0.75rem'
-                    }}
-                  />
+                {/* Episode tools: search + one options button (layout, order, filler) */}
+                <div className="bx-ep-tools">
+                  <label className="bx-ep-search">
+                    <BxIcon name="search" size="1em" />
+                    <input
+                      type="search"
+                      inputMode="numeric"
+                      value={epSearchQuery}
+                      onChange={(e) => setEpSearchQuery(e.target.value)}
+                      placeholder={isRtl ? 'ابحث برقم الحلقة' : 'Episode number'}
+                      aria-label={isRtl ? 'ابحث برقم الحلقة' : 'Search episodes'}
+                    />
+                  </label>
                   <button
                     type="button"
-                    onClick={() => setEpLayoutMode((m) => (m === 'cards' ? 'grid' : 'cards'))}
-                    style={{
-                      padding: '0.4rem 0.65rem',
-                      borderRadius: '8px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: 'none',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
+                    className={`bx-chip${epOptionsCount ? ' is-active' : ''}`}
+                    onClick={() => {
+                      haptic('tap');
+                      setAppSheet('epOptions');
                     }}
+                    aria-label={isRtl ? 'خيارات الحلقات' : 'Episode options'}
                   >
-                    {epLayoutMode === 'cards' ? (isRtl ? <><BxIcon name="hash" className="bx-ico-lead" />{"شبكة أرقام"}</> : <><BxIcon name="hash" className="bx-ico-lead" />{"Grid"}</>) : isRtl ? <><BxIcon name="menu" className="bx-ico-lead" />{"بطاقات"}</> : <><BxIcon name="menu" className="bx-ico-lead" />{"Cards"}</>}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHideFiller((v) => !v)}
-                    style={{
-                      padding: '0.4rem 0.65rem',
-                      borderRadius: '8px',
-                      background: hideFiller ? '#ffffff' : 'rgba(255,255,255,0.08)',
-                      color: hideFiller ? '#000000' : '#ffffff',
-                      border: '1px solid rgba(255,255,255,0.18)',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {hideFiller ? <><BxIcon name="check" className="bx-ico-lead" />{"بدون فلر"}</> : 'إخفاء الفلر'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEpAscending((v) => !v)}
-                    style={{
-                      padding: '0.4rem 0.65rem',
-                      borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.08)',
-                      border: '1px solid rgba(255,255,255,0.18)',
-                      color: '#fff',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {epAscending ? <><BxIcon name="arrow-up" className="bx-ico-lead" />{"1..N"}</> : <><BxIcon name="download" className="bx-ico-lead" />{"N..1"}</>}
+                    <BxIcon name="sliders" size="1.05em" />
+                    {isRtl ? 'خيارات' : 'Options'}
+                    {epOptionsCount ? ` · ${epOptionsCount}` : ''}
                   </button>
                 </div>
 
@@ -9271,14 +7608,14 @@ export default function MobileApkApp() {
             {/* SUB-TAB 3: OFFICIAL TRAILER & SIMILAR/RELATED ANIME */}
             {detailTab === 'trailer' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {selectedAnime.trailer ? (
+                {detailTrailerId ? (
                   <div>
                     <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9375rem', fontWeight: 700 }}>
                       <BxIcon name="film" className="bx-ico-lead" />{isRtl ? 'الإعلان الرسمي' : 'Official Trailer'}
                     </h4>
                     <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.2)' }}>
                       <iframe
-                        src={`https://www.youtube.com/embed/${selectedAnime.trailer}`}
+                        src={`https://www.youtube.com/embed/${encodeURIComponent(detailTrailerId)}`}
                         title="Anime Trailer"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
@@ -9287,15 +7624,11 @@ export default function MobileApkApp() {
                       />
                     </div>
                   </div>
-                ) : (
-                  <div style={{ padding: '1rem', borderRadius: '12px', background: '#0a0a0e', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                    {isRtl ? 'لا يتوفر تريلر مدمج لهذا العمل.' : 'No embedded trailer available.'}
-                  </div>
-                )}
+                ) : null}
 
-                <div>
+                {relatedAnimes.length > 0 && <div>
                   <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9375rem', fontWeight: 700 }}>
-                    <BxIcon name="sparkles" className="bx-ico-lead" />{isRtl ? 'أنميات مشابهة ومرتبطة ننصحك بمشاهدتها' : 'Similar & Related Anime'}
+                    <BxIcon name="sparkles" className="bx-ico-lead" />{isRtl ? 'من نفس التصنيف' : 'Same genre'}
                   </h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
                     {relatedAnimes.map((rel) => (
@@ -9313,7 +7646,7 @@ export default function MobileApkApp() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </div>}
               </div>
             )}
 
@@ -9641,234 +7974,17 @@ export default function MobileApkApp() {
 
       {/* ==================== v9.0 FULL-SCREEN VERTICAL STORY / HIGHLIGHT PREVIEW MODAL ==================== */}
       {storyPreviewAnime?.item && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9880,
-            background: '#000000',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            overflow: 'hidden'
+        <StoryPreview
+          {...{
+            favorites,
+            handleOpenAnime,
+            isRtl,
+            popularList,
+            setStoryPreviewAnime,
+            storyPreviewAnime,
+            toggleFavorite
           }}
-        >
-          {/* Full-Bleed Vertical Story Poster */}
-          <img
-            src={storyPreviewAnime.item.poster}
-            alt={storyPreviewAnime.item.titleEn}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              filter: 'brightness(0.72) contrast(1.08)'
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.88) 75%, #000000 100%)',
-              pointerEvents: 'none'
-            }}
-          />
-
-          {/* Top Segmented Story Progress Bars & Header */}
-          <div style={{ position: 'relative', zIndex: 5, padding: '0.75rem 1rem' }}>
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '0.65rem' }}>
-              {(storyPreviewAnime.pool || popularList.slice(0, 12)).map((poolItem, sIdx, pool) => (
-                <div
-                  key={`sbar-${sIdx}`}
-                  onClick={() => setStoryPreviewAnime({ item: poolItem, index: sIdx, pool })}
-                  style={{
-                    flex: 1,
-                    height: '3px',
-                    borderRadius: '999px',
-                    background:
-                      sIdx <= (storyPreviewAnime.index || 0) ? '#ffffff' : 'rgba(255,255,255,0.26)',
-                    cursor: 'pointer'
-                  }}
-                />
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                <img
-                  src={storyPreviewAnime.item.poster}
-                  alt={storyPreviewAnime.item.titleEn}
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: '1.5px solid #ffffff'
-                  }}
-                />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{storyPreviewAnime.item.titleEn}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
-                    {storyPreviewAnime.pool ? (isRtl ? 'بتنزل النهارده' : 'Airing today') : isRtl ? 'الأكثر مشاهدة' : 'Most popular'}{` • ${(storyPreviewAnime.index || 0) + 1}/${(storyPreviewAnime.pool || popularList.slice(0, 12)).length}`}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setStoryPreviewAnime(null)}
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.15)',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  color: '#ffffff',
-                  fontWeight: 700,
-                  fontSize: '0.8125rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="close" />
-              </button>
-            </div>
-          </div>
-
-          {/* Middle Invisible Left/Right Tap Zones to Cycle Stories */}
-          <div style={{ position: 'relative', zIndex: 4, flex: 1, display: 'flex' }}>
-            <div
-              onClick={() => {
-                const pool = storyPreviewAnime.pool || popularList.slice(0, 12);
-                const prevIdx = ((storyPreviewAnime.index || 0) - 1 + pool.length) % pool.length;
-                setStoryPreviewAnime({ item: pool[prevIdx], index: prevIdx, pool });
-              }}
-              style={{ flex: 1, cursor: 'pointer' }}
-            />
-            <div
-              onClick={() => {
-                const pool = storyPreviewAnime.pool || popularList.slice(0, 12);
-                const nextIdx = ((storyPreviewAnime.index || 0) + 1) % pool.length;
-                setStoryPreviewAnime({ item: pool[nextIdx], index: nextIdx, pool });
-              }}
-              style={{ flex: 1, cursor: 'pointer' }}
-            />
-          </div>
-
-          {/* Bottom Story Details & Instant Action Deck */}
-          <div style={{ position: 'relative', zIndex: 5, padding: '1rem 1.15rem 1.8rem' }}>
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-              {storyPreviewAnime.item.rating && (
-                <span
-                  style={{
-                    padding: '0.18rem 0.55rem',
-                    borderRadius: '8px',
-                    background: '#ffffff',
-                    color: '#000000',
-                    fontSize: '0.75rem',
-                    fontWeight: 700
-                  }}
-                >
-                  <BxIcon name="star" className="bx-ico-lead" />{storyPreviewAnime.item.rating}
-                </span>
-              )}
-              {[storyPreviewAnime.item.type, storyPreviewAnime.item.state].filter(Boolean).length > 0 && (
-                <span
-                  style={{
-                    padding: '0.18rem 0.55rem',
-                    borderRadius: '8px',
-                    background: 'rgba(255,255,255,0.14)',
-                    fontSize: '0.75rem',
-                    fontWeight: 700
-                  }}
-                >
-                  {[storyPreviewAnime.item.type, storyPreviewAnime.item.state].filter(Boolean).join(' • ')}
-                </span>
-              )}
-            </div>
-
-            <h2 style={{ margin: '0 0 0.4rem', fontSize: '1.375rem', fontWeight: 800, lineHeight: 1.25 }}>
-              {storyPreviewAnime.item.titleEn}
-            </h2>
-
-            <p
-              style={{
-                margin: '0 0 1rem',
-                fontSize: '0.9375rem',
-                color: 'rgba(255,255,255,0.82)',
-                lineHeight: 1.55,
-                display: '-webkit-box',
-                WebkitLineClamp: 3,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden'
-              }}
-            >
-              {storyPreviewAnime.item.storyAr}
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = storyPreviewAnime.item;
-                  setStoryPreviewAnime(null);
-                  handleOpenAnime(target, 1);
-                }}
-                style={{
-                  padding: '0.78rem 1rem',
-                  borderRadius: '12px',
-                  background: '#ffffff',
-                  color: '#000000',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.8125rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="play" className="bx-ico-lead" />{isRtl ? 'تشغيل' : 'Play'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const target = storyPreviewAnime.item;
-                  setStoryPreviewAnime(null);
-                  handleOpenAnime(target);
-                }}
-                style={{
-                  padding: '0.78rem 0.9rem',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.12)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.26)',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <BxIcon name="info" className="bx-ico-lead" />{isRtl ? 'التفاصيل' : 'Details'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => toggleFavorite(storyPreviewAnime.item)}
-                style={{
-                  padding: '0.78rem 0.85rem',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.12)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.26)',
-                  fontWeight: 700,
-                  fontSize: '0.8125rem',
-                  cursor: 'pointer'
-                }}
-              >
-                {favorites.some((f) => f.objectID === storyPreviewAnime.item.objectID) ? <BxIcon name="check" /> : <BxIcon name="plus" />}
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       {/* Playback settings (PlayerControls settings button in full screen) */}
@@ -9985,6 +8101,69 @@ export default function MobileApkApp() {
           </button>
         </div>
       </BottomSheet>
+      <BottomSheet
+        open={appSheet === 'epOptions' && Boolean(selectedAnime)}
+        onClose={() => setAppSheet(null)}
+        title={isRtl ? 'خيارات الحلقات' : 'Episode options'}
+        closeLabel={isRtl ? 'إغلاق' : 'Close'}
+        className="bx-ep-options"
+      >
+        <section className="bx-filter-group">
+          <h4>{isRtl ? 'طريقة العرض' : 'Layout'}</h4>
+          <div className="bx-seg" role="group">
+            <button type="button" className={epLayoutMode === 'cards' ? 'is-on' : ''} aria-pressed={epLayoutMode === 'cards'} onClick={() => setEpLayoutMode('cards')}>
+              <BxIcon name="list" className="bx-ico-lead" />
+              {isRtl ? 'بطاقات' : 'Cards'}
+            </button>
+            <button type="button" className={epLayoutMode === 'grid' ? 'is-on' : ''} aria-pressed={epLayoutMode === 'grid'} onClick={() => setEpLayoutMode('grid')}>
+              <BxIcon name="grid" className="bx-ico-lead" />
+              {isRtl ? 'أرقام' : 'Numbers'}
+            </button>
+          </div>
+        </section>
+        <section className="bx-filter-group">
+          <h4>{isRtl ? 'الترتيب' : 'Order'}</h4>
+          <div className="bx-seg" role="group">
+            <button type="button" className={epAscending ? 'is-on' : ''} aria-pressed={epAscending} onClick={() => setEpAscending(true)}>
+              {isRtl ? 'من الأولى' : 'First to last'}
+            </button>
+            <button type="button" className={!epAscending ? 'is-on' : ''} aria-pressed={!epAscending} onClick={() => setEpAscending(false)}>
+              {isRtl ? 'من الأحدث' : 'Newest first'}
+            </button>
+          </div>
+        </section>
+        {hasFillerData ? (
+          <section className="bx-filter-group">
+            <h4>{isRtl ? 'حلقات الفلر' : 'Filler episodes'}</h4>
+            <div className="bx-seg" role="group">
+              <button type="button" className={!hideFiller ? 'is-on' : ''} aria-pressed={!hideFiller} onClick={() => setHideFiller(false)}>
+                {isRtl ? 'اعرضها' : 'Show'}
+              </button>
+              <button type="button" className={hideFiller ? 'is-on' : ''} aria-pressed={hideFiller} onClick={() => setHideFiller(true)}>
+                {isRtl ? 'اخفيها' : 'Hide'}
+              </button>
+            </div>
+          </section>
+        ) : null}
+      </BottomSheet>
+      <FilterSheet
+        open={filterSheetOpen && activeTab === 'manga' && !selectedAnime && !selectedManga && !activeMangaChapter}
+        onClose={() => setFilterSheetOpen(false)}
+        isRtl={isRtl}
+        value={{
+          server: mangaServerTabs.find((t) => t.id === mangaSource) || mangaServerTabs[0],
+          kind: MANGA_KIND_FILTERS.find((k) => k.id === mangaFilterType) || MANGA_KIND_FILTERS[0]
+        }}
+        defaults={{ server: mangaServerTabs[0], kind: MANGA_KIND_FILTERS[0] }}
+        groups={[
+          { key: 'server', title: isRtl ? 'السيرفر' : 'Server', items: mangaServerTabs },
+          { key: 'kind', title: isRtl ? 'النوع' : 'Type', items: MANGA_KIND_FILTERS }
+        ]}
+        onApply={(d) => {
+          if (d.server?.id && d.server.id !== mangaSource) setMangaSource(d.server.id);
+          if (d.kind?.id && d.kind.id !== mangaFilterType) setMangaFilterType(d.kind.id);
+        }}
+      />
       <FilterSheet
         open={filterSheetOpen && activeTab === 'catalog' && !selectedAnime}
         onClose={() => setFilterSheetOpen(false)}
@@ -9999,173 +8178,25 @@ export default function MobileApkApp() {
 
       {/* ==================== ACCESS MENU (opened from the top bar) ==================== */}
       {menuPresence.mounted && (
-        <div className={`bx-menu-backdrop${menuPresence.closing ? ' is-closing' : ''}`} onClick={() => setCommandMenuOpen(false)} role="presentation">
-          <div
-            className="bx-menu-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label={isRtl ? 'القائمة' : 'Menu'}
-            onClick={(e) => e.stopPropagation()}
-            style={{ transformOrigin: isRtl ? 'top left' : 'top right' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.3rem 0.6rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)' }}>
-                {isRtl ? 'القائمة' : 'MENU'}
-              </span>
-              <button
-                type="button"
-                className="bx-round-btn"
-                onClick={() => setCommandMenuOpen(false)}
-                aria-label={isRtl ? 'إغلاق' : 'Close'}
-                style={{ width: '34px', height: '34px', fontSize: '1.0625rem', boxShadow: 'none' }}
-              >
-                <BxIcon name="close" />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              className="bx-menu-item"
-              onClick={() => goToTab('profile', () => resetProfileStack())}
-              style={{
-                '--i': 0,
-                padding: '0.55rem 0.6rem',
-                marginBottom: '0.45rem',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.12)'
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
-                <span className="bx-avatar-btn" style={{ width: '44px', height: '44px', boxShadow: 'none', flexShrink: 0 }}>
-                  {avatarPhoto ? (
-                    <img src={avatarPhoto} alt="" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} />
-                  ) : user ? (
-                    <span>{(user.displayName?.[0] || user.username?.[0] || 'X').toUpperCase()}</span>
-                  ) : (
-                    <BxIcon name="user" />
-                  )}
-                </span>
-                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'start' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.9375rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {user?.displayName || (isRtl ? 'زائر' : 'Guest')}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>
-                    {user
-                      ? isRtl
-                        ? 'الملف الشخصي ومكتبتي'
-                        : 'Profile & library'
-                      : isWeb
-                      ? isRtl
-                        ? 'سجّل دخولك عشان مكتبتك تتحفظ على كل أجهزتك'
-                        : 'Sign in to keep your library on every device'
-                      : isRtl
-                      ? 'سجّل دخولك لمزامنة مكتبتك مع الموقع'
-                      : 'Sign in to sync with the website'}
-                  </span>
-                </span>
-              </span>
-              <BxIcon name={isRtl ? 'chevron-left' : 'chevron-right'} style={{ opacity: 0.55 }} />
-            </button>
-
-            {[
-              {
-                id: 'mylist',
-                icon: 'bookmark',
-                label: isRtl ? 'قائمتي' : 'My list',
-                badge: visibleFavorites.length || null,
-                onClick: () => goToTab('profile', () => resetProfileStack(['library']))
-              },
-              {
-                id: 'history',
-                icon: 'clock',
-                label: isRtl ? 'سجل المشاهدة' : 'Watch history',
-                badge: null,
-                onClick: () => goToTab('profile', () => resetProfileStack(['history']))
-              },
-              {
-                id: 'radar',
-                icon: 'bell',
-                label: isRtl ? 'تنبيهات الحلقات' : 'Episode alerts',
-                badge: null,
-                onClick: () => {
-                  setCommandMenuOpen(false);
-                  setRadarModalOpen(true);
-                }
-              },
-              {
-                id: 'offline',
-                icon: 'download',
-                label: isRtl ? 'التنزيلات' : 'Downloads',
-                badge: offlineChapters.length || null,
-                onClick: () => goToTab('profile', () => resetProfileStack(['offline']))
-              },
-              {
-                id: 'vip',
-                icon: 'crown',
-                label: isRtl ? 'العضوية و VIP' : 'Membership & VIP',
-                badge: userVipTier !== 'free' || isDeveloper ? 'VIP' : null,
-                onClick: () => goToTab('profile', () => resetProfileStack(['vip']))
-              },
-              {
-                id: 'settings',
-                icon: 'settings',
-                label: isRtl ? 'الإعدادات' : 'Settings',
-                badge: null,
-                onClick: () => goToTab('profile', () => resetProfileStack(['settings']))
-              },
-              ...(isWeb
-                ? [
-                    {
-                      id: 'computer',
-                      icon: 'monitor',
-                      label: isRtl ? 'نسخة الكمبيوتر' : 'Computer version',
-                      badge: null,
-                      onClick: () => {
-                        setCommandMenuOpen(false);
-                        openComputerVersion();
-                      }
-                    }
-                  ]
-                : [])
-            ].map((item, idx) => (
-              <button key={item.id} type="button" className="bx-menu-item" style={{ '--i': idx + 1 }} onClick={item.onClick}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-                  <span className="bx-menu-ico">
-                    <BxIcon name={item.icon} />
-                  </span>
-                  <span style={{ textAlign: 'start' }}>{item.label}</span>
-                </span>
-                {item.badge ? <span className="bx-menu-badge">{item.badge}</span> : null}
-              </button>
-            ))}
-
-            {/* App info (moved here from the old top header) */}
-            <div
-              className="bx-fade"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                marginTop: '0.55rem',
-                padding: '0.75rem 0.6rem 0.2rem',
-                borderTop: '1px solid rgba(255,255,255,0.08)',
-                animationDelay: '0.45s'
-              }}
-            >
-              <img src="/blackx-logo.png" alt="" style={{ width: '30px', height: '30px', borderRadius: '8px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.22)' }} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>BLACK X</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>
-                  {isWeb
-                    ? `black-x-anime.me${bxAnimeTotal ? ` • ${formatBxCount(bxAnimeTotal)} ${isRtl ? 'أنمي' : 'anime'}` : ''}`
-                    : isRtl
-                    ? `إصدار ${BX_APK_VERSION}${bxAnimeTotal ? ` • ${formatBxCount(bxAnimeTotal)} أنمي` : ''}`
-                    : `Version ${BX_APK_VERSION}${bxAnimeTotal ? ` • ${formatBxCount(bxAnimeTotal)} anime` : ''}`}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AccessMenu
+          {...{
+            avatarPhoto,
+            bxAnimeTotal,
+            goToTab,
+            isDeveloper,
+            isRtl,
+            isWeb,
+            menuPresence,
+            offlineChapters,
+            resetProfileStack,
+            setAppSheet,
+            setAvatarFailed,
+            setCommandMenuOpen,
+            user,
+            userVipTier,
+            visibleFavorites
+          }}
+        />
       )}
 
       {/* ==================== BOTTOM DOCK (MobileDock.jsx) — hidden while the player / reader is open ==================== */}
@@ -10178,380 +8209,26 @@ export default function MobileApkApp() {
 
       {/* ==================== GLOBAL MANDATORY VIP SUBSCRIPTION & ACTIVATION GATE (مربوط سحابياً بكل النسخ وبحساب المطور) ==================== */}
       {globalVipEnforced && userVipTier === 'free' && !isDeveloper && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9950,
-            background: '#000000',
-            color: '#ffffff',
-            overflowY: 'auto',
-            padding: '1.2rem 1rem 3rem'
+        <VipGate
+          {...{
+            authBusy,
+            authPassword,
+            authUsername,
+            handleAuthSubmit,
+            handleRealGoogleOAuthLogin,
+            handleRedeemVipCode,
+            isRtl,
+            setAuthPassword,
+            setAuthUsername,
+            setSessionToken,
+            setUser,
+            setVipRedeemCode,
+            showToast,
+            user,
+            vipRedeemBusy,
+            vipRedeemCode
           }}
-        >
-          <div style={{ maxWidth: '540px', margin: '0 auto' }}>
-            {/* Header Badge */}
-            <div style={{ textAlign: 'center', marginBottom: '1.1rem' }}>
-              <img
-                src="/blackx-logo.png"
-                alt="BLACK X"
-                style={{
-                  width: '64px',
-                  height: '64px',
-                  margin: '0 auto 0.65rem',
-                  borderRadius: '18px',
-                  background: '#000000',
-                  objectFit: 'cover',
-                  display: 'block',
-                  border: '1px solid rgba(255,255,255,0.24)',
-                  boxShadow: '0 0 28px rgba(255,0,0,0.4)'
-                }}
-              />
-              <span
-                style={{
-                  display: 'inline-block',
-                  padding: '0.25rem 0.85rem',
-                  borderRadius: '999px',
-                  background: 'rgba(255,255,255,0.1)',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  marginBottom: '0.45rem'
-                }}
-              >
-                <BxIcon name="crown" className="bx-ico-lead" />BLACK X VIP PREMIERE ACCESS
-              </span>
-              <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.375rem', fontWeight: 800 }}>
-                {isRtl ? 'اشترك في باقات BLACK X VIP للمتابعة' : 'BLACK X VIP Subscription Required'}
-              </h1>
-              <p style={{ margin: 0, fontSize: '0.9375rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.55 }}>
-                {isRtl
-                  ? 'التطبيق يعمل حالياً بنظام العضوية المدفوعة الموحد مع الموقع الرسمي. اختر باقتك أو أدخل كود التفعيل الفوري، أو سجّل دخولك إذا كنت مشتركاً بالفعل.'
-                  : 'VIP membership is currently enforced across all platforms. Redeem your VIP code or sign in to continue.'}
-              </p>
-            </div>
-
-            {/* Instant VIP Code Activation Box */}
-            <form
-              onSubmit={handleRedeemVipCode}
-              style={{
-                padding: '1rem',
-                borderRadius: '18px',
-                background: '#0b0b0f',
-                border: '1.5px solid #ffffff',
-                marginBottom: '1rem',
-                boxShadow: '0 10px 30px rgba(255,255,255,0.08)'
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.45rem' }}>
-                <BxIcon name="key" className="bx-ico-lead" />{isRtl ? 'لديك كود تفعيل VIP؟ أدخله هنا للفتح الفوري:' : 'Have a VIP Activation Code? Redeem Instantly:'}
-              </div>
-              <div style={{ display: 'flex', gap: '0.45rem' }}>
-                <input
-                  type="text"
-                  value={vipRedeemCode}
-                  onChange={(e) => setVipRedeemCode(e.target.value)}
-                  placeholder="BX-XXXX-XXXX-XXXX"
-                  style={{
-                    flex: 1,
-                    padding: '0.7rem 0.85rem',
-                    borderRadius: '12px',
-                    background: '#000000',
-                    border: '1px solid rgba(255,255,255,0.28)',
-                    color: '#ffffff',
-                    fontFamily: 'monospace',
-                    fontWeight: 700,
-                    fontSize: '0.8125rem'
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={vipRedeemBusy}
-                  style={{
-                    padding: '0 1.15rem',
-                    borderRadius: '12px',
-                    border: 'none',
-                    background: '#ffffff',
-                    color: '#000000',
-                    fontWeight: 700,
-                    fontSize: '0.8125rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {vipRedeemBusy ? <BxIcon name="loader" /> : isRtl ? 'تفعيل الآن' : 'Activate'}
-                </button>
-              </div>
-            </form>
-
-            {/* The 2 Official BLACK X VIP Plans (Matches Website 100%) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.8rem', marginBottom: '1rem' }}>
-              {/* Plan 1: Monarch VIP 199 EGP */}
-              <div
-                style={{
-                  padding: '1.05rem',
-                  borderRadius: '18px',
-                  background: 'linear-gradient(145deg, #121218 0%, #07070a 100%)',
-                  border: '1.5px solid #ffffff',
-                  position: 'relative'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                    <BxIcon name="crown" className="bx-ico-lead" />{isRtl ? 'باقة الملك' : 'Monarch VIP Plan'}
-                  </span>
-                  <span
-                    style={{
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '8px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      fontWeight: 700,
-                      fontSize: '0.8125rem'
-                    }}
-                  >
-                    199 {isRtl ? 'ج.م / شهرياً' : 'EGP / mo'}
-                  </span>
-                </div>
-                <ul style={{ margin: '0 0 0.75rem', paddingInlineStart: '1.1rem', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.82)', lineHeight: 1.6 }}>
-                  <li>{isRtl ? 'فتح جميع سيرفرات BLACK X المتاحة على الموقع' : 'Every BLACK X server available on the website'}</li>
-                  <li>{isRtl ? 'فتح مكتبة المانجا والمانهوا كاملة بشاشة كاملة وتحميل مباشر' : 'Full Manga & Manhwa library + Direct Download'}</li>
-                  <li>{isRtl ? 'تعمل على الموقع الرسمي وتطبيق الهاتف بنفس الحساب' : 'Works on both Website and Mobile APK'}</li>
-                </ul>
-
-                <div
-                  style={{
-                    padding: '0.65rem 0.8rem',
-                    borderRadius: '12px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '0.55rem'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                      <BxIcon name="smartphone" className="bx-ico-lead" />{isRtl ? 'رقم محفظة فودافون كاش للتحويل:' : 'Vodafone Cash Wallet:'}
-                    </div>
-                    <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '0.05em' }}>
-                      01094965378
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText('01094965378');
-                      showToast('اتنسخ رقم فودافون كاش: 01094965378', 'check');
-                    }}
-                    style={{
-                      padding: '0.4rem 0.75rem',
-                      borderRadius: '8px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: 'none',
-                      fontWeight: 700,
-                      fontSize: '0.75rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <BxIcon name="copy" className="bx-ico-lead" />{isRtl ? 'نسخ الرقم' : 'Copy'}
-                  </button>
-                </div>
-
-                <a
-                  href={`https://wa.me/201094965378?text=${encodeURIComponent(
-                    'مرحباً إدارة BLACK X، قمت بتحويل 199 ج.م على فودافون كاش 01094965378 للاشتراك في باقة الملك MONARCH VIP وأريد استلام كود التفعيل الفوري.'
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'block',
-                    textAlign: 'center',
-                    padding: '0.68rem',
-                    borderRadius: '12px',
-                    background: '#ffffff',
-                    color: '#000000',
-                    fontWeight: 700,
-                    fontSize: '0.8125rem',
-                    textDecoration: 'none'
-                  }}
-                >
-                  <BxIcon name="message" className="bx-ico-lead" />{isRtl ? 'إرسال إيصال التحويل واستلام كود VIP فوراً' : 'Send Transfer Receipt & Get VIP Code'}
-                </a>
-              </div>
-
-              {/* Plan 2: Basic VIP 99 EGP */}
-              <div
-                style={{
-                  padding: '0.95rem',
-                  borderRadius: '18px',
-                  background: '#0a0a0e',
-                  border: '1px solid rgba(255,255,255,0.22)'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.9375rem' }}>
-                    <BxIcon name="zap" className="bx-ico-lead" />{isRtl ? 'الباقة الأساسية' : 'Basic VIP Plan'}
-                  </span>
-                  <span
-                    style={{
-                      padding: '0.18rem 0.55rem',
-                      borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.14)',
-                      color: '#ffffff',
-                      fontWeight: 700,
-                      fontSize: '0.75rem'
-                    }}
-                  >
-                    99 {isRtl ? 'ج.م / شهرياً' : 'EGP / mo'}
-                  </span>
-                </div>
-                <p style={{ margin: '0 0 0.55rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.72)' }}>
-                  {isRtl
-                    ? 'مشاهدة جميع الأنميات والمانهوا بجودة 1080p بدون إعلانات عبر سيرفرات BLACK X.'
-                    : 'Full 1080p Anime & Manhwa streaming across BLACK X servers.'}
-                </p>
-                <a
-                  href={`https://wa.me/201094965378?text=${encodeURIComponent(
-                    'مرحباً إدارة BLACK X، قمت بتحويل 99 ج.م على فودافون كاش 01094965378 للاشتراك في الباقة الأساسية BASIC VIP وأريد استلام كود التفعيل.'
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'block',
-                    textAlign: 'center',
-                    padding: '0.58rem',
-                    borderRadius: '12px',
-                    background: 'rgba(255,255,255,0.12)',
-                    border: '1px solid rgba(255,255,255,0.25)',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    fontSize: '0.75rem',
-                    textDecoration: 'none'
-                  }}
-                >
-                  <BxIcon name="message" className="bx-ico-lead" />{isRtl ? 'طلب كود الباقة الأساسية (99 ج.م)' : 'Request Basic VIP Code (99 EGP)'}
-                </a>
-              </div>
-            </div>
-
-            {/* Sign-In Section for Existing Subscribers or Developer Account */}
-            <div
-              style={{
-                padding: '1rem',
-                borderRadius: '18px',
-                background: '#0a0a0e',
-                border: '1px solid rgba(255,255,255,0.18)'
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-                <BxIcon name="lock" className="bx-ico-lead" />{isRtl ? 'مشترك بالفعل أو صاحب حساب المطور؟ سجّل دخولك:' : 'Already VIP or Developer? Sign In:'}
-              </div>
-
-              {user ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ fontSize: '0.75rem' }}>
-                    {isRtl ? 'داخل باسم:' : 'Signed in as:'} <strong>{user.displayName || user.email}</strong>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      apkSignOut();
-                      setSessionToken(null);
-                      setUser(null);
-                      localStorage.removeItem('bx_mob_user');
-                    }}
-                    style={{
-                      padding: '0.4rem 0.75rem',
-                      borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.12)',
-                      border: '1px solid rgba(255,255,255,0.24)',
-                      color: '#fff',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isRtl ? 'تبديل الحساب' : 'Switch Account'}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                  <button
-                    type="button"
-                    disabled={authBusy}
-                    onClick={handleRealGoogleOAuthLogin}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      borderRadius: '12px',
-                      background: '#ffffff',
-                      color: '#000000',
-                      border: 'none',
-                      fontWeight: 700,
-                      fontSize: '0.8125rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    G {isRtl ? 'الدخول بحساب Google' : 'Sign in with Google'}
-                  </button>
-
-                  <form onSubmit={handleAuthSubmit} style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    <input
-                      type="text"
-                      value={authUsername}
-                      onChange={(e) => setAuthUsername(e.target.value)}
-                      placeholder={isRtl ? 'البريد أو اسم المستخدم' : 'Email / Username'}
-                      style={{
-                        flex: 1,
-                        minWidth: '130px',
-                        padding: '0.6rem 0.75rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.75rem'
-                      }}
-                    />
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      placeholder={isRtl ? 'كلمة المرور' : 'Password'}
-                      style={{
-                        flex: 1,
-                        minWidth: '110px',
-                        padding: '0.6rem 0.75rem',
-                        borderRadius: '12px',
-                        background: '#000',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '0.75rem'
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={authBusy}
-                      style={{
-                        padding: '0.6rem 0.95rem',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: 'rgba(255,255,255,0.18)',
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {isRtl ? 'دخول' : 'Login'}
-                    </button>
-                  </form>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        />
       )}
     </div>
   );

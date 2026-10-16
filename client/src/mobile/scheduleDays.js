@@ -16,7 +16,12 @@ export const SCHEDULE_DAYS = [
 /** Date#getDay() order (0 = Sunday). */
 const BY_WEEKDAY = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
+/** The schedule id of a date's weekday on this phone (local time). */
+export function dayIdOf(date) {
+  return BY_WEEKDAY[date.getDay()] || 'السبت';
+}
+
 /** The schedule id of today on this phone (local time). */
 export function todayScheduleId(date = new Date()) {
-  return BY_WEEKDAY[date.getDay()] || 'السبت';
+  return dayIdOf(date);
 }

@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import BxIcon from '../BxIcon.jsx';
 import PosterCard from '../PosterCard.jsx';
 import SectionHead from '../SectionHead.jsx';
+import ScrollRow from '../ScrollRow.jsx';
 import { coverForMode } from '../dataSaver.js';
-import { episodeKey, getPosition, subscribePositions } from '../resumeStore.js';
+import { POSITIONS_MAX, episodeKey, getPosition, positionEntries, subscribePositions } from '../resumeStore.js';
 import { ChoiceRow, Empty, Field, GoogleMark, Group, Row, Segmented, SegmentedRow, SwitchRow } from './ProfileUi.jsx';
 import './profile.css';
 
@@ -145,6 +146,84 @@ function episodeLine(h, isRtl) {
   if (done) line += isRtl ? ` •${NB}خلصت` : ` •${NB}finished`;
   else if (leftMin) line += isRtl ? ` •${NB}فاضل${NB}${leftMin}${NB}د` : ` •${NB}${leftMin}${NB}min${NB}left`;
   return line;
+}
+
+/**
+ * Watch stats from what this device / account really recorded: the saved playback positions
+ * (resume store: the newest 120 episodes) and the genres of the titles in the history.
+ * Nothing is estimated: an episode counts as finished at 90 %, time is the seconds reached.
+ */
+function watchStats(history) {
+  let finished = 0;
+  let seconds = 0;
+  let episodes = 0;
+  for (const [, v] of positionEntries()) {
+    const sec = Math.max(0, Number(v?.sec) || 0);
+    const dur = Math.max(0, Number(v?.dur) || 0);
+    if (!sec && !v?.done) continue;
+    episodes += 1;
+    seconds += dur > 0 ? Math.min(sec, dur) : sec;
+    if (v?.done || (dur > 0 && sec / dur >= 0.9)) finished += 1;
+  }
+  const counts = new Map();
+  for (const h of Array.isArray(history) ? history : []) {
+    for (const t of Array.isArray(h?.tags) ? h.tags.slice(0, 6) : []) {
+      const k = String(t || '').trim();
+      if (k) counts.set(k, (counts.get(k) || 0) + 1);
+    }
+  }
+  const topGenres = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([t]) => t);
+  return { finished, seconds, episodes, topGenres };
+}
+
+function durationText(totalSec, isRtl) {
+  const min = Math.floor((Number(totalSec) || 0) / 60);
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (isRtl) return h ? `${fmt(h)}${NB}س${m ? ` ${m}${NB}د` : ''}` : `${m}${NB}د`;
+  return h ? `${fmt(h)}h${m ? ` ${m}m` : ''}` : `${m}m`;
+}
+
+function WatchStats({ history, isRtl }) {
+  const stats = watchStats(history);
+  if (!stats.episodes) return null;
+  return (
+    <section className="bxp-watchstats" aria-label={isRtl ? 'إحصائيات المشاهدة' : 'Watch stats'}>
+      <h3 className="bxp-watchstats-title">{isRtl ? 'إحصائيات المشاهدة' : 'Watch stats'}</h3>
+      <div className="bxp-watchstats-grid">
+        <div>
+          <strong>{fmt(stats.finished)}</strong>
+          <span>{isRtl ? 'حلقة كمّلتها' : 'Episodes finished'}</span>
+        </div>
+        <div>
+          <strong>{durationText(stats.seconds, isRtl)}</strong>
+          <span>{isRtl ? 'وقت المشاهدة' : 'Time watched'}</span>
+        </div>
+        <div>
+          <strong>{fmt(stats.episodes)}</strong>
+          <span>{isRtl ? 'حلقة بدأتها' : 'Episodes started'}</span>
+        </div>
+      </div>
+      {stats.topGenres.length ? (
+        <p className="bxp-watchstats-genres">
+          <span>{isRtl ? 'أكتر تصنيفات بتتفرجها:' : 'Your top genres:'}</span>
+          {stats.topGenres.map((g) => (
+            <span key={g} className="bxp-pill">
+              {g}
+            </span>
+          ))}
+        </p>
+      ) : null}
+      <p className="bxp-watchstats-note">
+        {isRtl
+          ? `محسوبة من مواضع التشغيل المحفوظة (آخر ${POSITIONS_MAX} حلقة) على الجهاز ده وحسابك.`
+          : `Counted from the saved playback positions (latest ${POSITIONS_MAX} episodes) on this device and your account.`}
+      </p>
+    </section>
+  );
 }
 
 /** Re-render when a playback position changes (resume store). */
@@ -308,7 +387,7 @@ function RootPage(props) {
       {historyRail.length ? (
         <section className="bxp-rail">
           <SectionHead title={isRtl ? 'سجل المشاهدة' : 'History'} isRtl={isRtl} onMore={() => onOpenPage('history')} />
-          <div className="bx-row bx-mob-scroll">
+          <ScrollRow label={isRtl ? 'سجل المشاهدة' : 'History'}>
             {historyRail.map((h) => {
               const { pct } = historyProgress(h);
               return (
@@ -324,14 +403,16 @@ function RootPage(props) {
                 />
               );
             })}
-          </div>
+          </ScrollRow>
         </section>
       ) : null}
+
+      <WatchStats history={library.history} isRtl={isRtl} />
 
       {favRail.length ? (
         <section className="bxp-rail">
           <SectionHead title={isRtl ? 'قائمتي' : 'My list'} isRtl={isRtl} onMore={() => onOpenPage('library')} />
-          <div className="bx-row bx-mob-scroll">
+          <ScrollRow label={isRtl ? 'قائمتي' : 'My list'}>
             {favRail.map((f) => (
               <PosterCard
                 key={f.objectID || f.slug}
@@ -342,7 +423,7 @@ function RootPage(props) {
                 onPeek={library.onPeek}
               />
             ))}
-          </div>
+          </ScrollRow>
         </section>
       ) : null}
 
@@ -397,8 +478,8 @@ function RootPage(props) {
             />
             <Row
               icon="monitor"
-              label={isRtl ? 'نسخة الكمبيوتر' : 'Computer version'}
-              sub={isRtl ? 'صفحات الموقع الكاملة' : 'The full website pages'}
+              label={isRtl ? 'التصميم القديم للموقع' : 'Classic website'}
+              sub={isRtl ? 'الصفحات القديمة (الترتيب، حفلة المشاهدة…)' : 'The old pages (rankings, watch party…)'}
               onClick={app.onComputer}
             />
           </>

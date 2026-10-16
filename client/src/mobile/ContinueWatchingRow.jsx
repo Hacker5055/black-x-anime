@@ -3,6 +3,7 @@ import BxIcon from './BxIcon.jsx';
 import { episodeKey, getPosition, subscribePositions } from './resumeStore.js';
 import PosterCard from './PosterCard.jsx';
 import SectionHead from './SectionHead.jsx';
+import ScrollRow from './ScrollRow.jsx';
 
 /**
  * "Continue watching" with the real progress of each show's last episode
@@ -25,7 +26,7 @@ export default function ContinueWatchingRow({ history, isRtl, dataSaver = false,
   return (
     <section className="bx-section">
       <SectionHead title={isRtl ? 'كمّل المشاهدة' : 'Continue watching'} isRtl={isRtl} />
-      <div className="bx-row bx-mob-scroll">
+      <ScrollRow>
         {items.map((h, i) => {
           const ep = Number(h.episode) || 0;
           const pos = ep ? getPosition(episodeKey(h, ep)) : null;
@@ -56,7 +57,7 @@ export default function ContinueWatchingRow({ history, isRtl, dataSaver = false,
             />
           );
         })}
-      </div>
+      </ScrollRow>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PosterCard from './PosterCard.jsx';
+import ScrollRow from './ScrollRow.jsx';
 import { SkeletonRow } from './Skeleton.jsx';
 
 const CACHE_KEY = 'bx_mob_byw_v16';
@@ -66,11 +67,11 @@ export default function BecauseYouWatchedRow({ seed, excludeIds, loadSimilar, on
           <bdi>{seedTitle}</bdi>
         </h2>
       </div>
-      <div className="bx-row bx-mob-scroll">
+      <ScrollRow>
         {state.items.map((item) => (
           <PosterCard key={item.objectID} item={item} onOpen={onOpen} onPeek={onPeek} dataSaver={dataSaver} />
         ))}
-      </div>
+      </ScrollRow>
     </section>
   );
 }

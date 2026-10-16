@@ -1,0 +1,323 @@
+/*
+ * BLACK X app interface on wide screens — computers and big tablets.
+ *
+ * Owner's decision of 2026-10-17 (client/src/webUi.js): the website shows the app interface on
+ * every device, so the same code (and every update) runs on phones, computers and the APK.
+ * Phones are untouched: every rule here sits behind a min-width or a mouse (hover + fine
+ * pointer) media query. The bottom dock becomes a side rail, rails get arrows, grids get more
+ * columns, sheets become centred dialogs and the player works with the mouse and keyboard
+ * (PlayerControls.jsx). Several app surfaces carry inline styles, hence the few !important.
+ */
+
+/* ---------- mouse: hover feedback, pointer cursors ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .bx-poster-art img,
+  .bx-wide-card img {
+    transition: transform 0.45s var(--bx-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+  .bx-poster:hover .bx-poster-art img {
+    transform: scale(1.06);
+  }
+  .bx-wide-card:hover img {
+    transform: scale(1.04);
+  }
+  .bx-poster:hover .bx-poster-title {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .bx-sched-row:hover,
+  .bx-alerts-row:hover,
+  .bx-post-anime:hover,
+  .bx-chip:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+  .bx-dock-item:hover {
+    color: #ffffff;
+  }
+  /* a click is not a tap: no shrink-on-press flash for mouse users */
+  .bx-app .bx-mob-card:active {
+    transform: scale(0.985);
+  }
+}
+
+/* ---------- wide screens ---------- */
+@media (min-width: 1024px) {
+  :root {
+    --bx-rail: 92px;
+    --bx-gutter: 2.25rem;
+  }
+
+  .bx-app {
+    padding-bottom: 40px !important; /* no bottom dock to clear */
+    padding-inline-start: var(--bx-rail);
+  }
+
+  /* The bottom dock becomes a side rail on the start side (right in Arabic). */
+  .bx-dock {
+    top: 0;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    inset-inline-start: 0;
+    width: var(--bx-rail);
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-auto-rows: 74px;
+    align-content: start;
+    gap: 6px;
+    padding: 92px 10px 16px;
+    border-radius: 0;
+    border: 0;
+    border-inline-end: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 8, 10, 0.94);
+    box-shadow: none;
+    animation: none;
+  }
+  .bx-dock.is-hidden {
+    transform: none;
+    opacity: 0;
+  }
+  .bx-dock-indicator {
+    display: none;
+  }
+  .bx-dock-item {
+    border-radius: 16px;
+    gap: 6px;
+  }
+  .bx-dock-item.is-active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .bx-dock-label {
+    font-size: 0.75rem;
+  }
+
+  /* Top bar next to the rail; the rail keeps its own logo-free top space. */
+  .bx-topbar {
+    inset-inline-start: var(--bx-rail);
+    inset-inline-end: 0;
+    padding: 14px var(--bx-gutter) 12px;
+  }
+
+  /* ---------- home ---------- */
+  .bx-hero {
+    height: min(74vh, 700px);
+  }
+  .bx-hero .bx-hero-img {
+    object-position: center 22%;
+  }
+  .bx-hero-shade {
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 20%, rgba(0, 0, 0, 0) 58%, #000000 100%),
+      linear-gradient(to left, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 38%, rgba(0, 0, 0, 0) 66%);
+  }
+  :root[dir='ltr'] .bx-hero-shade {
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 20%, rgba(0, 0, 0, 0) 58%, #000000 100%),
+      linear-gradient(to right, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 38%, rgba(0, 0, 0, 0) 66%);
+  }
+  .bx-hero .bx-hero-copy {
+    inset-inline-start: var(--bx-gutter);
+    inset-inline-end: auto;
+    bottom: 72px;
+    width: min(600px, 52%);
+    padding: 0;
+    align-items: flex-start;
+    text-align: start;
+  }
+  .bx-hero-meta {
+    justify-content: flex-start;
+    font-size: var(--bx-fs-md);
+  }
+  .bx-hero-title {
+    font-size: 2.875rem;
+    line-height: 1.12;
+    -webkit-line-clamp: 3;
+  }
+  :root[dir='rtl'] .bx-hero-title {
+    text-align: right;
+  }
+  .bx-hero-actions {
+    max-width: 480px;
+  }
+  .bx-hero-dots {
+    justify-content: flex-start;
+    padding-inline-start: var(--bx-gutter);
+    bottom: 34px;
+  }
+
+  .bx-section {
+    padding: 1.75rem var(--bx-gutter) 0;
+  }
+  .bx-section-title {
+    font-size: 1.25rem;
+  }
+  .bx-row {
+    margin-inline: calc(var(--bx-gutter) * -1);
+    padding: 0 var(--bx-gutter) 6px;
+    scroll-padding-inline: var(--bx-gutter);
+    gap: 16px;
+  }
+  .bx-has-mouse .bx-rail-arrow.is-back {
+    inset-inline-start: calc(var(--bx-gutter) * -1);
+    width: calc(var(--bx-gutter) + 24px);
+  }
+  .bx-has-mouse .bx-rail-arrow.is-forward {
+    inset-inline-end: calc(var(--bx-gutter) * -1);
+    width: calc(var(--bx-gutter) + 24px);
+  }
+  .bx-row .bx-poster {
+    flex-basis: calc(var(--w) * 1.36);
+    width: calc(var(--w) * 1.36);
+  }
+  .bx-top10 {
+    padding-inline-start: 58px;
+  }
+  .bx-top10-num {
+    font-size: 7.25rem;
+    bottom: 52px;
+  }
+  .bx-wide-card {
+    flex-basis: 380px;
+    width: 380px;
+  }
+  .bx-wide-title {
+    font-size: var(--bx-fs-lg);
+  }
+  .bx-stories {
+    gap: 22px;
+  }
+  .bx-story {
+    flex-basis: 100px;
+    width: 100px;
+  }
+  .bx-story-ring {
+    width: 96px;
+    height: 96px;
+  }
+  .bx-story-name {
+    max-width: 100px;
+    font-size: var(--bx-fs-sm);
+  }
+  .bx-genre-row {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .bx-home-foot {
+    padding-inline: var(--bx-gutter);
+  }
+
+  /* ---------- grids and the other tabs ---------- */
+  .bx-grid {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 24px 16px;
+  }
+  .bx-search-page,
+  .bx-manga-page {
+    max-width: 1480px;
+    margin-inline: auto;
+    padding-inline: var(--bx-gutter) !important;
+  }
+  .bx-schedule {
+    max-width: 1240px;
+    margin-inline: auto;
+    padding-inline: var(--bx-gutter) !important;
+  }
+  .bx-schedule .bx-sched-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .bx-community {
+    max-width: 760px;
+    margin-inline: auto;
+    padding-inline: 0 !important;
+  }
+  .bxp {
+    max-width: 920px;
+    margin-inline: auto;
+  }
+
+  /* ---------- title page, player, reader ---------- */
+  :root[dir='rtl'] .bx-details-sheet {
+    right: var(--bx-rail) !important;
+  }
+  :root[dir='ltr'] .bx-details-sheet {
+    left: var(--bx-rail) !important;
+  }
+  .bx-details-sheet {
+    padding-inline: max(0px, calc((100% - 1240px) / 2));
+  }
+  .bx-player-shell.is-page {
+    padding-inline: max(0px, calc((100% - 1320px) / 2));
+  }
+  .bx-video-box.is-page {
+    max-width: min(100%, calc((100vh - 150px) * 16 / 9));
+    margin-inline: auto;
+  }
+  :root[dir='rtl'] .bx-player-shell.is-mini {
+    left: 24px !important;
+    right: auto !important;
+    width: 400px;
+    bottom: 24px !important;
+  }
+  :root[dir='ltr'] .bx-player-shell.is-mini {
+    right: 24px !important;
+    left: auto !important;
+    width: 400px;
+    bottom: 24px !important;
+  }
+  .bx-reader img[data-bx-no-heal] {
+    max-width: min(100%, 900px) !important;
+  }
+
+  /* ---------- sheets become centred dialogs ---------- */
+  .bx-sheet-layer {
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+  }
+  .bx-bottom-sheet {
+    width: min(580px, 100%);
+    max-height: min(84vh, 780px);
+    padding: 14px 1.25rem 0;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.8);
+    animation: bxDialogIn 0.3s var(--bx-ease-out, cubic-bezier(0.22, 1, 0.36, 1)) backwards;
+  }
+  .bx-sheet-layer.is-closing .bx-bottom-sheet {
+    transform: translate3d(0, 10px, 0) scale(0.97);
+    opacity: 0;
+    transition:
+      transform 0.22s ease,
+      opacity 0.22s ease;
+  }
+  .bx-sheet-grip {
+    display: none;
+  }
+  .bx-sheet-foot {
+    margin: 0 -1.25rem;
+    padding: 12px 1.25rem 14px;
+  }
+}
+
+/* very wide screens: a little more breathing room */
+@media (min-width: 1600px) {
+  :root {
+    --bx-gutter: 3rem;
+  }
+  .bx-schedule .bx-sched-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@keyframes bxDialogIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

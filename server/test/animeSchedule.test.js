@@ -1,7 +1,8 @@
 // /api/anime/schedule: this week's real air times (AniList) for the most popular Japanese
-// anime on air now. The computer home's weekly schedule is built from it. One AniList
-// request covers the whole week, because a weekly show's next episode always falls within
-// 7 days. (The old airingSchedules query returned only the first 50 slots of the week,
+// anime on air now. The app's schedule tab (matched to the catalogue by MAL id) and the old
+// computer home are built from it. One AniList page covers the whole week, because a weekly
+// show's next episode always falls within 7 days; a second page is read only when AniList
+// reports one. (The old airingSchedules query returned only the first 50 slots of the week,
 // which ran out after two or three days.) Hidden genres never appear.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,18 +11,21 @@ const express = (await import('express')).default;
 const { default: animeRoutes } = await import('../src/routes/anime.js');
 const { db } = await import('../src/db.js');
 
-const CACHE_KEY = 'anilist:airing-now:v1';
+const CACHE_KEY = 'anilist:airing-now:v2';
 // Ids far above AniList's range, so the local anime cache never mixes them with real titles.
 const IDS = { soon: 990000101, aired: 990000102, hidden: 990000103, hiatus: 990000104, later: 990000105 };
 const originalFetch = globalThis.fetch;
 const requests = [];
+// AniList's second page (empty unless a test fills it).
+let secondPage = [];
 const now = Math.floor(Date.now() / 1000);
 let server;
 let base;
 
-function media(id, title, { genres = ['Action'], tags = [], next = null } = {}) {
+function media(id, title, { genres = ['Action'], tags = [], next = null, idMal = id - 990000000 + 70000 } = {}) {
   return {
     id,
+    idMal,
     type: 'ANIME',
     status: 'RELEASING',
     format: 'TV',
@@ -61,8 +65,14 @@ before(async () => {
   clearCaches();
   globalThis.fetch = async (url, init = {}) => {
     if (String(url).startsWith('https://graphql.anilist.co')) {
-      requests.push(JSON.parse(init.body || '{}'));
-      return new Response(JSON.stringify({ data: { Page: { media: FIXTURE } } }), {
+      const body = JSON.parse(init.body || '{}');
+      requests.push(body);
+      const page = Number(body.variables?.page) || 1;
+      const data =
+        page === 1
+          ? { Page: { pageInfo: { hasNextPage: secondPage.length > 0 }, media: FIXTURE } }
+          : { Page: { pageInfo: { hasNextPage: false }, media: secondPage } };
+      return new Response(JSON.stringify({ data }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -93,7 +103,7 @@ async function schedule() {
 
 test('one AniList request for shows on air now, with the hidden genres excluded in the query', async () => {
   await schedule();
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 1, 'no second page is read when AniList reports none');
   const { query } = requests[0];
   assert.match(query, /status: RELEASING/);
   assert.match(query, /genre_not_in/);
@@ -127,6 +137,13 @@ test('each slot carries the real next episode and air time, without the synopsis
   assert.equal(soon.media.description, undefined);
 });
 
+test('each media carries its MyAnimeList id, so the app can match its catalogue records', async () => {
+  const { slots } = await schedule();
+  const soon = slots.find((s) => s.media.id === IDS.soon);
+  assert.equal(soon.media.malId, 70101);
+  assert.match(requests[0].query, /idMal/);
+});
+
 test('hidden genres, shows on hiatus and shows returning after this week are left out', async () => {
   const { slots } = await schedule();
   assert.deepEqual(
@@ -139,4 +156,27 @@ test('the AniList answer is cached, so visitors do not each trigger a request', 
   await schedule();
   await schedule();
   assert.equal(requests.length, 1);
+});
+
+test('when AniList reports a second page it is read once and merged (no duplicates)', async () => {
+  clearCaches();
+  requests.length = 0;
+  secondPage = [
+    media(990000106, 'Second Page Show', { next: { episode: 3, airingAt: now + 5 * 3600 } }),
+    // Already on page one: must not appear twice.
+    FIXTURE[0]
+  ];
+  try {
+    const { slots } = await schedule();
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].variables.page, 2);
+    assert.deepEqual(
+      slots.map((s) => s.media.id),
+      [IDS.soon, 990000106, IDS.aired]
+    );
+  } finally {
+    secondPage = [];
+    db.prepare('DELETE FROM anime_cache WHERE id = 990000106').run();
+    clearCaches();
+  }
 });

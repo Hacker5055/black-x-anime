@@ -11,6 +11,7 @@ const ANILIST_URL = 'https://graphql.anilist.co';
 
 const MEDIA_FRAGMENT = `
   id
+  idMal
   type
   status
   format
@@ -147,34 +148,64 @@ export async function fetchSeason(season, seasonYear) {
 
 /**
  * Air times for the most popular Japanese anime on air now, between two unix
- * times (seconds). One AniList request; the hidden genres are excluded by the
- * query itself and again by visibleMedia. A weekly show's next episode always
- * falls within the next 7 days, so a 7-day window covers every weekday.
+ * times (seconds). Up to two AniList pages (100 shows; the second only when
+ * AniList says there is one), cached 15 minutes; the hidden genres are excluded
+ * by the query itself and again by visibleMedia. A weekly show's next episode
+ * always falls within the next 7 days, so a 7-day window covers every weekday.
  * (The old airingSchedules query got only the first 50 slots of the week,
  * which ran out after two or three days and left the rest of the week empty.)
+ * Each media carries its MyAnimeList id (`malId`), so the app can match the
+ * catalogue (whose records only know the MAL id) to the real air time.
  */
+const AIRING_PAGES = 2;
+const AIRING_QUERY = `query ($page: Int) {
+  Page(page: $page, perPage: 50) {
+    pageInfo { hasNextPage }
+    media(status: RELEASING, type: ANIME, countryOfOrigin: "JP", sort: POPULARITY_DESC, isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
+  }
+}`;
+
+function slimAiring(list) {
+  return list
+    .filter(visibleMedia)
+    .map((m) => ({ ...mediaToJson(normalizeMedia(m)), malId: Number(m.idMal) > 0 ? Number(m.idMal) : null }))
+    .filter((m) => m.nextAiringAt > 0)
+    // The schedule never shows the synopsis; keep the response small.
+    .map((m) => {
+      const slim = { ...m };
+      delete slim.description;
+      return slim;
+    });
+}
+
+async function fetchAiringNow() {
+  const cacheKey = 'anilist:airing-now:v2';
+  const hit = cacheGet(cacheKey);
+  if (hit) return hit;
+  const media = [];
+  const seen = new Set();
+  for (let page = 1; page <= AIRING_PAGES; page += 1) {
+    let data;
+    try {
+      data = await anilistQuery(AIRING_QUERY, { page });
+    } catch (err) {
+      if (page === 1) throw err;
+      break; // keep the first page when the second one fails
+    }
+    for (const m of data?.Page?.media || []) {
+      if (!m || seen.has(m.id)) continue;
+      seen.add(m.id);
+      media.push(m);
+    }
+    if (!data?.Page?.pageInfo?.hasNextPage) break;
+  }
+  const mapped = slimAiring(media);
+  cacheSet(cacheKey, mapped, 15 * 60 * 1000);
+  return mapped;
+}
+
 export async function fetchSchedule(fromSec, toSec) {
-  const airing = await cachedQuery(
-    'anilist:airing-now:v1',
-    15 * 60 * 1000,
-    `query {
-      Page(perPage: 50) {
-        media(status: RELEASING, type: ANIME, countryOfOrigin: "JP", sort: POPULARITY_DESC, isAdult: false, ${HIDE}) { ${MEDIA_FRAGMENT} }
-      }
-    }`,
-    {},
-    (data) =>
-      data.Page.media
-        .filter(visibleMedia)
-        .map((m) => mediaToJson(normalizeMedia(m)))
-        .filter((m) => m.nextAiringAt > 0)
-        // The schedule cards never show the synopsis; keep the response small.
-        .map((m) => {
-          const slim = { ...m };
-          delete slim.description;
-          return slim;
-        })
-  );
+  const airing = await fetchAiringNow();
   return airing
     .filter((m) => m.nextAiringAt >= fromSec && m.nextAiringAt < toSec)
     .map((m) => ({ episode: m.nextEpisode, airingAt: m.nextAiringAt, media: m }))

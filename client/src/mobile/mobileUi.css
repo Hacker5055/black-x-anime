@@ -1536,6 +1536,47 @@
   direction: ltr;
 }
 
+.bx-sched-time {
+  flex: none;
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  line-height: 1.25;
+}
+.bx-sched-time strong {
+  font-size: var(--bx-fs-sm);
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+}
+.bx-sched-time span {
+  font-size: var(--bx-fs-xs);
+  font-weight: 600;
+  color: var(--bx-text-3);
+}
+.bx-sched-time.is-soon span {
+  color: #ffffff;
+}
+.bx-sched-row.is-aired .bx-sched-thumb,
+.bx-sched-row.is-aired .bx-sched-copy {
+  opacity: 0.62;
+}
+.bx-sched-divider {
+  margin: 18px 2px 10px;
+  font-size: var(--bx-fs-sm);
+  font-weight: 700;
+  color: var(--bx-text-3);
+}
+.bx-sched-note {
+  margin: 16px 2px 4px;
+  font-size: var(--bx-fs-xs);
+  line-height: 1.6;
+  color: var(--bx-text-3);
+}
+
 /* ---------- Community ---------- */
 .bx-composer,
 .bx-signin-card {
@@ -2349,6 +2390,436 @@ html[data-bx-vt='push']::view-transition-new(root) {
 }
 html[data-bx-vt='pop']::view-transition-old(root) {
   animation: bxTabOutSink 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- v18: rails with arrows (computers), wide "airing now" cards ---------- */
+.bx-rail-wrap {
+  position: relative;
+}
+.bx-rail-arrow {
+  display: none;
+}
+/* shown once a mouse is used (ScrollRow.jsx adds html.bx-has-mouse); never on touch */
+.bx-has-mouse .bx-rail-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  z-index: 3;
+  width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  color: #ffffff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+.bx-has-mouse .bx-rail-arrow.is-back {
+  inset-inline-start: -1rem;
+}
+.bx-has-mouse .bx-rail-arrow.is-forward {
+  inset-inline-end: -1rem;
+}
+:root[dir='rtl'].bx-has-mouse .bx-rail-arrow.is-back {
+  background: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.82) 70%);
+}
+:root[dir='rtl'].bx-has-mouse .bx-rail-arrow.is-forward {
+  background: linear-gradient(to left, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.82) 70%);
+}
+:root[dir='ltr'].bx-has-mouse .bx-rail-arrow.is-back {
+  background: linear-gradient(to left, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.82) 70%);
+}
+:root[dir='ltr'].bx-has-mouse .bx-rail-arrow.is-forward {
+  background: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.82) 70%);
+}
+:root[dir='ltr'] .bx-rail-arrow .bx-ico {
+  transform: scaleX(-1);
+}
+.bx-has-mouse .bx-rail-wrap:hover .bx-rail-arrow.is-on,
+.bx-has-mouse .bx-rail-arrow.is-on:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.bx-app .bx-rail-arrow:active:not(:disabled) {
+  transform: none;
+}
+.bx-wide-row {
+  gap: 12px;
+}
+.bx-wide-card {
+  position: relative;
+  flex: 0 0 272px;
+  width: 272px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--bx-r-md);
+  overflow: hidden;
+  background: var(--bx-surface-2);
+  box-shadow: inset 0 0 0 1px var(--bx-line);
+  cursor: pointer;
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bx-wide-card img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+  -webkit-user-drag: none;
+}
+.bx-wide-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0.88) 100%);
+}
+.bx-wide-copy {
+  position: absolute;
+  inset-inline: 12px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bx-wide-title {
+  font-size: var(--bx-fs-md);
+  font-weight: 800;
+  line-height: 1.25;
+  color: #ffffff;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[dir='rtl'] .bx-wide-title {
+  text-align: right;
+}
+.bx-wide-sub {
+  font-size: var(--bx-fs-xs);
+  font-weight: 600;
+  color: var(--bx-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bx-wide-sub.is-airing {
+  color: #ffffff;
+}
+.bx-wide-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  direction: ltr;
+}
+.bx-wide-card:focus-visible,
+.bx-poster:focus-visible .bx-poster-art {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+.bx-story-time {
+  margin-top: -3px;
+  color: #ffffff;
+  font-size: var(--bx-fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------- v18: episode alerts sheet ---------- */
+.bx-alerts-how {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--bx-r-md);
+  background: var(--bx-surface);
+  border: 1px solid var(--bx-line);
+}
+.bx-alerts-how p {
+  margin: 0;
+  color: var(--bx-text-2);
+  font-size: var(--bx-fs-sm);
+  line-height: 1.65;
+}
+.bx-alerts-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--bx-text-3);
+  font-size: var(--bx-fs-xs);
+  font-weight: 600;
+}
+.bx-alerts-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 10px;
+  font-size: var(--bx-fs-md);
+  font-weight: 700;
+}
+.bx-alerts-head span {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bx-surface-2);
+  color: var(--bx-text-2);
+  font-size: var(--bx-fs-xs);
+}
+.bx-alerts-empty {
+  padding: 1.25rem 0.5rem;
+}
+.bx-alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bx-alerts-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px;
+  padding-inline-end: 12px;
+  border-radius: var(--bx-r-md);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bx-surface);
+  color: #ffffff;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.bx-alerts-row img {
+  flex: none;
+  width: 40px;
+  height: 56px;
+  border-radius: var(--bx-r-sm);
+  object-fit: cover;
+  background: var(--bx-surface-2);
+}
+.bx-alerts-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bx-alerts-title {
+  font-size: var(--bx-fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[dir='rtl'] .bx-alerts-title {
+  text-align: right;
+}
+.bx-alerts-sub {
+  color: var(--bx-text-3);
+  font-size: var(--bx-fs-xs);
+  font-weight: 600;
+}
+
+/* ---------- v18: episode tools (search + one options button) ---------- */
+.bx-ep-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.7rem;
+}
+.bx-ep-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--bx-surface);
+  border: 1px solid var(--bx-line);
+  color: var(--bx-text-3);
+}
+.bx-ep-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-size: var(--bx-fs-sm);
+  font-weight: 600;
+}
+.bx-ep-search:focus-within {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.bx-ep-options .bx-seg {
+  display: flex;
+  width: 100%;
+}
+.bx-ep-options .bx-seg button {
+  flex: 1;
+  min-height: 44px;
+}
+
+/* ---------- v18: manga tab (popular quick searches, one filter button) ---------- */
+.bx-manga-popular {
+  margin-bottom: 0.85rem;
+}
+.bx-manga-popular-label {
+  display: block;
+  margin: 0 2px 8px;
+  color: var(--bx-text-3);
+  font-size: var(--bx-fs-xs);
+  font-weight: 700;
+}
+.bx-manga-tools {
+  margin-bottom: 0.85rem;
+}
+.bx-manga-tools .bx-search-count {
+  min-width: 0;
+}
+
+/* ---------- v18: community — spoiler cover, the anime a post is about ---------- */
+.bx-post-spoiler {
+  position: relative;
+}
+.bx-post-spoiler.is-covered .bx-post-text {
+  min-height: 3.2em;
+  filter: blur(7px);
+  opacity: 0.55;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+.bx-post-spoiler.is-covered .bx-spoiler-btn {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  min-height: 0;
+  background: rgba(10, 10, 14, 0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.bx-post-anime {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px;
+  padding-inline-end: 12px;
+  border-radius: var(--bx-r-md);
+  border: 1px solid var(--bx-line);
+  background: var(--bx-surface-2);
+  color: #ffffff;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.bx-post-anime img {
+  flex: none;
+  width: 36px;
+  height: 50px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #000000;
+}
+.bx-post-anime-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bx-post-anime-copy strong {
+  font-size: var(--bx-fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[dir='rtl'] .bx-post-anime-copy strong {
+  text-align: right;
+}
+.bx-post-anime-copy span {
+  color: var(--bx-text-3);
+  font-size: var(--bx-fs-xs);
+  font-weight: 600;
+}
+.bx-composer-anime {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 6px;
+  padding-inline-end: 4px;
+  border-radius: var(--bx-r-md);
+  background: var(--bx-surface-2);
+  border: 1px solid var(--bx-line);
+}
+.bx-composer-anime img {
+  width: 30px;
+  height: 42px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.bx-composer-anime span {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--bx-fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bx-composer-attach {
+  gap: 5px;
+}
+.bx-post-picker-search {
+  margin-bottom: 12px;
+}
+.bx-post-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+}
+.bx-post-picker-note {
+  margin: 1rem 0;
+  color: var(--bx-text-3);
+  font-size: var(--bx-fs-sm);
+  text-align: center;
+}
+
+/* ---------- v18: classic-website link at the bottom of home (website only) ---------- */
+.bx-home-foot {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem 0.5rem;
+}
+.bx-classic-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bx-text-3);
+  font: inherit;
+  font-size: var(--bx-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.bx-classic-link:hover {
+  color: #ffffff;
 }
 
 /* ---------- Reduced motion ---------- */

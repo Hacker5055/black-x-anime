@@ -10,6 +10,7 @@ import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
 import { resolveUserVipTier } from '../components/VipPlansAndDevCodes.jsx';
 import { isAnimeEpisodeAlertEnabled, toggleAnimeEpisodeAlert } from '../utils/deviceNotifications.js';
 import { DownloadModal } from '../components/DownloadModal.jsx';
+import { downloadQualityTier, unknownQualityLabel } from '../utils/downloadQuality.js';
 import { LiquidLoader, EmptyState } from '../components/Loading.jsx';
 import { isHiddenAnime } from '../../../shared/contentFilter.js';
 import { auth, syncProgressToFirestore, syncFavoriteToFirestore, removeFavoriteFromFirestore } from '../firebase.js';
@@ -465,15 +466,17 @@ export default function Watch({ onOpenAuth }) {
                 return {
                   id: d.id || `dl-${idx}`,
                   server: d.server || d.label || `Server ${idx + 1}`,
-                  quality: String(d.quality || 'FHD').toUpperCase(),
+                  // Only the quality the server reported: nothing = «جودة غير معروفة» (free), never a guessed FHD.
+                  quality: String(d.quality || '').trim().toUpperCase(),
                   url: d.url || d.downloadUrl || res.downloadUrl || res.url || res.directUrl || null,
                   directUrl: d.directUrl || res.directUrl || res.downloadUrl || res.url || null
                 };
               });
 
-            const fhdLinks = allDownloads.filter((d) => d.quality.includes('FHD') || d.quality.includes('1080'));
-            const hdLinks = allDownloads.filter((d) => (d.quality.includes('HD') && !d.quality.includes('FHD')) || d.quality.includes('720'));
-            const sdLinks = allDownloads.filter((d) => d.quality.includes('SD') || d.quality.includes('480') || d.quality.includes('360'));
+            const fhdLinks = allDownloads.filter((d) => downloadQualityTier(d.quality) === 'fhd');
+            const hdLinks = allDownloads.filter((d) => downloadQualityTier(d.quality) === 'hd');
+            const sdLinks = allDownloads.filter((d) => downloadQualityTier(d.quality) === 'sd');
+            const unknownLinks = allDownloads.filter((d) => downloadQualityTier(d.quality) === 'unknown');
 
             const handleDirectTableClick = async (dlItem, requireVip = false) => {
               if (requireVip && !isVipMember) {
@@ -526,7 +529,8 @@ export default function Watch({ onOpenAuth }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {/* Row 1: الجودة الخارقة FHD (1080p) */}
+                  {/* Row 1: الجودة الخارقة FHD (1080p) — only links the server reported as FHD */}
+                  {fhdLinks.length > 0 && (
                   <div
                     style={{
                       display: 'flex',
@@ -544,7 +548,7 @@ export default function Watch({ onOpenAuth }) {
                       👑 {lang === 'ar' ? 'الجودة الخارقة FHD (1080p)' : 'Full HD (1080p)'}
                     </span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                      {(fhdLinks.length ? fhdLinks : allDownloads.slice(0, 5)).map((dl) => (
+                      {fhdLinks.map((dl) => (
                         <button
                           key={`dl-fhd-${dl.id}`}
                           type="button"
@@ -553,13 +557,15 @@ export default function Watch({ onOpenAuth }) {
                           onClick={() => handleDirectTableClick(dl, true)}
                         >
                           <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
-                          <small>{isVipMember ? '1080p' : '🔒 VIP'}</small>
+                          <small>{isVipMember ? dl.quality : '🔒 VIP'}</small>
                         </button>
                       ))}
                     </div>
                   </div>
+                  )}
 
-                  {/* Row 2: الجودة العالية HD (720p • مجاناً) */}
+                  {/* Row 2: الجودة العالية HD (720p • مجاناً) — only links reported as HD */}
+                  {hdLinks.length > 0 && (
                   <div
                     style={{
                       display: 'flex',
@@ -577,7 +583,7 @@ export default function Watch({ onOpenAuth }) {
                       🖥️ {lang === 'ar' ? 'الجودة العالية HD (720p • مجاناً)' : 'High Definition HD (720p • Free)'}
                     </span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                      {(hdLinks.length ? hdLinks : allDownloads.slice(0, 5)).map((dl) => (
+                      {hdLinks.map((dl) => (
                         <button
                           key={`dl-hd-${dl.id}`}
                           type="button"
@@ -586,11 +592,12 @@ export default function Watch({ onOpenAuth }) {
                           onClick={() => handleDirectTableClick(dl, false)}
                         >
                           <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
-                          <small>720p</small>
+                          <small>{dl.quality}</small>
                         </button>
                       ))}
                     </div>
                   </div>
+                  )}
 
                   {/* Row 3: الجودة المتوسطة SD (480p • مجاناً) */}
                   {sdLinks.length > 0 && (
@@ -620,7 +627,43 @@ export default function Watch({ onOpenAuth }) {
                             onClick={() => handleDirectTableClick(dl, false)}
                           >
                             <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
-                            <small>480p</small>
+                            <small>{dl.quality}</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Row 4: links whose server did not say the quality — labelled as such, free */}
+                  {unknownLinks.length > 0 && (
+                    <div
+                      className="wit-dl-unknown"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '0.6rem',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '10px',
+                        background: 'rgba(6, 6, 6, 0.9)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                      }}
+                    >
+                      <span style={{ fontWeight: 900, fontSize: '0.84rem', color: '#a1a1aa' }}>
+                        ❔ {lang === 'ar' ? `${unknownQualityLabel(lang)} (مجاناً)` : `${unknownQualityLabel(lang)} (free)`}
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {unknownLinks.map((dl) => (
+                          <button
+                            key={`dl-unknown-${dl.id}`}
+                            type="button"
+                            className="wit-server-tab"
+                            disabled={resolvingDlId === dl.id}
+                            onClick={() => handleDirectTableClick(dl, false)}
+                          >
+                            <span>📥 {resolvingDlId === dl.id ? '...' : dl.server}</span>
+                            {dl.quality ? <small>{dl.quality}</small> : null}
                           </button>
                         ))}
                       </div>
