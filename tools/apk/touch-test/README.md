@@ -45,32 +45,45 @@ rapid taps, taps during a running transition).
 
 A pass here is necessary, not sufficient: it does not replace a test on a real phone.
 
-## The website (phones = the app interface, computers = the website pages)
+## The website (every device = the app interface; the classic pages by choice)
 
 ```bash
-bash tools/apk/touch-test/run-web.sh                    # builds the website into /tmp, ~2.5 min
+bash tools/apk/touch-test/run-web.sh                    # builds the website into /tmp, ~5 min
 ONLY=links,back bash tools/apk/touch-test/run-web.sh    # some scenarios
 DIST=/path/to/website/build bash tools/apk/touch-test/run-web.sh
 ```
 
-`web-suite.mjs` (128 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
+`web-suite.mjs` (196 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
 the site's same-origin `/api/*` goes to the mock, Google Fonts are answered with the bundled fonts so
 Arabic renders in screenshots). A 412×915 touch phone with a phone browser user agent, or a 1440×900
-computer. Scenarios: `boot` (phone → app interface, computer → website, `?ui=` switch remembered,
-footer link back, no APK update card), `links` (`/show`, `/watch`, `/discover`, `/browse`,
-`/community`, `/trending?q=`, `/profile/...`, `/mylist`, manga chapter links, hidden and dead links),
-`sync` (the address bar follows the page), `back` (browser back steps back one app level, leaves the
-site at home, no piled-up history, no entry before the first tap), `profile` (Android download and
-computer-version rows, Google opens Firebase's popup, not the APK window), `player` (+10 s, browser
-full screen + landscape), `genres` and `desktop` (computer home without invented values: no «👑 FHD»
-on the cards, no guessed «يعرض الآن», no «الحلقة ٠» (that card opens the title page), the episode label
-clear of the alert bell, a weekly schedule built from real air times (`/api/anime/schedule` mock); hidden
-titles «مش متاح», AniList queries with the exclusions, the player page seen as VIP Monarch: no
-«4K HDR • 60FPS» toggle, no colour filter over the video, no 4K / HDR / 60fps copy, no «VIP Fast CDN»
-switch, «Early Access» pill or 24-hour badge, real episode numbers with «الأحدث» on the newest; as a
-free visitor the upgrade button sits with the actions; the loader shows while the servers load (no
-crash); the signed-in VIP plan cards list only real perks at unchanged prices; the watch-party panel
-has no invented viewer count). `openWeb(browser, { route, phone, seed, ctx })`: `seed` is written to
-localStorage, which every page of one browser shares, so seed `blackx.vipTier` explicitly; `ctx`
-patches the mock (`episodeDelayMs` holds `/api/stream/episode` back); a seeded `blackx_token` signs
-the computer website in through the mocked `/api/auth/me`.
+computer with a mouse; since 2026-10-17 both get the app interface. Scenarios: `boot` (phone and
+computer → app interface, the computer's side rail, an old saved «site» choice ignored, `?ui=site` →
+classic pages remembered under `bx_web_ui_v2`, footer «واجهة BLACK X الجديدة» back, no APK update card),
+`links` (`/show`, `/watch`, `/discover`, `/browse`, `/community`, `/trending?q=`, `/profile/...`,
+`/mylist`, manga chapter links, hidden and dead links), `sync` (the address bar follows the page),
+`back` (browser back steps back one app level, leaves the site at home, no piled-up history, no entry
+before the first tap), `profile` (Android download and «التصميم القديم للموقع» rows, Google opens
+Firebase's popup, not the APK window), `player` (+10 s, browser full screen + landscape), `genres`,
+`desktop` (the CLASSIC computer pages, opened with `ui: 'site'`: home without invented values — no
+«👑 FHD» on the cards, no guessed «يعرض الآن», no «الحلقة ٠», the episode label clear of the alert
+bell, a weekly schedule built from real air times; hidden titles «مش متاح», AniList queries with the
+exclusions, the player page as VIP Monarch without the fake 4K/CDN/early-access features, the free
+visitor's upgrade button, the loader, the VIP plan cards with only real perks at unchanged prices and
+no struck-through «old price», the watch-party panel without an invented viewer count), `features`
+(the 2026-10-17 app updates on a phone: wide «بيتعرض دلوقتي» cards and today's circles with the real
+air time; the schedule tab ordered by real air time with a live countdown, «الأسبوع الجاي», «من غير ميعاد
+معروف» and the Japanese-broadcast note; the alerts sheet without the fake «ACTIVE» badge and a test
+notification that says «تجربة»; details without empty tabs or «(0)»; one search box + one «خيارات» sheet
+for episodes; manga quick searches from AniList (with the exclusions) and one server/type filter sheet,
+no fake 68 % bar; community spoiler cover (also for the «فيه حرق» category) and the anime card that opens
+the fresh record; composer tying a post to an anime; profile watch stats from seeded positions) and
+`wide` (the computer layout: side rail, start-aligned hero with the landscape banner, bigger posters,
+rail arrows only after a mouse moves and a click scrolls a screen, a 6+ column search grid, sheets as
+centred dialogs, the title page next to the rail, the player capped to the screen height with Space/K,
+→, M, F and a mouse click, the classic-website link). `openWeb(browser, { route, phone, seed, ctx, ui })`:
+`seed` is written to localStorage, which every page of one browser shares, so seed `blackx.vipTier`
+explicitly; `ui: 'site'` stores the classic-pages choice; `ctx` patches the mock (`episodeDelayMs` holds
+`/api/stream/episode` back, `communityPosts` replaces the seeded feed, `extraSlots` adds AniList air
+times); a seeded `blackx_token` signs the classic computer pages in through the mocked `/api/auth/me`.
+Headless Chrome reports no hover/fine pointer (and CDP cannot emulate them), which is why the rail
+arrows key off a real mouse movement (`html.bx-has-mouse`, `ScrollRow.jsx`).

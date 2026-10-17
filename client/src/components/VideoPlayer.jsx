@@ -2,11 +2,10 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { api, resolveApiUrl } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
+import { isFhdQuality } from '../utils/downloadQuality.js';
 
-export function isFhdQuality(q) {
-  const s = String(q || '').toUpperCase();
-  return s.includes('FHD') || s.includes('1080') || s.includes('4K') || s.includes('2160');
-}
+// The quality tiers live in utils/downloadQuality.js (plain JS, unit-tested).
+export { isFhdQuality };
 
 const fmt = (s) => {
   if (!Number.isFinite(s) || s < 0) s = 0;

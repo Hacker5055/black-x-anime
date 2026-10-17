@@ -1,6 +1,6 @@
 // BLACK X APK — real-touch regression suite (v17 UI), run against assets/public of the built APK.
 // Use ./run.sh; `ONLY=nav,player ./run.sh` runs some scenarios. One browser per scenario.
-import { startServer, launch, openApp, check, sleep, swipe, tapEl, boxOf, waitVt, doubleTap, text, summary, TODAY, LOCAL } from './lib.mjs';
+import { startServer, launch, openApp, check, sleep, swipe, tapEl, boxOf, waitVt, doubleTap, text, summary, TODAY, LOCAL, APK_RELEASE } from './lib.mjs';
 
 const ONLY = (process.env.ONLY || '').split(',').filter(Boolean);
 const scenarios = [];
@@ -75,9 +75,11 @@ async function markPosterInSection(page, sectionTitle, posterTitle) {
       document.querySelectorAll('[data-test-target]').forEach((e) => e.removeAttribute('data-test-target'));
       const heads = [...document.querySelectorAll('.bx-section-title')].filter((h) => h.textContent.trim() === sectionTitle);
       for (const h of heads) {
-        let sec = h.parentElement;
-        while (sec && !sec.querySelector('.bx-poster')) sec = sec.parentElement;
-        const card = [...(sec?.querySelectorAll('.bx-poster') || [])].find((p) => p.querySelector('.bx-poster-title')?.textContent.trim() === posterTitle);
+        // Only that section (v18: «بيتعرض دلوقتي» is a row of wide cards, not posters).
+        const sec = h.closest('section') || h.parentElement;
+        const card = [...(sec?.querySelectorAll('.bx-poster, .bx-wide-card') || [])].find(
+          (p) => p.querySelector('.bx-poster-title, .bx-wide-title')?.textContent.trim() === posterTitle
+        );
         if (card) {
           card.setAttribute('data-test-target', '1');
           return true;
@@ -201,8 +203,8 @@ scenario('nav', async (browser) => {
   const items = await text(page, '.bx-menu-item');
   check(G, 'menu opens with its items', items.length >= 5 && items.some((t) => t.includes('قائمتي')) && items.some((t) => t.includes('الإعدادات')), items.join(' | ').slice(0, 200));
   check(G, 'menu has no duplicate tab links', !items.some((t) => /^(الرئيسية|البحث|الجدول|المجتمع)$/.test(t)));
-  const ver = await page.evaluate(() => document.body.innerText.match(/إصدار 17\.0[^\n]*/)?.[0] || '');
-  check(G, 'menu footer shows version 17.0', Boolean(ver), ver);
+  const ver = await page.evaluate((v) => document.body.innerText.match(new RegExp(`إصدار ${v.replace('.', '\\.')}[^\\n]*`))?.[0] || '', APK_RELEASE.version);
+  check(G, `menu footer shows version ${APK_RELEASE.version} (shared/apkRelease.js)`, Boolean(ver), ver);
   const bd = await boxOf(page, '.bx-menu-backdrop', { scroll: false });
   await page.touchscreen.tap(bd ? Math.min(400, bd.left + bd.w - 10) : 400, 450);
   await sleep(700);
@@ -432,7 +434,7 @@ scenario('genres', async (browser) => {
   await sleep(700);
   const menu = await page.evaluate(() => ({
     mylist: [...document.querySelectorAll('.bx-menu-item')].find((e) => e.innerText.includes('قائمتي'))?.innerText.replace(/\s+/g, ' ').trim() || '',
-    ver: document.body.innerText.match(/إصدار 17\.0[^\n]*/)?.[0] || ''
+    ver: document.body.innerText.match(/إصدار \d+(?:\.\d+)*[^\n]*/)?.[0] || ''
   }));
   check(G, 'menu: "My list" badge counts visible favorites only (1)', /قائمتي\s*1\b/.test(menu.mylist) || menu.mylist.endsWith('1'), menu.mylist);
   check(G, 'menu total = titles the app can show (60, not 65)', /60 أنمي/.test(menu.ver), menu.ver);

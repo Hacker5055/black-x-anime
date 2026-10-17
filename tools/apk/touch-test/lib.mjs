@@ -13,6 +13,7 @@ import chromium from '@sparticuz/chromium';
 
 const REPO = path.resolve(process.env.BX_REPO || '../../..');
 const { APK_RELEASE } = await import(pathToFileURL(path.join(REPO, 'shared/apkRelease.js')).href);
+export { APK_RELEASE };
 
 export const DIST = path.resolve(process.env.DIST || '/tmp/bx-touch/public');
 export const PORT = Number(process.env.PORT || 8790);
@@ -167,6 +168,9 @@ export const HIDDEN_ANIME = [
   hiddenAnime(4, 'Hidden Isekai Movie', ['عالم مختلف'], { type: 'فيلم' }),
   hiddenAnime(5, 'Hidden Airing Harem', ['اكشن', 'حريم'], { state: 'مستمر', showTime: TODAY })
 ];
+
+/** What the mocked AniList reports as its most popular manga (the manga tab's quick searches). */
+export const POPULAR_MANGA_TITLES = ['Popular Manga One', 'Popular Manga Two', 'Popular Manga Three'];
 
 export const MANGA = Array.from({ length: 12 }, (_, i) => ({
   id: `test-manhwa-${i + 1}`,
@@ -323,20 +327,23 @@ function api(req, url, ctx) {
   // one that aired earlier today (next episode in a week), one tomorrow, one in three days. Day buckets are UTC like the server; the page regroups.
   if (p === '/api/anime/schedule') {
     const now = Math.floor(Date.now() / 1000);
-    const slot = (id, name, inSec, episode) => ({
+    // `malId` matches catalogue records (Test Anime N has mal_id 1000 + N): the app's schedule
+    // tab, home cards and alerts use those real times.
+    const slot = (id, name, inSec, episode, malId) => ({
       episode,
       airingAt: now + inSec,
       media: {
-        id, titleRomaji: name, titleEnglish: name, titleArabic: null, coverUrl: `${LOCAL}/poster/${(id % 8) + 1}.svg`,
+        id, malId, titleRomaji: name, titleEnglish: name, titleArabic: null, coverUrl: `${LOCAL}/poster/${(id % 8) + 1}.svg`,
         color: '#888888', genres: ['Action'], episodes: 12, status: 'RELEASING', format: 'TV', nextEpisode: episode, nextAiringAt: now + inSec
       }
     });
     const slots = [
-      slot(9101, 'Today Show', 60, 5),
+      slot(9101, 'Today Show', 60, 5, 1001),
       // Aired a minute ago, so AniList's next airing is the same weekday next week.
-      slot(9104, 'Aired Earlier Show', 7 * 86400 - 60, 7),
-      slot(9102, 'Tomorrow Show', 86400, 9),
-      slot(9103, 'Later Show', 3 * 86400, 2)
+      slot(9104, 'Aired Earlier Show', 7 * 86400 - 60, 7, 1002),
+      slot(9102, 'Tomorrow Show', 86400, 9, 1010),
+      slot(9103, 'Later Show', 3 * 86400, 2, 1011),
+      ...(ctx.extraSlots || [])
     ];
     const days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
     for (const s of slots) days[new Date(s.airingAt * 1000).getUTCDay()].push(s);
@@ -491,13 +498,29 @@ function route(req, ctx) {
   if (url.host === 'black-x-anime.me') return api(req, url, ctx);
   if (/algolia(net)?\.(net|com)$/.test(url.host)) {
     const index = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const objectPart = url.pathname.split('/')[4] || '';
+    // getObject: GET /1/indexes/<index>/<objectID> (the community post's anime card)
+    if (req.method() === 'GET' && objectPart && objectPart !== 'query') {
+      const id = decodeURIComponent(objectPart);
+      ctx.algolia.push({ index, object: id });
+      const hit = [...HIDDEN_ANIME, ...ANIME].find((a) => a.objectID === id);
+      return hit ? json(req, hit) : json(req, { message: 'ObjectID does not exist', status: 404 }, 404);
+    }
     const body = safeJson(req.postData());
     ctx.algolia.push({ index, body });
     return json(req, algolia(index, body, ctx.paginationLimit));
   }
   if (url.host === 'firestore.googleapis.com') return firestore(req, url, ctx);
   if (url.host === 'graphql.anilist.co') ctx.anilist.push(safeJson(req.postData()));
-  if (url.host === 'graphql.anilist.co') return json(req, { data: { Page: { pageInfo: { hasNextPage: false, currentPage: 1 }, media: [], airingSchedules: [] }, Media: null } });
+  if (url.host === 'graphql.anilist.co') {
+    const q = String(safeJson(req.postData()).query || '');
+    // The manga tab's quick searches: AniList's most popular manga (titles only).
+    if (/type: MANGA, sort: POPULARITY_DESC/.test(q)) {
+      const media = POPULAR_MANGA_TITLES.map((t, i) => ({ id: 7000 + i, title: { english: t, romaji: t }, genres: ['Action'] }));
+      return json(req, { data: { Page: { media } } });
+    }
+    return json(req, { data: { Page: { pageInfo: { hasNextPage: false, currentPage: 1 }, media: [], airingSchedules: [] }, Media: null } });
+  }
   ctx.blocked.push(raw.slice(0, 160));
   return req.respond({ status: 404, headers: CORS, contentType: 'text/plain', body: 'blocked in test' });
 }
@@ -568,11 +591,12 @@ export const PHONE_UA = UA.replace('; wv', '');
 export const DESKTOP_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
 /**
- * Opens the WEBSITE build at `route`. `phone: true` = a 412×915 touch phone (the website then
- * serves the app interface), otherwise a 1440×900 computer with a mouse. `seed` fills
- * localStorage before the first load; the splash is skipped (as on a second page view).
+ * Opens the WEBSITE build at `route`. `phone: true` = a 412×915 touch phone, otherwise a
+ * 1440×900 computer with a mouse; both get the app interface (webUi.js) unless `ui: 'site'`
+ * stores the classic-website choice first. `seed` fills localStorage before the first load;
+ * the splash is skipped (as on a second page view).
  */
-export async function openWeb(browser, { route: routePath = '/', phone = true, seed = {}, wait = true, ctx: ctxPatch = {} } = {}) {
+export async function openWeb(browser, { route: routePath = '/', phone = true, seed = {}, wait = true, ctx: ctxPatch = {}, ui = '' } = {}) {
   const page = await browser.newPage();
   await page.setUserAgent(phone ? PHONE_UA : DESKTOP_UA);
   await page.setViewport(
@@ -581,6 +605,8 @@ export async function openWeb(browser, { route: routePath = '/', phone = true, s
   const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000, logins: [], profilePuts: [], requests: [], userPatch: {} };
   ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
   Object.assign(ctx, ctxPatch);
+  // `ctx: { communityPosts }` replaces the seeded feed for one page.
+  if (Array.isArray(ctxPatch.communityPosts)) ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(ctxPatch.communityPosts) } });
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     try {
@@ -604,7 +630,7 @@ export async function openWeb(browser, { route: routePath = '/', phone = true, s
     } catch {
       /* about:blank */
     }
-  }, { bx_mob_lang: 'ar', blackx_lang: 'ar', ...seed });
+  }, { bx_mob_lang: 'ar', blackx_lang: 'ar', ...(ui ? { bx_web_ui_v2: ui } : {}), ...seed });
   await page.goto(`${LOCAL}${routePath}`, { waitUntil: 'domcontentloaded' });
   if (wait) await waitWebReady(page);
   return { page, ctx };

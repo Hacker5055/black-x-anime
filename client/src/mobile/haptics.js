@@ -4,7 +4,7 @@
  * navigator.vibrate(); browsers without it simply ignore the call.
  */
 const KEY = 'bx_mob_haptics';
-const PATTERNS = { tap: 8, select: 12, toggle: 14, success: [12, 40, 20], warning: [26, 60, 26], heavy: 24 };
+const PATTERNS = { tap: 8, select: 12, toggle: 14, success: [12, 40, 20], warning: [26, 60, 26], error: [30, 50, 30, 50, 30], heavy: 24 };
 
 export function hapticsEnabled() {
   try {

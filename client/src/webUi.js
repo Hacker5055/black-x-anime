@@ -1,18 +1,21 @@
 /**
- * Which interface the website shows (owner's decision, 2026-10-16):
+ * Which interface the website shows.
  *
- * - Phones get the BLACK X app interface itself (client/src/mobile, the same code the APK runs),
- *   so every app update reaches the phone website automatically.
- * - Computers and tablets keep the website pages (client/src/App.jsx).
+ * Owner's decision of 2026-10-17 (it replaces the 2026-10-16 phone/computer split): every
+ * device gets the BLACK X app interface itself (client/src/mobile, the same code the APK runs),
+ * laid out for wide screens on computers, so every app update reaches phones, computers and
+ * the APK together. The classic website pages (client/src/App.jsx) stay one tap away for
+ * whoever wants them (rankings, watch party, …).
  *
- * Visitors can switch by hand: `?ui=app` / `?ui=site` (also used by the "computer version"
- * row in the app's profile and the "phone interface" link in the website footer). The choice
- * is remembered on that browser. `?apk_ui=1` (older preview link) opens the app interface
- * without remembering it.
+ * Visitors can switch by hand: `?ui=app` / `?ui=site` (also used by the "classic website" row
+ * in the app's profile, the link at the bottom of the app's home and the "new interface"
+ * button in the classic footer). The choice is remembered on that browser under a new key, so
+ * a "site" choice saved under the old split does not keep a visitor away from the new default.
+ * `?apk_ui=1` (older preview link) opens the app interface without remembering it.
  *
  * Keep this file tiny and free of imports: main.jsx runs it before anything else is loaded.
  */
-export const WEB_UI_KEY = 'bx_web_ui';
+export const WEB_UI_KEY = 'bx_web_ui_v2';
 
 function mediaMatches(query) {
   try {
@@ -22,7 +25,8 @@ function mediaMatches(query) {
   }
 }
 
-/** A phone: small screen (shorter side ≤ 600 CSS px) used by touch, or a phone browser. */
+/** A phone: small screen (shorter side ≤ 600 CSS px) used by touch, or a phone browser.
+ *  (No longer decides the interface; kept for layout decisions and tests.) */
 export function isPhoneDevice() {
   if (typeof window === 'undefined') return false;
   const nav = window.navigator || {};
@@ -67,7 +71,7 @@ export function decideWebUi() {
     return forced;
   }
   if (params && params.get('apk_ui') === '1') return 'app';
-  return savedWebUi() || (isPhoneDevice() ? 'app' : 'site');
+  return savedWebUi() || 'app';
 }
 
 /**

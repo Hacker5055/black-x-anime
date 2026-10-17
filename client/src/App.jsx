@@ -21,7 +21,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import { api, isNativeApk } from './api.js';
 import BxIcon from './components/BxIcon.jsx';
 import { useAnimeCatalogTotal, formatCount } from './hooks/useCatalogStats.js';
-import { isPhoneDevice, switchWebUi } from './webUi.js';
+import { switchWebUi } from './webUi.js';
 import { ANILIST_EXCLUSION_ARGS, hasBlockedGenre } from '../../shared/contentFilter.js';
 
 function serverFourSearchItems(animeData, mangaData, query) {
@@ -995,15 +995,8 @@ function ScrollToTop() {
 function Footer() {
   const { t, lang } = useI18n();
   const [footerText, setFooterText] = useState(null);
-  // Phones get the app interface by default (webUi.js); anyone on a touch screen who chose the
-  // website pages can go back to it from here.
-  const [touchScreen] = useState(() => {
-    try {
-      return isPhoneDevice() || window.matchMedia('(pointer: coarse)').matches;
-    } catch {
-      return false;
-    }
-  });
+  // Every device gets the BLACK X app interface by default (webUi.js, owner's decision of
+  // 2026-10-17); whoever chose these classic pages can go back to it from here.
 
   useEffect(() => {
     let alive = true;
@@ -1058,26 +1051,24 @@ function Footer() {
         <div style={{ marginTop: '0.35rem', opacity: 0.68, fontSize: '0.82rem' }}>
           © {new Date().getFullYear()} · {footerText?.notice || t('footer.rights')}
         </div>
-        {touchScreen ? (
-          <button
-            type="button"
-            onClick={() => switchWebUi('app')}
-            style={{
-              marginTop: '0.9rem',
-              minHeight: '44px',
-              padding: '0.6rem 1.2rem',
-              borderRadius: '999px',
-              border: '1px solid rgba(255,255,255,0.28)',
-              background: 'transparent',
-              color: '#ffffff',
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}
-          >
-            {lang === 'ar' ? 'واجهة الموبايل' : 'Phone interface'}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => switchWebUi('app')}
+          style={{
+            marginTop: '0.9rem',
+            minHeight: '44px',
+            padding: '0.6rem 1.2rem',
+            borderRadius: '999px',
+            border: '1px solid rgba(255,255,255,0.28)',
+            background: 'transparent',
+            color: '#ffffff',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            cursor: 'pointer'
+          }}
+        >
+          {lang === 'ar' ? 'واجهة BLACK X الجديدة' : 'New BLACK X interface'}
+        </button>
       </div>
     </footer>
   );

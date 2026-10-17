@@ -589,6 +589,62 @@ export async function fetchAniListMasterPage(page = 1, country = null, search = 
   }
 }
 
+/**
+ * The most popular manga / manhwa on AniList right now (titles only), for the quick search
+ * chips of the manga tab. Cached for a day; [] when AniList cannot be reached (the chips are
+ * then simply not shown — there is no hard-coded fallback list).
+ */
+const POPULAR_MANGA_KEY = 'bx_mob_popular_manga_v1';
+export async function fetchPopularMangaTitles(limit = 10) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(POPULAR_MANGA_KEY) || 'null');
+    if (cached && Array.isArray(cached.titles) && cached.titles.length && Date.now() - Number(cached.at) < 24 * 3600 * 1000) {
+      return cached.titles.slice(0, limit);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const res = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        query: `query ($genreNotIn: [String], $tagNotIn: [String]) {
+          Page(page: 1, perPage: 20) {
+            media(type: MANGA, sort: POPULARITY_DESC, isAdult: false, genre_not_in: $genreNotIn, tag_not_in: $tagNotIn) {
+              id
+              title { romaji english }
+              genres
+            }
+          }
+        }`,
+        variables: { genreNotIn: [...ANILIST_GENRE_NOT_IN], tagNotIn: [...ANILIST_TAG_NOT_IN] }
+      })
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const titles = [];
+    const seen = new Set();
+    for (const m of json?.data?.Page?.media || []) {
+      const t = String(m?.title?.english || m?.title?.romaji || '').trim();
+      const key = t.toLowerCase();
+      if (!t || seen.has(key) || t.length > 40) continue;
+      seen.add(key);
+      titles.push(t);
+    }
+    if (titles.length) {
+      try {
+        localStorage.setItem(POPULAR_MANGA_KEY, JSON.stringify({ at: Date.now(), titles }));
+      } catch {
+        /* ignore */
+      }
+    }
+    return titles.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 export function dedupeMangaHits(list) {
   const seenIds = new Set();
   const seenTitles = new Set();

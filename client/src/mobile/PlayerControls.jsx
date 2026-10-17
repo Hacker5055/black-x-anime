@@ -18,6 +18,11 @@ const stop = (e) => e.stopPropagation();
  * ~3 s into playback and stay while paused); a double tap on the left/right third seeks
  * ±10 s. Touches on the empty video area still reach the brightness/volume swipes and the
  * long-press 2x speed handled by the video container.
+ *
+ * Computers (mouse + keyboard, the website shows this player there too): moving the mouse
+ * shows the controls, a click on the picture plays / pauses, a double click toggles full
+ * screen, and the keyboard works like on the big video sites — Space / K play-pause,
+ * ← / J and → / L ±10 s, ↑ / ↓ volume, M mute, F full screen, Shift+N next episode.
  */
 export default function PlayerControls({
   videoRef,
@@ -115,6 +120,57 @@ export default function PlayerControls({
     reveal();
   }, [fullscreen, reveal]);
 
+  // Keyboard shortcuts (computers). Ignored while typing in a field or with Ctrl / Alt / Meta.
+  const keyActions = useRef({});
+  keyActions.current = { hasNext, onNext, onToggleFullscreen, onSeekBy, locked };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      const tag = t && t.tagName ? t.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
+      // an open sheet / dialog above the player keeps its own keys
+      if (typeof document !== 'undefined' && document.querySelector('.bx-sheet-layer:not(.is-closing), [role="dialog"][aria-modal="true"]')) return;
+      const a = keyActions.current;
+      if (a.locked) return;
+      const v = videoRef.current;
+      if (!v) return;
+      const key = e.key;
+      let handled = true;
+      if (key === ' ' || key === 'k' || key === 'K') {
+        if (v.paused || v.ended) {
+          const p = v.play();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } else v.pause();
+      } else if (key === 'ArrowLeft' || key === 'j' || key === 'J') a.onSeekBy?.('left');
+      else if (key === 'ArrowRight' || key === 'l' || key === 'L') a.onSeekBy?.('right');
+      else if (key === 'ArrowUp') {
+        v.muted = false;
+        v.volume = Math.min(1, Math.round((v.volume + 0.1) * 10) / 10);
+      } else if (key === 'ArrowDown') v.volume = Math.max(0, Math.round((v.volume - 0.1) * 10) / 10);
+      else if (key === 'm' || key === 'M') v.muted = !v.muted;
+      else if (key === 'f' || key === 'F') a.onToggleFullscreen?.();
+      else if ((key === 'N' || key === 'n') && e.shiftKey && a.hasNext) a.onNext?.();
+      else handled = false;
+      if (handled) {
+        e.preventDefault();
+        reveal();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [videoRef, reveal]);
+
+  // Mouse: moving over the player shows the controls (throttled).
+  const lastMove = useRef(0);
+  const onMouseMove = (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const now = Date.now();
+    if (now - lastMove.current < 250) return;
+    lastMove.current = now;
+    reveal();
+  };
+
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -143,6 +199,21 @@ export default function PlayerControls({
     const t = tap.current;
     if (Date.now() - t.down > TAP_MAX_MS) return; // long press (2x speed) — not a tap
     if (Math.abs(e.clientX - t.x) > TAP_SLOP || Math.abs(e.clientY - t.y) > TAP_SLOP) return; // a swipe
+    if (e.pointerType === 'mouse') {
+      // A click plays / pauses; a double click (second click soon after) toggles full screen.
+      const now = Date.now();
+      if (now - t.last < DOUBLE_TAP_MS + 60 && t.zone === 'mouse') {
+        clearTimeout(t.timer);
+        t.last = 0;
+        onToggleFullscreen?.();
+        return;
+      }
+      t.last = now;
+      t.zone = 'mouse';
+      clearTimeout(t.timer);
+      t.timer = setTimeout(togglePlay, DOUBLE_TAP_MS + 60);
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const rel = (e.clientX - rect.left) / Math.max(1, rect.width);
     const zone = rel < 0.35 ? 'left' : rel > 0.65 ? 'right' : 'center';
@@ -203,7 +274,7 @@ export default function PlayerControls({
   }
 
   return (
-    <div className={`bx-pc${show ? ' is-visible' : ''}${fullscreen ? ' is-fs' : ''}`} dir="ltr">
+    <div className={`bx-pc${show ? ' is-visible' : ''}${fullscreen ? ' is-fs' : ''}`} dir="ltr" onPointerMove={onMouseMove}>
       <div className="bx-pc-surface" onPointerDown={onSurfaceDown} onPointerUp={onSurfaceUp} />
       <div className="bx-pc-shade" aria-hidden="true" />
 

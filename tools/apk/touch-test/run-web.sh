@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Real-touch suite for the WEBSITE: phones get the app interface (client/src/mobile/webApp.js),
-# computers get the website pages (client/src/webUi.js). Builds the website into $WORK/web
+# Real-touch suite for the WEBSITE: phones and computers get the app interface
+# (client/src/mobile/webApp.js, client/src/webUi.js); the classic pages stay one link away
+# («التصميم القديم للموقع»). Builds the website into $WORK/web
 # (never into client/dist) unless DIST points at an existing build. See README.md.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

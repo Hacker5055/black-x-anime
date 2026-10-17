@@ -23,8 +23,10 @@ export function activeFilterCount(value) {
 /**
  * Sort + filters of the search tab in one bottom sheet (instead of five rows of chips
  * above the results). Choices are a draft until "Show results" is tapped.
+ * Other tabs pass their own `groups` ([{ key, title, items }]) and `defaults` (the manga tab:
+ * server + type).
  */
-export default function FilterSheet({ open, onClose, isRtl, value, onApply, types, states, studios, genres }) {
+export default function FilterSheet({ open, onClose, isRtl, value, onApply, types, states, studios, genres, groups, defaults }) {
   const [draft, setDraft] = useState(value);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function FilterSheet({ open, onClose, isRtl, value, onApply, type
   );
 
   const reset = () =>
-    setDraft({ sort: SORT_OPTIONS[0].id, type: types[0], state: states[0], studio: studios[0], genre: genres[0] });
+    setDraft(defaults || { sort: SORT_OPTIONS[0].id, type: types[0], state: states[0], studio: studios[0], genre: genres[0] });
 
   return (
     <BottomSheet
@@ -85,13 +87,17 @@ export default function FilterSheet({ open, onClose, isRtl, value, onApply, type
       }
     >
       {draft ? (
-        <>
-          {group(isRtl ? 'الترتيب' : 'Sort by', SORT_OPTIONS, 'sort', true)}
-          {group(isRtl ? 'النوع' : 'Type', types, 'type')}
-          {group(isRtl ? 'الحالة' : 'Status', states, 'state')}
-          {group(isRtl ? 'التصنيف' : 'Genre', genres, 'genre')}
-          {group(isRtl ? 'الاستوديو' : 'Studio', studios, 'studio')}
-        </>
+        groups ? (
+          <>{groups.map((g) => <React.Fragment key={g.key}>{group(g.title, g.items, g.key)}</React.Fragment>)}</>
+        ) : (
+          <>
+            {group(isRtl ? 'الترتيب' : 'Sort by', SORT_OPTIONS, 'sort', true)}
+            {group(isRtl ? 'النوع' : 'Type', types, 'type')}
+            {group(isRtl ? 'الحالة' : 'Status', states, 'state')}
+            {group(isRtl ? 'التصنيف' : 'Genre', genres, 'genre')}
+            {group(isRtl ? 'الاستوديو' : 'Studio', studios, 'studio')}
+          </>
+        )
       ) : null}
     </BottomSheet>
   );

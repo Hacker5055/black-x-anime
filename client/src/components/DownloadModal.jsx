@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { resolveUserVipTier } from './VipPlansAndDevCodes.jsx';
-import { isFhdQuality } from './VideoPlayer.jsx';
+import { downloadQualityTier, unknownQualityLabel } from '../utils/downloadQuality.js';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 
@@ -103,7 +103,7 @@ export function DownloadModal({
     const existingEndpoint = localDownloadEndpoint(directUrl);
     if (existingEndpoint) return existingEndpoint;
     const cleanTitle = (title || slug || 'Anime').replace(/[^a-zA-Z0-9_\u0600-\u06FF\s-]/g, '').trim();
-    const filename = `${cleanTitle}_Ep${episode}_${quality || 'HD'}.mp4`;
+    const filename = `${cleanTitle}_Ep${episode}${quality ? `_${quality}` : ''}.mp4`;
     return `/api/stream/download?url=${encodeURIComponent(directUrl)}&filename=${encodeURIComponent(filename)}`;
   }, [title, slug, episode]);
 
@@ -117,7 +117,7 @@ export function DownloadModal({
     if (!directUrl) return;
     const downloadEndpoint = getDirectDownloadEndpoint(directUrl, quality);
     const cleanTitle = (title || slug || 'Anime').replace(/[^a-zA-Z0-9_\u0600-\u06FF\s-]/g, '').trim();
-    const filename = `${cleanTitle}_Ep${episode}_${quality || 'HD'}.mp4`;
+    const filename = `${cleanTitle}_Ep${episode}${quality ? `_${quality}` : ''}.mp4`;
 
     const link = document.createElement('a');
     link.href = downloadEndpoint;
@@ -160,14 +160,15 @@ export function DownloadModal({
         seenUrls.add(url);
         return true;
       })
-      .map((item, idx) => {
+      .map((item) => {
         const res = resolvedDownloads[item.id] || {};
-        const rawQual = item.quality || (idx % 2 === 0 ? 'FHD' : 'HD');
+        // Only the quality the server reported; none = «جودة غير معروفة», free (never a guessed FHD/HD).
+        const rawQual = String(item.quality || '').trim();
         return {
           id: item.id,
           server: item.server || 'Server',
           quality: rawQual,
-          isFhd: isFhdQuality(rawQual),
+          isFhd: downloadQualityTier(rawQual) === 'fhd',
           url: item.url || item.downloadUrl || res.downloadUrl || res.url || res.directUrl || null,
           directUrl: item.directUrl || res.directUrl || res.downloadUrl || res.url || null
         };
@@ -396,7 +397,9 @@ export function DownloadModal({
                             fontWeight: 900
                           }}
                         >
-                          {item.isFhd ? `${item.quality} • VIP 👑` : `${item.quality} • مجاني`}
+                          {item.isFhd
+                            ? `${item.quality} • VIP 👑`
+                            : `${item.quality || unknownQualityLabel(lang)} • ${lang === 'ar' ? 'مجاني' : 'Free'}`}
                         </span>
                       </div>
 

@@ -98,6 +98,13 @@ export function positionsForSync() {
   );
 }
 
+/** Every stored position ([key, { sec, dur, at, done? }]) — at most the newest 120 episodes. */
+export function positionEntries() {
+  return Object.entries(load());
+}
+
+export const POSITIONS_MAX = MAX;
+
 export function subscribePositions(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);

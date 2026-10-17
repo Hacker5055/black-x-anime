@@ -1,16 +1,55 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import BxIcon from './BxIcon.jsx';
 import { SkeletonList } from './Skeleton.jsx';
 import { coverForMode } from './dataSaver.js';
 import { useLongPress } from './PosterCard.jsx';
 import { SCHEDULE_DAYS, todayScheduleId } from './scheduleDays.js';
+import { airingState, countdownText, formatAirClock, formatAirWeekday } from './airingSchedule.js';
 
-function ScheduleRow({ item, isRtl, dataSaver, fav, onOpen, onPeek, onToggleFavorite }) {
+/** Re-render every `ms` while mounted (live countdowns, «اتعرضت» once the time passes). */
+function useNow(ms = 30000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') setNow(Date.now());
+    };
+    const t = setInterval(tick, ms);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [ms]);
+  return now;
+}
+
+function TimeCell({ airing, now, isRtl, showDay }) {
+  if (!airing) return null;
+  const state = airingState(airing.airingAt, now);
+  const clock = formatAirClock(airing.airingAt, isRtl);
+  let sub = '';
+  if (state === 'aired') sub = isRtl ? 'اتعرضت' : 'Aired';
+  else if (state === 'soon') sub = countdownText(airing.airingAt, now, isRtl);
+  else if (state === 'nextWeek') sub = isRtl ? 'الأسبوع الجاي' : 'Next week';
+  else if (showDay) sub = formatAirWeekday(airing.airingAt, isRtl);
+  return (
+    <span className={`bx-sched-time is-${state}`}>
+      <strong>{clock}</strong>
+      {sub ? <span>{sub}</span> : null}
+    </span>
+  );
+}
+
+function ScheduleRow({ item, isRtl, dataSaver, fav, now, showDay, onOpen, onPeek, onToggleFavorite }) {
   const { handlers, consumeClick } = useLongPress(onPeek ? () => onPeek(item) : null);
-  const meta = [item.type, item.state].filter(Boolean);
+  const airing = item.airing || null;
+  const meta = [];
+  if (airing?.episode) meta.push(isRtl ? `الحلقة ${airing.episode}` : `Episode ${airing.episode}`);
+  if (item.type) meta.push(item.type);
+  if (!airing && item.state) meta.push(item.state);
   return (
     <div
-      className="bx-sched-row bx-mob-card"
+      className={`bx-sched-row bx-mob-card${airing ? ' has-time' : ''}${airing && airingState(airing.airingAt, now) === 'aired' ? ' is-aired' : ''}`}
       data-bx-oid={item.objectID}
       role="button"
       tabIndex={0}
@@ -20,6 +59,7 @@ function ScheduleRow({ item, isRtl, dataSaver, fav, onOpen, onPeek, onToggleFavo
         onOpen(item);
       }}
     >
+      <TimeCell airing={airing} now={now} isRtl={isRtl} showDay={showDay} />
       <img className="bx-sched-thumb" src={coverForMode(item.poster, dataSaver)} alt="" loading="lazy" decoding="async" draggable={false} />
       <div className="bx-sched-copy">
         <div className="bx-sched-title" dir="auto">
@@ -53,9 +93,19 @@ function ScheduleRow({ item, isRtl, dataSaver, fav, onOpen, onPeek, onToggleFavo
   );
 }
 
+function countText(count, isRtl) {
+  if (!isRtl) return `${count} ${count === 1 ? 'show' : 'shows'}`;
+  if (count === 0) return '';
+  if (count === 1) return 'عمل واحد';
+  if (count === 2) return 'عملين';
+  return count <= 10 ? `${count} أعمال` : `${count} عمل`;
+}
+
 /**
- * Airing schedule: day chips (today is marked and scrolled into view), then one compact
- * row per show. The list is the real catalogue `show_time` of that weekday.
+ * Airing schedule: day chips (today is marked and scrolled into view), then one row per show.
+ * Shows with a real air time (AniList, matched by MAL id — airingSchedule.js) come first, in
+ * time order, with the local time and a live countdown («اتعرضت» once it passed); the
+ * catalogue's shows for that weekday without a known time follow, by popularity.
  */
 export default function ScheduleTab({
   pageClassName = 'bx-page',
@@ -73,6 +123,7 @@ export default function ScheduleTab({
 }) {
   const railRef = useRef(null);
   const today = todayScheduleId();
+  const now = useNow(30000);
 
   useEffect(() => {
     const chip = railRef.current?.querySelector('[aria-pressed="true"]');
@@ -84,21 +135,29 @@ export default function ScheduleTab({
     }
   }, [day]);
 
-  const count = items.length;
-  const countLabel = isRtl
-    ? count === 0
-      ? ''
-      : count === 1
-      ? 'حلقة واحدة'
-      : count === 2
-      ? 'حلقتين'
-      : count <= 10
-      ? `${count} حلقات`
-      : `${count} حلقة`
-    : `${count} ${count === 1 ? 'show' : 'shows'}`;
+  const timed = items.filter((x) => x.airing);
+  const untimed = items.filter((x) => !x.airing);
+  const showDay = day === 'all_airing';
+  const label = countText(items.length, isRtl);
+  const order = timed.length ? (isRtl ? 'بالميعاد' : 'by air time') : isRtl ? 'حسب الشعبية' : 'by popularity';
+  const isFav = (item) => favorites.some((f) => f.objectID === item.objectID);
+  const row = (item) => (
+    <ScheduleRow
+      key={item.objectID}
+      item={item}
+      isRtl={isRtl}
+      dataSaver={dataSaver}
+      fav={isFav(item)}
+      now={now}
+      showDay={showDay}
+      onOpen={onOpen}
+      onPeek={onPeek}
+      onToggleFavorite={onToggleFavorite}
+    />
+  );
 
   return (
-    <main className={pageClassName} style={{ padding: '0.25rem 1rem 1rem' }}>
+    <main className={`${pageClassName} bx-schedule`} style={{ padding: '0.25rem 1rem 1rem' }}>
       <div className="bx-row bx-chip-row bx-day-rail" ref={railRef} role="tablist" aria-label={isRtl ? 'أيام الأسبوع' : 'Days'}>
         {SCHEDULE_DAYS.map((d) => {
           const active = d.id === day;
@@ -121,7 +180,7 @@ export default function ScheduleTab({
       </div>
 
       <div className="bx-sched-bar">
-        <span>{loading ? '' : countLabel ? `${countLabel} • ${isRtl ? 'حسب الشعبية' : 'by popularity'}` : ''}</span>
+        <span>{loading || !label ? '' : `${label} • ${order}`}</span>
         <button type="button" className="bx-chip" onClick={onAlerts}>
           <BxIcon name="bell" size="1em" />
           {isRtl ? 'التنبيهات' : 'Alerts'}
@@ -136,20 +195,25 @@ export default function ScheduleTab({
           <p>{isRtl ? 'مفيش حلقات متسجلة لليوم ده.' : 'Nothing is scheduled for this day.'}</p>
         </div>
       ) : (
-        <div className="bx-sched-list bx-stagger">
-          {items.map((item) => (
-            <ScheduleRow
-              key={item.objectID}
-              item={item}
-              isRtl={isRtl}
-              dataSaver={dataSaver}
-              fav={favorites.some((f) => f.objectID === item.objectID)}
-              onOpen={onOpen}
-              onPeek={onPeek}
-              onToggleFavorite={onToggleFavorite}
-            />
-          ))}
-        </div>
+        <>
+          {timed.length ? <div className="bx-sched-list bx-stagger">{timed.map(row)}</div> : null}
+          {untimed.length ? (
+            <>
+              {timed.length ? (
+                <h3 className="bx-sched-divider">{isRtl ? 'من غير ميعاد معروف' : 'No known air time'}</h3>
+              ) : null}
+              <div className="bx-sched-list bx-stagger">{untimed.map(row)}</div>
+            </>
+          ) : null}
+          {timed.length ? (
+            <p className="bx-sched-note">
+              <BxIcon name="info" size="1em" className="bx-ico-lead" />
+              {isRtl
+                ? 'المواعيد هي ميعاد عرض الحلقة في اليابان بتوقيت جهازك (من AniList)، والحلقة المترجمة بتنزل على BLACK X بعدها.'
+                : 'Times are the Japanese broadcast in your time zone (from AniList); the subtitled episode reaches BLACK X after that.'}
+            </p>
+          ) : null}
+        </>
       )}
     </main>
   );

@@ -48,18 +48,18 @@ export const VIP_BASIC_ORNAMENTS = [
   'sakura-blossom'
 ];
 
+// Real prices only. The struck-through "old" monthly prices (150 / 320) advertised a discount
+// that was not real, so they were removed (owner's answer of 2026-10-17). Prices are unchanged.
 export const EGP_PRICING = {
   vip_basic: {
     monthly: 99,
     quarterly: 249,
-    yearly: 799,
-    oldMonthly: 150
+    yearly: 799
   },
   vip_monarch: {
     monthly: 199,
     quarterly: 499,
-    yearly: 1499,
-    oldMonthly: 320
+    yearly: 1499
   }
 };
 
@@ -453,11 +453,6 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
               <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fef08a' }}>
                 {lang === 'ar' ? `ج.م ${basicPrice.periodAr}` : `EGP ${basicPrice.periodEn}`}
               </span>
-              {billingCycle === 'monthly' && (
-                <span style={{ fontSize: '0.82rem', color: '#94a3b8', textDecoration: 'line-through' }}>
-                  150 ج.م
-                </span>
-              )}
             </div>
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem', fontSize: '0.88rem' }}>
@@ -568,11 +563,6 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
               <span style={{ fontSize: '1rem', fontWeight: 800, color: '#c084fc' }}>
                 {lang === 'ar' ? `ج.م ${monarchPrice.periodAr}` : `EGP ${monarchPrice.periodEn}`}
               </span>
-              {billingCycle === 'monthly' && (
-                <span style={{ fontSize: '0.82rem', color: '#94a3b8', textDecoration: 'line-through' }}>
-                  320 ج.م
-                </span>
-              )}
             </div>
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem', fontSize: '0.88rem' }}>
