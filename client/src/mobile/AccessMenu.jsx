@@ -141,6 +141,42 @@ export default function AccessMenu({
           },
           ...(isWeb
             ? [
+                // website only (2026-10-17)
+                {
+                  id: 'rankings',
+                  icon: 'trophy',
+                  label: isRtl ? 'الترتيب' : 'Rankings',
+                  badge: null,
+                  onClick: () => goToTab('profile', () => resetProfileStack(['rankings']))
+                },
+                {
+                  id: 'wrapped',
+                  icon: 'sparkles',
+                  label: isRtl ? 'ملخصك' : 'Your year',
+                  badge: null,
+                  onClick: () => goToTab('profile', () => resetProfileStack(['wrapped']))
+                },
+                ...(typeof window !== 'undefined' && window.innerWidth >= 1024
+                  ? [
+                      {
+                        id: 'shortcuts',
+                        icon: 'keyboard',
+                        label: isRtl ? 'اختصارات الكيبورد' : 'Keyboard shortcuts',
+                        badge: '?',
+                        onClick: () => {
+                          setCommandMenuOpen(false);
+                          setAppSheet('shortcuts');
+                        }
+                      }
+                    ]
+                  : []),
+                {
+                  id: 'apkperks',
+                  icon: 'smartphone',
+                  label: isRtl ? 'تطبيق الأندرويد' : 'Android app',
+                  badge: null,
+                  onClick: () => goToTab('profile', () => resetProfileStack(['apkperks']))
+                },
                 {
                   id: 'computer',
                   icon: 'monitor',
@@ -152,7 +188,15 @@ export default function AccessMenu({
                   }
                 }
               ]
-            : [])
+            : [
+                {
+                  id: 'webperks',
+                  icon: 'globe',
+                  label: isRtl ? 'على الموقع بس' : 'Website only',
+                  badge: null,
+                  onClick: () => goToTab('profile', () => resetProfileStack(['webperks']))
+                }
+              ])
         ].map((item, idx) => (
           <button key={item.id} type="button" className="bx-menu-item" style={{ '--i': idx + 1 }} onClick={item.onClick}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>

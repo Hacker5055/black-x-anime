@@ -1,5 +1,8 @@
 import React from 'react';
 import {
+  Command,
+  Keyboard,
+  Link2,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
@@ -177,6 +180,10 @@ const ICONS = {
   'chevron-up': ChevronUp,
   'circle-dashed': CircleDashed,
   clock: Clock,
+  cinema: Clapperboard,
+  command: Command,
+  keyboard: Keyboard,
+  link: Link2,
   close: X,
   cloud: Cloud,
   'cloud-rain': CloudRain,

@@ -2,6 +2,8 @@ import React, { useRef } from 'react';
 import BxIcon from './BxIcon.jsx';
 import { coverForMode } from './dataSaver.js';
 import { haptic } from './haptics.js';
+import { hoverClose, hoverEnter, hoverLeave } from './hoverPreview.js';
+import { openInNewTab, posterHref } from './posterLinks.js';
 
 const LONG_PRESS_MS = 460;
 const MOVE_TOLERANCE = 10;
@@ -94,6 +96,10 @@ export function useLongPress(onLongPress) {
  * The single poster card used by every rail and grid of the APK: cover art, ONE badge
  * (the real rating, or a rank/progress where that is the point of the row) and a title
  * that is laid out by its own script direction (English titles inside the Arabic UI).
+ *
+ * On the website with a mouse (2026-10-17): resting on the card opens the preview card
+ * (hoverPreview.js), and a middle click or Ctrl / ⌘ + click opens the title in a new tab
+ * (posterLinks.js — never set in the APK).
  */
 export default function PosterCard({
   item,
@@ -131,11 +137,36 @@ export default function PosterCard({
       aria-label={title}
       style={width ? { ...style, '--w': typeof width === 'number' ? `${width}px` : width } : style}
       {...handlers}
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') hoverEnter(item, e.currentTarget, onOpen);
+      }}
+      onPointerLeave={(e) => {
+        handlers.onPointerLeave?.(e);
+        hoverLeave();
+      }}
+      onMouseDown={(e) => {
+        // no autoscroll circle when the middle button opens a tab
+        if (e.button === 1 && posterHref(item)) e.preventDefault();
+      }}
+      onAuxClick={(e) => {
+        if (e.button !== 1) return;
+        const href = posterHref(item);
+        if (href) {
+          e.preventDefault();
+          openInNewTab(href);
+        }
+      }}
       onClick={(e) => {
         if (consumeClick()) {
           e.preventDefault();
           return;
         }
+        if ((e.ctrlKey || e.metaKey) && posterHref(item)) {
+          e.preventDefault();
+          openInNewTab(posterHref(item));
+          return;
+        }
+        hoverClose();
         onOpen?.(item);
       }}
       onKeyDown={(e) => {

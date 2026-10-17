@@ -12,7 +12,8 @@
  *   /community                 community
  *   /profile[/page], /mylist   profile hub and its pages (/mylist = my list)
  *   /show/SLUG                 title page
- *   /watch/SLUG/EP             player
+ *   /watch/SLUG/EP[?party=C]   player (party: join that watch party)
+ *   /rankings                  rankings (profile page, website only)
  *
  * Pure functions only (no window access) so they can be unit-tested in Node.
  */
@@ -41,7 +42,11 @@ export const LINKABLE_PROFILE_PAGES = Object.freeze([
   'privacy',
   'requests',
   'backup',
-  'signin'
+  'signin',
+  // website only (2026-10-17)
+  'rankings',
+  'wrapped',
+  'apkperks'
 ]);
 
 function safeDecode(value) {
@@ -65,7 +70,7 @@ function cleanSlug(value) {
  *   { kind: 'tab', tab, query? }
  *   { kind: 'profile', page? }
  *   { kind: 'show', slug, source? }
- *   { kind: 'watch', slug, ep, source? }
+ *   { kind: 'watch', slug, ep, source?, party? }
  *   { kind: 'manga', id, server?, chapter? }
  */
 export function parseWebLocation(pathname = '/', search = '') {
@@ -87,9 +92,20 @@ export function parseWebLocation(pathname = '/', search = '') {
     const slug = cleanSlug(parts[1]);
     const ep = Number.parseInt(parts[2] || '1', 10);
     if (!slug) return { kind: 'home' };
-    return { kind: 'watch', slug, ep: Number.isInteger(ep) && ep > 0 ? ep : 1, ...(source ? { source } : {}) };
+    const party = String(params.get('party') || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    return {
+      kind: 'watch',
+      slug,
+      ep: Number.isInteger(ep) && ep > 0 ? ep : 1,
+      ...(source ? { source } : {}),
+      ...(party.length >= 4 && party.length <= 16 ? { party } : {})
+    };
   }
-  if (head === 'trending' || head === 'catalog' || head === 'search' || head === 'rankings') {
+  if (head === 'rankings' || head === 'ranking') return { kind: 'profile', page: 'rankings' };
+  if (head === 'wrapped') return { kind: 'profile', page: 'wrapped' };
+  if (head === 'trending' || head === 'catalog' || head === 'search') {
     return { kind: 'tab', tab: 'catalog', ...(query ? { query } : {}) };
   }
   if (head === 'discover' || head === 'schedule') return { kind: 'tab', tab: 'schedule' };
@@ -116,14 +132,19 @@ export function parseWebLocation(pathname = '/', search = '') {
  * The URL of what is on screen. `state` holds:
  *   tab, catalogQuery, profilePage (top of the profile stack, '' for its root),
  *   show { slug, source? } | null, episode (number) | null (player open, not minimised),
- *   manga { id, server? } | null, chapter (id) | null.
+ *   manga { id, server? } | null, chapter (id) | null,
+ *   party (room code) | '' — kept on the player's address so the address bar is the invite.
  */
 export function webUrlFor(state = {}) {
   const enc = encodeURIComponent;
   const show = state.show && state.show.slug ? state.show : null;
   if (show) {
     const suffix = show.source === 'aniproject' ? '?source=aniproject' : '';
-    if (state.episode) return `/watch/${enc(show.slug)}/${enc(String(state.episode))}${suffix}`;
+    if (state.episode) {
+      const party = String(state.party || '').replace(/[^A-Za-z0-9]/g, '');
+      const partySuffix = party ? `${suffix ? '&' : '?'}party=${enc(party)}` : '';
+      return `/watch/${enc(show.slug)}/${enc(String(state.episode))}${suffix}${partySuffix}`;
+    }
     return `/show/${enc(show.slug)}${suffix}`;
   }
   const manga = state.manga && state.manga.id ? state.manga : null;
@@ -139,6 +160,7 @@ export function webUrlFor(state = {}) {
     const page = String(state.profilePage || '');
     if (!page) return '/profile';
     if (page === 'library') return '/mylist';
+    if (page === 'rankings') return '/rankings';
     return `/profile/${enc(page)}`;
   }
   if (tab === 'catalog') {

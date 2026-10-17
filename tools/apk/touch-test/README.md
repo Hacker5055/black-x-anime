@@ -23,7 +23,7 @@ server answers video `Range` requests with 206 (without that every seek restarts
 Taps and swipes are CDP touch events (`page.touchscreen`), never `element.click()`, because the
 v16.0 bug (no tab could be scrolled by finger) passed every mouse/JS-click check.
 
-Scenarios (196 checks): `nav` (dock, finger scroll on pages and rails, directional view
+Scenarios (210 checks): `nav` (dock, finger scroll on pages and rails, directional view
 transitions, avatar → profile, menu, long press → quick peek, language switch), `search` (grid,
 typing, recent searches, filter sheet), `catalog` ("load more" stops at Algolia's pagination
 limit with a note instead of a dead button; the mock caps paging like `paginationLimitedTo`), `genres` (Ecchi,
@@ -33,7 +33,11 @@ every mock list), `schedule` (opens on today), `player` (resume, auto-hide,
 pause, ±10 s buttons and double tap, intro marks, full screen + native immersive call, settings
 sheet over the player, ±10 min, speed, lock, next episode, saved position, back order sheet →
 full screen → player → details → home), `manga` (chapters, reader pages, immersive, finger
-scroll), `community` (guest), `logged` (one like per account, posting), `profile` (guest sign-in
+scroll), `community` (guest), `logged` (one like per account, posting), `bundle` (APK v18: the
+air-time reminders handed to `BlackXNativeAuth.scheduleEpisodeAlarms` — one per followed title with a
+real air time, never an empty list —, the alerts sheet saying so, the menu's «على الموقع بس» page and
+no website pages, «على الداتا», the sleep-timer chip and its cancel, a watch-party room by code
+without the website's invite link, no preview card / quick search), `profile` (guest sign-in
 hero, grouped rows, sub-pages pushed with a back button and popped by the phone back button, my
 list grid + empty state, watch history with episode / time left / day groups and Latin titles
 aligned in RTL, reading history chapter + cover, settings switches and segments saved, splash
@@ -53,7 +57,7 @@ ONLY=links,back bash tools/apk/touch-test/run-web.sh    # some scenarios
 DIST=/path/to/website/build bash tools/apk/touch-test/run-web.sh
 ```
 
-`web-suite.mjs` (196 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
+`web-suite.mjs` (239 checks) opens the **website build** with the same mocks (`openWeb()` in `lib.mjs`:
 the site's same-origin `/api/*` goes to the mock, Google Fonts are answered with the bundled fonts so
 Arabic renders in screenshots). A 412×915 touch phone with a phone browser user agent, or a 1440×900
 computer with a mouse; since 2026-10-17 both get the app interface. Scenarios: `boot` (phone and
@@ -80,10 +84,22 @@ the fresh record; composer tying a post to an anime; profile watch stats from se
 `wide` (the computer layout: side rail, start-aligned hero with the landscape banner, bigger posters,
 rail arrows only after a mouse moves and a click scrolls a screen, a 6+ column search grid, sheets as
 centred dialogs, the title page next to the rail, the player capped to the screen height with Space/K,
-→, M, F and a mouse click, the classic-website link). `openWeb(browser, { route, phone, seed, ctx, ui })`:
+→, M, F and a mouse click, the classic-website link) and `bundle` (what only the website has: the mouse
+preview card and its buttons, middle click / Ctrl+click → new tab, Ctrl+K and «/» quick search,
+«?» shortcuts, cinema mode beside / under the video with its button and «T», `/rankings` with
+BLACK X votes only where someone voted and a row that opens the title or the search, «ملخصك» from
+seeded positions and its image, the empty state, and a watch party between TWO browsers sharing the
+Firestore mock: room by code, the invite link in the address bar, the guest following the host's
+position and pause, chat, two messages at once, reactions, the people line, the host ending it, only
+`json` + `updatedAt` stored; the classic «ملخص 2026» card). `openWeb(browser, { route, phone, seed, ctx, ui })`:
 `seed` is written to localStorage, which every page of one browser shares, so seed `blackx.vipTier`
 explicitly; `ui: 'site'` stores the classic-pages choice; `ctx` patches the mock (`episodeDelayMs` holds
 `/api/stream/episode` back, `communityPosts` replaces the seeded feed, `extraSlots` adds AniList air
-times); a seeded `blackx_token` signs the classic computer pages in through the mocked `/api/auth/me`.
+times, `fs` / `fsTimes` share Firestore documents between pages or browsers, `recordOpen` makes
+`window.open` record the address instead of opening a tab); a seeded `blackx_token` signs the classic
+computer pages in through the mocked `/api/auth/me`. The Firestore mock gives every write a new
+`updateTime` and enforces `currentDocument.exists` / `currentDocument.updateTime` like the real API.
+Extra browser contexts crash the single-process test Chromium, so a second person is a second
+`launch()`.
 Headless Chrome reports no hover/fine pointer (and CDP cannot emulate them), which is why the rail
 arrows key off a real mouse movement (`html.bx-has-mouse`, `ScrollRow.jsx`).

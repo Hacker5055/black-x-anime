@@ -3,6 +3,8 @@ import BottomSheet from './BottomSheet.jsx';
 import BxIcon from './BxIcon.jsx';
 import { coverForMode } from './dataSaver.js';
 import { airingFor, airingLine } from './airingSchedule.js';
+import { nativeAlarmsSupported } from './nativeAlarms.js';
+import { isWebApp } from './webApp.js';
 
 function lastRunText(at, isRtl) {
   if (!(at > 0)) return isRtl ? 'لسه ماحصلش فحص' : 'No check yet';
@@ -43,6 +45,20 @@ export default function AlertsSheet({ open, onClose, isRtl, followed, airingMap,
           {isRtl
             ? 'بيوصلك إشعار لما حلقة جديدة تنزل على BLACK X من الأعمال اللي بتتابعها (قائمتي + بتتفرج + ناوي تتفرج). الفحص بيحصل وBLACK X مفتوح: كل ٣٠ دقيقة، وكل ١٠ دقايق لمدة ٦ ساعات بعد ميعاد عرض حلقة من أعمالك في اليابان.'
             : 'You get a notification when a new episode of a title you follow (my list + watching + planned) reaches BLACK X. Checks run while BLACK X is open: every 30 minutes, and every 10 minutes for 6 hours after one of your titles airs in Japan.'}
+        </p>
+        <p className="bx-alerts-native" data-bx-native={nativeAlarmsSupported() ? 'on' : isWebApp() ? 'web' : 'old'}>
+          <BxIcon name="bell-ring" size="1em" className="bx-ico-lead" />
+          {nativeAlarmsSupported()
+            ? isRtl
+              ? 'وكمان التطبيق بيفكرك بميعاد العرض الياباني لأعمالك حتى وهو مقفول.'
+              : 'The app also reminds you at the Japanese air time of your titles, even while it is closed.'
+            : isWebApp()
+            ? isRtl
+              ? 'على الموقع الفحص بيحصل والموقع مفتوح بس. تطبيق الأندرويد بيفكرك بميعاد العرض حتى وهو مقفول.'
+              : 'On the website checks run only while it is open. The Android app reminds you at air time even while closed.'
+            : isRtl
+            ? 'حدّث التطبيق لإصدار 18.0 عشان يفكرك بميعاد العرض حتى وهو مقفول.'
+            : 'Update the app to version 18.0 to get air-time reminders even while it is closed.'}
         </p>
         <div className="bx-alerts-status">
           <span>

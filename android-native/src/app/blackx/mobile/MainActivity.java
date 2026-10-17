@@ -599,6 +599,21 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
+     * Air-time reminders while the app is closed (v18.0): replaces every alarm with `json`
+     * ([{"id","title","body","at"}]); returns how many were armed, -1 on failure.
+     * The shipped bytecode comes from android-native/smali/MainActivity.scheduleEpisodeAlarms.smali
+     * (tools/apk/patch-native.sh); this Java is the reading copy.
+     */
+    @JavascriptInterface
+    public int scheduleEpisodeAlarms(String json) {
+        try {
+            return EpisodeAlarms.schedule(getApplicationContext(), json);
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /**
      * Request Android 13+ (API 33+) POST_NOTIFICATIONS runtime permission
      */
     @JavascriptInterface

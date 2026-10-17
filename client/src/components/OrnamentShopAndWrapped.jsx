@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useI18n } from '../i18n/I18nProvider.jsx';
 import { LiveCreatureOverlay } from './LiveAvatarOrnament.jsx';
-import { VerifiedBadge } from './UserBadges.jsx';
 import { api } from '../api.js';
 import { pushToast } from '../hooks/hooks.js';
 
@@ -478,235 +477,30 @@ export function OrnamentShop({
 /**
  * BLACK X Wrapped 2026 — Shareable & Downloadable Annual/Monthly Anime & Manga Summary Card
  */
-export function WrappedCardPanel({
-  user,
-  stats,
-  gamificationStats,
-  bookmarks = [],
-  readingHistory = [],
-  userRatings = [],
-  customTitle = 'Shadow Monarch 👑'
-}) {
-  const { lang, formatNumber } = useI18n();
-  const [sharing, setSharing] = useState(false);
-
-  const watchMinutes = gamificationStats?.totalWatchTimeMin || ((stats?.watchedEpisodes || 42) * 24);
-  const watchHours = Math.max(12, Math.round(watchMinutes / 60));
-  const chaptersRead = Math.max(28, (readingHistory?.length || 0) * 6 + (bookmarks?.length || 0) * 4 + 34);
-  const episodesCount = Math.max(48, stats?.watchedEpisodes || 64);
-  const level = gamificationStats?.currentLevel || 75;
-
-  const handleDownloadPng = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1350;
-    const ctx = canvas.getContext('2d');
-
-    // Deep Cyber-Abyss Background
-    const bg = ctx.createLinearGradient(0, 0, 1080, 1350);
-    bg.addColorStop(0, '#060712');
-    bg.addColorStop(0.5, '#1e1035');
-    bg.addColorStop(1, '#04060d');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 1080, 1350);
-
-    // Glowing Aura Orbs
-    const orb1 = ctx.createRadialGradient(540, 320, 20, 540, 320, 420);
-    orb1.addColorStop(0, 'rgba(168, 85, 247, 0.42)');
-    orb1.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = orb1;
-    ctx.fillRect(0, 0, 1080, 1350);
-
-    // Border Frame
-    ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(44, 44, 992, 1262);
-
-    // Header
-    ctx.fillStyle = '#22d3ee';
-    ctx.font = '900 44px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('BLACK X • WRAPPED 2026', 540, 135);
-
-    // User Name & Handle
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 64px sans-serif';
-    ctx.fillText(`${user?.displayName || user?.username || 'ZIAD AL SHAFY'} ✓`, 540, 255);
-
-    ctx.fillStyle = '#c084fc';
-    ctx.font = '800 34px sans-serif';
-    ctx.fillText(`@${user?.username || 'Ziad007'} • ${customTitle} • LVL ${level}`, 540, 315);
-
-    // Stats Boxes
-    const statItems = [
-      { label: 'HOURS WATCHED / ساعات المشاهدة', val: `${watchHours} hrs`, col: '#22d3ee' },
-      { label: 'EPISODES COMPLETED / الحلقات', val: `${episodesCount} EP`, col: '#f472b6' },
-      { label: 'MANGA CHAPTERS / فصول المانجا', val: `${chaptersRead} CH`, col: '#a855f7' },
-      { label: 'GLOBAL RANK / التصنيف العالمي', val: 'TOP 1% 🌍', col: '#fde047' }
-    ];
-
-    statItems.forEach((st, idx) => {
-      const y = 410 + idx * 185;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-      ctx.fillRect(120, y, 840, 145);
-      ctx.strokeStyle = st.col;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(120, y, 840, 145);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '700 26px sans-serif';
-      ctx.fillText(st.label, 540, y + 52);
-
-      ctx.fillStyle = st.col;
-      ctx.font = '900 54px sans-serif';
-      ctx.fillText(st.val, 540, y + 118);
-    });
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '700 26px sans-serif';
-    ctx.fillText('black-x-anime.me • Official Global Anime & Manga Card', 540, 1245);
-
-    const link = document.createElement('a');
-    link.download = `black-x-wrapped-${user?.username || 'profile'}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-    pushToast(
-      lang === 'ar'
-        ? '📥 تم توليد وتحميل بطاقة ملخصك السنوي (BLACK X Wrapped PNG) بنجاح!'
-        : '📥 Downloaded your BLACK X Wrapped HD PNG card!',
-      'success'
-    );
-  };
-
-  const handleShareToCommunity = async () => {
-    setSharing(true);
-    try {
-      const text = lang === 'ar'
-        ? `📈 ملخصي على منصة BLACK X لعام 2026!\n⚡ المستوى: LVL ${level} (${customTitle})\n🎬 ساعات المشاهدة: ${watchHours} ساعة (${episodesCount} حلقة)\n📖 فصول المانجا والروايات المقروءة: ${chaptersRead} فصل\n🌍 الرتبة العالمية: ضمن أعلى 1% من عشاق الأنمي والمانجا!`
-        : `📈 My 2026 BLACK X Wrapped!\n⚡ Level: LVL ${level} (${customTitle})\n🎬 Watch Time: ${watchHours} hrs (${episodesCount} episodes)\n📖 Manga Chapters Read: ${chaptersRead}\n🌍 Global Rank: Top 1% Worldwide!`;
-
-      await api.post('/api/community/posts', {
-        content: text,
-        tag: 'general',
-        tagName: '📈 ملخص BLACK X',
-        authorName: user?.displayName || user?.username || 'ZIAD AL SHAFY',
-        authorUsername: user?.username || '',
-        authorAvatar: user?.photoUrl || user?.photoURL || '',
-        authorRole: user?.role || 'user',
-        uid: user?.uid || user?.id || user?.email
-      });
-      pushToast(
-        lang === 'ar'
-          ? '🚀 تمت مشاركة بطاقة ملخصك في مجتمع BLACK X بنجاح!'
-          : '🚀 Shared your BLACK X Wrapped card to the Community!',
-        'success'
-      );
-    } catch (err) {
-      pushToast(err.message || 'Share error', 'error');
-    } finally {
-      setSharing(false);
-    }
-  };
-
+/**
+ * «ملخص 2026» of the classic profile, 2026-10-17.
+ *
+ * Until then the card invented its numbers: at least 12 hours, 48 episodes and 28 chapters for
+ * everybody (plus 34 chapters added to every count), level 75 and «TOP 1%» worldwide when
+ * nothing was known, a fixed «Dark Fantasy & Action» favourite genre and a stranger's name as
+ * the fallback. The yearly summary now lives in the app interface of the website
+ * («ملخصك», client/src/mobile/WrappedPage.jsx) with only what was really recorded, so this
+ * card sends the visitor there (`?ui=app` also remembers the choice, client/src/webUi.js).
+ */
+export function WrappedCardPanel() {
+  const { lang } = useI18n();
+  const ar = lang === 'ar';
   return (
-    <div className="glass" style={{ padding: '2rem', borderRadius: '24px', border: '1px solid rgba(34, 211, 238, 0.3)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '2rem', alignItems: 'center' }}>
-        {/* Left Visual Wrapped Card Preview */}
-        <div
-          style={{
-            padding: '2rem 1.75rem',
-            borderRadius: '24px',
-            background: 'radial-gradient(circle at 50% 20%, rgba(168, 85, 247, 0.35), rgba(6, 8, 18, 0.96) 70%)',
-            border: '2px solid rgba(34, 211, 238, 0.45)',
-            boxShadow: '0 25px 65px rgba(0, 0, 0, 0.75)',
-            textAlign: 'center',
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-        >
-          <div style={{ fontSize: '0.78rem', fontWeight: 900, letterSpacing: '0.12em', color: 'var(--cyan)', marginBottom: '0.75rem' }}>
-            ✨ BLACK X • OFFICIAL WRAPPED 2026 ✨
-          </div>
-
-          <h2 style={{ margin: 0, fontSize: '1.65rem', fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-            {user?.displayName || user?.username}
-            <VerifiedBadge isDev={user?.role === 'developer'} size={21} />
-          </h2>
-          <div style={{ color: '#c084fc', fontWeight: 800, fontSize: '0.88rem', marginTop: '0.25rem', marginBottom: '1.35rem' }}>
-            @{user?.username} • {customTitle} • LVL {level}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1.25rem' }}>
-            <div style={{ padding: '0.95rem', borderRadius: '16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(34,211,238,0.35)' }}>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: 'var(--cyan)' }}>{formatNumber(watchHours)}h</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-dim)' }}>{lang === 'ar' ? 'ساعات مشاهدة الأنمي' : 'Anime Watch Hours'}</div>
-            </div>
-            <div style={{ padding: '0.95rem', borderRadius: '16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(168,85,247,0.35)' }}>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#c084fc' }}>{formatNumber(chaptersRead)}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-dim)' }}>{lang === 'ar' ? 'فصول مانجا وروايات' : 'Chapters Read'}</div>
-            </div>
-            <div style={{ padding: '0.95rem', borderRadius: '16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(244,114,182,0.35)' }}>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#f472b6' }}>{formatNumber(episodesCount)}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-dim)' }}>{lang === 'ar' ? 'حلقات مكتملة' : 'Episodes Completed'}</div>
-            </div>
-            <div style={{ padding: '0.95rem', borderRadius: '16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(250,204,21,0.4)' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#fde047' }}>TOP 1%</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-dim)' }}>{lang === 'ar' ? 'التصنيف العالمي' : 'Global Percentile'}</div>
-            </div>
-          </div>
-
-          <div style={{ fontSize: '0.8rem', color: '#cbd5e1', fontWeight: 700 }}>
-            🏆 {lang === 'ar' ? 'التصنيف المفضل: خيال مظلم وأكشن (Dark Fantasy & Action)' : 'Top Genre: Dark Fantasy & Action'}
-          </div>
-        </div>
-
-        {/* Right Actions & Explanation */}
-        <div>
-          <h3 style={{ margin: '0 0 0.65rem', fontSize: '1.45rem', fontWeight: 900 }}>
-            📈 {lang === 'ar' ? 'بطاقة ملخصك العالمي (BLACK X Wrapped)' : 'Your Global BLACK X Wrapped Card'}
-          </h3>
-          <p style={{ color: 'var(--ink-dim)', fontSize: '0.94rem', lineHeight: 1.65, marginBottom: '1.5rem' }}>
-            {lang === 'ar'
-              ? 'بطاقة جرافيكية تفاعلية تجمع إنجازاتك في مشاهدة الأنمي وقراءة المانجا والروايات ومستواك العالمي. يمكنك تحميلها كصورة عالية الدقة (PNG) أو نشرها بضغطة زر واحدة في المجتمع!'
-              : 'An interactive graphic card summarizing your anime watch hours, manga chapters read, and global rank. Download it as an HD PNG or share it directly to the Community!'}
-          </p>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.85rem' }}>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={handleDownloadPng}
-              style={{
-                background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
-                color: '#fff',
-                fontWeight: 800,
-                padding: '0.8rem 1.4rem',
-                borderRadius: '14px'
-              }}
-            >
-              📥 {lang === 'ar' ? 'تحميل البطاقة كصورة PNG عالية الدقة' : 'Download HD PNG Card'}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn--ghost"
-              disabled={sharing}
-              onClick={handleShareToCommunity}
-              style={{
-                borderColor: 'rgba(244, 114, 182, 0.5)',
-                color: '#f472b6',
-                fontWeight: 800,
-                padding: '0.8rem 1.4rem',
-                borderRadius: '14px'
-              }}
-            >
-              ↗️ {sharing
-                ? (lang === 'ar' ? 'جارٍ النشر...' : 'Sharing...')
-                : (lang === 'ar' ? 'مشاركة الملخص في المجتمع' : 'Share Wrapped to Community')}
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="glass" style={{ padding: '2rem', borderRadius: '24px', border: '1px solid rgba(255, 255, 255, 0.18)' }}>
+      <h3 style={{ margin: '0 0 0.65rem', fontSize: '1.35rem', fontWeight: 900 }}>{ar ? '✨ ملخصك السنوي' : '✨ Your year on BLACK X'}</h3>
+      <p style={{ color: 'var(--ink-dim)', fontSize: '0.94rem', lineHeight: 1.7, marginBottom: '1.25rem' }}>
+        {ar
+          ? 'ملخص سنتك بقى في واجهة BLACK X الجديدة: وقت المشاهدة، الحلقات اللي كمّلتها، أكتر أعمال وتصنيفات اتفرجت عليها — بأرقامك الحقيقية بس، وتقدر تنزّله صورة أو تشاركه.'
+          : 'Your yearly summary is now in the new BLACK X interface: time watched, episodes finished, your top titles and genres — only your real numbers, as an image to download or share.'}
+      </p>
+      <button type="button" className="btn btn--primary" onClick={() => window.location.assign('/profile/wrapped?ui=app')}>
+        {ar ? 'افتح ملخصك' : 'Open your year'}
+      </button>
     </div>
   );
 }

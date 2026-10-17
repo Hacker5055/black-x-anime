@@ -80,6 +80,15 @@ async function openFirstPoster(page) {
   await sleep(400);
 }
 
+
+/** A mouse click in the middle of `selector` (computer pages). */
+async function clickEl(page, selector, opts = {}) {
+  const b = await boxOf(page, selector, { scroll: true, ...opts });
+  if (!b) throw new Error(`not found: ${selector}${opts.text ? ` "${opts.text}"` : ''}`);
+  await page.mouse.click(b.x, b.y);
+  return b;
+}
+
 /* ====================================================================== boot */
 scenario('boot', async (browser) => {
   const G = 'boot';
@@ -349,8 +358,15 @@ scenario('profile', async (browser) => {
   const rows = await page.evaluate(() => [...document.querySelectorAll('main .bxp-row-label')].map((e) => e.textContent.trim()));
   check(G, 'website rows: «تطبيق الأندرويد» + «التصميم القديم للموقع»', rows.includes('تطبيق الأندرويد') && rows.includes('التصميم القديم للموقع'), rows.join(' | '));
   check(G, 'no «تحديث التطبيق» row on the website', !rows.includes('تحديث التطبيق'));
-  const href = await page.evaluate(() => [...document.querySelectorAll('main a')].find((a) => a.textContent.includes('تطبيق الأندرويد'))?.getAttribute('href') || '');
-  check(G, 'the Android row downloads the APK from this site', href === '/BLACK-X-Mobile-120Hz.apk', href);
+  // «تطبيق الأندرويد» opens «ليه تنزل التطبيق؟» (what only the APK does) with the download button
+  await tapEl(page, 'main .bxp-row', { text: 'تطبيق الأندرويد' });
+  await waitFor(page, () => /ليه تنزل التطبيق/.test(document.querySelector('.bx-topbar-title')?.textContent || ''), null, 5000);
+  const perks = await page.evaluate(() => ({
+    items: [...document.querySelectorAll('main .bx-perks-list strong')].map((e) => e.textContent.trim()),
+    href: document.querySelector('main .bx-perks a.bx-btn')?.getAttribute('href') || ''
+  }));
+  check(G, 'the Android row opens «ليه تنزل التطبيق؟»: the APK-only features + a download from this site', perks.href === '/BLACK-X-Mobile-120Hz.apk' && perks.items.length >= 4 && perks.items.some((t) => /والتطبيق مقفول/.test(t)), `${perks.href} | ${perks.items.join(' / ')}`);
+  await browserBack(page);
   check(G, 'footer says black-x-anime.me (no app version)', /black-x-anime\.me/.test(await page.evaluate(() => document.querySelector('.bxp-foot')?.textContent || '')));
 
   // Google: the web popup (Firebase), not the APK's OAuth window.
@@ -608,6 +624,7 @@ scenario('desktop', async (browser) => {
   check(G, 'VIP plans: no early access, 24-hour delay, «uncompressed», viewer caps or AI studio', Boolean(plansShown) && falsePerks.length === 0, plansShown ? falsePerks.join(', ') || 'clean' : 'plans did not render');
   const truePerks = ['تحميل الحلقات بجودة FHD 1080p', 'السيرفرات المباشرة (Fast CDN)', 'رسائل صوتية بلا حدود', 'إطارين حصريين زيادة'].filter((f) => !plans.includes(f));
   check(G, 'VIP plans: the real perks are listed (FHD downloads, direct servers first, voice notes, frames)', truePerks.length === 0, truePerks.length ? `missing: ${truePerks.join(', ')}` : 'all there');
+  check(G, 'VIP plans: no «private rooms with a custom link» (never existed), voice notes are the community\'s', !/رابط مخصص|غرف مشاهدة خاصة/.test(plans) && /رسائل صوتية بلا حدود في المجتمع/.test(plans) && !/في غرف المشاهدة/.test(plans));
   const planDigits = asciiDigits(plans);
   check(G, 'VIP plans: prices unchanged (99 / 199 ج.م)', /\b99\b/.test(planDigits) && /\b199\b/.test(planDigits), (planDigits.match(/\b(99|199|249|499|799|1499)\b/g) || []).join(','));
   const struck = await page.evaluate(() =>
@@ -623,14 +640,21 @@ scenario('desktop', async (browser) => {
   check(G, 'VIP Monarch account: the keyword-matching «AI 3D studio» is gone, the 5 VIP frames stay', !/استوديو الذكاء|AI 3D Prompt|توليد وتطبيق/.test(monarchPlans) && /الـ 5 إطارات الحصرية/.test(monarchPlans));
   await page.close();
 
-  // Watch party panel: no fixed «4 / N مشاهد» count and no unenforced capacities.
+  // Watch party: the classic page's local imitation (sample messages from «Kuro_Kun» and
+  // «Mirai_Sama», a room nobody else could see) became a card to the real party (2026-10-17).
   ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 2')}/1`, phone: false, ui: 'site', seed: { 'blackx.vipTier': 'vip_basic' } }));
-  await waitFor(page, () => /غرفة المشاهدة الجماعية/.test(document.querySelector('.app-shell')?.innerText || ''), null, 10000);
-  const party = await page.evaluate(() => {
-    const h = [...document.querySelectorAll('.app-shell h3')].find((x) => /غرفة المشاهدة الجماعية/.test(x.textContent));
-    return h ? h.innerText : '';
-  });
-  check(G, 'watch party: no invented viewer count or room capacity', Boolean(party) && !/\d+\s*\/\s*\d+|\(25|100/.test(party), party.replace(/\n/g, ' ').slice(0, 120) || 'panel missing');
+  await waitFor(page, () => Boolean(document.querySelector('.watch-party-panel--handoff')), null, 10000);
+  const party = await page.evaluate(() => document.querySelector('.watch-party-panel--handoff')?.innerText || '');
+  check(G, 'watch party: no sample messages, no viewer counts — a card to the real party', Boolean(party) && !/Kuro_Kun|Mirai_Sama|\d+\s*\/\s*\d+/.test(party) && /الواجهة الجديدة/.test(party), party.replace(/\n/g, ' ').slice(0, 120) || 'panel missing');
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}),
+    clickEl(page, '.watch-party-panel--handoff button')
+  ]);
+  await waitWebReady(page);
+  await waitFor(page, () => Boolean(document.querySelector('.bx-dock')), null, 15000);
+  // the address bar shows «/» for a moment while the linked title loads, then the player's address
+  await waitFor(page, () => location.pathname.startsWith('/watch/'), null, 15000);
+  check(G, '…its button opens the same episode in the app interface', (await iface(page)) === 'app' && /^\/watch\//.test(await here(page)), `${await iface(page)} ${await here(page)}`);
   await page.close();
 
   // The browser's own AniList queries ask AniList to drop the hidden genres.
@@ -1008,6 +1032,236 @@ scenario('wide', async (browser) => {
   await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
   await waitWebReady(page);
   check(G, 'home: «التصميم القديم للموقع» opens the classic pages and remembers it', (await iface(page)) === 'site' && (await page.evaluate(() => localStorage.getItem('bx_web_ui_v2'))) === 'site', await iface(page));
+  await page.close();
+});
+
+
+/* ==================================================================== bundle */
+// What only the website has (2026-10-17): the computer's cinema mode, the mouse preview, quick
+// search, shortcuts and new-tab links, the rankings and «ملخصك» pages, «ليه تنزل التطبيق؟»,
+// and the watch party between two browsers (shared Firestore mock with its preconditions).
+scenario('bundle', async (browser) => {
+  const G = 'bundle';
+
+  // ---- computer home: mouse preview, new tabs, quick search, shortcuts
+  let { page, ctx } = await openWeb(browser, { route: '/', phone: false, ctx: { recordOpen: true } });
+  await page.mouse.move(700, 300);
+  await page.mouse.move(720, 320, { steps: 3 });
+  await waitFor(page, () => document.querySelectorAll('main .bx-rail-wrap .bx-poster').length > 3, null, 10000);
+  await page.evaluate(() => document.querySelector('main .bx-rail-wrap')?.scrollIntoView({ block: 'center' }));
+  await sleep(500);
+  const poster = await boxOf(page, 'main .bx-rail-wrap .bx-poster', { scroll: false, index: 1 });
+  await page.mouse.move(poster.x, poster.y, { steps: 6 });
+  const shown = await waitFor(page, () => Boolean(document.querySelector('.bx-hover-card.is-in')), null, 3000);
+  const card = await page.evaluate(() => {
+    const c = document.querySelector('.bx-hover-card');
+    return c
+      ? { title: c.querySelector('h3')?.textContent || '', meta: c.querySelector('.bx-hover-meta')?.textContent || '', btns: [...c.querySelectorAll('button')].map((b) => b.innerText.trim()).filter(Boolean) }
+      : null;
+  });
+  check(G, 'mouse preview: resting on a poster opens its card (real details, play / details / my list)', shown && Boolean(card?.title) && card.btns.includes('شاهد') && card.btns.includes('التفاصيل'), JSON.stringify(card));
+  check(G, '…without invented values', Boolean(card) && !/TV-MA|98%|9\.5|24 دقيقة|4K/.test(card.meta), card?.meta || '');
+  check(G, '…and the rail keeps its arrows while the card covers it', await page.evaluate(() => Boolean(document.querySelector('.bx-rail-wrap.is-previewing'))));
+  await clickEl(page, '.bx-hover-card button', { text: 'التفاصيل', scroll: false });
+  await waitFor(page, () => Boolean(document.querySelector('.bx-details-sheet')), null, 8000);
+  check(G, '…«التفاصيل» opens that title', (await detailsTitle(page)).includes(card?.title || '?'), await detailsTitle(page));
+  await browserBack(page);
+  await sleep(400);
+  const p2 = await boxOf(page, 'main .bx-rail-wrap .bx-poster', { scroll: false, index: 2 });
+  await page.mouse.move(p2.x, p2.y, { steps: 4 });
+  await waitFor(page, () => Boolean(document.querySelector('.bx-hover-card.is-in')), null, 3000);
+  await page.mouse.move(30, 880, { steps: 6 });
+  check(G, '…it closes when the mouse leaves', await waitFor(page, () => !document.querySelector('.bx-hover-card'), null, 2000));
+
+  await page.mouse.click(p2.x, p2.y, { button: 'middle' });
+  await sleep(300);
+  let opened = await page.evaluate(() => window.__bxOpened.slice());
+  check(G, 'middle click on a poster opens its page in a new tab (this page stays)', opened.length === 1 && /^\/show\/aw-/.test(opened[0]) && !(await detailsOpen(page)), opened.join(' '));
+  await page.keyboard.down('Control');
+  await page.mouse.click(p2.x, p2.y);
+  await page.keyboard.up('Control');
+  await sleep(300);
+  opened = await page.evaluate(() => window.__bxOpened.slice());
+  check(G, '…Ctrl + click too', opened.length === 2 && opened[1] === opened[0] && !(await detailsOpen(page)), opened.join(' '));
+  await page.mouse.move(30, 880);
+  await sleep(300);
+
+  await page.keyboard.down('Control');
+  await page.keyboard.press('KeyK');
+  await page.keyboard.up('Control');
+  const pal = await waitFor(page, () => Boolean(document.querySelector('.bx-palette')), null, 3000);
+  const pages = await page.evaluate(() => [...document.querySelectorAll('.bx-palette-row .bx-palette-label')].map((e) => e.textContent.trim()));
+  check(G, 'Ctrl+K opens the quick search with the pages', pal && pages.includes('الترتيب') && pages.includes('جدول الحلقات') && pages.includes('ملخصك'), pages.join(' | '));
+  const focused = await waitFor(page, () => document.activeElement === document.querySelector('.bx-palette-input input'), null, 2000);
+  check(G, '…with the cursor already in its field', focused);
+  if (!focused) await clickEl(page, '.bx-palette-input input', { scroll: false });
+  await page.keyboard.type('Test Anime 7');
+  const res = await waitFor(page, () => Boolean(document.querySelector('.bx-palette-row.is-item')), null, 8000);
+  const first = await page.evaluate(() => document.querySelector('.bx-palette-row.is-item')?.innerText.replace(/\s+/g, ' ') || '');
+  check(G, '…typing searches the catalogue', res && /Test Anime 7/.test(first), first);
+  await page.keyboard.press('Enter');
+  await waitFor(page, () => Boolean(document.querySelector('.bx-details-sheet')), null, 8000);
+  check(G, '…Enter opens the first result', /Test Anime 7/.test(await detailsTitle(page)), await detailsTitle(page));
+  await browserBack(page);
+  await sleep(300);
+  await page.keyboard.press('/');
+  const slashOpen = await waitFor(page, () => Boolean(document.querySelector('.bx-palette')), null, 2000);
+  await page.keyboard.press('Escape');
+  check(G, '«/» opens it too, Esc closes it', slashOpen && (await waitFor(page, () => !document.querySelector('.bx-palette'), null, 2000)));
+  await page.keyboard.press('?');
+  const sc = await waitFor(page, () => /اختصارات الكيبورد والماوس/.test(document.body.innerText), null, 3000);
+  check(G, '«?» lists every shortcut', sc && (await page.evaluate(() => document.querySelectorAll('.bx-shortcuts-group li').length)) >= 15);
+  await page.keyboard.press('Escape');
+  check(G, 'no page errors (preview, new tabs, quick search)', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
+  // ---- cinema mode
+  ({ page, ctx } = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 4')}/1`, phone: false }));
+  await waitFor(page, () => Boolean(document.querySelector('.bx-player-shell video')), null, 15000);
+  await sleep(900);
+  const lay = () =>
+    page.evaluate(() => {
+      const sh = document.querySelector('.bx-player-shell');
+      const v = document.querySelector('.bx-player-shell > .bx-video-box')?.getBoundingClientRect();
+      const sd = document.querySelector('.bx-player-shell > .bx-player-side')?.getBoundingClientRect();
+      return {
+        theatre: Boolean(sh?.classList.contains('is-theatre')),
+        v: v ? { l: Math.round(v.left), r: Math.round(v.right), t: Math.round(v.top), w: Math.round(v.width) } : null,
+        s: sd ? { l: Math.round(sd.left), r: Math.round(sd.right), t: Math.round(sd.top) } : null
+      };
+    });
+  let L = await lay();
+  const beside = (x) => Boolean(x.v && x.s && (x.s.r <= x.v.l + 2 || x.s.l >= x.v.r - 2) && Math.abs(x.s.t - x.v.t) < 40);
+  check(G, 'cinema mode (computer): the video big, the episodes / party column beside it', L.theatre && beside(L) && L.v.w >= 760, JSON.stringify(L));
+  await clickEl(page, '.bx-theatre-btn');
+  await sleep(500);
+  L = await lay();
+  check(G, '…the header button turns it off (column under the video) and remembers it', !L.theatre && Boolean(L.s && L.v && L.s.t > L.v.t + 100) && (await page.evaluate(() => localStorage.getItem('bx_theatre'))) === 'off', JSON.stringify(L));
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press('t');
+  await sleep(500);
+  L = await lay();
+  check(G, '…and T turns it back on', L.theatre && beside(L), JSON.stringify(L));
+  check(G, 'no page errors (cinema mode)', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+  await page.close();
+
+  // ---- rankings
+  ({ page, ctx } = await openWeb(browser, { route: '/rankings', phone: false }));
+  await waitFor(page, () => document.querySelectorAll('.bx-rank-row:not(.is-skeleton)').length >= 5, null, 10000);
+  const rk = await page.evaluate(() => [...document.querySelectorAll('.bx-rank-row')].map((r) => r.innerText.replace(/\s+/g, ' ').trim()));
+  check(G, '/rankings: the app\'s ranking page (AniList average on every row)', rk.length === 6 && rk[0].includes('Test Anime 3') && /\b9\b/.test(rk[0]) && /AniList/.test(rk[0]), rk.slice(0, 2).join(' | '));
+  check(G, '…BLACK X votes only where someone voted', /4 صوت على BLACK X/.test(rk[1] || '') && !/صوت/.test(rk[0] || '') && !/صوت/.test(rk[2] || ''), rk.slice(0, 3).join(' | '));
+  await clickEl(page, '.bx-rank-row', { text: 'Test Anime 5' });
+  await waitFor(page, () => Boolean(document.querySelector('.bx-details-sheet')), null, 8000);
+  check(G, '…a row opens that title on BLACK X', /Test Anime 5/.test(await detailsTitle(page)), await detailsTitle(page));
+  await browserBack(page);
+  await waitFor(page, () => document.querySelectorAll('.bx-rank-row').length >= 5, null, 6000);
+  await clickEl(page, '.bx-rank-row', { text: 'Only On AniList' });
+  await sleep(2000);
+  check(G, '…a title BLACK X does not have opens the search for it, nothing else', !(await detailsOpen(page)) && /\/trending\?q=Only/.test(await here(page)), await here(page));
+  await page.close();
+
+  // ---- «ملخصك»
+  const now = Date.now();
+  const iso = (ms) => new Date(ms).toISOString();
+  const wrappedSeed = {
+    bx_mob_positions_v16: {
+      'aw-test-anime-4:1': { sec: 1400, dur: 1440, at: now - 3 * 3600e3 },
+      'aw-test-anime-4:2': { sec: 700, dur: 1440, at: now - 2 * 3600e3 },
+      'aw-test-anime-9:1': { sec: 1440, dur: 1440, done: true, at: now - 3600e3 }
+    },
+    bx_mob_history: [
+      { slug: 'aw-test-anime-4', objectID: 'Test Anime 4', episode: 2, titleEn: 'Test Anime 4', poster: `${LOCAL}/poster/4.svg`, tags: ['دراما', 'كوميدي'], updatedAt: iso(now - 2 * 3600e3) },
+      { slug: 'aw-test-anime-9', objectID: 'Test Anime 9', episode: 1, titleEn: 'Test Anime 9', poster: `${LOCAL}/poster/1.svg`, tags: ['أكشن', 'مغامرات'], updatedAt: iso(now - 3600e3) }
+    ],
+    bx_mob_favorites: [{ objectID: 'Test Anime 9', slug: 'aw-test-anime-9', titleEn: 'Test Anime 9', poster: `${LOCAL}/poster/1.svg`, createdAt: iso(now - 3600e3) }]
+  };
+  ({ page, ctx } = await openWeb(browser, { route: '/profile/wrapped', phone: false, seed: wrappedSeed }));
+  await waitFor(page, () => Boolean(document.querySelector('.bx-wrapped-grid')), null, 8000);
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('.bx-wrapped-tile')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
+  const tileText = tiles.join(' | ');
+  check(
+    G,
+    '«ملخصك»: the year from what was recorded (59 د, 2 finished, 3 started, 2 titles, 1 added)',
+    /59 د وقت المشاهدة/.test(tileText) && /2 حلقة كمّلتها/.test(tileText) && /3 حلقة بدأتها/.test(tileText) && /2 عمل اتفرجت عليه/.test(tileText) && /0 مانجا/.test(tileText) && /1 اتضاف لقائمتك/.test(tileText),
+    tileText
+  );
+  const top = await page.evaluate(() => document.querySelector('.bx-wrapped-top li')?.innerText.replace(/\s+/g, ' ') || '');
+  check(G, '…most watched: Test Anime 4 (2 episodes)', /Test Anime 4/.test(top) && /2 حلقة/.test(top), top);
+  check(G, '…no level, «TOP 1%» or fixed genre like the classic card had', !/TOP 1%|LVL|Dark Fantasy/.test(await page.evaluate(() => document.querySelector('main')?.innerText || '')));
+  await clickEl(page, '.bx-wrapped-actions button', { text: 'نزّل الصورة' });
+  check(G, '…the image is made and saved', await waitFor(page, () => /اتحفظت الصورة/.test(document.body.innerText), null, 6000));
+  await page.close();
+  ({ page, ctx } = await openWeb(browser, { route: '/profile/wrapped', phone: false, seed: { bx_mob_positions_v16: {}, bx_mob_history: [], bx_mob_favorites: [] } }));
+  await waitFor(page, () => /لسه مفيش مشاهدات/.test(document.querySelector('main')?.innerText || ''), null, 8000);
+  check(G, '…nothing recorded: it says so (no made-up numbers)', /لسه مفيش مشاهدات/.test(await page.evaluate(() => document.querySelector('main')?.innerText || '')));
+  await page.close();
+
+  // ---- the watch party between two browsers
+  const fs = new Map();
+  const fsTimes = new Map();
+  // A second browser (its own storage = another person). Extra browser contexts crash the
+  // single-process test Chromium, so the guest gets its own browser process.
+  const browser2 = await launch();
+  const host = await openWeb(browser, { route: `/watch/${slugOf('Test Anime 6')}/1`, phone: false, ctx: { fs, fsTimes } });
+  await waitFor(host.page, () => Boolean(document.querySelector('.bx-player-shell video')), null, 15000);
+  await sleep(800);
+  await clickEl(host.page, '.bx-party-toggle');
+  await waitFor(host.page, () => Boolean(document.querySelector('.bx-party')), null, 3000);
+  await clickEl(host.page, '.bx-party button', { text: 'افتح غرفة للحلقة دي' });
+  await waitFor(host.page, () => Boolean(document.querySelector('.bx-party-code')), null, 8000);
+  const code = await host.page.evaluate(() => document.querySelector('.bx-party-code')?.textContent.trim() || '');
+  check(G, 'watch party: «افتح غرفة» makes a real room with a code (the host\'s document)', /^BX[A-Z0-9]{6}$/.test(code) && fs.has(`settings/wp_${code.toLowerCase()}`), code);
+  check(G, '…the address bar is the invite link', new RegExp(`[?&]party=${code}`).test(await here(host.page)), await here(host.page));
+  await host.page.evaluate(() => {
+    const v = document.querySelector('.bx-player-shell video');
+    v.currentTime = 300;
+    return v.play().catch(() => {});
+  });
+  await sleep(1200);
+  const guest = await openWeb(browser2, { route: `/watch/${slugOf('Test Anime 6')}/1?party=${code}`, phone: false, ctx: { fs, fsTimes } });
+  const joined = await waitFor(guest.page, () => /الفيديو ماشي مع/.test(document.querySelector('.bx-party')?.innerText || ''), null, 20000);
+  check(G, '…a friend opening the link in another browser joins the room', joined, await guest.page.evaluate(() => document.querySelector('.bx-party')?.innerText.slice(0, 80) || 'no panel'));
+  const synced = await waitFor(
+    guest.page,
+    () => {
+      const v = document.querySelector('.bx-player-shell video');
+      return Boolean(v && v.currentTime > 296 && !v.paused);
+    },
+    null,
+    20000
+  );
+  const gt = await guest.page.evaluate(() => document.querySelector('.bx-player-shell video')?.currentTime || 0);
+  const ht = await host.page.evaluate(() => document.querySelector('.bx-player-shell video')?.currentTime || 0);
+  check(G, '…and the video follows the host (same moment, playing)', synced && Math.abs(gt - ht) < 4, `host ${ht.toFixed(1)} s, guest ${gt.toFixed(1)} s`);
+  await host.page.evaluate(() => document.querySelector('.bx-player-shell video').pause());
+  check(G, '…the host pauses, the guest pauses', await waitFor(guest.page, () => Boolean(document.querySelector('.bx-player-shell video')?.paused), null, 10000));
+  await guest.page.type('.bx-party-form input', 'أهلا من الضيف');
+  await guest.page.keyboard.press('Enter');
+  check(G, '…chat: the guest\'s message reaches the host', await waitFor(host.page, () => /أهلا من الضيف/.test(document.querySelector('.bx-party-chat')?.innerText || ''), null, 10000));
+  await host.page.type('.bx-party-form input', 'رسالة من صاحب الغرفة');
+  await guest.page.type('.bx-party-form input', 'رسالة من الضيف');
+  await Promise.all([host.page.keyboard.press('Enter'), guest.page.keyboard.press('Enter')]);
+  const both = (pg) => waitFor(pg, () => /رسالة من صاحب الغرفة/.test(document.querySelector('.bx-party-chat')?.innerText || '') && /رسالة من الضيف/.test(document.querySelector('.bx-party-chat')?.innerText || ''), null, 12000);
+  check(G, '…two messages sent at the same moment both arrive (no lost message)', (await both(host.page)) && (await both(guest.page)));
+  await clickEl(host.page, '.bx-party-reactions button');
+  check(G, '…reactions float over the video for everyone', await waitFor(guest.page, () => Boolean(document.querySelector('.bx-party-float span')), null, 10000));
+  const members = await host.page.evaluate(() => document.querySelector('.bx-party-members')?.innerText || '');
+  check(G, '…the people list is who joined (two names), no viewer count', (members.match(/ضيف \d{4}/g) || []).length >= 2 && !/\d+\s*\/\s*\d+/.test(members), members);
+  await clickEl(host.page, '.bx-party-leave');
+  check(G, '…the host ends it and the guest is told', await waitFor(guest.page, () => /صاحب الغرفة قفل الحفلة/.test(document.body.innerText), null, 12000));
+  const partyDocs = [...fs.entries()].filter(([k]) => /^settings\/wp_/.test(k));
+  check(G, 'room and chat documents use only the fields the Firestore rules accept', partyDocs.length === 2 && partyDocs.every(([, f]) => Object.keys(f).sort().join() === 'json,updatedAt'), partyDocs.map(([k]) => k).join(' '));
+  check(G, 'no page errors (watch party)', host.ctx.errors.length === 0 && guest.ctx.errors.length === 0, [...host.ctx.errors, ...guest.ctx.errors].slice(0, 3).join(' | '));
+  await host.page.close();
+  await guest.page.close();
+  await browser2.close().catch(() => {});
+
+  // ---- the classic profile's «ملخص 2026»: no more invented numbers
+  ({ page, ctx } = await openWeb(browser, { route: '/profile?tab=wrapped', phone: false, ui: 'site', seed: { blackx_token: 'test-session-token-login-0123456789' } }));
+  await waitFor(page, () => /ملخصك السنوي/.test(document.querySelector('.app-shell')?.innerText || ''), null, 12000);
+  const classic = await page.evaluate(() => document.querySelector('.app-shell')?.innerText || '');
+  check(G, 'classic «ملخص 2026»: no «TOP 1%», levels or fixed genre — a link to «ملخصك»', /ملخصك السنوي/.test(classic) && !/TOP 1%|Dark Fantasy|ZIAD AL SHAFY/.test(classic));
   await page.close();
 });
 

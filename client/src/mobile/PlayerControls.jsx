@@ -22,7 +22,8 @@ const stop = (e) => e.stopPropagation();
  * Computers (mouse + keyboard, the website shows this player there too): moving the mouse
  * shows the controls, a click on the picture plays / pauses, a double click toggles full
  * screen, and the keyboard works like on the big video sites — Space / K play-pause,
- * ← / J and → / L ±10 s, ↑ / ↓ volume, M mute, F full screen, Shift+N next episode.
+ * ← / J and → / L ±10 s, ↑ / ↓ volume, M mute, F full screen, T cinema mode (website, wide
+ * screens), Shift+N next episode.
  */
 export default function PlayerControls({
   videoRef,
@@ -39,7 +40,8 @@ export default function PlayerControls({
   onNext,
   onMore,
   onLock,
-  onUnlock
+  onUnlock,
+  onToggleTheatre
 }) {
   const [media, setMedia] = useState({ cur: 0, dur: 0, paused: true, waiting: false, buffered: 0 });
   const [visible, setVisible] = useState(true);
@@ -122,7 +124,7 @@ export default function PlayerControls({
 
   // Keyboard shortcuts (computers). Ignored while typing in a field or with Ctrl / Alt / Meta.
   const keyActions = useRef({});
-  keyActions.current = { hasNext, onNext, onToggleFullscreen, onSeekBy, locked };
+  keyActions.current = { hasNext, onNext, onToggleFullscreen, onSeekBy, locked, onToggleTheatre };
   useEffect(() => {
     const onKey = (e) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -151,6 +153,7 @@ export default function PlayerControls({
       else if (key === 'm' || key === 'M') v.muted = !v.muted;
       else if (key === 'f' || key === 'F') a.onToggleFullscreen?.();
       else if ((key === 'N' || key === 'n') && e.shiftKey && a.hasNext) a.onNext?.();
+      else if ((key === 't' || key === 'T') && a.onToggleTheatre) a.onToggleTheatre();
       else handled = false;
       if (handled) {
         e.preventDefault();

@@ -10,7 +10,9 @@ test('computer-website paths open the matching app page', () => {
   assert.deepEqual(parseWebLocation('/watch/aw-one-piece/1071'), { kind: 'watch', slug: 'aw-one-piece', ep: 1071 });
   assert.deepEqual(parseWebLocation('/watch/aw-one-piece/0'), { kind: 'watch', slug: 'aw-one-piece', ep: 1 });
   assert.deepEqual(parseWebLocation('/trending', '?q=naruto'), { kind: 'tab', tab: 'catalog', query: 'naruto' });
-  assert.deepEqual(parseWebLocation('/rankings'), { kind: 'tab', tab: 'catalog' });
+  // rankings is a page of the app interface since 2026-10-17 (website only)
+  assert.deepEqual(parseWebLocation('/rankings'), { kind: 'profile', page: 'rankings' });
+  assert.deepEqual(parseWebLocation('/wrapped'), { kind: 'profile', page: 'wrapped' });
   assert.deepEqual(parseWebLocation('/discover'), { kind: 'tab', tab: 'schedule' });
   assert.deepEqual(parseWebLocation('/schedule'), { kind: 'tab', tab: 'schedule' });
   assert.deepEqual(parseWebLocation('/browse'), { kind: 'tab', tab: 'manga' });
@@ -68,4 +70,20 @@ test('round trip: a link made by the app opens the same page again', () => {
     else if (st.tab === 'profile') assert.deepEqual(back, { kind: 'profile', page: st.profilePage });
     else assert.deepEqual(back, { kind: 'tab', tab: st.tab, ...(st.catalogQuery ? { query: st.catalogQuery } : {}) });
   }
+});
+
+test('watch party links: ?party= is read and written back on the player address', () => {
+  assert.deepEqual(parseWebLocation('/watch/aw-one-piece/12', '?party=bx7k2m9q'), { kind: 'watch', slug: 'aw-one-piece', ep: 12, party: 'BX7K2M9Q' });
+  assert.deepEqual(parseWebLocation('/watch/aw-one-piece/12', '?party=bx-7k'), { kind: 'watch', slug: 'aw-one-piece', ep: 12, party: 'BX7K' });
+  // too short / junk: no party
+  assert.deepEqual(parseWebLocation('/watch/aw-one-piece/12', '?party=x'), { kind: 'watch', slug: 'aw-one-piece', ep: 12 });
+  assert.equal(webUrlFor({ show: { slug: 'aw-one-piece' }, episode: 12, party: 'BX7K2M9Q' }), '/watch/aw-one-piece/12?party=BX7K2M9Q');
+  assert.equal(
+    webUrlFor({ show: { slug: 'x1', source: 'aniproject' }, episode: 3, party: 'BX7K2M9Q' }),
+    '/watch/x1/3?source=aniproject&party=BX7K2M9Q'
+  );
+  // the title page never carries the party
+  assert.equal(webUrlFor({ show: { slug: 'aw-one-piece' }, episode: null, party: 'BX7K2M9Q' }), '/show/aw-one-piece');
+  assert.equal(webUrlFor({ tab: 'profile', profilePage: 'rankings' }), '/rankings');
+  assert.equal(webUrlFor({ tab: 'profile', profilePage: 'wrapped' }), '/profile/wrapped');
 });

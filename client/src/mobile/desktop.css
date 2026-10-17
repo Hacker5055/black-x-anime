@@ -321,3 +321,54 @@
     transform: none;
   }
 }
+
+/* ---------- cinema mode (2026-10-17): the video big, its column beside it ---------- */
+/* MobileApkApp adds .is-theatre on the website at ≥ 1200 px (toggle: the header button or T). */
+@media (min-width: 1200px) {
+  .bx-player-shell.is-page.is-theatre {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 440px);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+    column-gap: 22px;
+    padding-inline: 24px !important;
+  }
+  .bx-player-shell.is-theatre > .bx-player-head {
+    grid-column: 1 / -1;
+    margin-inline: -24px;
+  }
+  .bx-player-shell.is-theatre > .bx-video-box {
+    grid-column: 1;
+    grid-row: 2;
+    position: sticky !important;
+    top: 72px;
+    max-width: min(100%, calc((100vh - 110px) * 16 / 9));
+    margin-top: 14px;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .bx-player-shell.is-theatre > .bx-player-side {
+    grid-column: 2;
+    grid-row: 2;
+    position: sticky;
+    top: 72px;
+    max-height: calc(100vh - 86px);
+    overflow-y: auto;
+    padding: 14px 4px 24px !important;
+    overscroll-behavior: contain;
+  }
+  .bx-player-shell.is-theatre .bx-party-chat {
+    max-height: 34vh;
+  }
+  /* the episodes become a grid instead of a sideways strip */
+  .bx-player-shell.is-theatre .bx-ep-strip {
+    flex-wrap: wrap;
+    overflow: visible !important;
+    max-height: 260px;
+    overflow-y: auto !important;
+  }
+  .bx-theatre-btn.is-active {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

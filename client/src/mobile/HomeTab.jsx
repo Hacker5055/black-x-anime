@@ -354,7 +354,7 @@ export default function HomeTab({
         <footer className="bx-home-foot">
           <button type="button" className="bx-classic-link" onClick={onClassicSite}>
             <BxIcon name="monitor" size="1em" />
-            {isRtl ? 'التصميم القديم للموقع (الترتيب، حفلة المشاهدة…)' : 'Classic website (rankings, watch party…)'}
+            {isRtl ? 'التصميم القديم للموقع (الروايات، متجر الإطارات…)' : 'Classic website (novels, frame shop…)'}
           </button>
         </footer>
       ) : null}

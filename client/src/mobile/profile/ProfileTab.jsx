@@ -6,6 +6,9 @@ import ScrollRow from '../ScrollRow.jsx';
 import { coverForMode } from '../dataSaver.js';
 import { POSITIONS_MAX, episodeKey, getPosition, positionEntries, subscribePositions } from '../resumeStore.js';
 import { ChoiceRow, Empty, Field, GoogleMark, Group, Row, Segmented, SegmentedRow, SwitchRow } from './ProfileUi.jsx';
+import RankingsPage from '../RankingsPage.jsx';
+import WrappedPage from '../WrappedPage.jsx';
+import PlatformPerks from '../PlatformPerks.jsx';
 import './profile.css';
 
 /**
@@ -35,7 +38,13 @@ export const PROFILE_PAGES = {
   requests: { ar: 'اطلب أنمي أو مانهوا', en: 'Request a title' },
   backup: { ar: 'نسخة احتياطية', en: 'Backup' },
   signin: { ar: 'تسجيل الدخول', en: 'Sign in' },
-  developer: { ar: 'لوحة المطور', en: 'Developer' }
+  developer: { ar: 'لوحة المطور', en: 'Developer' },
+  // website only (2026-10-17)
+  rankings: { ar: 'الترتيب', en: 'Rankings' },
+  wrapped: { ar: 'ملخصك', en: 'Your year' },
+  apkperks: { ar: 'ليه تنزل التطبيق؟', en: 'Why the app?' },
+  // APK only
+  webperks: { ar: 'على الموقع بس', en: 'Website only' }
 };
 
 export function profilePageTitle(page, isRtl) {
@@ -447,6 +456,13 @@ function RootPage(props) {
         ) : null}
       </Group>
 
+      {app.web ? (
+        <Group title={isRtl ? 'على الموقع' : 'On the website'}>
+          <Row icon="trophy" label={isRtl ? 'الترتيب' : 'Rankings'} sub={isRtl ? 'أعلى الأعمال تقييمًا' : 'The top-rated titles'} onClick={() => onOpenPage('rankings')} />
+          <Row icon="sparkles" label={isRtl ? 'ملخصك' : 'Your year'} sub={isRtl ? 'سنتك على BLACK X بأرقامك الحقيقية' : 'Your year on BLACK X, real numbers'} onClick={() => onOpenPage('wrapped')} />
+        </Group>
+      ) : null}
+
       <Group title={isRtl ? 'التطبيق' : 'App'}>
         <Row
           icon="settings"
@@ -471,19 +487,25 @@ function RootPage(props) {
             <Row
               icon="smartphone"
               label={isRtl ? 'تطبيق الأندرويد' : 'Android app'}
-              sub={isRtl ? 'نزّل BLACK X على موبايلك' : 'Get BLACK X on your phone'}
+              sub={isRtl ? 'ليه تنزله؟ وزرار التحميل' : 'Why get it, and the download'}
               value={`v${app.version}`}
-              href={app.downloadUrl}
-              onClick={app.onUpdate}
+              onClick={() => onOpenPage('apkperks')}
             />
             <Row
               icon="monitor"
               label={isRtl ? 'التصميم القديم للموقع' : 'Classic website'}
-              sub={isRtl ? 'الصفحات القديمة (الترتيب، حفلة المشاهدة…)' : 'The old pages (rankings, watch party…)'}
+              sub={isRtl ? 'الصفحات القديمة (الروايات، متجر الإطارات…)' : 'The old pages (novels, frame shop…)'}
               onClick={app.onComputer}
             />
           </>
         ) : (
+          <>
+          <Row
+            icon="globe"
+            label={isRtl ? 'على الموقع بس' : 'Website only'}
+            sub={isRtl ? 'حفلة المشاهدة باللينك، وضع السينما، الترتيب…' : 'Party links, cinema mode, rankings…'}
+            onClick={() => onOpenPage('webperks')}
+          />
           <Row
             icon="smartphone"
             label={isRtl ? 'تحديث التطبيق' : 'App update'}
@@ -493,6 +515,7 @@ function RootPage(props) {
             href={app.downloadUrl}
             onClick={app.onUpdate}
           />
+          </>
         )}
       </Group>
 
@@ -927,8 +950,8 @@ function SettingsPage({ isRtl, settings, onOpenPage }) {
         title={isRtl ? 'المشاهدة والبيانات' : 'Playback & data'}
         footer={
           isRtl
-            ? `«تلقائي» بيمشي مع توفير البيانات في أندرويد ومع النت البطيء.${settings.dataSaverActive ? ' التوفير شغال دلوقتي.' : ''}`
-            : `“Auto” follows Android's Data Saver and slow connections.${settings.dataSaverActive ? ' Data saver is active now.' : ''}`
+            ? `«تلقائي» بيمشي مع توفير البيانات في أندرويد ومع النت البطيء، و«على الداتا» كمان لما تكون على باقة الموبايل.${settings.dataSaverActive ? ' التوفير شغال دلوقتي.' : ''}`
+            : `“Auto” follows Android's Data Saver and slow connections; “Mobile data” also turns it on over mobile data.${settings.dataSaverActive ? ' Data saver is active now.' : ''}`
         }
       >
         <SegmentedRow
@@ -938,6 +961,7 @@ function SettingsPage({ isRtl, settings, onOpenPage }) {
           ariaLabel={isRtl ? 'توفير البيانات' : 'Data saver'}
           options={[
             ['auto', isRtl ? 'تلقائي' : 'Auto'],
+            ['cellular', isRtl ? 'على الداتا' : 'Mobile data'],
             ['on', isRtl ? 'شغال' : 'On'],
             ['off', isRtl ? 'مقفول' : 'Off']
           ]}
@@ -1153,6 +1177,29 @@ export default function ProfileTab(props) {
       break;
     case 'developer':
       body = devPanel || null;
+      break;
+    case 'rankings':
+      body = <RankingsPage isRtl={props.isRtl} dataSaver={props.dataSaver} loadRankings={props.extras?.loadRankings} onOpenRanked={props.extras?.onOpenRanked} />;
+      break;
+    case 'wrapped':
+      body = (
+        <WrappedPage
+          isRtl={props.isRtl}
+          user={props.account?.user}
+          watchHistory={props.library?.history}
+          mangaHistory={props.library?.mangaHistory}
+          favorites={props.library?.favorites}
+          dataSaver={props.dataSaver}
+          onOpenTitle={props.extras?.onOpenWrappedTitle}
+          onToast={props.extras?.onToast}
+        />
+      );
+      break;
+    case 'apkperks':
+      body = <PlatformPerks variant="apk" isRtl={props.isRtl} apkUrl={props.app?.downloadUrl} onToast={props.extras?.onToast} />;
+      break;
+    case 'webperks':
+      body = <PlatformPerks variant="web" isRtl={props.isRtl} onToast={props.extras?.onToast} />;
       break;
     default:
       body = <RootPage {...props} />;

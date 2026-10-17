@@ -31,7 +31,7 @@ import {
   signOut as apkSignOut,
   updateAccountProfile
 } from './apkApi.js';
-import { animeSlugOf, episodeKey, flushPositions, formatClock, getPosition, mergePositions, positionsForSync, savePosition } from './resumeStore.js';
+import { animeSlugOf, episodeKey, flushPositions, formatClock, getPosition, mergePositions, positionEntries, positionsForSync, savePosition } from './resumeStore.js';
 import { checkFollowedTitles, lastAlertRun } from './episodeAlerts.js';
 import { attachHls, needsHlsJs } from './hlsPlayer.js';
 import { haptic, hapticsEnabled, setHapticsEnabled } from './haptics.js';
@@ -69,6 +69,14 @@ import { navigateStack, navigateWithMotion, pageEnterClass } from './tabMotion.j
 import { todayScheduleId } from './scheduleDays.js';
 import { airingFor, buildScheduleDay, fetchAiringTimes } from './airingSchedule.js';
 import { NextEpisodeCountdown, SkipSegmentOverlay } from './PlayerExtras.jsx';
+import useWatchParty from './useWatchParty.js';
+import PartyPanel, { PartyReactions } from './PartyPanel.jsx';
+import { createPartyTransport, partyDisplayName, partyMemberId } from './watchParty.js';
+import HoverPreview from './HoverPreview.jsx';
+import CommandPalette from './CommandPalette.jsx';
+import ShortcutsSheet from './ShortcutsSheet.jsx';
+import { openInNewTab, posterHref, setPosterHrefBuilder } from './posterLinks.js';
+import { buildAlarmList, nativeAlarmsSupported, scheduleNativeAlarms } from './nativeAlarms.js';
 import { SPLASH_SOUND_KEY } from './splashPrefs.js';
 import {
   WEB_APK_PATH,
@@ -651,10 +659,7 @@ export default function MobileApkApp() {
 
   // ==================== v5.0 SOVEREIGN ENGINE STATES ====================
   // 1. Live Cloud Watch Party & Timed Scene Comments (Danmaku)
-  const [watchPartyRoom, setWatchPartyRoom] = useState(null); // { roomCode, isHost, animeId, animeTitle, epDocId, epName, currentTime, paused, chat: [] }
-  const [watchPartyModalOpen, setWatchPartyModalOpen] = useState(false);
-  const [watchPartyJoinInput, setWatchPartyJoinInput] = useState('');
-  const [watchPartyChatInput, setWatchPartyChatInput] = useState('');
+  const [partyPanelOpen, setPartyPanelOpen] = useState(false);
   const [timedComments, setTimedComments] = useState([]);
   const [timedCommentsEnabled, setTimedCommentsEnabled] = useState(true);
   const [newTimedCommentText, setNewTimedCommentText] = useState('');
@@ -1559,164 +1564,8 @@ export default function MobileApkApp() {
 
   // ==================== v5.0 SOVEREIGN CONTROLLERS ====================
 
-  // 1. Live Cloud Watch Party (Create Room, Join Room, Sync Playback, & Live Room Chat)
-  const pushWatchPartyState = useCallback(async (roomObj) => {
-    if (!roomObj?.roomCode) return;
-    try {
-      await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', roomObj.roomCode)}?key=${BX_KEY}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            json: { stringValue: JSON.stringify(roomObj) },
-            updatedAt: { stringValue: new Date().toISOString() }
-          }
-        })
-      });
-    } catch (_) {}
-  }, []);
-
-  const handleCreateWatchParty = useCallback(async () => {
-    if (!selectedAnime || !activeEpisode) return;
-    const code = `BX-${Math.floor(1000 + Math.random() * 9000)}`;
-    const curSec = Math.floor(videoRef.current?.currentTime || 0);
-    const isPaused = Boolean(videoRef.current?.paused);
-    const roomObj = {
-      roomCode: code,
-      hostName: user?.displayName || 'مضيف الغرفة',
-      animeId: selectedAnime.objectID,
-      animeTitle: selectedAnime.titleEn,
-      epDocId: activeEpisode.docId,
-      epName: activeEpisode.name,
-      currentTime: curSec,
-      paused: isPaused,
-      updatedAt: Date.now(),
-      chat: [
-        {
-          id: `sys_${Date.now()}`,
-          author: 'BLACK X',
-          text: `الغرفة ${code} جاهزة — ابعت الكود لصحابك وهتتفرجوا في نفس اللحظة`,
-          time: 'الآن'
-        }
-      ]
-    };
-    setWatchPartyRoom({ ...roomObj, isHost: true });
-    await pushWatchPartyState(roomObj);
-    showToast(`الغرفة جاهزة — الكود: ${code}`, 'popcorn');
-  }, [selectedAnime, activeEpisode, user, pushWatchPartyState, showToast]);
-
-  const handleJoinWatchParty = useCallback(async () => {
-    const cleanCode = String(watchPartyJoinInput || '').trim().toUpperCase();
-    if (!cleanCode) {
-      showToast(lang === 'ar' ? 'اكتب كود الغرفة الأول (زي BX-4821)' : 'Enter room code first');
-      return;
-    }
-    try {
-      const res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', cleanCode)}?key=${BX_KEY}`);
-      if (!res.ok) {
-        showToast(lang === 'ar' ? 'مفيش غرفة بالكود ده' : 'Room not found', 'x-circle');
-        return;
-      }
-      const doc = await res.json();
-      const raw = doc?.fields?.json?.stringValue;
-      if (!raw) return;
-      const remoteRoom = JSON.parse(raw);
-      const joinMsg = {
-        id: `join_${Date.now()}`,
-        author: user?.displayName || 'عضو BLACK X',
-        text: 'انضم إلى غرفة المشاهدة الجماعية!',
-        time: 'الآن'
-      };
-      const updatedRoom = {
-        ...remoteRoom,
-        chat: [...(remoteRoom.chat || []), joinMsg].slice(-40)
-      };
-      setWatchPartyRoom({ ...updatedRoom, isHost: false });
-      setWatchPartyJoinInput('');
-      await pushWatchPartyState(updatedRoom);
-      if (videoRef.current && typeof remoteRoom.currentTime === 'number') {
-        videoRef.current.currentTime = remoteRoom.currentTime;
-      }
-      showToast(`دخلت غرفة ${cleanCode} واتزامن الوقت`, 'popcorn');
-    } catch (_) {
-      showToast(lang === 'ar' ? 'ماقدرناش ندخل الغرفة' : 'Failed to join room');
-    }
-  }, [watchPartyJoinInput, user, pushWatchPartyState, showToast, lang]);
-
-  const handleSendWatchPartyChat = useCallback(
-    async (e) => {
-      if (e?.preventDefault) e.preventDefault();
-      if (!watchPartyRoom || !watchPartyChatInput.trim()) return;
-      const msg = {
-        id: `msg_${Date.now()}`,
-        author: user?.displayName || 'أوتاكو BLACK X',
-        text: watchPartyChatInput.trim(),
-        time: 'الآن'
-      };
-      const nextRoom = {
-        ...watchPartyRoom,
-        currentTime: Math.floor(videoRef.current?.currentTime || watchPartyRoom.currentTime || 0),
-        paused: Boolean(videoRef.current?.paused),
-        updatedAt: Date.now(),
-        chat: [...(watchPartyRoom.chat || []), msg].slice(-40)
-      };
-      setWatchPartyRoom(nextRoom);
-      setWatchPartyChatInput('');
-      await pushWatchPartyState(nextRoom);
-    },
-    [watchPartyRoom, watchPartyChatInput, user, pushWatchPartyState]
-  );
-
-  // Poll Watch Party Room every 2.5s to keep playback and chat synchronized
-  useEffect(() => {
-    if (!watchPartyRoom?.roomCode) return;
-    const timer = setInterval(async () => {
-      try {
-        if (watchPartyRoom.isHost && videoRef.current) {
-          const cur = Math.floor(videoRef.current.currentTime || 0);
-          const isPaused = Boolean(videoRef.current.paused);
-          const res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', watchPartyRoom.roomCode)}?key=${BX_KEY}`);
-          let remoteChat = watchPartyRoom.chat || [];
-          if (res.ok) {
-            const doc = await res.json();
-            const raw = doc?.fields?.json?.stringValue;
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed.chat)) remoteChat = parsed.chat;
-            }
-          }
-          const updated = {
-            ...watchPartyRoom,
-            currentTime: cur,
-            paused: isPaused,
-            updatedAt: Date.now(),
-            chat: remoteChat
-          };
-          setWatchPartyRoom(updated);
-          await pushWatchPartyState(updated);
-        } else {
-          const res = await fetch(`${BX_SETTINGS_BASE}/${cleanCloudKey('wp', watchPartyRoom.roomCode)}?key=${BX_KEY}`);
-          if (!res.ok) return;
-          const doc = await res.json();
-          const raw = doc?.fields?.json?.stringValue;
-          if (!raw) return;
-          const remote = JSON.parse(raw);
-          setWatchPartyRoom({ ...remote, isHost: false });
-          if (videoRef.current && typeof remote.currentTime === 'number') {
-            if (Math.abs((videoRef.current.currentTime || 0) - remote.currentTime) > 4) {
-              videoRef.current.currentTime = remote.currentTime;
-            }
-            if (remote.paused && !videoRef.current.paused) {
-              videoRef.current.pause();
-            } else if (!remote.paused && videoRef.current.paused) {
-              videoRef.current.play().catch(() => {});
-            }
-          }
-        }
-      } catch (_) {}
-    }, 2600);
-    return () => clearInterval(timer);
-  }, [watchPartyRoom, pushWatchPartyState]);
+  // 1. Watch party: useWatchParty.js / watchParty.js (v18 — host-only room state, chat with
+  //    preconditions, the guest opens the host's episode). The old single-document party lived here.
 
   // 2. Timed Scene Comments / Danmaku (التعليقات الزمنية التفاعلية على مشاهد الحلقة)
   useEffect(() => {
@@ -4186,6 +4035,252 @@ export default function MobileApkApp() {
   const visibleMangaHistory = useMemo(() => mangaHistory.filter((m) => !isHiddenManga(m)), [mangaHistory]);
   const watchedIds = useMemo(() => watchHistory.map((h) => h.objectID).filter(Boolean), [watchHistory]);
 
+  // ==================== TITLE LOOKUPS (links, watch party, rankings, «ملخصك») ====================
+  // A website slug → the app's record: the catalogue (Algolia) record for BLACK X 1 titles, so
+  // lists / history / positions use the same objectID as in-app opens; else the server's show.
+  const resolveAnimeBySlug = useCallback(async (slug, sourceHint = '') => {
+    const source = sourceHint === 'aniproject' ? 'aniproject' : inferAnimeSource({ slug });
+    let show = null;
+    try {
+      const data = await bxRequestJson(`/api/stream/show/${encodeURIComponent(slug)}?source=${encodeURIComponent(source)}`, { timeoutMs: 20000 });
+      show = data?.show || null;
+    } catch (_) {
+      show = null;
+    }
+    let anime = null;
+    if (source === 'witanime') {
+      const title = show ? show.titleRomaji || show.title || show.titleEn : slug.slice(3).replace(/-/g, ' ');
+      const pick = (res) => (res?.hits || []).find((h) => witcherSlug(h.objectID) === slug) || null;
+      const hit =
+        pick(await queryAlgolia('series_fav_count_desc', { query: title, hitsPerPage: 20 }).catch(() => null)) ||
+        // Not in the filtered index: a hidden title (its tags make the details refuse it below).
+        pick(await queryAlgoliaRaw('series_fav_count_desc', { query: title, hitsPerPage: 20 }).catch(() => null));
+      if (hit) anime = formatAnimeHit(hit);
+    }
+    if (!anime && show) {
+      anime = mapShowToMobileAnime({ ...show, slug: show.slug || slug, source });
+      if (anime && (isHiddenAnime(show) || show.bxHidden)) anime.bxHidden = true;
+    }
+    return anime;
+  }, []);
+
+  /** Opens the title of a slug (and plays episode `ep`); false when it cannot be shown. */
+  const openAnimeBySlug = useCallback(
+    async (slug, sourceHint = '', ep = null) => {
+      const anime = await resolveAnimeBySlug(slug, sourceHint);
+      if (!anime) {
+        showToast(isRtl ? 'ماقدرناش نلاقي العمل ده — جرّب البحث' : 'We could not find that title — try searching', 'search');
+        return false;
+      }
+      if (anime.bxHidden || isHiddenAnime(anime)) {
+        showToastMessage(hiddenTitleMessage(), 'info');
+        return false;
+      }
+      handleOpenAnimeBase(anime, ep);
+      return true;
+    },
+    [resolveAnimeBySlug, handleOpenAnimeBase, showToast, isRtl]
+  );
+
+  // ==================== WATCH PARTY (useWatchParty.js, PartyPanel.jsx) ====================
+  const partyTransport = useMemo(() => createPartyTransport({ base: BX_SETTINGS_BASE, key: BX_KEY }), []);
+  const partyMember = useMemo(() => {
+    const uid = partyMemberId();
+    return { uid, name: partyDisplayName(user, uid, isRtl) };
+  }, [user, isRtl]);
+  const partyCurrent = useMemo(() => {
+    if (!selectedAnime || !activeEpisode) return null;
+    const slug = animeSlugOf(selectedAnime);
+    if (!slug) return null;
+    return {
+      slug,
+      source: selectedAnime.source || '',
+      objectID: selectedAnime.objectID || '',
+      title: selectedAnime.titleEn || selectedAnime.titleRomaji || '',
+      poster: selectedAnime.poster || '',
+      episode: Number(activeEpisode.number ?? activeEpisode.episode) || 1,
+      epName: activeEpisode.name || ''
+    };
+  }, [selectedAnime, activeEpisode]);
+  // A guest follows the host: the same title → switch episode, else open the host's title.
+  const openPartyContent = useCallback(
+    (room) => {
+      if (!room) return;
+      setPartyPanelOpen(true);
+      if (selectedAnime && animeSlugOf(selectedAnime) === room.slug) {
+        const ep = animeEpisodes.find((e) => Number(e.number) === Number(room.episode));
+        if (ep) {
+          setPlayerMinimized(false);
+          handlePlayEpisode(selectedAnime, ep);
+          return;
+        }
+      }
+      openAnimeBySlug(room.slug, room.source, room.episode);
+    },
+    [selectedAnime, animeEpisodes, handlePlayEpisode, openAnimeBySlug]
+  );
+  const party = useWatchParty({
+    transport: partyTransport,
+    videoRef,
+    member: partyMember,
+    current: partyCurrent,
+    onNavigate: openPartyContent,
+    notify: showToast,
+    isRtl,
+    isWeb
+  });
+  const partyJoinRef = useRef(party.join);
+  partyJoinRef.current = party.join;
+
+  // ==================== COMPUTER EXTRAS (website): cinema mode, preview, quick search, new tabs ====================
+  const [theatrePref, setTheatrePref] = useState(() => {
+    try {
+      return localStorage.getItem('bx_theatre') !== 'off';
+    } catch (_) {
+      return true;
+    }
+  });
+  const [wideScreen, setWideScreen] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(min-width: 1200px)').matches));
+  useEffect(() => {
+    const mq = typeof window !== 'undefined' ? window.matchMedia?.('(min-width: 1200px)') : null;
+    if (!mq) return undefined;
+    const on = () => setWideScreen(mq.matches);
+    on();
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
+  const theatreAvailable = isWeb && wideScreen;
+  const theatreOn = theatreAvailable && theatrePref;
+  const toggleTheatre = useCallback(() => {
+    setTheatrePref((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('bx_theatre', next ? 'on' : 'off');
+      } catch (_) {}
+      return next;
+    });
+  }, []);
+
+  const isFavoriteItem = useCallback(
+    (item) => Boolean(item) && favorites.some((f) => f.objectID === item.objectID || (item.slug && f.slug === item.slug)),
+    [favorites]
+  );
+  // «شاهد» on the preview: the last episode with a saved position, else episode 1.
+  const resumeEpisodeFor = useCallback((item) => {
+    const slug = animeSlugOf(item);
+    if (!slug) return null;
+    let best = null;
+    for (const [key, v] of positionEntries()) {
+      if (!String(key).startsWith(`${slug}:`)) continue;
+      const ep = Number(String(key).slice(slug.length + 1));
+      if (ep > 0 && (!best || (Number(v?.at) || 0) > best.at)) best = { ep, at: Number(v?.at) || 0 };
+    }
+    return best ? best.ep : null;
+  }, []);
+  const playFromPreview = useCallback((item) => handleOpenAnime(item, resumeEpisodeFor(item) || 1), [handleOpenAnime, resumeEpisodeFor]);
+
+  const searchForPalette = useCallback(async (q) => {
+    const res = await queryAlgolia('series_fav_count_desc', { query: q, hitsPerPage: 8 });
+    return (res?.hits || []).map(formatAnimeHit).filter(Boolean);
+  }, []);
+  const appSheetRef = useRef(appSheet);
+  appSheetRef.current = appSheet;
+  useEffect(() => {
+    if (!isWeb) return undefined;
+    const onKey = (e) => {
+      const t = e.target;
+      const tag = t && t.tagName ? t.tagName.toLowerCase() : '';
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(t && t.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setAppSheet((cur) => (cur === 'palette' ? null : 'palette'));
+        return;
+      }
+      if (e.key === 'Escape' && (appSheetRef.current === 'shortcuts' || appSheetRef.current === 'palette')) {
+        setAppSheet(null);
+        return;
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        setAppSheet('palette');
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setAppSheet((cur) => (cur === 'shortcuts' ? null : 'shortcuts'));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isWeb]);
+
+  // Middle click / Ctrl + click on a poster opens its page in a new tab (PosterCard.jsx).
+  useEffect(() => {
+    if (!isWeb) return undefined;
+    setPosterHrefBuilder((item) => {
+      if (item?.bxId) {
+        const params = new URLSearchParams({ manga: String(item.bxId) });
+        if (item.bxServer) params.set('server', String(item.bxServer));
+        return `/browse?${params.toString()}`;
+      }
+      const slug = animeSlugOf(item);
+      return slug ? `/show/${encodeURIComponent(slug)}${item?.source === 'aniproject' ? '?source=aniproject' : ''}` : '';
+    });
+    return () => setPosterHrefBuilder(null);
+  }, [isWeb]);
+
+  // ==================== RANKINGS / «ملخصك» (website profile pages) ====================
+  const loadRankings = useCallback(async () => {
+    const data = await bxRequestJson('/api/anime/rankings', { timeoutMs: 20000 });
+    return (Array.isArray(data?.anime) ? data.anime : []).filter((m) => !isHiddenAnime({ tags: m.genres || [] }));
+  }, []);
+  // An AniList title → its catalogue record: the same MAL id, else the exact same name.
+  const openRankedTitle = useCallback(
+    async (media) => {
+      const names = [media.titleRomaji, media.titleEnglish].filter(Boolean);
+      for (const q of names) {
+        const res = await queryAlgolia('series_fav_count_desc', { query: q, hitsPerPage: 10 }).catch(() => null);
+        const hits = res?.hits || [];
+        const lower = q.toLowerCase();
+        const hit =
+          (media.malId ? hits.find((h) => String(h.mal_id) === String(media.malId)) : null) ||
+          hits.find((h) => [h.name, h.details?.english_title].some((n) => n && String(n).toLowerCase() === lower));
+        if (hit) {
+          handleOpenAnime(formatAnimeHit(hit));
+          return;
+        }
+      }
+      showToast(isRtl ? 'مش لاقيين العمل ده على BLACK X — دوّرنا عليه في البحث' : 'Not found on BLACK X — searching for it', 'search');
+      setSearchQuery(names[0] || '');
+      goToTab('catalog');
+    },
+    [handleOpenAnime, showToast, isRtl] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const openWrappedTitle = useCallback(
+    async (t) => {
+      if (t?.objectID) {
+        const hit = await fetchAnimeRecord(t.objectID).catch(() => null);
+        if (hit && !isHiddenAnime(hit)) {
+          handleOpenAnime(formatAnimeHit(hit));
+          return;
+        }
+      }
+      if (t?.slug) openAnimeBySlug(t.slug);
+    },
+    [handleOpenAnime, openAnimeBySlug]
+  );
+
+  // ==================== APK: air-time reminders while the app is closed (nativeAlarms.js) ====================
+  useEffect(() => {
+    if (isWeb || !nativeAlarmsSupported()) return undefined;
+    // No air times yet (offline, still loading) while titles are followed: keep the reminders
+    // the phone already has instead of replacing them with an empty list.
+    if (followedForAlerts.length && !(airingMap && airingMap.size)) return undefined;
+    const t = setTimeout(() => {
+      scheduleNativeAlarms(buildAlarmList({ followed: followedForAlerts, airingMap, isRtl }));
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [isWeb, followedForAlerts, airingMap, isRtl]);
+
   // ==================== PHONE WEBSITE: address bar, back button, links (webRoutes.js / webHistory.js) ====================
   const webUrl = useMemo(() => {
     if (!isWeb) return '';
@@ -4199,9 +4294,10 @@ export default function MobileApkApp() {
       show: showSlug ? { slug: showSlug, source: selectedAnime?.source || '' } : null,
       episode: playerOpen && showSlug ? Number(activeEpisode.number ?? activeEpisode.episode) || null : null,
       manga: mangaId ? { id: mangaId, server: mangaActiveServer || selectedManga.bxServer || '' } : null,
-      chapter: mangaId && activeMangaChapter ? activeMangaChapter.chapterId || activeMangaChapter.id || null : null
+      chapter: mangaId && activeMangaChapter ? activeMangaChapter.chapterId || activeMangaChapter.id || null : null,
+      party: playerOpen && party.code ? party.code : ''
     });
-  }, [isWeb, activeTab, searchQuery, profileStack, selectedAnime, activeEpisode, playerMinimized, selectedManga, mangaActiveServer, activeMangaChapter]);
+  }, [isWeb, activeTab, searchQuery, profileStack, selectedAnime, activeEpisode, playerMinimized, selectedManga, mangaActiveServer, activeMangaChapter, party.code]);
   // Same rule as the APK's history push: anything the back button can close.
   const webDepth =
     commandMenuOpen ||
@@ -4249,31 +4345,19 @@ export default function MobileApkApp() {
     const start = webStart;
     const notFound = () =>
       showToast(lang === 'ar' ? 'ماقدرناش نلاقي الصفحة دي — جرّب البحث' : 'We could not find that page — try searching', 'search');
-    if (start.kind === 'show' || start.kind === 'watch') {
+    if (start.kind === 'watch' && start.party) {
+      // An invite link: the room decides the title and episode (useWatchParty opens them).
+      partyJoinRef.current(start.party).then((ok) => {
+        if (ok) return;
+        showToast(
+          lang === 'ar' ? 'الحفلة دي خلصت أو مش موجودة — فتحنالك الحلقة' : 'That party is over or does not exist — here is the episode',
+          'popcorn'
+        );
+        openAnimeBySlug(start.slug, start.source, start.ep);
+      });
+    } else if (start.kind === 'show' || start.kind === 'watch') {
       (async () => {
-        const source = start.source === 'aniproject' ? 'aniproject' : inferAnimeSource({ slug: start.slug });
-        let show = null;
-        try {
-          const data = await bxRequestJson(`/api/stream/show/${encodeURIComponent(start.slug)}?source=${encodeURIComponent(source)}`, { timeoutMs: 20000 });
-          show = data?.show || null;
-        } catch (_) {
-          show = null;
-        }
-        let anime = null;
-        if (source === 'witanime') {
-          // Prefer the catalogue record: lists, history and favourites are keyed on its objectID.
-          const title = show ? show.titleRomaji || show.title || show.titleEn : start.slug.slice(3).replace(/-/g, ' ');
-          const pick = (res) => (res?.hits || []).find((h) => witcherSlug(h.objectID) === start.slug) || null;
-          const hit =
-            pick(await queryAlgolia('series_fav_count_desc', { query: title, hitsPerPage: 20 }).catch(() => null)) ||
-            // Not in the filtered index: a hidden title (its tags make the details refuse it below).
-            pick(await queryAlgoliaRaw('series_fav_count_desc', { query: title, hitsPerPage: 20 }).catch(() => null));
-          if (hit) anime = formatAnimeHit(hit);
-        }
-        if (!anime && show) {
-          anime = mapShowToMobileAnime({ ...show, slug: show.slug || start.slug, source });
-          if (anime && (isHiddenAnime(show) || show.bxHidden)) anime.bxHidden = true;
-        }
+        const anime = await resolveAnimeBySlug(start.slug, start.source);
         if (!anime) {
           notFound();
           return;
@@ -4303,7 +4387,7 @@ export default function MobileApkApp() {
         handleOpenManga(hit, start.server || '');
       })();
     }
-  }, [webStart, handleOpenAnimeBase, handleOpenManga, showToast, lang]);
+  }, [webStart, handleOpenAnimeBase, handleOpenManga, showToast, lang, resolveAnimeBySlug, openAnimeBySlug]);
   // …and the chapter, once the manga's chapters are in.
   useEffect(() => {
     const want = webPendingChapterRef.current;
@@ -5292,6 +5376,35 @@ export default function MobileApkApp() {
           handleOpenAnime(item);
         }}
       />
+      {isWeb ? (
+        <>
+          <CommandPalette
+            open={appSheet === 'palette'}
+            onClose={() => setAppSheet(null)}
+            isRtl={isRtl}
+            dataSaver={dataSaver}
+            search={searchForPalette}
+            onOpenItem={(item) => handleOpenAnime(item)}
+            onOpenItemNewTab={(item) => openInNewTab(posterHref(item))}
+            pages={[
+              { id: 'home', icon: 'home', label: isRtl ? 'الرئيسية' : 'Home', keywords: 'home', run: () => goToTab('home') },
+              { id: 'catalog', icon: 'search', label: isRtl ? 'البحث' : 'Search', keywords: 'search catalog', run: () => goToTab('catalog') },
+              { id: 'schedule', icon: 'calendar', label: isRtl ? 'جدول الحلقات' : 'Schedule', keywords: 'schedule', run: () => goToTab('schedule') },
+              { id: 'manga', icon: 'book', label: isRtl ? 'المانجا' : 'Manga', keywords: 'manga manhwa', run: () => goToTab('manga') },
+              { id: 'community', icon: 'users', label: isRtl ? 'المجتمع' : 'Community', keywords: 'community', run: () => goToTab('community') },
+              { id: 'mylist', icon: 'bookmark', label: isRtl ? 'قائمتي' : 'My list', keywords: 'list favorites', run: () => goToTab('profile', () => resetProfileStack(['library'])) },
+              { id: 'rankings', icon: 'trophy', label: isRtl ? 'الترتيب' : 'Rankings', keywords: 'rankings top', run: () => goToTab('profile', () => resetProfileStack(['rankings'])) },
+              { id: 'wrapped', icon: 'sparkles', label: isRtl ? 'ملخصك' : 'Your year', keywords: 'wrapped year', run: () => goToTab('profile', () => resetProfileStack(['wrapped'])) },
+              { id: 'alerts', icon: 'bell', label: isRtl ? 'تنبيهات الحلقات' : 'Episode alerts', keywords: 'alerts', run: () => setAppSheet('alerts') },
+              { id: 'shortcuts', icon: 'keyboard', label: isRtl ? 'اختصارات الكيبورد' : 'Keyboard shortcuts', keywords: 'shortcuts keys', hint: '?', run: () => setAppSheet('shortcuts') },
+              { id: 'profile', icon: 'user', label: isRtl ? 'حسابي' : 'Profile', keywords: 'profile account', run: () => goToTab('profile') },
+              { id: 'classic', icon: 'monitor', label: isRtl ? 'التصميم القديم للموقع' : 'Classic website', keywords: 'classic old', run: () => openComputerVersion() }
+            ]}
+          />
+          <ShortcutsSheet open={appSheet === 'shortcuts'} onClose={() => setAppSheet(null)} isRtl={isRtl} />
+          <HoverPreview isRtl={isRtl} dataSaver={dataSaver} isFavorite={isFavoriteItem} onPlay={playFromPreview} onToggleFavorite={toggleFavorite} />
+        </>
+      ) : null}
 
       {/* Top bar: only the user's picture + the access menu (logo / version / shortcuts live in the menu now) */}
       {!selectedAnime && !activeMangaChapter && (
@@ -5725,6 +5838,7 @@ export default function MobileApkApp() {
           isRtl={isRtl}
           lang={lang}
           dataSaver={dataSaver}
+          extras={{ loadRankings, onOpenRanked: openRankedTitle, onOpenWrappedTitle: openWrappedTitle, onToast: showToast }}
           onOpenPage={openProfilePage}
           onBack={closeProfilePage}
           onSync={handleManualSync}
@@ -5877,7 +5991,9 @@ export default function MobileApkApp() {
           {activeEpisode && (
             <div
               ref={playerPageRef}
-              className={`bx-player-shell ${videoFullscreen ? 'is-full' : playerMinimized ? 'is-mini' : 'is-page'}`}
+              className={`bx-player-shell ${videoFullscreen ? 'is-full' : playerMinimized ? 'is-mini' : 'is-page'}${
+                theatreOn && !videoFullscreen && !playerMinimized ? ' is-theatre' : ''
+              }`}
               style={
                 videoFullscreen
                   ? {
@@ -5921,6 +6037,7 @@ export default function MobileApkApp() {
               {/* Sticky Top Navigation Header for Dedicated Standalone Video Player Page */}
               {!videoFullscreen && !playerMinimized && (
                 <div
+                  className="bx-player-head"
                   style={{
                     position: 'sticky',
                     top: 0,
@@ -5963,6 +6080,36 @@ export default function MobileApkApp() {
                     </div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>{activeEpisode.name}</div>
                   </div>
+
+                  {sleepTimerMode !== 'off' ? (
+                    <button
+                      type="button"
+                      className="bx-chip bx-sleep-chip"
+                      aria-label={isRtl ? 'إلغاء مؤقت النوم' : 'Cancel the sleep timer'}
+                      title={isRtl ? 'إلغاء مؤقت النوم' : 'Cancel the sleep timer'}
+                      onClick={() => {
+                        setSleepTimerMode('off');
+                        setSleepTimerRemainingSec(0);
+                        showToast(isRtl ? 'اتلغى مؤقت النوم' : 'Sleep timer cancelled', 'moon');
+                      }}
+                    >
+                      <BxIcon name="moon" size="1em" />
+                      {sleepTimerMode === 'end_of_ep' ? (isRtl ? 'آخر الحلقة' : 'End of episode') : formatClock(sleepTimerRemainingSec)}
+                    </button>
+                  ) : null}
+
+                  {theatreAvailable ? (
+                    <button
+                      type="button"
+                      className={`bx-icon-btn bx-icon-btn-sm bx-theatre-btn${theatreOn ? ' is-active' : ''}`}
+                      aria-pressed={theatreOn}
+                      aria-label={isRtl ? 'وضع السينما (T)' : 'Cinema mode (T)'}
+                      title={isRtl ? 'وضع السينما (T)' : 'Cinema mode (T)'}
+                      onClick={toggleTheatre}
+                    >
+                      <BxIcon name="cinema" />
+                    </button>
+                  ) : null}
 
                   <button
                     type="button"
@@ -6124,6 +6271,7 @@ export default function MobileApkApp() {
                         })()}
                         onSeekBy={handleVideoDoubleTap}
                         onToggleFullscreen={() => setVideoFullscreen((v) => !v)}
+                        onToggleTheatre={theatreAvailable && !videoFullscreen ? toggleTheatre : undefined}
                         onNext={() => {
                           const idx = animeEpisodes.findIndex((x) => x.docId === activeEpisode.docId);
                           if (idx !== -1 && idx + 1 < animeEpisodes.length) handlePlayEpisode(selectedAnime, animeEpisodes[idx + 1]);
@@ -6199,6 +6347,9 @@ export default function MobileApkApp() {
                           : <><BxIcon name="volume" className="bx-ico-lead" />{isRtl ? 'الصوت' : 'Volume'}{": "}{gestureHud.value}{"%"}</>}
                       </div>
                     )}
+                    {/* Watch party reactions float over the video for everyone in the room */}
+                    {party.code ? <PartyReactions messages={party.messages} /> : null}
+
                     {/* Long-Press 2.0x Speed Boost Badge */}
                     {longPress2x && (
                       <div
@@ -6358,8 +6509,9 @@ export default function MobileApkApp() {
               )}
 
               {/* Cinema Controls Strip (Fullscreen Button, Fit Mode, Prev/Next Ep, Auto-Next, PiP, Speed, Download) */}
+              {/* (the computer's cinema mode puts this column beside the video: desktop.css .is-theatre) */}
               {!videoFullscreen && !playerMinimized && (
-                <div style={{ padding: '0.65rem 1rem 0' }}>
+                <div className="bx-player-side" style={{ padding: '0.65rem 1rem 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.9375rem', minWidth: 0 }} dir="auto">
                       {activeEpisode.name} {activeEpisode.titleAr ? `— ${activeEpisode.titleAr}` : ''}
@@ -6413,20 +6565,25 @@ export default function MobileApkApp() {
 
                       <button
                         type="button"
-                        onClick={() => setWatchPartyModalOpen((v) => !v)}
+                        className="bx-party-toggle"
+                        aria-expanded={partyPanelOpen || Boolean(party.code)}
+                        onClick={() => setPartyPanelOpen((v) => !v)}
                         style={{
                           padding: '0.32rem 0.65rem',
                           borderRadius: '8px',
-                          background: watchPartyRoom ? '#ffffff' : 'rgba(255,255,255,0.12)',
+                          background: party.code ? '#ffffff' : 'rgba(255,255,255,0.12)',
                           border: '1px solid rgba(255,255,255,0.24)',
-                          color: watchPartyRoom ? '#000000' : '#ffffff',
+                          color: party.code ? '#000000' : '#ffffff',
                           fontSize: '0.75rem',
                           fontWeight: 700,
                           whiteSpace: 'nowrap',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          position: 'relative'
                         }}
                       >
-                        <BxIcon name="popcorn" className="bx-ico-lead" />{watchPartyRoom ? watchPartyRoom.roomCode : isRtl ? 'مشاهدة جماعية' : 'Party'}
+                        <BxIcon name="popcorn" className="bx-ico-lead" />
+                        {party.code ? party.code : isRtl ? 'حفلة مشاهدة' : 'Watch party'}
+                        {party.code && party.unread && !partyPanelOpen ? <span className="bx-party-unread">{party.unread}</span> : null}
                       </button>
 
                       <button
@@ -6836,167 +6993,22 @@ export default function MobileApkApp() {
                     </button>
                   </form>
 
-                  {/* Live Cloud Watch Party Room Panel (غرفة المشاهدة الجماعية السحابية) */}
-                  {(watchPartyModalOpen || watchPartyRoom) && (
-                    <div
-                      style={{
-                        marginTop: '0.65rem',
-                        padding: '0.8rem',
-                        borderRadius: '12px',
-                        background: '#09090d',
-                        border: '1.5px solid #ffffff'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.8125rem' }}>
-                          <BxIcon name="popcorn" />{' '}
-                          {watchPartyRoom
-                            ? isRtl
-                              ? `غرفة المشاهدة الجماعية (${watchPartyRoom.roomCode})`
-                              : `Watch Party (${watchPartyRoom.roomCode})`
-                            : isRtl
-                            ? 'غرفة المشاهدة الجماعية السحابية'
-                            : 'Live Cloud Watch Party'}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (watchPartyRoom) {
-                              setWatchPartyRoom(null);
-                              showToast(isRtl ? 'خرجت من غرفة المشاهدة' : 'Left Watch Party');
-                            }
-                            setWatchPartyModalOpen(false);
-                          }}
-                          style={{
-                            background: 'rgba(255,255,255,0.12)',
-                            border: 'none',
-                            color: '#fff',
-                            borderRadius: '8px',
-                            padding: '0.2rem 0.55rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {watchPartyRoom ? (isRtl ? <>{"مغادرة"}<BxIcon name="close" className="bx-ico-trail" /></> : <>{"Leave"}<BxIcon name="close" className="bx-ico-trail" /></>) : <BxIcon name="close" />}
-                        </button>
-                      </div>
-
-                      {!watchPartyRoom ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                          <button
-                            type="button"
-                            onClick={handleCreateWatchParty}
-                            style={{
-                              width: '100%',
-                              padding: '0.6rem',
-                              borderRadius: '12px',
-                              background: '#ffffff',
-                              color: '#000000',
-                              border: 'none',
-                              fontWeight: 700,
-                              fontSize: '0.75rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <BxIcon name="popcorn" className="bx-ico-lead" />{isRtl ? 'إنشاء غرفة جديدة ومشاركة الكود مع أصدقائك' : 'Create Watch Party Room'}
-                          </button>
-                          <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <input
-                              type="text"
-                              value={watchPartyJoinInput}
-                              onChange={(e) => setWatchPartyJoinInput(e.target.value)}
-                              placeholder={isRtl ? 'أو أدخل كود غرفة صديقك (مثال: BX-4821)...' : 'Enter friend room code (BX-XXXX)...'}
-                              style={{
-                                flex: 1,
-                                padding: '0.5rem 0.7rem',
-                                borderRadius: '8px',
-                                background: '#000',
-                                border: '1px solid rgba(255,255,255,0.2)',
-                                color: '#fff',
-                                fontSize: '0.75rem'
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={handleJoinWatchParty}
-                              style={{
-                                padding: '0.5rem 0.85rem',
-                                borderRadius: '8px',
-                                background: 'rgba(255,255,255,0.15)',
-                                color: '#fff',
-                                border: '1px solid rgba(255,255,255,0.28)',
-                                fontWeight: 700,
-                                fontSize: '0.75rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {isRtl ? 'انضمام' : 'Join'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div
-                            style={{
-                              maxHeight: '110px',
-                              overflowY: 'auto',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.3rem',
-                              marginBottom: '0.45rem',
-                              padding: '0.4rem',
-                              borderRadius: '8px',
-                              background: '#040406'
-                            }}
-                          >
-                            {(watchPartyRoom.chat || []).map((m) => (
-                              <div key={m.id} style={{ fontSize: '0.75rem' }}>
-                                <strong style={{ color: '#ffffff' }}>{m.author}: </strong>
-                                <span style={{ color: 'rgba(255,255,255,0.82)' }}>{m.text}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <form onSubmit={handleSendWatchPartyChat} style={{ display: 'flex', gap: '0.4rem' }}>
-                            <input
-                              type="text"
-                              value={watchPartyChatInput}
-                              onChange={(e) => setWatchPartyChatInput(e.target.value)}
-                              placeholder={isRtl ? 'اكتب رسالة لأصدقائك في الغرفة...' : 'Message party...'}
-                              style={{
-                                flex: 1,
-                                padding: '0.45rem 0.65rem',
-                                borderRadius: '8px',
-                                background: '#000',
-                                border: '1px solid rgba(255,255,255,0.2)',
-                                color: '#fff',
-                                fontSize: '0.75rem'
-                              }}
-                            />
-                            <button
-                              type="submit"
-                              style={{
-                                padding: '0.45rem 0.75rem',
-                                borderRadius: '8px',
-                                background: '#ffffff',
-                                color: '#000000',
-                                border: 'none',
-                                fontWeight: 700,
-                                fontSize: '0.75rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {isRtl ? 'إرسال' : 'Send'}
-                            </button>
-                          </form>
-                        </div>
-                      )}
-                    </div>
+                  {/* Watch party (PartyPanel.jsx + useWatchParty.js): real rooms, chat, reactions */}
+                  {(partyPanelOpen || party.code) && (
+                    <PartyPanel
+                      party={party}
+                      isRtl={isRtl}
+                      isWeb={isWeb}
+                      canHost={Boolean(partyCurrent)}
+                      onClose={() => setPartyPanelOpen(false)}
+                      onToast={showToast}
+                    />
                   )}
 
                   {/* In-Player Quick Episode Switcher Strip inside Dedicated Standalone Video Player Page */}
                   {animeEpisodes.length > 0 && (
                     <div
+                      className="bx-ep-strip-box"
                       style={{
                         marginTop: '0.8rem',
                         padding: '0.75rem',
@@ -7010,7 +7022,7 @@ export default function MobileApkApp() {
                           {isRtl ? `الحلقات (${animeEpisodes.length})` : `Episodes (${animeEpisodes.length})`}
                         </span>
                       </div>
-                      <div className="bx-mob-scroll" style={{ display: 'flex', gap: '0.45rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
+                      <div className="bx-mob-scroll bx-ep-strip" style={{ display: 'flex', gap: '0.45rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
                         {animeEpisodes.slice(0, 120).map((ep) => {
                           const active = activeEpisode?.docId === ep.docId;
                           return (
