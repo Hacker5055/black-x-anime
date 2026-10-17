@@ -35,6 +35,35 @@ are byte-identical to the previous APK. Then run the real-touch suite on the new
 and open it at `http://localhost:<port>/` (the APK build renders the mobile UI everywhere;
 `?apk_ui=1` does the same on the normal website build).
 
+## Native changes (v18.0+)
+
+Up to v17.1 only the web bundle changed. v18.0 added native code (air-time reminders while the
+app is closed: `EpisodeAlarms` + `MainActivity.scheduleEpisodeAlarms`). There is still no Gradle
+project and no D8 here, so the additions are smali (`android-native/smali/`; Java reading copies
+in `android-native/src/`) and only the app's own dex and the manifest change:
+
+```bash
+JAVA=/path/to/java APKTOOL_JAR=/path/to/apktool.jar PYTHON=/path/to/python-with-androguard \
+  tools/apk/patch-native.sh                 # -> /tmp/bx-apk-native/base-native.apk
+BASE_APK=/tmp/bx-apk-native/base-native.apk JAVA=… APKSIGNER_JAR=… BX_KEYSTORE=… BX_KEYSTORE_PASS_FILE=… \
+  tools/apk/build-apk.sh                    # new web bundle + signature, as before
+```
+
+`patch-native.sh` decodes the current APK with apktool, adds the smali class, the bridge method,
+the `RECEIVE_BOOT_COMPLETED` permission and the boot receiver, sets `versionCode` / `versionName`
+(`VERSION_CODE`, `VERSION_NAME`), rebuilds, and copies **only** `AndroidManifest.xml` and
+`classes4.dex` from the rebuilt APK into a copy of the current one (`native_patch.py merge`).
+`native_patch.py verify` then checks: same entries, every other entry byte-identical, the version,
+permissions and receiver in the manifest, every old method of `classes4.dex` unchanged, the new
+methods present; the script also disassembles the result and checks the `@JavascriptInterface`
+annotation. Re-running it on an APK that already has the code is a no-op for the smali/manifest
+steps. apktool 2.9.3 comes in the npm package `@postar/apktool-node` (`lib/apktool.jar`, with the
+aapt2 it needs); `androguard` is on PyPI.
+
+Smali is not type-checked when assembled: keep new native logic in its own class (a broken class
+fails only when used, the bridge method catches `Throwable`), mirror it in the Java reading copy,
+and have the owner try the feature on a phone before publishing.
+
 ## Tools
 
 - Java 17+: any JDK/JRE. Without an Android SDK, the `jdk4py` wheel on PyPI ships a
@@ -55,6 +84,6 @@ and open it at `http://localhost:<port>/` (the APK build renders the mobile UI e
 - APK v14 and older were signed with a different key that was never saved, so moving
   from v14 to v15 needs one uninstall + reinstall. Every later build signed with the
   key above installs as a normal update. Signing with any other key breaks updates again.
-- Android accepts an update with the same or a higher `versionCode` (currently 30).
+- Android accepts an update with the same or a higher `versionCode` (30 up to v17.1, 31 since v18.0).
 - After committing a rebuilt APK, bump `version` (and the notes) in `shared/apkRelease.js`: the
   server's `/api/app/config` reports it and installed apps show the update banner.

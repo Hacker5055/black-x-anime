@@ -11,25 +11,23 @@
  * no longer work (they get a non-dismissible banner).
  */
 export const APK_RELEASE = Object.freeze({
-  version: '17.1',
+  version: '18.0',
   minSupported: '15.0',
   url: 'https://black-x-anime.me/BLACK-X-Mobile-120Hz.apk',
   publishedAt: '2026-10-17',
   notesAr: Object.freeze([
-    'الجدول بمواعيد العرض الحقيقية وعدّاد تنازلي، و«اتعرضت» لما الحلقة تتعرض',
-    'تنبيهات الحلقات بقت أسرع بعد ميعاد عرض أعمالك، وإشعار التجربة بيقول إنه تجربة',
-    'صفحة الأنمي من غير تابات فاضية، وأدوات الحلقات في زرار «خيارات» واحد',
-    'المانجا: اقتراحات بحث من الأشهر على AniList وفلترة السيرفر والنوع في مكان واحد',
-    'المجتمع: البوست يتربط بأنمي تفتحه بضغطة، وغطا على بوستات الحرق',
-    'إحصائيات مشاهدتك في حسابك من سجلك الحقيقي، وكروت عريضة لـ«بيتعرض دلوقتي»'
+    'تذكير بميعاد عرض حلقات الأعمال اللي بتتابعها حتى والتطبيق مقفول',
+    'حفلة المشاهدة اتعملت من جديد: بتفتح حلقة صاحب الغرفة، والفيديو بيمشي معاه، وشات ورياكشن حقيقيين',
+    'توفير البيانات ممكن يشتغل لوحده على باقة الموبايل («على الداتا»)',
+    'مؤقت النوم ظاهر فوق المشغل، وتلغيه بلمسة',
+    'صفحة «على الموقع بس» بتقولك الموقع فيه إيه زيادة'
   ]),
   notesEn: Object.freeze([
-    'Schedule with the real air times, a live countdown and «aired» once it aired',
-    'Episode alerts come sooner after your shows air, and the test notification says it is a test',
-    'Title pages without empty tabs, and the episode tools in one «Options» button',
-    'Manga: quick searches from AniList’s most popular titles, server and type in one filter sheet',
-    'Community: tie a post to an anime that opens with a tap, and a cover over spoiler posts',
-    'Watch stats on your account from your real history, and wide cards for «Airing now»'
+    'Air-time reminders for the titles you follow, even while the app is closed',
+    'Watch parties rebuilt: you open the host’s episode, the video follows the host, with a real chat and reactions',
+    'Data saver can turn itself on over mobile data («Mobile data»)',
+    'The sleep timer shows above the player and is cancelled with one tap',
+    'A «Website only» page lists what the website adds'
   ])
 });
 

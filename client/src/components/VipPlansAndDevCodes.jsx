@@ -382,13 +382,10 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
                 <span>✔️</span> {lang === 'ar' ? 'الحلقات الجديدة من غير أي فترة انتظار' : 'New episodes with no waiting period'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#cbd5e1' }}>
-                <span>✔️</span> {lang === 'ar' ? 'الانضمام لغرف المشاهدة الجماعية' : 'Join Watch Party rooms'}
+                <span>✔️</span> {lang === 'ar' ? 'حفلات المشاهدة: تفتح غرفة أو تدخل غرفة صاحبك' : 'Watch parties: open a room or join a friend’s'}
               </li>
               <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
                 <span>🔒</span> {lang === 'ar' ? 'تحميل الحلقات بجودة FHD 1080p لمشتركي VIP' : 'FHD 1080p downloads are VIP only'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.5rem', color: '#64748b' }}>
-                <span>🔒</span> {lang === 'ar' ? 'بدون غرف مشاهدة خاصة برابط مخصص' : 'No private rooms with a custom link'}
               </li>
             </ul>
           </div>
@@ -460,16 +457,13 @@ export function VipPlansSection({ user, referralData, onVipUpdated, onSelectFram
                 <span>🎬</span> {lang === 'ar' ? 'تحميل الحلقات بجودة FHD 1080p' : 'FHD 1080p episode downloads'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
-                <span>🎙️</span> {lang === 'ar' ? 'رسائل صوتية بلا حدود في غرف المشاهدة' : 'Unlimited voice notes in Watch Party rooms'}
+                <span>🎙️</span> {lang === 'ar' ? 'رسائل صوتية بلا حدود في المجتمع (المجاني: 2)' : 'Unlimited voice notes in the community (free: 2)'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
                 <span>👑</span> {lang === 'ar' ? 'شارة VIP الذهبية المميزة بجانب الاسم 👑' : 'Exclusive Golden VIP Badge next to your name 👑'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
                 <span>🚀</span> {lang === 'ar' ? 'السيرفرات المباشرة (Fast CDN) في أول قائمة السيرفرات' : 'Direct (Fast CDN) servers listed first'}
-              </li>
-              <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
-                <span>🔒</span> {lang === 'ar' ? 'إنشاء غرف مشاهدة جماعية خاصة مع رابط مخصص' : 'Create Private Watch Party rooms with custom link'}
               </li>
               <li style={{ display: 'flex', gap: '0.55rem', color: '#fff', fontWeight: 700 }}>
                 <span>🎨</span> {lang === 'ar' ? 'فتح 5 إطارات وزخارف كائنات حية حصرية لملف الحساب' : 'Unlock 5 exclusive living 3D avatar ornaments'}

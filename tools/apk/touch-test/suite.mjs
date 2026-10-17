@@ -1104,6 +1104,122 @@ scenario('motion', async (browser) => {
 });
 
 /* =================================================================== runner */
+
+/* ==================================================================== bundle */
+// APK v18 (2026-10-17): air-time reminders handed to the native side, the alerts sheet saying
+// so, «على الموقع بس», «على الداتا», the sleep-timer chip, the watch party by code (no website
+// invite link) — and none of the website's computer extras.
+scenario('bundle', async (browser) => {
+  const G = 'bundle';
+  const now = Date.now();
+  const fav = (n) => ({
+    objectID: `Test Anime ${n}`,
+    slug: `aw-test-anime-${n}`,
+    titleEn: `Test Anime ${n}`,
+    titleAr: `Test Anime ${n}`,
+    poster: `${LOCAL}/poster/${(n % 8) + 1}.svg`,
+    malId: 1000 + n,
+    createdAt: new Date(now - 86400e3).toISOString()
+  });
+  // the schedule mock airs MAL 1001 (+1 min), 1010 (+1 day) and 1011 (+3 days); 1020 has no air time
+  const { page, ctx } = await openApp(browser, { seed: { bx_mob_favorites: [fav(1), fav(10), fav(11), fav(20)] } });
+  await page.waitForFunction(() => window.__bxNativeCalls.some((c) => c.name === 'scheduleEpisodeAlarms'), { timeout: 15000 }).catch(() => {});
+  const calls = await nativeCalls(page, 'scheduleEpisodeAlarms');
+  const list = calls.length ? JSON.parse(calls[calls.length - 1][0]) : [];
+  check(
+    G,
+    'air-time reminders go to the APK: one per followed title with a real air time',
+    list.length === 3 && list.every((a) => a.at > now && a.id > 0) && ['Test Anime 1', 'Test Anime 10', 'Test Anime 11'].every((t) => list.some((a) => a.title === `ميعاد ${t}`)),
+    list.map((a) => `${a.title} +${Math.round((a.at - now) / 60000)}m`).join(' | ') || 'no call'
+  );
+  check(G, '…the text: the Japanese air time, and that it reaches BLACK X once subtitled', list.length > 0 && list.every((a) => /بتتعرض دلوقتي في اليابان\. هتنزل على BLACK X لما تتترجم\./.test(a.body)), list[0]?.body || '');
+  check(G, '…never an empty list (that would wipe the phone\'s reminders)', calls.length > 0 && calls.every((c) => JSON.parse(c[0]).length > 0), `${calls.length} calls`);
+
+  await tapEl(page, '.bx-topbar [aria-label="القائمة"], [aria-label="القائمة"]', { scroll: false });
+  await sleep(700);
+  const items = await page.evaluate(() => [...document.querySelectorAll('.bx-menu-item')].map((e) => e.innerText.trim()));
+  check(G, 'menu: «على الموقع بس», none of the website pages (الترتيب، ملخصك، الاختصارات)', items.some((t) => t.includes('على الموقع بس')) && !items.some((t) => /الترتيب|ملخصك|اختصارات/.test(t)), items.join(' | '));
+  await tapEl(page, '.bx-menu-item', { text: 'تنبيهات الحلقات' });
+  await sleep(900);
+  const native = await page.evaluate(() => {
+    const p = document.querySelector('.bx-alerts-native');
+    return p ? { mode: p.dataset.bxNative, text: p.innerText.trim() } : null;
+  });
+  check(G, 'the alerts sheet says the reminders come while the app is closed', native?.mode === 'on' && /حتى وهو مقفول/.test(native.text), JSON.stringify(native));
+  await back(page);
+  await sleep(600);
+
+  await tapEl(page, '.bx-topbar [aria-label="القائمة"], [aria-label="القائمة"]', { scroll: false });
+  await sleep(700);
+  await tapEl(page, '.bx-menu-item', { text: 'على الموقع بس' });
+  await waitVt(page);
+  await sleep(700);
+  const perks = await page.evaluate(() => ({
+    title: document.querySelector('.bx-topbar-title')?.textContent.trim() || '',
+    items: [...document.querySelectorAll('.bx-perks-list strong')].map((e) => e.textContent.trim()),
+    btn: document.querySelector('.bx-perks .bx-btn')?.innerText.trim() || ''
+  }));
+  check(G, '«على الموقع بس»: what the website adds + copy its address', /على الموقع بس/.test(perks.title) && perks.items.length >= 5 && perks.items.includes('حفلة المشاهدة باللينك') && /انسخ لينك الموقع/.test(perks.btn), JSON.stringify(perks));
+  await back(page);
+  await sleep(600);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('main .bxp-row-label')].map((e) => e.textContent.trim()));
+  check(G, 'profile: the «على الموقع بس» row next to «تحديث التطبيق»', rows.includes('على الموقع بس') && rows.includes('تحديث التطبيق') && !rows.includes('الترتيب'), rows.join(' | '));
+
+  await tapEl(page, 'main .bxp-row', { text: 'الإعدادات' });
+  await waitVt(page);
+  await sleep(600);
+  const saver = await page.evaluate(() => [...document.querySelectorAll('main .bxp-seg button')].map((b) => b.textContent.trim()));
+  check(G, 'settings: data saver can follow mobile data («على الداتا»)', ['تلقائي', 'على الداتا', 'شغال', 'مقفول'].every((t) => saver.includes(t)), saver.join(' | '));
+  await tapEl(page, 'main .bxp-seg button', { text: 'على الداتا', exact: true });
+  await sleep(300);
+  check(G, '…and remembers it', (await page.evaluate(() => localStorage.getItem('bx_mob_data_saver'))) === 'cellular');
+  await back(page);
+  await sleep(500);
+
+  // the player: sleep-timer chip, watch party by code
+  await tapTab(page, 'الرئيسية');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  let marked = false;
+  for (let i = 0; i < 8 && !marked; i++) {
+    marked = await markPosterInSection(page, 'بيتعرض دلوقتي', 'Test Anime 1');
+    if (!marked) {
+      await page.evaluate(() => window.scrollBy(0, 500));
+      await sleep(500);
+    }
+  }
+  await tapEl(page, '[data-test-target]');
+  await page.waitForFunction(() => Boolean(document.querySelector('.bx-detail-cta')), { timeout: 10000 }).catch(() => {});
+  await tapEl(page, '.bx-detail-cta');
+  await waitVideo(page, (v) => v.rs >= 2, 20000);
+  await sleep(600);
+  await tapEl(page, '.bx-player-side button', { text: 'إعدادات المشغل' });
+  await sleep(500);
+  await tapEl(page, '.bx-player-side button', { text: 'مؤقت النوم' });
+  await sleep(500);
+  await tapEl(page, '.bx-player-side button', { text: 'مؤقت النوم' }); // off → end of episode → 15 min
+  await sleep(600);
+  const chip = await page.evaluate(() => document.querySelector('.bx-sleep-chip')?.innerText.trim() || '');
+  check(G, 'sleep timer: a chip above the player shows the time left', /1[45]:\d\d/.test(chip), chip || 'no chip');
+  await tapEl(page, '.bx-sleep-chip', { scroll: false });
+  await sleep(500);
+  check(G, '…one tap cancels it', !(await page.evaluate(() => Boolean(document.querySelector('.bx-sleep-chip')))));
+
+  await tapEl(page, '.bx-party-toggle');
+  await sleep(500);
+  await tapEl(page, '.bx-party button', { text: 'افتح غرفة للحلقة دي' });
+  await page.waitForFunction(() => Boolean(document.querySelector('.bx-party-code')), { timeout: 8000 }).catch(() => {});
+  const party = await page.evaluate(() => ({
+    code: document.querySelector('.bx-party-code')?.textContent.trim() || '',
+    chips: [...document.querySelectorAll('.bx-party-actions .bx-chip')].map((b) => b.innerText.trim())
+  }));
+  check(G, 'watch party in the APK: a real room by code (copy the code; the invite link is the website\'s)', /^BX[A-Z0-9]{6}$/.test(party.code) && ctx.fs.has(`settings/wp_${party.code.toLowerCase()}`) && party.chips.includes('انسخ الكود') && !party.chips.some((t) => /لينك/.test(t)), JSON.stringify(party));
+  await tapEl(page, '.bx-party-leave');
+  await sleep(500);
+
+  check(G, 'no website computer extras in the APK (preview card, quick search)', await page.evaluate(() => !document.querySelector('.bx-hover-card, .bx-palette')));
+  check(G, 'no uncaught page errors', ctx.errors.length === 0, ctx.errors.slice(0, 3).join(' | '));
+});
+
 const server = await startServer();
 for (const sc of scenarios) {
   if (ONLY.length && !ONLY.includes(sc.name)) continue;

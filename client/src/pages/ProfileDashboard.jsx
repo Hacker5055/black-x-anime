@@ -2103,7 +2103,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.8 }}>
                     <li>{lang === 'ar' ? 'مشاهدة بجودة 720p / 1080p العادية' : 'Standard 720p/1080p stream'}</li>
                     <li>{lang === 'ar' ? 'سيرفرات المشاهدة العامة' : 'Public streaming servers'}</li>
-                    <li>{lang === 'ar' ? 'غرف مشاهدة جماعية عامة' : 'Public watch party rooms'}</li>
+                    <li>{lang === 'ar' ? 'حفلات المشاهدة (تفتح غرفة أو تدخل واحدة)' : 'Watch parties (open or join a room)'}</li>
                     <li>{lang === 'ar' ? 'إطارات وزخارف أساسية' : 'Basic profile ornaments'}</li>
                   </ul>
                 </div>
@@ -2119,8 +2119,7 @@ export default function ProfileDashboard({ onOpenAuth }) {
                   <ul style={{ paddingInlineStart: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#fef08a', lineHeight: 1.8 }}>
                     <li>{lang === 'ar' ? 'شارة VIP الذهبية المميزة بجانب الاسم 👑' : 'Golden VIP badge next to name'}</li>
                     <li>{lang === 'ar' ? 'السيرفرات المباشرة (Fast CDN) في أول القائمة' : 'Direct (Fast CDN) servers listed first'}</li>
-                    <li>{lang === 'ar' ? 'رسائل صوتية بلا حدود في غرف المشاهدة' : 'Unlimited voice notes in watch rooms'}</li>
-                    <li>{lang === 'ar' ? 'إنشاء غرف مشاهدة جماعية خاصة مع رابط مخصص' : 'Private Watch Party with custom link'}</li>
+                    <li>{lang === 'ar' ? 'رسائل صوتية بلا حدود في المجتمع (المجاني: 2)' : 'Unlimited voice notes in the community (free: 2)'}</li>
                     <li>{lang === 'ar' ? 'فتح 5 إطارات وزخارف حصرية لملف الحساب' : 'Unlock 5 exclusive 3D frames'}</li>
                   </ul>
                 </div>

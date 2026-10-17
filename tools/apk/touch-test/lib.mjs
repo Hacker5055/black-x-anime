@@ -349,6 +349,29 @@ function api(req, url, ctx) {
     for (const s of slots) days[new Date(s.airingAt * 1000).getUTCDay()].push(s);
     return json(req, { days, weekStart: now, weekEnd: now + 7 * 86400 });
   }
+  // AniList's top-rated titles (/api/anime/rankings): names match catalogue records so a row
+  // opens the title; BLACK X votes only on #2 (the page shows them only when someone voted).
+  if (p === '/api/anime/rankings') {
+    const rows = [3, 5, 8, 12, 15].map((n, i) => ({
+      id: 8000 + n,
+      titleRomaji: `Test Anime ${n}`,
+      titleEnglish: `Test Anime ${n}`,
+      coverUrl: `${LOCAL}/poster/${(n % 8) + 1}.svg`,
+      genres: ['Action', 'Drama'],
+      episodes: 12,
+      status: 'FINISHED',
+      format: 'TV',
+      seasonYear: 2024,
+      score: 90 - i,
+      rank: i + 1,
+      scoreTen: Number(((90 - i) / 10).toFixed(1)),
+      communityScore: i === 1 ? 8.5 : null,
+      votesCount: i === 1 ? 4 : 0
+    }));
+    // a title only AniList has: the page must search for it instead of opening something else
+    rows.push({ id: 8999, titleRomaji: 'Only On AniList', titleEnglish: 'Only On AniList', coverUrl: `${LOCAL}/poster/1.svg`, genres: ['Drama'], episodes: 1, status: 'FINISHED', format: 'MOVIE', seasonYear: 2023, score: 84, rank: 6, scoreTen: 8.4, communityScore: null, votesCount: 0 });
+    return json(req, { anime: rows });
+  }
   if (p === '/api/anime/trending') {
     return json(req, {
       anime: ANIME.slice(20, 26).map((a) => ({ id: a.mal_id, title_english: a.name, title_romaji: a.name, cover_url: a.poster_uri, banner_url: a.cover_uri, genres: ['Action'], score: 81, season_year: 2024 }))
@@ -459,19 +482,35 @@ function api(req, url, ctx) {
   return json(req, { error: 'not_found' }, 404);
 }
 
+// Firestore REST like the real one: every write gets a new updateTime, and the
+// currentDocument.exists / currentDocument.updateTime preconditions are enforced (the watch
+// party's chat relies on them). `ctx.fs` / `ctx.fsTimes` can be shared by several pages
+// (openWeb / openApp `ctx: { fs, fsTimes }`), so two browsers see the same documents.
+let fsClock = 0;
 function firestore(req, url, ctx) {
   const m = url.pathname.match(/\/documents\/(.+)$/);
   const docPath = m ? decodeURIComponent(m[1]) : '';
   const method = req.method();
+  const times = ctx.fsTimes || (ctx.fsTimes = new Map());
+  const stamp = (p) => times.get(p) || '2026-10-17T00:00:00.000000Z';
   if (method === 'GET') {
     const fields = ctx.fs.get(docPath);
-    return fields ? json(req, { name: docPath, fields }) : json(req, { error: { code: 404, status: 'NOT_FOUND' } }, 404);
+    return fields ? json(req, { name: docPath, fields, updateTime: stamp(docPath) }) : json(req, { error: { code: 404, status: 'NOT_FOUND' } }, 404);
   }
   if (method === 'PATCH' || method === 'POST') {
+    const exists = ctx.fs.has(docPath);
+    const mustNot = url.searchParams.get('currentDocument.exists') === 'false';
+    const wantTime = url.searchParams.get('currentDocument.updateTime');
+    if (mustNot && exists) return json(req, { error: { code: 409, status: 'ALREADY_EXISTS' } }, 409);
+    if (wantTime && !exists) return json(req, { error: { code: 404, status: 'NOT_FOUND' } }, 404);
+    if (wantTime && stamp(docPath) !== wantTime) return json(req, { error: { code: 400, status: 'FAILED_PRECONDITION' } }, 400);
     const body = safeJson(req.postData());
+    fsClock += 1;
+    const t = `2026-10-17T00:00:${String(Math.floor(fsClock / 1e6) % 60).padStart(2, '0')}.${String(fsClock % 1e6).padStart(6, '0')}Z`;
     ctx.fs.set(docPath, body.fields || {});
+    times.set(docPath, t);
     ctx.fsWrites.push({ docPath, body });
-    return json(req, { name: docPath, fields: body.fields || {} });
+    return json(req, { name: docPath, fields: body.fields || {}, updateTime: t });
   }
   return json(req, {});
 }
@@ -540,12 +579,13 @@ export async function launch() {
 
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 7 Build/UQ1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/140.0.0.0 Mobile Safari/537.36';
 
-export async function openApp(browser, { seed = {} } = {}) {
+export async function openApp(browser, { seed = {}, ctx: ctxPatch = {} } = {}) {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
   await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const ctx = { net: [], algolia: [], fs: new Map(), fsWrites: [], errors: [], consoleErrors: [], blocked: [], episodes: [], anilist: [], paginationLimit: 1000, logins: [], profilePuts: [], requests: [], userPatch: {} };
   ctx.fs.set('settings/shared_community_feed', { json: { stringValue: JSON.stringify(seedPosts()) } });
+  Object.assign(ctx, ctxPatch);
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     try {
@@ -572,7 +612,16 @@ export async function openApp(browser, { seed = {} } = {}) {
       requestNotificationPermission: rec('requestNotificationPermission'),
       sendPhoneNotification: rec('sendPhoneNotification'),
       exitApp: rec('exitApp'),
-      enterPipMode: rec('enterPipMode')
+      enterPipMode: rec('enterPipMode'),
+      // APK v18: air-time reminders (returns how many were armed, like the real bridge)
+      scheduleEpisodeAlarms: (json) => {
+        window.__bxNativeCalls.push({ name: 'scheduleEpisodeAlarms', args: [json] });
+        try {
+          return JSON.parse(json).length;
+        } catch {
+          return -1;
+        }
+      }
     };
     if (!sessionStorage.getItem('__bx_seeded')) {
       sessionStorage.setItem('__bx_seeded', '1');
@@ -631,6 +680,16 @@ export async function openWeb(browser, { route: routePath = '/', phone = true, s
       /* about:blank */
     }
   }, { bx_mob_lang: 'ar', blackx_lang: 'ar', ...(ui ? { bx_web_ui_v2: ui } : {}), ...seed });
+  // `ctx: { recordOpen: true }`: window.open only records the address (new-tab links)
+  if (ctxPatch.recordOpen) {
+    await page.evaluateOnNewDocument(() => {
+      window.__bxOpened = [];
+      window.open = (url) => {
+        window.__bxOpened.push(String(url));
+        return null;
+      };
+    });
+  }
   await page.goto(`${LOCAL}${routePath}`, { waitUntil: 'domcontentloaded' });
   if (wait) await waitWebReady(page);
   return { page, ctx };
